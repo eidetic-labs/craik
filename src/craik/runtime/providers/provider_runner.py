@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from craik.contracts.models import (
+    AgentRoleKind,
     CapabilityGrant,
     CapabilityReceipt,
     CompiledPrompt,
@@ -20,7 +21,7 @@ from craik.contracts.models import (
 )
 from craik.runtime.memory.memory import LocalMemoryStore, MemoryStore
 from craik.runtime.policy.credential_policy import check_credential_policy
-from craik.runtime.policy.policy import denial_receipt
+from craik.runtime.policy.policy import denial_receipt, generate_policy_envelope
 from craik.runtime.projects.prompts import PromptCompiler
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.providers.provider_execution import credential_identity_for_config
@@ -33,6 +34,7 @@ from craik.runtime.providers.provider_runtime import (
     adapter_for_provider,
     provider_runtime_receipt,
 )
+from craik.runtime.runners.role_dispatch import dispatch_role
 from craik.runtime.runners.runners import get_runner_capability_matrix
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
@@ -219,6 +221,8 @@ class ProviderBackedRunExecutor:
         max_iterations: int = 5,
         provider_token_budget: int | None = None,
         live_enabled: bool | None = None,
+        role_kind: AgentRoleKind | None = None,
+        role_runner_id: str | None = None,
         started_at: datetime | None = None,
         resume_run_id: str | None = None,
     ) -> ProviderBackedRunResult:
@@ -226,6 +230,18 @@ class ProviderBackedRunExecutor:
         case_file = CaseFileAssembler(self.store).latest_for_task(task_id)
         if case_file is None:
             case_file = CaseFileAssembler(self.store).build(task_id)
+        role_dispatch = (
+            dispatch_role(
+                policy=self._policy_or_create(case_file.policy_envelope_id, task_id=task_id),
+                role_kind=role_kind,
+                runner_id=role_runner_id,
+            )
+            if role_kind is not None
+            else None
+        )
+        if role_dispatch is not None:
+            self.store.put_receipt(role_dispatch.receipt)
+            provider_id = role_dispatch.role.runner_id or provider_id
         provider = default_model_provider_registry().require(provider_id)
         adapter = adapter_for_provider(
             provider,
@@ -261,6 +277,11 @@ class ProviderBackedRunExecutor:
                 steps=steps or default_loop_steps(),
                 max_iterations=max_iterations,
                 provider_token_budget=provider_token_budget,
+                role_id=role_dispatch.role.id if role_dispatch is not None else None,
+                role_kind=role_dispatch.role.kind if role_dispatch is not None else None,
+                initial_receipt_ids=(
+                    [role_dispatch.receipt.id] if role_dispatch is not None else None
+                ),
                 started_at=started_at,
                 resume_run_id=resume_run_id,
             )
@@ -298,6 +319,14 @@ class ProviderBackedRunExecutor:
         policy = self.store.get_policy_envelope(policy_id)
         if policy is None:
             raise ValueError(f"compiled prompt references missing policy: {policy_id}")
+        return policy
+
+    def _policy_or_create(self, policy_id: str, *, task_id: str) -> PolicyEnvelope:
+        policy = self.store.get_policy_envelope(policy_id)
+        if policy is not None:
+            return policy
+        policy = generate_policy_envelope(task_id=task_id, actor="runner:role-dispatch")
+        self.store.put_policy_envelope(policy)
         return policy
 
 

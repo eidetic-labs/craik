@@ -110,6 +110,8 @@ def test_policy_envelope_operator_fields_round_trip(
             "required_operator_issuer": "https://issuer.example.test",
             "allowed_credential_kinds": ["secret-ref"],
             "allowed_credential_profiles": ["openai:prod-*"],
+            "allowed_agent_role_kinds": ["verifier"],
+            "allowed_agent_role_ids": ["role_verifier"],
         }
     )
 
@@ -122,6 +124,8 @@ def test_policy_envelope_operator_fields_round_trip(
     assert dumped["required_operator_issuer"] == "https://issuer.example.test"
     assert dumped["allowed_credential_kinds"] == ["secret-ref"]
     assert dumped["allowed_credential_profiles"] == ["openai:prod-*"]
+    assert dumped["allowed_agent_role_kinds"] == ["verifier"]
+    assert dumped["allowed_agent_role_ids"] == ["role_verifier"]
 
 
 def test_task_request_auth_context_fields_round_trip(
@@ -187,6 +191,8 @@ def test_task_run_identity_fields_round_trip(
             "source_handoff_id": "handoff_docs_reconcile",
             "source_task_id": "task_docs_reconcile",
             "source_run_id": "run_docs_reconcile",
+            "role_id": "role_verifier",
+            "role_kind": "verifier",
             "completed_step_keys": ["run_docs:1:plan", "run_docs:2:act"],
             "last_step_key": "run_docs:2:act",
             "wall_clock_budget_seconds": 120.5,
@@ -205,6 +211,8 @@ def test_task_run_identity_fields_round_trip(
     assert dumped["source_handoff_id"] == "handoff_docs_reconcile"
     assert dumped["source_task_id"] == "task_docs_reconcile"
     assert dumped["source_run_id"] == "run_docs_reconcile"
+    assert dumped["role_id"] == "role_verifier"
+    assert dumped["role_kind"] == "verifier"
     assert dumped["operator_issuer"] == "https://issuer.example.test"
     assert dumped["completed_step_keys"] == ["run_docs:1:plan", "run_docs:2:act"]
     assert dumped["last_step_key"] == "run_docs:2:act"

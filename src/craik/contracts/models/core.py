@@ -151,6 +151,8 @@ class PolicyEnvelope(CraikModel):
     required_operator_issuer: str | None = None
     allowed_credential_kinds: list[str] | None = None
     allowed_credential_profiles: list[str] | None = None
+    allowed_agent_role_kinds: list[str] | None = None
+    allowed_agent_role_ids: list[str] | None = None
 
 
 class CapabilityTarget(CraikModel):

@@ -205,6 +205,8 @@ class TaskRun(CraikModel):
     source_handoff_id: str | None = None
     source_task_id: str | None = None
     source_run_id: str | None = None
+    role_id: str | None = None
+    role_kind: str | None = None
 
 
 if not TYPE_CHECKING:

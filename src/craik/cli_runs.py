@@ -8,9 +8,8 @@ from typing import Annotated, Any
 
 import typer
 
+from craik.cli_run_support import fixture_shell_grant, provider_run_payload, role_kind
 from craik.contracts.models import (
-    CapabilityGrant,
-    CapabilityTarget,
     RecoverySession,
     RunDelta,
     TaskRun,
@@ -22,8 +21,8 @@ from craik.runtime.companions.operator_views import (
 from craik.runtime.providers.model_providers import ModelProviderNotFoundError
 from craik.runtime.providers.provider_runner import (
     ProviderBackedRunExecutor,
-    ProviderBackedRunResult,
 )
+from craik.runtime.runners.role_dispatch import RoleDispatchError
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import ProjectNotFoundError, TaskNotFoundError
 from craik.runtime.work.runs import TERMINAL_RUN_STATUSES, RunTransition, TaskRunManager
@@ -55,23 +54,34 @@ def run_execute(
         int,
         typer.Option("--max-iterations", help="Maximum single-agent loop iterations."),
     ] = 5,
+    role: Annotated[
+        str | None,
+        typer.Option("--role", help="Specialist role kind to dispatch for this run."),
+    ] = None,
+    role_runner: Annotated[
+        str | None,
+        typer.Option("--role-runner", help="Override the default runner for the selected role."),
+    ] = None,
 ) -> None:
     """Execute a deterministic provider-backed MVP runner path for a task."""
     store = LocalStore.from_env()
     try:
         store.initialize()
-        grants = [_fixture_shell_grant(task_id)] if allow_fixture_action else []
+        grants = [fixture_shell_grant(task_id)] if allow_fixture_action else []
         result = ProviderBackedRunExecutor(store).execute(
             task_id=task_id,
             provider_id=provider_id,
             grants=grants,
             max_iterations=max_iterations,
+            role_kind=role_kind(role) if role is not None else None,
+            role_runner_id=role_runner,
         )
-        payload = _provider_run_payload(result)
+        payload = provider_run_payload(result)
     except (
         ModelProviderNotFoundError,
         ProjectNotFoundError,
         TaskNotFoundError,
+        RoleDispatchError,
         ValueError,
     ) as error:
         raise typer.BadParameter(str(error)) from None
@@ -165,7 +175,7 @@ def run_resume(
                 err=True,
             )
             raise typer.Exit(1)
-        grants = [_fixture_shell_grant(run.task_id)] if allow_fixture_action else []
+        grants = [fixture_shell_grant(run.task_id)] if allow_fixture_action else []
         result = ProviderBackedRunExecutor(store).execute(
             task_id=run.task_id,
             provider_id=provider_id or run.runner_id,
@@ -173,7 +183,7 @@ def run_resume(
             max_iterations=max_iterations,
             resume_run_id=run.id,
         )
-        payload = _provider_run_payload(result)
+        payload = provider_run_payload(result)
     except (
         ModelProviderNotFoundError,
         ProjectNotFoundError,
@@ -292,55 +302,6 @@ def run_delta(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
     typer.echo("\n".join(payload["lines"]))
-
-
-def _fixture_shell_grant(task_id: str) -> CapabilityGrant:
-    return CapabilityGrant(
-        id=f"grant_{task_id.removeprefix('task_')}_fixture_shell",
-        task_id=task_id,
-        capability="shell.execute",
-        target=CapabilityTarget(paths=["fixture-action"]),
-        operations=["execute"],
-        reason="Allow the deterministic MVP fixture action.",
-        approved_by="user:local-operator",
-    )
-
-
-def _provider_run_payload(result: ProviderBackedRunResult) -> dict[str, Any]:
-    provider_results = [
-        provider_result.model_dump(mode="json", by_alias=True)
-        for provider_result in result.provider_results
-    ]
-    receipt_ids = sorted(
-        {
-            receipt_id
-            for output in (result.loop.output_captures if result.loop else [])
-            for receipt_id in output.output.receipt_ids
-        }
-        | set(result.run.receipt_ids)
-    )
-    return {
-        "schema": "craik.provider_backed_run_execution",
-        "version": "0.1.0",
-        "status": result.run.status,
-        "run": result.run.model_dump(mode="json", by_alias=True),
-        "handoff": result.handoff.model_dump(mode="json", by_alias=True),
-        "compiled_prompt": result.compiled_prompt.model_dump(mode="json", by_alias=True),
-        "provider_results": provider_results,
-        "provider_ids": sorted(
-            {provider_result["provider_id"] for provider_result in provider_results}
-        ),
-        "provider_families": sorted(
-            {provider_result["provider_family"] for provider_result in provider_results}
-        ),
-        "receipt_ids": receipt_ids,
-        "interrupted_error": result.interrupted_error,
-        "next_commands": [
-            f"craik run inspect {result.run.id} --include-outputs",
-            f"craik handoff show {result.handoff.id}",
-            f"craik receipts list --task-id {result.run.task_id}",
-        ],
-    }
 
 
 def _find_run(store: LocalStore, run_id_or_task_id: str) -> TaskRun | None:

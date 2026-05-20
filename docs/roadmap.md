@@ -284,7 +284,7 @@ produces structured debate artifacts with receipted resolution.
 <div className="craik-grid">
 
 <div><h4>Handoff consumption</h4><p>Shipped first slice: <code>craik task resume --from-handoff=&lt;id&gt;</code> creates a new task, case file, and pending run with source handoff provenance and explicit consumer identity.</p></div>
-<div><h4>Role-based dispatch</h4><p>Orchestrator selects role-specific runners (implementer · verifier · adversarial reviewer · policy reviewer · docs reviewer · memory curator · adjudicator).</p></div>
+<div><h4>Role-based dispatch</h4><p>Shipped first slice: provider-backed runs can dispatch implementer · verifier · adversarial reviewer · policy reviewer · docs reviewer · memory curator · adjudicator roles with policy allow-lists, dispatch receipts, and run metadata.</p></div>
 <div><h4>Multi-agent message contract</h4><p>Typed agent-to-agent mailbox with persisted receipts.</p></div>
 <div><h4>Concurrent run coordination</h4><p>Intent-lock enforcement across simultaneous loops against the same project.</p></div>
 <div><h4>Structured debate runtime</h4><p>Two agents produce typed positions · adjudicator role or human delegation resolves with a receipt.</p></div>

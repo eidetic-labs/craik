@@ -169,6 +169,9 @@ class SingleAgentLoopExecutor:
         provider_token_budget: int | None = None,
         started_at: datetime | None = None,
         resume_run_id: str | None = None,
+        role_id: str | None = None,
+        role_kind: str | None = None,
+        initial_receipt_ids: list[str] | None = None,
     ) -> LoopExecutionResult:
         active_steps = steps or default_loop_steps()
         resuming = resume_run_id is not None
@@ -189,6 +192,9 @@ class SingleAgentLoopExecutor:
                 max_iterations=max_iterations,
                 wall_clock_budget_seconds=wall_clock_budget_seconds,
                 provider_token_budget=provider_token_budget,
+                role_id=role_id,
+                role_kind=role_kind,
+                receipt_ids=initial_receipt_ids,
                 created_at=started_at,
             )
         )
