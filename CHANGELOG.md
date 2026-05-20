@@ -14,25 +14,42 @@ _No unreleased changes._
 
 ## 0.2.0 - 2026-05-20
 
-### Added
+### Added — Resumable execution
 
-- Pluggable credential profiles with env-var API keys, local-CLI OAuth,
-  CLI-bridge tokens, secret-reference credentials, Stigmem-backed credential
-  references, marker profiles, and credential pools.
-- OIDC operator identity with device-code and loopback PKCE flows, JWKS-backed
-  ID-token validation, session storage, workload identity sources, and RFC 8693
-  token exchange.
-- Governance-native auth controls: credential-scoped receipts,
-  operator-scoped receipts, policy-bound credentials, policy-bound operators,
-  first-use approval gates, and receipted operator-credential authorization.
-- Operational hardening for auth state: file-locked profile/session/pool stores,
-  credential health doctor checks, expiry risk evidence in case files,
-  per-credential redaction patterns, and handoff identity bookkeeping.
+- Durable run phase idempotency with completed step keys, stable runner step
+  context keys, and resume behavior that skips already captured phase outputs.
+- Operator-facing recovery commands: `craik run show`, `craik run resume`, and
+  `craik run cancel` for persisted provider-backed runs.
 
-### Changed
+### Added — Budgets at execution boundaries
 
-- Release readiness now tracks the `0.2.0` auth and identity gate separately
-  from the historical `0.1.x` provider-runtime release record.
+- Per-run wall-clock budgets that interrupt before the next phase or provider
+  tool round when the budget is exhausted.
+- Provider token budget accounting that decrements from usage metadata and
+  blocks additional provider calls after exhaustion.
+- Pre-dispatch budget checks that stop expired runs before side effects,
+  receipts, or tool-result attestations are produced.
+
+### Added — Sandboxed tool execution
+
+- Local-process sandbox backend for registered shell command references, routed
+  through governed loop tool dispatch when configured.
+- Cancellation propagation into in-flight local-process sandbox commands, with
+  cancelled results replayed through tool messages.
+- Tool-result attestations that hash the redacted replay payload and link each
+  dispatched result to its side-effect receipt.
+
+### Added — Recovery and observability
+
+- Persisted exit-discipline checks at the handoff boundary, including blocking
+  reasons for incomplete handoffs.
+- `craik run delta` for rendering persisted run-delta records and linked
+  recovery sessions as operator views or JSON.
+
+### Added — Storage
+
+- Registered, forward-only local-store migration runner that preserves existing
+  migrations and adds framework metadata migration coverage.
 
 ## 0.1.2 - 2026-05-18
 

@@ -49,12 +49,27 @@ use. First-time use of a credential profile is approval-gated and produces a
 receipted authorization chain. Credential expiry surfaces as evidence in case
 files so long-running runs are warned about tokens that will expire mid-work.
 
+Durable execution continuity is now part of the runtime. Provider-backed runs
+record phase idempotency keys and can resume from completed phase boundaries.
+The loop enforces wall-clock budgets, provider token budgets, and pre-dispatch
+time checks before producing additional side effects.
+
+Configured shell tool calls can execute through the local-process sandbox
+backend for registered command references. Dispatched tool results are
+attested, cancellation propagates into in-flight local processes, and run
+recovery commands expose persisted run state, cancellation, resume, and run
+delta views. Local-store schema changes are applied through a registered,
+forward-only migration framework.
+
 ## What Does Not Work Yet
 
 Craik is not yet a fully autonomous release-quality agent. It does not claim
 unbounded tool execution, unattended file edits, broad remote Stigmem writes, or
-production multi-agent orchestration. Tool execution is policy-bound, and live
-provider calls remain opt-in rather than hidden CI behavior.
+production multi-agent orchestration. Tool execution is policy-bound and
+currently limited to configured local-process sandbox execution for registered
+command references; container, remote-shell, browser, and MCP execution
+backends remain future work. Live provider calls remain opt-in rather than
+hidden CI behavior.
 
 ## Vision
 
@@ -165,18 +180,21 @@ stability signal, not the first release target.
 
 The repository now includes the CLI package, strict runtime contracts, local
 SQLite state, project/task/case-file workflows, policy and receipt primitives,
-runner preview contracts, governed loop fixtures, multi-agent review contracts,
-instruction distillation, quality/recovery helpers, skills/plugins foundations,
-operator view formatters, gateway/channel contracts, sandbox/provider routing
-contracts, learning-loop helpers, multimodal decisions, migration/i18n
-contracts, and broad docs/tests through the v0.12 roadmap.
+runner preview contracts, governed provider-backed loops, durable run
+continuity, budget enforcement, local-process sandboxed shell dispatch,
+multi-agent review contracts, instruction distillation, quality/recovery
+helpers, skills/plugins foundations, operator view formatters,
+gateway/channel contracts, sandbox/provider routing contracts, learning-loop
+helpers, multimodal decisions, migration/i18n contracts, and broad docs/tests
+through the v0.12 roadmap.
 
 The remaining MVP work is to harden these contract and helper surfaces into one
 complete release-quality workflow: remote Stigmem write promotion,
 God-file/runtime package cleanup, ADR-backed design decisions, and docs/test
-depth comparable to Stigmem. Package version `0.1.0` marks the first governed
-provider, credential, and operator-identity substrate; roadmap sections remain
-implementation gates, not `1.0.0` readiness claims. See
+depth comparable to Stigmem. Package version `0.2.0` marks the durable
+execution continuity gate after the first governed provider, credential, and
+operator-identity substrate; roadmap sections remain implementation gates, not
+`1.0.0` readiness claims. See
 [Robust MVP Roadmap](docs/mvp-roadmap.md).
 
 ## Implementation Stack
