@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from craik.contracts.models import (
     AdapterPackage,
     AdjudicationOutcome,
+    AgentMessage,
     Assumption,
     CapabilityGrant,
     CapabilityReceipt,
@@ -305,6 +306,7 @@ __all__ = [
     "ValidationError",
     "AdapterPackage",
     "AdjudicationOutcome",
+    "AgentMessage",
     "Assumption",
     "CapabilityGrant",
     "CapabilityReceipt",

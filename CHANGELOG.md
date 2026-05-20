@@ -19,6 +19,9 @@ within the `0.x.0` stability expectations described in
 - Role-based provider dispatch: `craik run execute --role` now records a
   policy-checked specialist role assignment, dispatch receipt, and run-level
   role metadata.
+- Receipt-backed agent mailbox contracts and local-store helpers for sending
+  and receiving typed multi-agent messages linked to tasks, runs, handoffs,
+  and roles.
 
 ## 0.2.0 - 2026-05-20
 

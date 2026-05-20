@@ -64,6 +64,34 @@ class WorkGraphExport(CraikModel):
     created_at: datetime
 
 
+class AgentMessage(CraikModel):
+    """Typed agent-to-agent mailbox message with receipt provenance."""
+
+    schema_: Literal["craik.agent_message"] = Field(
+        default="craik.agent_message",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    task_id: str
+    kind: AgentMessageKind = "request"
+    status: AgentMessageStatus = "sent"
+    from_agent: str = Field(min_length=1)
+    to_agent: str = Field(min_length=1)
+    from_role_id: str | None = None
+    from_role_kind: str | None = None
+    to_role_id: str | None = None
+    to_role_kind: str | None = None
+    run_id: str | None = None
+    handoff_id: str | None = None
+    subject: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    receipt_ids: list[str] = Field(min_length=1)
+    created_at: datetime
+    received_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class CaseFile(CraikModel):
     """Task-specific context assembled before execution."""
 

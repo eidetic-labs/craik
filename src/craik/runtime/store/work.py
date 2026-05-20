@@ -27,6 +27,16 @@ class WorkStoreMixin(LocalStoreCore):
     def list_task_runs(self) -> list[TaskRun]:
         return _cast_list(TaskRun, self.list_contracts("craik.task_run"))
 
+    def put_agent_message(self, message: AgentMessage) -> None:
+        self.put_contract(message)
+
+    def get_agent_message(self, message_id: str) -> AgentMessage | None:
+        contract = self.get_contract("craik.agent_message", message_id)
+        return _cast_optional(AgentMessage, contract)
+
+    def list_agent_messages(self) -> list[AgentMessage]:
+        return _cast_list(AgentMessage, self.list_contracts("craik.agent_message"))
+
     def put_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt:
         existing = self.get_receipt(receipt.id)
         replaced_hashes = _receipt_hash_history(existing)

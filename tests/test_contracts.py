@@ -156,6 +156,36 @@ def test_task_request_auth_context_fields_round_trip(
     assert dumped["expected_duration_minutes"] == 90
 
 
+def test_agent_message_contract_round_trip() -> None:
+    payload = {
+        "schema": "craik.agent_message",
+        "version": "0.1.0",
+        "id": "agent_message_task_docs_agent_a_agent_b_review",
+        "task_id": "task_docs_reconcile",
+        "kind": "request",
+        "status": "sent",
+        "from_agent": "agent:a",
+        "to_agent": "agent:b",
+        "from_role_id": "role_docs_reviewer",
+        "from_role_kind": "docs_reviewer",
+        "to_role_id": "role_verifier",
+        "to_role_kind": "verifier",
+        "run_id": "run_docs_reconcile",
+        "handoff_id": "handoff_docs_reconcile",
+        "subject": "Review docs patch",
+        "body": "Please verify the docs patch.",
+        "receipt_ids": ["receipt_agent_message_send"],
+        "created_at": "2026-05-20T12:00:00Z",
+    }
+
+    parsed = CONTRACT_REGISTRY["craik.agent_message"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["schema"] == "craik.agent_message"
+    assert dumped["from_role_kind"] == "docs_reviewer"
+    assert dumped["receipt_ids"] == ["receipt_agent_message_send"]
+
+
 def test_handoff_identity_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
@@ -272,6 +302,7 @@ def test_contract_models_keep_split_package_import_surface() -> None:
     ("module_name", "export_name", "export_kind"),
     [
         ("craik.contracts.models.core", "TaskRequest", "symbol"),
+        ("craik.contracts.models.runtime", "AgentMessage", "symbol"),
         ("craik.contracts.models.handoffs", "Handoff", "symbol"),
         ("craik.contracts.models.instructions", "InstructionSource", "symbol"),
         ("craik.contracts.models.memory", "MemoryProposal", "symbol"),

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from craik.contracts.models import (
+    AgentMessage,
     Assumption,
     CapabilityReceipt,
     ContradictionReport,
@@ -81,6 +82,8 @@ class WorkGraphExporter:
                 )
         for receipt in _filter_by_task(self._store.list_receipts(), task_id):
             builder.add_receipt(receipt)
+        for message in _filter_by_task(self._store.list_agent_messages(), task_id):
+            builder.add_agent_message(message)
         for proposal in _filter_by_task(self._store.list_proposals(), task_id):
             builder.add_proposal(proposal)
         for handoff in _filter_by_task(self._store.list_handoffs(), task_id):
@@ -210,6 +213,45 @@ class _GraphBuilder:
             from_node=f"task:{receipt.task_id}",
             to_node=f"receipt:{receipt.id}",
         )
+
+    def add_agent_message(self, message: AgentMessage) -> None:
+        self.add_node(
+            id=f"message:{message.id}",
+            type="agent_message",
+            label=message.subject,
+            task_id=message.task_id,
+            metadata={
+                "kind": message.kind,
+                "status": message.status,
+                "from_agent": message.from_agent,
+                "to_agent": message.to_agent,
+                "from_role_kind": message.from_role_kind,
+                "to_role_kind": message.to_role_kind,
+            },
+        )
+        self.add_edge(
+            type="has_message",
+            from_node=f"task:{message.task_id}",
+            to_node=f"message:{message.id}",
+        )
+        if message.run_id:
+            self.add_edge(
+                type="message_in_run",
+                from_node=f"run:{message.run_id}",
+                to_node=f"message:{message.id}",
+            )
+        if message.handoff_id:
+            self.add_edge(
+                type="message_references_handoff",
+                from_node=f"message:{message.id}",
+                to_node=f"handoff:{message.handoff_id}",
+            )
+        for receipt_id in message.receipt_ids:
+            self.add_edge(
+                type="records_receipt",
+                from_node=f"message:{message.id}",
+                to_node=f"receipt:{receipt_id}",
+            )
 
     def add_proposal(self, proposal: MemoryProposal) -> None:
         self.add_node(
