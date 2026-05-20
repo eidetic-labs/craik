@@ -35,7 +35,6 @@ from craik.runtime.work.loop_support.execution import (
     request_id,
     result_with_idempotency_key,
     runtime_policy_context,
-    stream_chunks_from_output,
 )
 from craik.runtime.work.loop_support.execution import (
     operator_policy_decision as check_active_operator_policy,
@@ -44,6 +43,8 @@ from craik.runtime.work.loop_support.execution import (
     side_effect_receipt as build_side_effect_receipt,
 )
 from craik.runtime.work.loop_support.fixture_runner import FixtureStepRunner
+from craik.runtime.work.loop_support.replay import completed_step_capture
+from craik.runtime.work.loop_support.scope_control import record_scope_change_pause
 from craik.runtime.work.loop_support.tool_dispatch import (
     attested_tool_message,
     dispatch_tool_call_side_effect,
@@ -66,16 +67,9 @@ from craik.runtime.work.run_outputs import (
 from craik.runtime.work.runs import RunTransition, TaskRunManager
 
 __all__ = [
-    "FixtureStepRunner",
-    "LoopExecutionError",
-    "LoopExecutionResult",
-    "LoopMaxIterationsError",
-    "LoopPolicyBlockedError",
-    "LoopProviderBudgetExceededError",
-    "LoopTimeBudgetExceededError",
-    "LoopStep",
-    "RunnerStepHandler",
-    "SingleAgentLoopExecutor",
+    "FixtureStepRunner", "LoopExecutionError", "LoopExecutionResult",
+    "LoopMaxIterationsError", "LoopPolicyBlockedError", "LoopProviderBudgetExceededError",
+    "LoopTimeBudgetExceededError", "LoopStep", "RunnerStepHandler", "SingleAgentLoopExecutor",
     "default_loop_steps",
 ]
 
@@ -237,6 +231,20 @@ class SingleAgentLoopExecutor:
                     ),
                 )
                 raise LoopMaxIterationsError(run.stop_reason or "max iterations reached")
+
+            scope_change = record_scope_change_pause(
+                store=self.store,
+                policy=policy,
+                run=run,
+                intent_lock=intent_lock,
+                step=step,
+                actor=f"runner:{runner_metadata.id}",
+            )
+            if scope_change is not None:
+                if scope_change.receipt is not None:
+                    receipts.append(scope_change.receipt)
+                run = scope_change.run or self.runs.require(run.id)
+                return LoopExecutionResult(run, step_results, output_captures, receipts)
 
             stop_reason = intent_stop_reason(intent_lock, step)
             if stop_reason is not None:
@@ -479,15 +487,8 @@ class SingleAgentLoopExecutor:
         run_id: str,
         step_key: str,
     ) -> RunOutputCapture | None:
-        for output in self.store.list_run_outputs():
-            if output.run_id != run_id:
-                continue
-            if output.observed_output.get("idempotency_key") != step_key:
-                continue
-            return RunOutputCapture(
-                output=output,
-                proposals=[],
-                skipped_reasons=["step already completed; reused durable output"],
-                chunks=stream_chunks_from_output(output.observed_output),
-            )
-        return None
+        return completed_step_capture(
+            self.store.list_run_outputs(),
+            run_id=run_id,
+            step_key=step_key,
+        )

@@ -290,7 +290,7 @@ produces structured debate artifacts with receipted resolution.
 <div><h4>Structured debate runtime</h4><p>Shipped first slice: role-linked positions become typed debate turns, summaries preserve agreement or disagreement, and resolution records an adjudication or human-delegation receipt.</p></div>
 <div><h4>Cross-agent review protocol</h4><p>Shipped first slice: review requests target worker results, handoffs, or debate summaries; review results carry typed findings, receipts, and source artifact links without mutating the reviewed artifact.</p></div>
 <div><h4>Human delegation at runtime</h4><p>Shipped first slice: <code>craik delegation pause</code> interrupts a run with a receipted delegation request, <code>craik delegation resolve</code> records accepted/rejected/cancelled responses, and existing run resume continues from the interrupted boundary.</p></div>
-<div><h4>Scope-change protocol</h4><p>Discovered new scope triggers declared protocol (expand / sibling / handoff) rather than silent expansion.</p></div>
+<div><h4>Scope-change protocol</h4><p>Shipped first slice: discovered scope outside the active intent lock interrupts the run, persists a receipted request, and requires an explicit expand / sibling / handoff / denial decision.</p></div>
 <div><h4>Live work graph</h4><p>Graph is the coordination source of truth, not just an export.</p></div>
 <div><h4>Per-agent isolation enforced</h4><p>Consumer agent gets its own profile assignment by default, not inherited. v0.1.0 records identity in handoff records; v0.3.0 enforces isolation across the runtime.</p></div>
 

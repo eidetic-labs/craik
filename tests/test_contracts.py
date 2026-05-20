@@ -214,6 +214,21 @@ def test_human_delegation_run_id_round_trip(
     assert delegation.run_id == "run_docs_reconcile"
 
 
+def test_scope_change_result_protocol_decision_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.scope_change_result"])
+    payload["decision"] = "accepted"
+    payload["protocol_decision"] = "sibling"
+    payload["sibling_task_id"] = "task_follow_up_scope"
+    payload["updated_intent_lock_id"] = None
+
+    result = CONTRACT_REGISTRY["craik.scope_change_result"].model_validate(payload)
+
+    assert result.protocol_decision == "sibling"
+    assert result.sibling_task_id == "task_follow_up_scope"
+
+
 def test_handoff_identity_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

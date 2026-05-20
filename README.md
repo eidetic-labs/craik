@@ -41,6 +41,9 @@ mutating the reviewed artifact.
 Human delegation can pause a run with a receipted request, record an accepted,
 rejected, or cancelled operator response, and then resume from the interrupted
 run boundary.
+Scope-change handling now prevents silent expansion: discovered work outside the
+active intent lock interrupts the run, persists the proposed scope change, and
+requires an explicit expand, sibling-work, handoff, or denial decision.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or

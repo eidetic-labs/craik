@@ -157,6 +157,7 @@ ReferenceIntegrationKind = Literal["skill", "plugin", "adapter"]
 HumanDelegationKind = Literal["approval", "clarification", "escalation", "ownership_transfer"]
 HumanDelegationStatus = Literal["open", "resolved", "cancelled"]
 ScopeChangeStatus = Literal["pending", "accepted", "rejected"]
+ScopeChangeProtocolDecision = Literal["expand", "sibling", "handoff", "denied"]
 InstructionSourceKind = Literal[
     "agents_md",
     "claude_md",
@@ -302,6 +303,7 @@ __all__ = [
     "HumanDelegationKind",
     "HumanDelegationStatus",
     "ScopeChangeStatus",
+    "ScopeChangeProtocolDecision",
     "InstructionSourceKind",
     "InstructionTrustBoundary",
     "InstructionSourceHashStatus",
