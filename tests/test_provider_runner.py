@@ -146,6 +146,29 @@ def test_provider_backed_runner_interrupts_when_provider_token_budget_exhausts(
     assert result.handoff.status == "incomplete"
 
 
+def test_provider_backed_runner_records_role_dispatch(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    task_id = _seed_task(store, tmp_path)
+
+    result = ProviderBackedRunExecutor(store).execute(
+        task_id=task_id,
+        provider_id="provider_openai",
+        grants=[_shell_grant(task_id)],
+        role_kind="docs_reviewer",
+        started_at=datetime(2026, 5, 17, 12, 0, tzinfo=UTC),
+    )
+    dispatch_receipt = store.get_receipt(f"receipt_{task_id}_role_dispatch_docs_reviewer")
+
+    assert result.compiled_prompt.runner_id == "provider_openai_chat"
+    assert result.run.role_id == "role_docs_reviewer"
+    assert result.run.role_kind == "docs_reviewer"
+    assert dispatch_receipt is not None
+    assert dispatch_receipt.id in result.run.receipt_ids
+    assert dispatch_receipt.result.metadata["runner_id"] == "provider_openai_chat"
+
+
 def _seed_task(store: LocalStore, tmp_path: Path) -> str:
     repo = tmp_path / "repo"
     repo.mkdir()

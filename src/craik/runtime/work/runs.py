@@ -76,6 +76,9 @@ class TaskRunManager:
         source_handoff_id: str | None = None,
         source_task_id: str | None = None,
         source_run_id: str | None = None,
+        role_id: str | None = None,
+        role_kind: str | None = None,
+        receipt_ids: list[str] | None = None,
         created_at: datetime | None = None,
     ) -> TaskRun:
         now = created_at or datetime.now(UTC)
@@ -95,6 +98,7 @@ class TaskRunManager:
             phase_started_at=now,
             updated_at=now,
             runner_metadata=list(runner_metadata or []),
+            receipt_ids=list(receipt_ids or []),
             auth_profile_id=auth_profile_id,
             auth_identity_hash=auth_identity_hash,
             operator_subject=operator_subject,
@@ -102,6 +106,8 @@ class TaskRunManager:
             source_handoff_id=source_handoff_id,
             source_task_id=source_task_id,
             source_run_id=source_run_id,
+            role_id=role_id,
+            role_kind=role_kind,
         )
         self.store.put_task_run(run)
         return run

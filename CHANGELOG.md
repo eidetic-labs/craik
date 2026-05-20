@@ -16,6 +16,9 @@ within the `0.x.0` stability expectations described in
   a follow-up task, case file, and pending run that record source handoff
   provenance while requiring an explicit consumer credential and operator
   identity.
+- Role-based provider dispatch: `craik run execute --role` now records a
+  policy-checked specialist role assignment, dispatch receipt, and run-level
+  role metadata.
 
 ## 0.2.0 - 2026-05-20
 

@@ -24,6 +24,9 @@ provider requests through OpenAI Responses, Anthropic Messages, and
 OpenAI-compatible Chat Completions adapters, persist receipts/handoffs/work
 graphs, consume completed handoffs into follow-up governed runs, and propose
 memory updates for review.
+Provider-backed runs can also be dispatched through v0.3.0 specialist roles
+such as verifier, docs reviewer, policy reviewer, memory curator, and
+adjudicator.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or

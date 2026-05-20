@@ -697,6 +697,8 @@ Options:
 - `--provider-id`: Configured provider runner id. Use provider list to inspect options.; default `provider_openai`
 - `--allow-fixture-action, --no-allow-fixture-action`: Grant the deterministic fixture shell action required by the MVP loop. This records a governed receipt; it does not execute arbitrary shell.; default `true`
 - `--max-iterations`: Maximum single-agent loop iterations.; default `5`
+- `--role`: Specialist role kind to dispatch for this run.
+- `--role-runner`: Override the default runner for the selected role.
 
 ## `craik run inspect`
 
