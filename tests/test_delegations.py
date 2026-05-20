@@ -11,8 +11,14 @@ from craik.contracts.models import (
     SelfAudit,
 )
 from craik.runtime.paths import ensure_craik_home
-from craik.runtime.reviewing.delegations import HumanDelegationManager, must_stop_for_human_decision
+from craik.runtime.policy.policy import generate_policy_envelope
+from craik.runtime.reviewing.delegations import (
+    HumanDelegationManager,
+    HumanDelegationStateError,
+    must_stop_for_human_decision,
+)
 from craik.runtime.store import LocalStore
+from craik.runtime.work.runs import RunTransition, TaskRunManager
 
 
 def _store(tmp_path: Path) -> LocalStore:
@@ -55,6 +61,18 @@ def _scope_request() -> ScopeChangeRequest:
     )
 
 
+def _run(store: LocalStore) -> str:
+    run = TaskRunManager(store).create(
+        task_id="task_delegate",
+        case_file_id="case_delegate",
+        policy_envelope_id="policy_delegate",
+        runner_id="provider_openai",
+        runner_mode="live",
+        intent_lock_id="intent_delegate",
+    )
+    return run.id
+
+
 @pytest.mark.parametrize(
     ("kind", "delegation_id"),
     [
@@ -82,6 +100,118 @@ def test_human_delegation_points_stop_until_resolved(
         assert resolved.resolution == "Human decision recorded."
         assert must_stop_for_human_decision([resolved], []) is False
         assert store.get_human_delegation(delegation.id) == resolved
+    finally:
+        store.close()
+
+
+def test_run_can_pause_for_human_delegation_and_resume_after_acceptance(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        run_id = _run(store)
+        policy = generate_policy_envelope(task_id="task_delegate", actor="runner:fixture")
+        manager = HumanDelegationManager(store)
+
+        paused = manager.pause_run_for_delegation(
+            policy=policy,
+            run_id=run_id,
+            kind="approval",
+            summary="Approval needed before continuing.",
+            requested_decision="Approve continuing the run.",
+            requested_by="agent:orchestrator",
+            owner="user:maintainer",
+        )
+        resolved = manager.resolve_run_delegation(
+            policy=policy,
+            delegation_id=paused.delegation.id,
+            resolution="Approved; continue.",
+            outcome="accepted",
+        )
+        resumed = TaskRunManager(store).prepare_resume(run_id)
+
+        assert paused.run.status == "interrupted"
+        assert paused.delegation.run_id == run_id
+        assert paused.receipt.id in paused.run.receipt_ids
+        assert resolved.delegation.status == "resolved"
+        assert resolved.receipt.id in resolved.run.receipt_ids
+        assert resumed.status == "running"
+    finally:
+        store.close()
+
+
+def test_run_delegation_rejection_keeps_run_interrupted(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        run_id = _run(store)
+        policy = generate_policy_envelope(task_id="task_delegate", actor="runner:fixture")
+        manager = HumanDelegationManager(store)
+        paused = manager.pause_run_for_delegation(
+            policy=policy,
+            run_id=run_id,
+            kind="clarification",
+            summary="Clarification needed before continuing.",
+            requested_decision="Clarify whether to continue.",
+            requested_by="agent:orchestrator",
+        )
+
+        resolved = manager.resolve_run_delegation(
+            policy=policy,
+            delegation_id=paused.delegation.id,
+            resolution="Rejected; do not continue.",
+            outcome="rejected",
+        )
+
+        assert resolved.delegation.status == "resolved"
+        assert resolved.receipt.result.status == "denied"
+        assert resolved.run.status == "interrupted"
+    finally:
+        store.close()
+
+
+def test_run_delegation_cancel_path_records_cancelled_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        run_id = _run(store)
+        policy = generate_policy_envelope(task_id="task_delegate", actor="runner:fixture")
+        manager = HumanDelegationManager(store)
+        paused = manager.pause_run_for_delegation(
+            policy=policy,
+            run_id=run_id,
+            kind="escalation",
+            summary="Escalation needed.",
+            requested_decision="Decide whether to transfer ownership.",
+            requested_by="agent:orchestrator",
+        )
+
+        cancelled = manager.resolve_run_delegation(
+            policy=policy,
+            delegation_id=paused.delegation.id,
+            resolution="Timed out; cancel delegation.",
+            outcome="cancelled",
+        )
+
+        assert cancelled.delegation.status == "cancelled"
+        assert cancelled.receipt.result.metadata["outcome"] == "cancelled"
+        assert cancelled.run.status == "interrupted"
+    finally:
+        store.close()
+
+
+def test_pausing_terminal_run_is_rejected(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        run_id = _run(store)
+        TaskRunManager(store).transition(run_id, RunTransition(status="completed", phase="stop"))
+        with pytest.raises(HumanDelegationStateError, match="already terminal"):
+            HumanDelegationManager(store).pause_run_for_delegation(
+                policy=generate_policy_envelope(task_id="task_delegate", actor="runner:fixture"),
+                run_id=run_id,
+                kind="approval",
+                summary="Approval needed.",
+                requested_decision="Approve.",
+                requested_by="agent:orchestrator",
+            )
     finally:
         store.close()
 

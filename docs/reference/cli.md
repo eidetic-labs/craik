@@ -208,6 +208,42 @@ Show one local contradiction report and linked evidence.
 craik contradictions show [OPTIONS] REPORT_ID
 ```
 
+## `craik delegation`
+
+Pause and resolve human delegation points.
+
+```text
+craik delegation COMMAND [ARGS]...
+```
+
+## `craik delegation pause`
+
+Pause a run by opening a receipted human delegation.
+
+```text
+craik delegation pause [OPTIONS] RUN_ID
+```
+
+Options:
+
+- `--summary`: Delegation summary.
+- `--decision`: Decision requested from the human operator.
+- `--kind`: Delegation kind: approval, clarification, escalation, or ownership_transfer.; default `clarification`
+- `--owner`: Delegation owner.
+
+## `craik delegation resolve`
+
+Resolve or cancel a human delegation and link the decision receipt to its run.
+
+```text
+craik delegation resolve [OPTIONS] DELEGATION_ID
+```
+
+Options:
+
+- `--resolution`: Human resolution text.
+- `--outcome`: accepted, rejected, or cancelled.; default `accepted`
+
 ## `craik demo`
 
 Run built-in Craik demos.

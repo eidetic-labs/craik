@@ -310,6 +310,7 @@ class HumanDelegationPoint(CraikModel):
     requested_decision: str
     requested_by: str
     owner: str | None = None
+    run_id: str | None = None
     role_id: str | None = None
     intent_lock_id: str | None = None
     policy_envelope_id: str | None = None

@@ -1233,6 +1233,55 @@ def test_run_cancel_refuses_terminal_run(tmp_path: Path) -> None:
     assert "terminal runs cannot be cancelled" in result.output
 
 
+def test_delegation_pause_and_resolve_cli_flow(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _seed_run_state(home, status="running")
+
+    paused = runner.invoke(
+        app,
+        [
+            "delegation",
+            "pause",
+            "run_docs",
+            "--summary",
+            "Need approval.",
+            "--decision",
+            "Approve continuation.",
+            "--kind",
+            "approval",
+            "--owner",
+            "user:maintainer",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert paused.exit_code == 0
+    paused_payload = json.loads(paused.stdout)
+    assert paused_payload["run"]["status"] == "interrupted"
+    assert paused_payload["delegation"]["run_id"] == "run_docs"
+    assert paused_payload["delegation"]["receipt_ids"] == [paused_payload["receipt"]["id"]]
+
+    resolved = runner.invoke(
+        app,
+        [
+            "delegation",
+            "resolve",
+            paused_payload["delegation"]["id"],
+            "--resolution",
+            "Approved.",
+            "--outcome",
+            "accepted",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert resolved.exit_code == 0
+    resolved_payload = json.loads(resolved.stdout)
+    assert resolved_payload["delegation"]["status"] == "resolved"
+    assert resolved_payload["receipt"]["result"]["metadata"]["outcome"] == "accepted"
+    assert resolved_payload["receipt"]["id"] in resolved_payload["run"]["receipt_ids"]
+
+
 def test_run_recover_prints_plan_for_interrupted_run(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _seed_run_state(home, status="interrupted")

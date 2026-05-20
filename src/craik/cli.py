@@ -44,6 +44,8 @@ connect_app = typer.Typer(help="Connect to external services.")
 app.add_typer(connect_app, name="connect")
 demo_app = typer.Typer(help="Run built-in Craik demos.")
 app.add_typer(demo_app, name="demo")
+delegation_app = typer.Typer(help="Pause and resolve human delegation points.")
+app.add_typer(delegation_app, name="delegation")
 auth_app = typer.Typer(help="Manage provider credential profiles.")
 app.add_typer(auth_app, name="auth")
 contradictions_app = typer.Typer(help="Manage local contradiction reports.")
@@ -218,6 +220,7 @@ def _load_cli_extensions() -> None:
     """Import command modules that register subcommands on shared Typer apps."""
     for module_name in (
         "craik.cli_auth",
+        "craik.cli_delegations",
         "craik.cli_operations",
         "craik.cli_project",
         "craik.cli_tasks",

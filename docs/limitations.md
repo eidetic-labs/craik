@@ -125,7 +125,7 @@ Scheduled milestones with explicit version targets.
 <div>
 <dt>Multi-agent runtime</dt>
 <dt><span className="craik-fields__type">v0.3.0</span></dt>
-<dd>Handoff consumption, role-based provider dispatch, receipt-backed mailbox messages, intent-lock coordination, structured debate resolution, and cross-agent review requests/results are available as first slices. Human runtime pause/resume, scope-change workflow, live graph coordination, and per-agent isolation enforcement remain v0.3.0 work.</dd>
+<dd>Handoff consumption, role-based provider dispatch, receipt-backed mailbox messages, intent-lock coordination, structured debate resolution, cross-agent review requests/results, and human delegation pause/resume are available as first slices. Scope-change workflow, live graph coordination, and per-agent isolation enforcement remain v0.3.0 work.</dd>
 </div>
 
 <div>

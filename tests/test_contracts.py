@@ -203,6 +203,17 @@ def test_review_contracts_accept_handoff_subject_links(
     assert result.subject_handoff_ids == ["handoff_review"]
 
 
+def test_human_delegation_run_id_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.human_delegation_point"])
+    payload["run_id"] = "run_docs_reconcile"
+
+    delegation = CONTRACT_REGISTRY["craik.human_delegation_point"].model_validate(payload)
+
+    assert delegation.run_id == "run_docs_reconcile"
+
+
 def test_handoff_identity_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
