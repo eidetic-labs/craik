@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
 
 from craik.contracts.models import (
     CapabilityGrant,
@@ -13,15 +10,14 @@ from craik.contracts.models import (
     IntentLock,
     PolicyEnvelope,
     RunnerMetadata,
-    RunnerResultStatus,
     RunnerStepRequest,
     RunnerStepResult,
-    TaskRun,
     TaskRunStatus,
 )
 from craik.runtime.memory.memory import MemoryStore
 from craik.runtime.policy.policy import denial_receipt
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.intent_locks import record_intent_lock_coordination_denial
 from craik.runtime.work.loop_support.budgets import (
     raise_provider_budget_if_exhausted,
     raise_time_budget_if_exhausted,
@@ -47,11 +43,21 @@ from craik.runtime.work.loop_support.execution import (
 from craik.runtime.work.loop_support.execution import (
     side_effect_receipt as build_side_effect_receipt,
 )
+from craik.runtime.work.loop_support.fixture_runner import FixtureStepRunner
 from craik.runtime.work.loop_support.tool_dispatch import (
     attested_tool_message,
     dispatch_tool_call_side_effect,
     dispatchable_tool_calls,
     result_with_stream_chunks,
+)
+from craik.runtime.work.loop_support.types import (
+    LoopExecutionError,
+    LoopExecutionResult,
+    LoopMaxIterationsError,
+    LoopPolicyBlockedError,
+    LoopProviderBudgetExceededError,
+    LoopTimeBudgetExceededError,
+    RunnerStepHandler,
 )
 from craik.runtime.work.run_outputs import (
     RunOutputCapture,
@@ -72,70 +78,6 @@ __all__ = [
     "SingleAgentLoopExecutor",
     "default_loop_steps",
 ]
-
-class LoopExecutionError(RuntimeError):
-    """Base error for governed loop execution failures."""
-class LoopPolicyBlockedError(LoopExecutionError):
-    """Raised when policy blocks a side-effect step."""
-
-class LoopMaxIterationsError(LoopExecutionError):
-    """Raised when the loop reaches its iteration bound."""
-
-class LoopTimeBudgetExceededError(LoopExecutionError):
-    """Raised when the loop exhausts its wall-clock budget."""
-
-class LoopProviderBudgetExceededError(LoopExecutionError):
-    """Raised when the loop exhausts its provider token budget."""
-
-class RunnerStepHandler(Protocol):
-    """Minimal runner boundary for one loop step."""
-
-    def run_step(
-        self,
-        request: RunnerStepRequest,
-        *,
-        stream_callback: Callable[[str], None] | None = None,
-    ) -> RunnerStepResult:
-        """Execute one step request and return a normalized result."""
-
-
-@dataclass(frozen=True)
-class LoopExecutionResult:
-    """Summary of a completed or stopped loop execution."""
-
-    run: TaskRun
-    step_results: list[RunnerStepResult]
-    output_captures: list[RunOutputCapture]
-    receipts: list[CapabilityReceipt]
-
-
-@dataclass
-class FixtureStepRunner:
-    """Deterministic step runner for local tests."""
-
-    statuses: list[RunnerResultStatus] = field(default_factory=list)
-
-    def run_step(
-        self,
-        request: RunnerStepRequest,
-        *,
-        stream_callback: Callable[[str], None] | None = None,
-    ) -> RunnerStepResult:
-        _ = stream_callback
-        status = self.statuses.pop(0) if self.statuses else "completed"
-        return RunnerStepResult(
-            id=f"runner_step_result_{request.run_id}_{request.phase}_{request.id}",
-            request_id=request.id,
-            run_id=request.run_id,
-            task_id=request.task_id,
-            phase=request.phase,
-            runner=request.runner,
-            status=status,
-            summary=f"Fixture {request.phase} step {status}.",
-            observed_output={"phase": request.phase, "status": status},
-            diagnostics=[] if status in {"completed", "partial"} else [f"fixture {status}"],
-            created_at=datetime.now(UTC),
-        )
 
 
 class SingleAgentLoopExecutor:
@@ -203,6 +145,28 @@ class SingleAgentLoopExecutor:
         output_captures: list[RunOutputCapture] = []
         active_grants = grants or []
         iteration = run.iteration
+        coordination_receipt = record_intent_lock_coordination_denial(
+            self.store,
+            run=run,
+            policy=policy,
+            actor=f"runner:{runner_metadata.id}",
+            intent_lock=intent_lock,
+            phase="start",
+        )
+        if coordination_receipt is not None:
+            receipts.append(coordination_receipt)
+            run = self.runs.transition(
+                run.id,
+                RunTransition(
+                    status="blocked",
+                    phase="stop",
+                    iteration=0,
+                    receipt_id=coordination_receipt.id,
+                    stop_reason=coordination_receipt.reason,
+                    at=datetime.now(UTC),
+                ),
+            )
+            return LoopExecutionResult(run, step_results, output_captures, receipts)
         operator_policy_decision = check_active_operator_policy(policy)
         if not operator_policy_decision.allowed:
             receipt = denial_receipt(
@@ -238,6 +202,29 @@ class SingleAgentLoopExecutor:
             self._raise_time_budget_if_exhausted(run.id, iteration)
 
             self._raise_provider_budget_if_exhausted(run.id, iteration)
+
+            coordination_receipt = record_intent_lock_coordination_denial(
+                self.store,
+                run=run,
+                policy=policy,
+                actor=f"runner:{runner_metadata.id}",
+                intent_lock=intent_lock,
+                phase=step.phase,
+            )
+            if coordination_receipt is not None:
+                receipts.append(coordination_receipt)
+                run = self.runs.transition(
+                    run.id,
+                    RunTransition(
+                        status="blocked",
+                        phase="stop",
+                        iteration=index - 1,
+                        receipt_id=coordination_receipt.id,
+                        stop_reason=coordination_receipt.reason,
+                        at=datetime.now(UTC),
+                    ),
+                )
+                return LoopExecutionResult(run, step_results, output_captures, receipts)
 
             if iteration >= max_iterations:
                 run = self.runs.transition(
@@ -364,6 +351,18 @@ class SingleAgentLoopExecutor:
                 if tool_calls:
                     for tool_call in tool_calls:
                         self._raise_time_budget_if_exhausted(run.id, iteration)
+                        coordination_receipt = record_intent_lock_coordination_denial(
+                            self.store,
+                            run=run,
+                            policy=policy,
+                            actor=f"runner:{runner_metadata.id}",
+                            intent_lock=intent_lock,
+                            phase=f"{step.phase}:tool",
+                        )
+                        if coordination_receipt is not None:
+                            receipts.append(coordination_receipt)
+                            denied_tool_receipt = coordination_receipt
+                            break
                         side_effect = dispatch_tool_call_side_effect(
                             store=self.store,
                             policy=policy,
