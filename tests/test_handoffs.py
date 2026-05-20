@@ -314,6 +314,11 @@ def test_consume_handoff_creates_new_task_case_and_pending_run(
     assert result.run.source_handoff_id == source_handoff.id
     assert result.run.auth_profile_id == "openai:writer"
     assert result.run.operator_subject == "operator-b"
+    assert result.run.receipt_ids
+    identity_receipt = store.get_receipt(result.run.receipt_ids[0])
+    assert identity_receipt is not None
+    assert identity_receipt.capability == "handoff.identity.assign"
+    assert identity_receipt.result.metadata["continued_producer_identity"] is False
 
 
 def test_consume_handoff_requires_explicit_consumer_identity(
@@ -336,6 +341,71 @@ def test_consume_handoff_requires_explicit_consumer_identity(
             operator_subject="operator-b",
             operator_issuer="https://issuer.example.test",
         )
+    receipts = store.list_receipts()
+    assert receipts[-1].capability == "handoff.identity.assign"
+    assert receipts[-1].result.status == "denied"
+
+
+def test_consume_handoff_denies_implicit_producer_identity_reuse(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    source_task_id = _seed_case(store, tmp_path)
+    source_handoff = HandoffWriter(store).create(
+        task_id=source_task_id,
+        agent="agent:reader",
+        summary="Reader finished review.",
+        tests_run=["pytest"],
+        auth_profile_id="openai:reader",
+        operator_subject="operator-a",
+        operator_issuer="https://issuer.example.test",
+    )
+
+    with pytest.raises(HandoffConsumptionError, match="matches producer identity"):
+        consume_handoff(
+            store,
+            handoff_id_or_task_id=source_handoff.id,
+            auth_profile_id="openai:reader",
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
+        )
+
+    receipts = store.list_receipts()
+    assert receipts[-1].result.status == "denied"
+    assert receipts[-1].result.metadata["producer_auth_profile_id"] == "openai:reader"
+    assert receipts[-1].result.metadata["consumer_auth_profile_id"] == "openai:reader"
+
+
+def test_consume_handoff_allows_explicit_identity_continuation(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    source_task_id = _seed_case(store, tmp_path)
+    source_handoff = HandoffWriter(store).create(
+        task_id=source_task_id,
+        agent="agent:reader",
+        summary="Reader finished review.",
+        tests_run=["pytest"],
+        auth_profile_id="openai:reader",
+        operator_subject="operator-a",
+        operator_issuer="https://issuer.example.test",
+    )
+
+    result = consume_handoff(
+        store,
+        handoff_id_or_task_id=source_handoff.id,
+        auth_profile_id="openai:reader",
+        operator_subject="operator-a",
+        operator_issuer="https://issuer.example.test",
+        allow_identity_continuation=True,
+    )
+
+    identity_receipt = store.get_receipt(result.run.receipt_ids[0])
+    assert result.run.auth_profile_id == "openai:reader"
+    assert result.run.operator_subject == "operator-a"
+    assert identity_receipt is not None
+    assert identity_receipt.result.status == "passed"
+    assert identity_receipt.result.metadata["continued_producer_identity"] is True
 
 
 def test_handoff_requires_existing_task(store: LocalStore) -> None:

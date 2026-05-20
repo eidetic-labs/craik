@@ -292,7 +292,7 @@ produces structured debate artifacts with receipted resolution.
 <div><h4>Human delegation at runtime</h4><p>Shipped first slice: <code>craik delegation pause</code> interrupts a run with a receipted delegation request, <code>craik delegation resolve</code> records accepted/rejected/cancelled responses, and existing run resume continues from the interrupted boundary.</p></div>
 <div><h4>Scope-change protocol</h4><p>Shipped first slice: discovered scope outside the active intent lock interrupts the run, persists a receipted request, and requires an explicit expand / sibling / handoff / denial decision.</p></div>
 <div><h4>Live work graph</h4><p>Shipped first slice: v0.3.0 coordination artifacts persist work-graph events, and operators can query the active graph before final export.</p></div>
-<div><h4>Per-agent isolation enforced</h4><p>Consumer agent gets its own profile assignment by default, not inherited. v0.1.0 records identity in handoff records; v0.3.0 enforces isolation across the runtime.</p></div>
+<div><h4>Per-agent isolation enforced</h4><p>Shipped first slice: handoff consumers record their own credential/operator assignment, producer identity reuse is denied by default, and intentional continuation requires an explicit flag.</p></div>
 
 </div>
 

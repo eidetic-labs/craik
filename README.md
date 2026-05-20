@@ -47,6 +47,10 @@ requires an explicit expand, sibling-work, handoff, or denial decision.
 The work graph is also becoming live coordination state: v0.3.0 mailbox,
 review, debate, delegation, and scope-change artifacts persist graph events that
 operators can query before a final export.
+Handoff consumers must now make their credential and operator assignment
+explicit. Craik rejects accidental producer-identity reuse unless the caller
+passes an explicit continuation flag, and the assignment is recorded as a
+receipt on the follow-up run.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or
