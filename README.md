@@ -38,6 +38,9 @@ delegation receipt.
 Cross-agent reviews can request bounded review of another agent's worker
 result, handoff, or debate summary and complete with typed findings without
 mutating the reviewed artifact.
+Human delegation can pause a run with a receipted request, record an accepted,
+rejected, or cancelled operator response, and then resume from the interrupted
+run boundary.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or

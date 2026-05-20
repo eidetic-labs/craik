@@ -31,6 +31,9 @@ within the `0.x.0` stability expectations described in
 - Cross-agent review protocol helper that creates receipted review requests
   for worker results, handoffs, or debate summaries and completes them with
   typed findings linked to reviewed artifacts.
+- Human delegation pause/resume workflow: runs can be interrupted with
+  receipted delegation requests, resolved or cancelled by CLI, and resumed from
+  the recorded response.
 
 ## 0.2.0 - 2026-05-20
 
