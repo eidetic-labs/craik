@@ -567,12 +567,41 @@ def test_handoff_commands_create_and_show_json_and_markdown(tmp_path: Path) -> N
         ["handoff", "show", "task_review_docs", "--markdown"],
         env={"CRAIK_HOME": str(home)},
     )
+    resumed = runner.invoke(
+        app,
+        [
+            "task",
+            "resume",
+            "--from-handoff",
+            "handoff_review_docs",
+            "--auth-profile-id",
+            "openai:writer",
+            "--operator-subject",
+            "operator-b",
+            "--operator-issuer",
+            "https://issuer.example.test",
+            "--runner",
+            "codex",
+            "--runner-mode",
+            "prompt-handoff",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
 
     assert created.exit_code == 0
     assert json.loads(created.stdout)["id"] == "handoff_review_docs"
     assert json.loads(created.stdout)["self_audit"]["validation_recorded"] is True
     assert shown.exit_code == 0
     assert shown.stdout.startswith("# Handoff: task_review_docs")
+    assert resumed.exit_code == 0
+    resume_payload = json.loads(resumed.stdout)
+    assert resume_payload["source_handoff"]["id"] == "handoff_review_docs"
+    assert resume_payload["task"]["source_handoff_id"] == "handoff_review_docs"
+    assert resume_payload["task"]["auth_profile_id"] == "openai:writer"
+    assert resume_payload["task"]["operator_subject"] == "operator-b"
+    assert resume_payload["run"]["status"] == "pending"
+    assert resume_payload["run"]["runner_id"] == "codex"
+    assert resume_payload["run"]["source_handoff_id"] == "handoff_review_docs"
     assert "- [x] Validation recorded" in shown.stdout
 
 

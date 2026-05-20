@@ -854,6 +854,29 @@ Options:
 - `--scope-change-rule`: Rule for handling scope changes.
 - `--expected-output`: Expected output. May be repeated.
 
+## `craik task resume`
+
+Consume a handoff into a new task, case file, and pending run.
+
+```text
+craik task resume [OPTIONS]
+```
+
+Options:
+
+- `--from-handoff`: Source handoff id or source task id to consume.
+- `--auth-profile-id`: Consumer auth profile for the new run.
+- `--operator-subject`: Consumer operator subject for the new run.
+- `--operator-issuer`: Consumer operator issuer for the new run.
+- `--title`: Follow-up task title.
+- `--objective`: Follow-up task objective.
+- `--requested-by`: Requester identity to store on the task.; default `user:local`
+- `--priority`: Priority: low, normal, high, or urgent.; default `normal`
+- `--mode`: Mode: plan, review, implement, or verify.; default `implement`
+- `--runner`: Runner id assigned to the pending run.; default `fixture`
+- `--runner-mode`: Runner mode: fixture, prompt-handoff, or live.; default `fixture`
+- `--max-iterations`: Maximum run iterations.; default `5`
+
 ## `craik update`
 
 Print safe update guidance without modifying the installation.

@@ -202,6 +202,9 @@ class TaskRun(CraikModel):
     auth_identity_hash: str | None = None
     operator_subject: str | None = None
     operator_issuer: str | None = None
+    source_handoff_id: str | None = None
+    source_task_id: str | None = None
+    source_run_id: str | None = None
 
 
 if not TYPE_CHECKING:

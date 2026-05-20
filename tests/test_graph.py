@@ -83,6 +83,37 @@ def test_work_graph_export_is_deterministic(
     assert _stable(first) == _stable(second)
 
 
+def test_work_graph_export_links_consumed_handoff_to_follow_up_task(
+    store: LocalStore,
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    source_handoff = Handoff.model_validate(fixtures["craik.handoff"])
+    follow_up_payload = dict(fixtures["craik.task_request"])
+    follow_up_payload.update(
+        {
+            "id": "task_follow_up",
+            "title": "Follow up from handoff",
+            "source_handoff_id": source_handoff.id,
+            "source_task_id": source_handoff.task_id,
+            "source_run_id": "run_docs_reconcile",
+        }
+    )
+    follow_up_task = TaskRequest.model_validate(follow_up_payload)
+    store.put_handoff(source_handoff)
+    store.put_task(follow_up_task)
+
+    export = WorkGraphExporter(store).export()
+
+    edge_types = {(edge.type, edge.from_node, edge.to_node) for edge in export.edges}
+    follow_up_node = next(node for node in export.nodes if node.id == "task:task_follow_up")
+    assert follow_up_node.metadata["source_handoff_id"] == source_handoff.id
+    assert (
+        "continues_handoff",
+        f"handoff:{source_handoff.id}",
+        "task:task_follow_up",
+    ) in edge_types
+
+
 def test_work_graph_export_rejects_unknown_task(store: LocalStore) -> None:
     with pytest.raises(WorkGraphTaskNotFoundError, match="unknown task"):
         WorkGraphExporter(store).export(task_id="task_missing")

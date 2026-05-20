@@ -142,8 +142,30 @@ class _GraphBuilder:
             type="task",
             label=task.title,
             task_id=task.id,
-            metadata={"mode": task.mode, "priority": task.priority},
+            metadata={
+                "mode": task.mode,
+                "priority": task.priority,
+                "source_handoff_id": task.source_handoff_id,
+                "source_task_id": task.source_task_id,
+            },
         )
+        if task.source_handoff_id:
+            self.add_node(
+                id=f"handoff:{task.source_handoff_id}",
+                type="handoff",
+                label=task.source_handoff_id,
+                task_id=task.id,
+                metadata={
+                    "source": "consumed_handoff",
+                    "source_task_id": task.source_task_id,
+                },
+            )
+            self.add_edge(
+                type="continues_handoff",
+                from_node=f"handoff:{task.source_handoff_id}",
+                to_node=f"task:{task.id}",
+                metadata={"source_task_id": task.source_task_id},
+            )
 
     def add_handoff(self, handoff: Handoff) -> None:
         self.add_node(

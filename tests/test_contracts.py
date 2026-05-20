@@ -131,6 +131,11 @@ def test_task_request_auth_context_fields_round_trip(
     payload.update(
         {
             "auth_profile_id": "anthropic:local-cli",
+            "operator_subject": "operator-a",
+            "operator_issuer": "https://issuer.example.test",
+            "source_handoff_id": "handoff_docs_reconcile",
+            "source_task_id": "task_docs_reconcile",
+            "source_run_id": "run_docs_reconcile",
             "expected_duration_minutes": 90,
         }
     )
@@ -139,6 +144,11 @@ def test_task_request_auth_context_fields_round_trip(
     dumped = parsed.model_dump(mode="json", by_alias=True)
 
     assert dumped["auth_profile_id"] == "anthropic:local-cli"
+    assert dumped["operator_subject"] == "operator-a"
+    assert dumped["operator_issuer"] == "https://issuer.example.test"
+    assert dumped["source_handoff_id"] == "handoff_docs_reconcile"
+    assert dumped["source_task_id"] == "task_docs_reconcile"
+    assert dumped["source_run_id"] == "run_docs_reconcile"
     assert dumped["expected_duration_minutes"] == 90
 
 
@@ -174,6 +184,9 @@ def test_task_run_identity_fields_round_trip(
             "auth_identity_hash": "b" * 64,
             "operator_subject": "operator-b",
             "operator_issuer": "https://issuer.example.test",
+            "source_handoff_id": "handoff_docs_reconcile",
+            "source_task_id": "task_docs_reconcile",
+            "source_run_id": "run_docs_reconcile",
             "completed_step_keys": ["run_docs:1:plan", "run_docs:2:act"],
             "last_step_key": "run_docs:2:act",
             "wall_clock_budget_seconds": 120.5,
@@ -189,6 +202,9 @@ def test_task_run_identity_fields_round_trip(
     assert dumped["auth_profile_id"] == "openai:writer"
     assert dumped["auth_identity_hash"] == "b" * 64
     assert dumped["operator_subject"] == "operator-b"
+    assert dumped["source_handoff_id"] == "handoff_docs_reconcile"
+    assert dumped["source_task_id"] == "task_docs_reconcile"
+    assert dumped["source_run_id"] == "run_docs_reconcile"
     assert dumped["operator_issuer"] == "https://issuer.example.test"
     assert dumped["completed_step_keys"] == ["run_docs:1:plan", "run_docs:2:act"]
     assert dumped["last_step_key"] == "run_docs:2:act"
