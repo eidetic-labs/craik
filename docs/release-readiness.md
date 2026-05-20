@@ -1,17 +1,100 @@
-# v0.1.0 Release Readiness Validation
+# Release Readiness Validation
 
-<p className="craik-meta"><span>3 min read</span><span>For maintainers</span><span>Validated 2026-05-17</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-20</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The repository-owned readiness sign-off for `v0.1.0`, validated against
-`main` at `bf29513d6ba65a8640050fbaa27cda2d6bf398b1`. Every check below
-is reproducible from the commit listed. Remaining work is outside the
-repository.
+The repository-owned readiness record for Craik releases. The current release
+gate is `0.2.0`; the historical `0.1.0` sign-off remains below for audit
+continuity.
 
 </div>
+
+## v0.2.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Auth and identity gate.**
+
+`0.2.0` moves Craik beyond the first provider-runtime substrate by adding
+typed credential profiles, OIDC operator identity, credential pools, workload
+identity federation, and receipt-backed authorization governance.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Release notes</dd>
+</div>
+
+<div>
+<dt>Package version</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> declare <code>0.2.0</code>.</dd>
+</div>
+
+<div>
+<dt>Credential sources</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>API-key, OAuth, CLI bridge, secret-reference, Stigmem-reference, marker, and pooled profiles are covered by store, source, and provider-runtime tests.</dd>
+</div>
+
+<div>
+<dt>Operator identity</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>OIDC login, session storage, JWT validation, workload identity, and RFC 8693 exchange paths have in-repo tests, including rejection cases for unsafe token shapes.</dd>
+</div>
+
+<div>
+<dt>Governance</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Receipts now carry credential and operator identity fields; policies can bind runs to credential kinds, profiles, operator subjects, groups, and issuers.</dd>
+</div>
+
+<div>
+<dt>Operational safety</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Credential stores use locked atomic writes, auth health appears in doctor output, first credential use is approval-gated, and per-credential redaction prevents profile-specific identifiers from leaking into artifacts.</dd>
+</div>
+
+<div>
+<dt>Release actions</dt>
+<dt><span className="craik-fields__type">pending</span></dt>
+<dd>Create immutable tag <code>v0.2.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+</div>
+
+</div>
+
+### v0.2.0 Verification Commands
+
+Run these before tagging:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_release_tag.py --tag v0.2.0 --expected-version 0.2.0
+uv run pytest tests/test_auth_api_key_source.py tests/test_auth_profiles.py tests/test_auth_credential_pool.py tests/test_oidc_operator.py tests/test_operator_session_store.py tests/test_workload_identity.py tests/test_oidc_exchange_secret_manager.py tests/test_provider_runtime.py tests/test_policy.py tests/test_case_files.py tests/test_handoffs.py -q
+uv build
+```
+
+### v0.2.0 Security Notes
+
+- Live provider credentials remain opt-in and are resolved from configured
+  profiles at request time; raw credential material is not stored in receipts.
+- Operator identity is enforced before credential resolution when policy
+  requires it.
+- OIDC validation rejects unsigned tokens, unknown key IDs, tampered payloads,
+  and algorithm-confusion cases.
+- Workload federation uses short-lived exchanged credentials and cached expiry
+  margins instead of long-lived platform secrets.
+
+## v0.1.0 Release Readiness
 
 <div className="craik-keypoint">
 

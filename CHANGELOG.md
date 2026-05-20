@@ -12,6 +12,28 @@ within the `0.x.0` stability expectations described in
 
 _No unreleased changes._
 
+## 0.2.0 - 2026-05-20
+
+### Added
+
+- Pluggable credential profiles with env-var API keys, local-CLI OAuth,
+  CLI-bridge tokens, secret-reference credentials, Stigmem-backed credential
+  references, marker profiles, and credential pools.
+- OIDC operator identity with device-code and loopback PKCE flows, JWKS-backed
+  ID-token validation, session storage, workload identity sources, and RFC 8693
+  token exchange.
+- Governance-native auth controls: credential-scoped receipts,
+  operator-scoped receipts, policy-bound credentials, policy-bound operators,
+  first-use approval gates, and receipted operator-credential authorization.
+- Operational hardening for auth state: file-locked profile/session/pool stores,
+  credential health doctor checks, expiry risk evidence in case files,
+  per-credential redaction patterns, and handoff identity bookkeeping.
+
+### Changed
+
+- Release readiness now tracks the `0.2.0` auth and identity gate separately
+  from the historical `0.1.x` provider-runtime release record.
+
 ## 0.1.2 - 2026-05-18
 
 ### Fixed
