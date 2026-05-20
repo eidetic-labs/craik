@@ -63,6 +63,13 @@ def task_resume(
         int,
         typer.Option("--max-iterations", help="Maximum run iterations."),
     ] = 5,
+    allow_identity_continuation: Annotated[
+        bool,
+        typer.Option(
+            "--allow-identity-continuation",
+            help="Explicitly allow the consumer to reuse the producer identity.",
+        ),
+    ] = False,
 ) -> None:
     """Consume a handoff into a new task, case file, and pending run."""
     store = LocalStore.from_env()
@@ -82,6 +89,7 @@ def task_resume(
             runner_id=runner_id,
             runner_mode=_runner_mode(runner_mode),
             max_iterations=max_iterations,
+            allow_identity_continuation=allow_identity_continuation,
         )
     except HandoffConsumptionError as error:
         raise typer.BadParameter(str(error)) from None

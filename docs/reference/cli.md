@@ -914,6 +914,7 @@ Options:
 - `--runner`: Runner id assigned to the pending run.; default `fixture`
 - `--runner-mode`: Runner mode: fixture, prompt-handoff, or live.; default `fixture`
 - `--max-iterations`: Maximum run iterations.; default `5`
+- `--allow-identity-continuation`: Explicitly allow the consumer to reuse the producer identity.; default `false`
 
 ## `craik update`
 

@@ -17,6 +17,10 @@ from craik.contracts.models import (
 from craik.runtime.policy.intent_locks import IntentLockManager
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
+from craik.runtime.work.coordination.identity_isolation import (
+    IdentityIsolationError,
+    validate_handoff_consumer_identity,
+)
 from craik.runtime.work.handoffs import HandoffContextError, HandoffWriter
 from craik.runtime.work.runs import TaskRunManager
 from craik.runtime.work.tasks import create_task
@@ -52,18 +56,23 @@ def consume_handoff(
     runner_id: str = "fixture",
     runner_mode: RunnerMode = "fixture",
     max_iterations: int = 5,
+    allow_identity_continuation: bool = False,
 ) -> HandoffConsumptionResult:
     """Create a new task, case file, and pending run from a source handoff."""
-    if not auth_profile_id:
-        raise HandoffConsumptionError("handoff consumption requires --auth-profile-id")
-    if not operator_subject or not operator_issuer:
-        raise HandoffConsumptionError(
-            "handoff consumption requires --operator-subject and --operator-issuer"
-        )
-
     try:
         handoff = HandoffWriter(store).require(handoff_id_or_task_id)
     except HandoffContextError as error:
+        raise HandoffConsumptionError(str(error)) from None
+    try:
+        identity = validate_handoff_consumer_identity(
+            store,
+            handoff=handoff,
+            auth_profile_id=auth_profile_id,
+            operator_subject=operator_subject,
+            operator_issuer=operator_issuer,
+            allow_identity_continuation=allow_identity_continuation,
+        )
+    except IdentityIsolationError as error:
         raise HandoffConsumptionError(str(error)) from None
 
     if store.get_project(handoff.project_id) is None:
@@ -78,9 +87,9 @@ def consume_handoff(
         requested_by=requested_by,
         priority=priority,
         mode=mode,
-        auth_profile_id=auth_profile_id,
-        operator_subject=operator_subject,
-        operator_issuer=operator_issuer,
+        auth_profile_id=identity.auth_profile_id,
+        operator_subject=identity.operator_subject,
+        operator_issuer=identity.operator_issuer,
         source_handoff_id=handoff.id,
         source_task_id=handoff.task_id,
         source_run_id=source_run_id,
@@ -117,12 +126,13 @@ def consume_handoff(
         runner_id=runner_id,
         runner_mode=runner_mode,
         max_iterations=max_iterations,
-        auth_profile_id=auth_profile_id,
-        operator_subject=operator_subject,
-        operator_issuer=operator_issuer,
+        auth_profile_id=identity.auth_profile_id,
+        operator_subject=identity.operator_subject,
+        operator_issuer=identity.operator_issuer,
         source_handoff_id=handoff.id,
         source_task_id=handoff.task_id,
         source_run_id=source_run_id,
+        receipt_ids=[identity.receipt.id],
     )
     return HandoffConsumptionResult(
         source_handoff=handoff,

@@ -40,6 +40,9 @@ within the `0.x.0` stability expectations described in
 - Live work graph coordination: mailbox messages, reviews, debates,
   delegations, and scope-change artifacts now persist work-graph events that can
   be queried as active coordination state.
+- Per-agent identity isolation: consuming a handoff now records an explicit
+  consumer credential/operator assignment, rejects producer identity reuse by
+  default, and requires an explicit continuation flag when reuse is intentional.
 
 ## 0.2.0 - 2026-05-20
 
