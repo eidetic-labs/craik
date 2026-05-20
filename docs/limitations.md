@@ -1,14 +1,14 @@
 # Limitations
 
-<p className="craik-meta"><span>4 min read</span><span>For everyone</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For everyone</span><span>Updated 2026-05-20</span></p>
 
 <div className="craik-lead">
 
 **What's in this doc**
 
-The honest scope boundary for the `0.1.0` MVP release. What's
+The honest scope boundary for the `0.2.0` MVP release line. What's
 end-to-end production-ready today, what exists as contract/helper
-scaffolding, what's deliberately deferred, and how the v0.1 release
+scaffolding, what's deliberately deferred, and how the v0.x release
 posture is framed.
 
 </div>
@@ -44,6 +44,11 @@ tests, and CI coverage.
 <div><h4>Identity on receipts</h4><p>Operator and credential identity on every provider receipt.</p></div>
 <div><h4>Policy-bound credentials</h4><p>Operators and credentials constrained by policy.</p></div>
 <div><h4>Approval-gated first use</h4><p>First live use of a credential requires explicit approval.</p></div>
+<div><h4>Resumable runs</h4><p>Provider-backed runs persist phase outputs and idempotency keys so interrupted runs can resume from durable boundaries.</p></div>
+<div><h4>Budget enforcement</h4><p>Wall-clock, provider-token, and pre-dispatch time checks interrupt exhausted runs before additional calls or side effects.</p></div>
+<div><h4>Local-process sandbox</h4><p>Registered shell command references can execute through the local-process sandbox backend with cancellation propagation.</p></div>
+<div><h4>Run recovery views</h4><p><code>craik run show</code>, <code>craik run resume</code>, <code>craik run cancel</code>, and <code>craik run delta</code> expose continuity state.</p></div>
+<div><h4>Store migrations</h4><p>Local-store schema changes run through a registered, forward-only migration framework.</p></div>
 <div><h4>Stigmem docs demo</h4><p>The accepted release-acceptance workflow.</p></div>
 
 </div>
@@ -75,8 +80,8 @@ fixtures — useful, but **not yet operational workflows**.
 
 <div>
 <dt>Execution backends</dt>
-<dt><span className="craik-fields__type">boundary-only</span></dt>
-<dd>Evaluate boundaries and policy requirements but do not execute shell, start containers, open remote shells, or drive browsers.</dd>
+<dt><span className="craik-fields__type">partial</span></dt>
+<dd>Registered shell command references can execute through the local-process sandbox backend. Docker, remote-shell, browser, and MCP execution backends remain contracts or future surfaces.</dd>
 </div>
 
 <div>
@@ -115,30 +120,6 @@ Scheduled milestones with explicit version targets.
 <dt>Gap</dt>
 <dt><span className="craik-fields__type">Target</span></dt>
 <dd>Why it's deferred</dd>
-</div>
-
-<div>
-<dt>Resumable runs across crashes</dt>
-<dt><span className="craik-fields__type">v0.2.0</span></dt>
-<dd>Recovery contract ships in MVP; crash-resume coverage waits.</dd>
-</div>
-
-<div>
-<dt>Real sandbox tool execution</dt>
-<dt><span className="craik-fields__type">v0.2.0</span></dt>
-<dd>Policy-gated today; isolating sandbox boundary scheduled for v0.2.</dd>
-</div>
-
-<div>
-<dt>Provider budget enforcement</dt>
-<dt><span className="craik-fields__type">v0.2.0</span></dt>
-<dd>Call-site enforcement waits on budget runtime hooks.</dd>
-</div>
-
-<div>
-<dt>Schema migration framework</dt>
-<dt><span className="craik-fields__type">v0.2.0</span></dt>
-<dd>MVP includes ad-hoc migrations; framework promotes them to first-class.</dd>
 </div>
 
 <div>
@@ -195,14 +176,14 @@ proposals remain the default unprivileged path.
 
 ## Release posture
 
-The first release target is `0.1.0`. The release is honest about
-limits and strong enough for a credible MVP — but it is not a `1.0.0`
+The first release line is `0.x`. Each release is honest about limits
+and strong enough for a credible MVP slice — but it is not a `1.0.0`
 stability guarantee.
 
-Package version `0.1.0` marks **the first governed agent-runtime
-substrate** with live opt-in providers, typed credentials, and operator
-identity. Roadmap milestones such as v0.12 remain implementation gates
-rather than published-package compatibility guarantees.
+Package version `0.2.0` marks the **durable execution continuity**
+gate after the first governed agent-runtime substrate. Roadmap
+milestones such as v0.12 remain implementation gates rather than
+published-package compatibility guarantees.
 
 ## What's next
 

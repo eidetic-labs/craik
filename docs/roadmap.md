@@ -230,7 +230,7 @@ survives schema changes via a documented migration path.
 
 </div>
 
-Tracking issues for the execution continuity slices:
+The execution continuity slices have landed:
 [#552](https://github.com/eidetic-labs/craik/issues/552) covers
 phase-boundary resume and deterministic step idempotency keys.
 [#554](https://github.com/eidetic-labs/craik/issues/554) covers
@@ -252,22 +252,20 @@ cancellation propagation into in-flight local-process sandbox commands.
 registered local-store migration runner and example migration.
 [#571](https://github.com/eidetic-labs/craik/issues/571) covers the
 CLI run-delta view for persisted continuity state.
-Keep this section updated as each v0.2.0 slice lands so the roadmap
-mirrors the current implementation state.
 
 <div className="craik-grid">
 
-<div><h4>Resumable interrupted runs</h4><p>First slice: interrupted runs can reopen from persisted phase outputs and continue at the next unfinished phase.</p></div>
-<div><h4>Step-level idempotency keys</h4><p>First slice: stable keys are recorded in run state and runner step context to avoid duplicated phase outputs and side effects on replay.</p></div>
-<div><h4>Time controls</h4><p>First slice: per-run wall-clock budgets interrupt before the next phase or tool round when exhausted.</p></div>
-<div><h4>Provider budget enforcement</h4><p>First slice: provider token budgets are decremented from usage metadata and interrupt before the next provider call when exhausted.</p></div>
-<div><h4>Run inspection &amp; recovery</h4><p>First slice: <code>craik run show</code>, <code>craik run resume</code>, and <code>craik run cancel</code> expose persisted continuity state.</p></div>
-<div><h4>Agent exit discipline</h4><p>First slice: handoff creation persists exit-discipline checks so missing validation, risks, or next steps are runtime state.</p></div>
-<div><h4>Tool result attestation</h4><p>First slice: dispatched tool calls persist hashed attestations linked to the side-effect receipt and replay message.</p></div>
-<div><h4>One real sandbox backend</h4><p>First slice: <code>local_process</code> executes registered command references through <code>subprocess.run</code> without shell expansion when the loop is configured with a sandbox backend.</p></div>
-<div><h4>Sandbox cancellation</h4><p>First slice: local-process sandbox commands poll a cancellation event, terminate in-flight processes, and replay a cancelled tool result.</p></div>
-<div><h4>Schema migration framework</h4><p>First slice: local-store migrations run through a registered, forward-only migration runner with an example metadata migration.</p></div>
-<div><h4>Run delta view</h4><p>First slice: <code>craik run delta</code> renders persisted run-delta records and linked recovery sessions as an operator view or JSON.</p></div>
+<div><h4>Resumable interrupted runs</h4><p>Shipped: interrupted runs reopen from persisted phase outputs and continue at the next unfinished phase.</p></div>
+<div><h4>Step-level idempotency keys</h4><p>Shipped: stable keys are recorded in run state and runner step context to avoid duplicated phase outputs and side effects on replay.</p></div>
+<div><h4>Time controls</h4><p>Shipped: per-run wall-clock budgets interrupt before the next phase or tool round when exhausted.</p></div>
+<div><h4>Provider budget enforcement</h4><p>Shipped: provider token budgets are decremented from usage metadata and interrupt before the next provider call when exhausted.</p></div>
+<div><h4>Run inspection &amp; recovery</h4><p>Shipped: <code>craik run show</code>, <code>craik run resume</code>, and <code>craik run cancel</code> expose persisted continuity state.</p></div>
+<div><h4>Agent exit discipline</h4><p>Shipped: handoff creation persists exit-discipline checks so missing validation, risks, or next steps are runtime state.</p></div>
+<div><h4>Tool result attestation</h4><p>Shipped: dispatched tool calls persist hashed attestations linked to the side-effect receipt and replay message.</p></div>
+<div><h4>One real sandbox backend</h4><p>Shipped: <code>local_process</code> executes registered command references through <code>subprocess.run</code> without shell expansion when the loop is configured with a sandbox backend.</p></div>
+<div><h4>Sandbox cancellation</h4><p>Shipped: local-process sandbox commands poll a cancellation event, terminate in-flight processes, and replay a cancelled tool result.</p></div>
+<div><h4>Schema migration framework</h4><p>Shipped: local-store migrations run through a registered, forward-only migration runner with an example metadata migration.</p></div>
+<div><h4>Run delta view</h4><p>Shipped: <code>craik run delta</code> renders persisted run-delta records and linked recovery sessions as an operator view or JSON.</p></div>
 
 </div>
 

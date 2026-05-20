@@ -16,11 +16,12 @@ continuity.
 
 <div className="craik-keypoint">
 
-**Auth and identity gate.**
+**Durable execution continuity gate.**
 
-`0.2.0` moves Craik beyond the first provider-runtime substrate by adding
-typed credential profiles, OIDC operator identity, credential pools, workload
-identity federation, and receipt-backed authorization governance.
+`0.2.0` hardens the provider-backed loop into durable execution: resumable
+phase boundaries, wall-clock and provider-token budgets, sandboxed shell tool
+dispatch, run recovery commands, tool-result attestations, and local-store
+migrations.
 
 </div>
 
@@ -39,27 +40,33 @@ identity federation, and receipt-backed authorization governance.
 </div>
 
 <div>
-<dt>Credential sources</dt>
+<dt>Resumable execution</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>API-key, OAuth, CLI bridge, secret-reference, Stigmem-reference, marker, and pooled profiles are covered by store, source, and provider-runtime tests.</dd>
+<dd>Interrupted runs reopen from persisted phase outputs, stable idempotency keys prevent duplicate phase output capture, and <code>craik run resume</code> continues unfinished provider-backed runs.</dd>
 </div>
 
 <div>
-<dt>Operator identity</dt>
+<dt>Budgets</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>OIDC login, session storage, JWT validation, workload identity, and RFC 8693 exchange paths have in-repo tests, including rejection cases for unsafe token shapes.</dd>
+<dd>Per-run wall-clock budgets, provider token ledgers, and pre-dispatch time checks interrupt before additional provider calls or side effects when exhausted.</dd>
 </div>
 
 <div>
-<dt>Governance</dt>
+<dt>Sandboxed tool execution</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Receipts now carry credential and operator identity fields; policies can bind runs to credential kinds, profiles, operator subjects, groups, and issuers.</dd>
+<dd>Configured shell tool calls execute through the local-process sandbox backend, propagate cancellation to in-flight commands, and record hashed tool-result attestations linked to side-effect receipts.</dd>
 </div>
 
 <div>
-<dt>Operational safety</dt>
+<dt>Recovery and observability</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Credential stores use locked atomic writes, auth health appears in doctor output, first credential use is approval-gated, and per-credential redaction prevents profile-specific identifiers from leaking into artifacts.</dd>
+<dd><code>craik run show</code>, <code>craik run cancel</code>, <code>craik run delta</code>, and persisted exit-discipline checks expose continuity state and handoff readiness.</dd>
+</div>
+
+<div>
+<dt>Storage migrations</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Local-store migrations now run through a registered, forward-only framework with compatibility fixtures, ordering tests, and migration failure guidance.</dd>
 </div>
 
 <div>
@@ -79,20 +86,19 @@ uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_version.py
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_release_tag.py --tag v0.2.0 --expected-version 0.2.0
-uv run pytest tests/test_auth_api_key_source.py tests/test_auth_profiles.py tests/test_auth_credential_pool.py tests/test_oidc_operator.py tests/test_operator_session_store.py tests/test_workload_identity.py tests/test_oidc_exchange_secret_manager.py tests/test_provider_runtime.py tests/test_policy.py tests/test_case_files.py tests/test_handoffs.py -q
-uv build
+uv run pytest tests/test_loop.py tests/test_local_process_backend.py tests/test_loop_tool_dispatch.py tests/test_store.py tests/test_cli.py tests/test_handoffs.py tests/test_provider_runner.py -q
 ```
 
 ### v0.2.0 Security Notes
 
-- Live provider credentials remain opt-in and are resolved from configured
-  profiles at request time; raw credential material is not stored in receipts.
-- Operator identity is enforced before credential resolution when policy
-  requires it.
-- OIDC validation rejects unsigned tokens, unknown key IDs, tampered payloads,
-  and algorithm-confusion cases.
-- Workload federation uses short-lived exchanged credentials and cached expiry
-  margins instead of long-lived platform secrets.
+- Shell execution remains policy-gated and only registered command references
+  are routed to the local-process sandbox backend.
+- The local-process backend avoids shell expansion and propagates cancellation
+  to in-flight subprocesses.
+- Budget checks happen before provider calls and immediately before tool
+  dispatch, preventing exhausted runs from producing new side effects.
+- Tool-result attestations hash redacted replay payloads and link each
+  dispatched result to its side-effect receipt.
 
 ## v0.1.0 Release Readiness
 

@@ -274,7 +274,7 @@ The release ships when every criterion below holds.
 - [ ] Provider receipts name both operator identity and credential identity.
 - [ ] Side effects are policy-gated and receipt-backed.
 - [ ] Redaction is applied before persistence and docs publication.
-- [ ] Local-store migrations are tested against fixture states.
+- [x] Local-store migrations are tested against fixture states.
 - [ ] Docusaurus docs build with no broken links.
 - [ ] CI includes lint, type, unit, docs, package, security, and conformance gates.
 - [ ] Package artifacts build and can be published through a protected workflow.
@@ -286,7 +286,7 @@ The release ships when every criterion below holds.
 
 <a href="../release-readiness/">
 <strong>Snapshot</strong>
-<span>Release readiness · v0.1.0</span>
+<span>Release readiness · v0.2.0</span>
 <small>The concrete pass/fail checklist captured against the current main.</small>
 </a>
 
