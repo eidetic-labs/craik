@@ -186,6 +186,23 @@ def test_agent_message_contract_round_trip() -> None:
     assert dumped["receipt_ids"] == ["receipt_agent_message_send"]
 
 
+def test_review_contracts_accept_handoff_subject_links(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    request_payload = dict(fixtures["craik.review_request"])
+    request_payload["subject_worker_result_ids"] = []
+    request_payload["subject_handoff_ids"] = ["handoff_review"]
+    result_payload = dict(fixtures["craik.review_result"])
+    result_payload["worker_result_ids"] = []
+    result_payload["subject_handoff_ids"] = ["handoff_review"]
+
+    request = CONTRACT_REGISTRY["craik.review_request"].model_validate(request_payload)
+    result = CONTRACT_REGISTRY["craik.review_result"].model_validate(result_payload)
+
+    assert request.subject_handoff_ids == ["handoff_review"]
+    assert result.subject_handoff_ids == ["handoff_review"]
+
+
 def test_handoff_identity_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

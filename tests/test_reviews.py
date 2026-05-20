@@ -12,7 +12,12 @@ from craik.contracts.models import (
     SelfAudit,
 )
 from craik.runtime.paths import ensure_craik_home
-from craik.runtime.reviewing.reviews import ReviewAdjudicationManager
+from craik.runtime.policy.policy import generate_policy_envelope
+from craik.runtime.reviewing.reviews import (
+    CrossAgentReviewFinding,
+    ReviewAdjudicationManager,
+    ReviewRequestNotFoundError,
+)
 from craik.runtime.store import LocalStore
 
 
@@ -213,3 +218,136 @@ def test_deferred_adjudication_requires_unresolved_disagreement() -> None:
             summary="Deferred without a reason.",
             created_at="2026-05-15T22:34:00Z",
         )
+
+
+def test_cross_agent_review_protocol_accepts_worker_result(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        policy = generate_policy_envelope(task_id="task_review", actor="runner:fixture")
+        manager = ReviewAdjudicationManager(store)
+        request = manager.request_cross_agent_review(
+            policy=policy,
+            task_id="task_review",
+            requester_role_id="role_implementer",
+            reviewer_role_id="role_verifier",
+            reviewer_role_kind="verifier",
+            subject_worker_result_ids=["worker_result_impl"],
+            focus=["behavior tests"],
+        )
+
+        result = manager.complete_cross_agent_review(
+            policy=policy,
+            review_request_id=request.id,
+            decision="approved",
+            summary="Verifier accepted the implementation.",
+            findings=[
+                CrossAgentReviewFinding(
+                    id="finding_behavior_tests",
+                    summary="Behavior tests cover the reviewed output.",
+                    severity="info",
+                    evidence_ids=["evidence_tests"],
+                )
+            ],
+        )
+
+        assert request.status == "open"
+        assert store.get_review_request(request.id).status == "completed"
+        assert result.decision == "approved"
+        assert result.worker_result_ids == ["worker_result_impl"]
+        assert result.finding_ids == ["finding_behavior_tests"]
+        assert result.evidence_ids == ["evidence_tests"]
+        assert result.receipt_ids
+        assert store.get_receipt(result.receipt_ids[0]).capability == "review.complete"
+    finally:
+        store.close()
+
+
+def test_cross_agent_review_protocol_rejects_handoff_subject(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        policy = generate_policy_envelope(task_id="task_review", actor="runner:fixture")
+        manager = ReviewAdjudicationManager(store)
+        request = manager.request_cross_agent_review(
+            policy=policy,
+            task_id="task_review",
+            requester_role_id="role_implementer",
+            reviewer_role_id="role_policy",
+            reviewer_role_kind="policy_reviewer",
+            subject_handoff_ids=["handoff_impl"],
+            focus=["release posture"],
+        )
+
+        result = manager.complete_cross_agent_review(
+            policy=policy,
+            review_request_id=request.id,
+            decision="changes_requested",
+            summary="Policy reviewer rejected the handoff pending release notes.",
+            findings=[
+                CrossAgentReviewFinding(
+                    id="finding_release_notes",
+                    summary="Release notes are missing for the reviewed handoff.",
+                    severity="high",
+                    evidence_ids=["evidence_changelog"],
+                    contradiction_ids=["contradiction_release_notes"],
+                )
+            ],
+        )
+
+        assert result.decision == "changes_requested"
+        assert result.subject_handoff_ids == ["handoff_impl"]
+        assert result.contradiction_ids == ["contradiction_release_notes"]
+        assert store.get_review_request(request.id).status == "completed"
+    finally:
+        store.close()
+
+
+def test_cross_agent_review_protocol_preserves_unresolved_debate_summary(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        policy = generate_policy_envelope(task_id="task_review", actor="runner:fixture")
+        manager = ReviewAdjudicationManager(store)
+        request = manager.request_cross_agent_review(
+            policy=policy,
+            task_id="task_review",
+            requester_role_id="role_orchestrator",
+            reviewer_role_id="role_adversarial",
+            reviewer_role_kind="adversarial_reviewer",
+            subject_debate_summary_ids=["debate_summary_impl"],
+            focus=["unresolved disagreement"],
+        )
+
+        result = manager.complete_cross_agent_review(
+            policy=policy,
+            review_request_id=request.id,
+            decision="deferred",
+            summary="Adversarial review deferred pending more evidence.",
+            findings=[],
+            contradiction_ids=["contradiction_impl"],
+        )
+
+        assert result.decision == "deferred"
+        assert result.debate_summary_ids == ["debate_summary_impl"]
+        assert result.contradiction_ids == ["contradiction_impl"]
+        receipt = store.get_receipt(result.receipt_ids[0])
+        assert receipt.result.metadata["subject_debate_summary_ids"] == [
+            "debate_summary_impl"
+        ]
+    finally:
+        store.close()
+
+
+def test_cross_agent_review_unknown_request_fails(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        with pytest.raises(ReviewRequestNotFoundError, match="unknown review request"):
+            ReviewAdjudicationManager(store).complete_cross_agent_review(
+                policy=generate_policy_envelope(task_id="task_review", actor="runner:fixture"),
+                review_request_id="review_request_missing",
+                decision="blocked",
+                summary="Cannot complete a missing request.",
+                findings=[],
+            )
+    finally:
+        store.close()

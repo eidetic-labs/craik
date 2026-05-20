@@ -288,7 +288,7 @@ produces structured debate artifacts with receipted resolution.
 <div><h4>Multi-agent message contract</h4><p>Shipped first slice: typed agent-to-agent mailbox messages persist send/receive receipts and link to task, run, handoff, and role identities.</p></div>
 <div><h4>Concurrent run coordination</h4><p>Shipped first slice: simultaneous loops on the same project are checked against active intent-lock scopes before new phases or tool dispatch, and overlapping scopes produce denial receipts.</p></div>
 <div><h4>Structured debate runtime</h4><p>Shipped first slice: role-linked positions become typed debate turns, summaries preserve agreement or disagreement, and resolution records an adjudication or human-delegation receipt.</p></div>
-<div><h4>Cross-agent review protocol</h4><p>Typed review artifact against another agent's output.</p></div>
+<div><h4>Cross-agent review protocol</h4><p>Shipped first slice: review requests target worker results, handoffs, or debate summaries; review results carry typed findings, receipts, and source artifact links without mutating the reviewed artifact.</p></div>
 <div><h4>Human delegation at runtime</h4><p>Run pauses, posts a delegation, waits for CLI input, resumes.</p></div>
 <div><h4>Scope-change protocol</h4><p>Discovered new scope triggers declared protocol (expand / sibling / handoff) rather than silent expansion.</p></div>
 <div><h4>Live work graph</h4><p>Graph is the coordination source of truth, not just an export.</p></div>
