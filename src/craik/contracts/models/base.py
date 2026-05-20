@@ -34,6 +34,17 @@ ReceiptStatus = Literal["passed", "failed", "blocked", "denied", "skipped"]
 RunStatus = Literal["completed", "incomplete", "blocked", "failed"]
 TaskRunPhase = Literal["plan", "act", "observe", "evaluate", "continue", "stop"]
 TaskRunStatus = Literal["pending", "running", "completed", "blocked", "failed", "interrupted"]
+AgentMessageKind = Literal[
+    "request",
+    "response",
+    "status",
+    "question",
+    "answer",
+    "decision",
+    "handoff",
+    "review",
+]
+AgentMessageStatus = Literal["sent", "received", "acknowledged", "blocked"]
 RunnerMode = Literal["fixture", "prompt-handoff", "live"]
 RunnerResultStatus = Literal["completed", "blocked", "failed", "partial"]
 WorkerResultStatus = Literal["completed", "blocked", "failed", "partial"]
@@ -248,6 +259,8 @@ __all__ = [
     "RunStatus",
     "TaskRunPhase",
     "TaskRunStatus",
+    "AgentMessageKind",
+    "AgentMessageStatus",
     "RunnerMode",
     "RunnerResultStatus",
     "WorkerResultStatus",

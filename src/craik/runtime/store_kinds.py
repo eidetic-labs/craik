@@ -5,6 +5,7 @@ from __future__ import annotations
 CONTRACT_KINDS: dict[str, str] = {
     "craik.adjudication_outcome": "adjudication_outcomes",
     "craik.adapter_package": "adapter_packages",
+    "craik.agent_message": "agent_messages",
     "craik.project_profile": "projects",
     "craik.run_output": "run_outputs",
     "craik.task_request": "tasks",
@@ -65,4 +66,3 @@ CONTRACT_KINDS: dict[str, str] = {
     "craik.tool_result_attestation": "tool_result_attestations",
     "craik.unknown_record": "unknown_records",
 }
-

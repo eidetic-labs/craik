@@ -125,7 +125,7 @@ Scheduled milestones with explicit version targets.
 <div>
 <dt>Multi-agent runtime</dt>
 <dt><span className="craik-fields__type">v0.3.0</span></dt>
-<dd>Handoff consumption and role-based provider dispatch are available as first slices. Concurrent coordination, agent mailboxes, review protocols, and debate remain v0.3.0 work.</dd>
+<dd>Handoff consumption, role-based provider dispatch, and receipt-backed mailbox messages are available as first slices. Concurrent coordination, review protocols, and debate remain v0.3.0 work.</dd>
 </div>
 
 <div>
