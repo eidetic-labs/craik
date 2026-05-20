@@ -46,6 +46,10 @@ demo_app = typer.Typer(help="Run built-in Craik demos.")
 app.add_typer(demo_app, name="demo")
 delegation_app = typer.Typer(help="Pause and resolve human delegation points.")
 app.add_typer(delegation_app, name="delegation")
+scope_change_app = typer.Typer(help="Decide pending scope-change protocol requests.")
+app.add_typer(scope_change_app, name="scope-change")
+agent_message_app = typer.Typer(help="Send and receive agent mailbox messages.")
+app.add_typer(agent_message_app, name="agent-message")
 auth_app = typer.Typer(help="Manage provider credential profiles.")
 app.add_typer(auth_app, name="auth")
 contradictions_app = typer.Typer(help="Manage local contradiction reports.")
@@ -219,10 +223,12 @@ def _paths_payload(paths: CraikPaths) -> dict[str, str]:
 def _load_cli_extensions() -> None:
     """Import command modules that register subcommands on shared Typer apps."""
     for module_name in (
+        "craik.cli_agent_messages",
         "craik.cli_auth",
         "craik.cli_delegations",
         "craik.cli_operations",
         "craik.cli_project",
+        "craik.cli_scope_changes",
         "craik.cli_tasks",
     ):
         import_module(module_name)

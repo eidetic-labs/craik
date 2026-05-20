@@ -29,7 +29,7 @@ def test_default_agent_roles_define_specialist_runner_assignments() -> None:
 
 
 def test_dispatch_role_records_runner_and_receipt_metadata() -> None:
-    policy = _policy()
+    policy = _policy().model_copy(update={"allowed_agent_role_kinds": ["docs_reviewer"]})
 
     dispatch = dispatch_role(policy=policy, role_kind="docs_reviewer")
 
@@ -57,6 +57,52 @@ def test_dispatch_role_honors_policy_allowed_role_kinds() -> None:
     assert "not allowed by policy" in receipt.reason
     with pytest.raises(RoleDispatchDeniedError, match="not allowed by policy"):
         dispatch_role(policy=policy, role_kind="docs_reviewer")
+
+
+def test_dispatch_role_rejects_default_policy_without_role_allowlist() -> None:
+    policy = _policy()
+    receipt = role_dispatch_receipt(
+        policy=policy,
+        role=default_agent_roles(policy_envelope_id=policy.id)["docs_reviewer"],
+    )
+
+    assert receipt.result.status == "denied"
+    assert "does not define allowed agent roles" in receipt.reason
+    with pytest.raises(RoleDispatchDeniedError, match="does not define allowed agent roles"):
+        dispatch_role(policy=policy, role_kind="docs_reviewer")
+
+
+def test_dispatch_role_rejects_runner_override_without_policy_capability() -> None:
+    policy = _policy().model_copy(update={"allowed_agent_role_kinds": ["docs_reviewer"]})
+
+    with pytest.raises(RoleDispatchDeniedError, match="runner override is not allowed"):
+        dispatch_role(
+            policy=policy,
+            role_kind="docs_reviewer",
+            runner_id="provider_anthropic_messages",
+        )
+
+
+def test_dispatch_role_allows_policy_gated_runner_override() -> None:
+    policy = _policy().model_copy(
+        update={
+            "allowed_agent_role_kinds": ["docs_reviewer"],
+            "allowed_capabilities": [
+                "repo.read",
+                "memory.read",
+                "receipt.write",
+                "role.runner.override",
+            ],
+        }
+    )
+
+    dispatch = dispatch_role(
+        policy=policy,
+        role_kind="docs_reviewer",
+        runner_id="provider_anthropic_messages",
+    )
+
+    assert dispatch.role.runner_id == "provider_anthropic_messages"
 
 
 def _policy() -> PolicyEnvelope:

@@ -147,6 +147,8 @@ class HumanDelegationManager:
         delegation_id: str,
         resolution: str,
         outcome: DelegationResolution,
+        operator_subject: str,
+        operator_issuer: str,
     ) -> RunDelegationResolution:
         """Resolve or cancel a run delegation and link the decision receipt to the run."""
         delegation = self._store.get_human_delegation(delegation_id)
@@ -155,6 +157,14 @@ class HumanDelegationManager:
         if delegation.status != "open":
             message = f"human delegation is {delegation.status}: {delegation_id}"
             raise HumanDelegationStateError(message)
+        run = self._store.get_task_run(delegation.run_id) if delegation.run_id else None
+        if not operator_subject or not operator_issuer:
+            raise HumanDelegationStateError("delegation resolution requires operator identity")
+        if run is not None:
+            if run.operator_subject and operator_subject != run.operator_subject:
+                raise HumanDelegationStateError("resolver operator does not match paused run")
+            if run.operator_issuer and operator_issuer != run.operator_issuer:
+                raise HumanDelegationStateError("resolver issuer does not match paused run")
         receipt = self._store.put_receipt(
             _delegation_receipt(
                 policy=policy,
@@ -167,7 +177,11 @@ class HumanDelegationManager:
                     "delegation_id": delegation.id,
                     "run_id": delegation.run_id,
                     "outcome": outcome,
+                    "operator_subject": operator_subject,
+                    "operator_issuer": operator_issuer,
                 },
+                operator_subject=operator_subject,
+                operator_issuer=operator_issuer,
             )
         )
         status = "cancelled" if outcome == "cancelled" else "resolved"
@@ -189,8 +203,8 @@ class HumanDelegationManager:
             receipt_ids=[receipt.id],
             metadata={"status": updated.status, "outcome": outcome},
         )
-        run = _append_receipt_to_run(self._store, delegation.run_id, receipt.id)
-        return RunDelegationResolution(delegation=updated, receipt=receipt, run=run)
+        linked_run = _append_receipt_to_run(self._store, delegation.run_id, receipt.id)
+        return RunDelegationResolution(delegation=updated, receipt=receipt, run=linked_run)
 
     def request_scope_change(self, request: ScopeChangeRequest) -> ScopeChangeRequest:
         """Persist a pending scope-change request."""
@@ -251,6 +265,8 @@ def _delegation_receipt(
     status: ReceiptStatus,
     summary: str,
     metadata: dict[str, object],
+    operator_subject: str | None = None,
+    operator_issuer: str | None = None,
 ) -> CapabilityReceipt:
     return CapabilityReceipt(
         id=f"receipt_{target}_{capability.rsplit('.', maxsplit=1)[-1]}",
@@ -263,6 +279,8 @@ def _delegation_receipt(
         reason=summary,
         result=ReceiptResult(status=status, summary=summary, metadata=metadata),
         redacted=True,
+        operator_subject=operator_subject,
+        operator_issuer=operator_issuer,
         created_at=datetime.now(UTC),
     )
 

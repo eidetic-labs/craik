@@ -61,7 +61,12 @@ def _scope_request() -> ScopeChangeRequest:
     )
 
 
-def _run(store: LocalStore) -> str:
+def _run(
+    store: LocalStore,
+    *,
+    operator_subject: str | None = None,
+    operator_issuer: str | None = None,
+) -> str:
     run = TaskRunManager(store).create(
         task_id="task_delegate",
         case_file_id="case_delegate",
@@ -69,6 +74,8 @@ def _run(store: LocalStore) -> str:
         runner_id="provider_openai",
         runner_mode="live",
         intent_lock_id="intent_delegate",
+        operator_subject=operator_subject,
+        operator_issuer=operator_issuer,
     )
     return run.id
 
@@ -127,6 +134,8 @@ def test_run_can_pause_for_human_delegation_and_resume_after_acceptance(
             delegation_id=paused.delegation.id,
             resolution="Approved; continue.",
             outcome="accepted",
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
         )
         resumed = TaskRunManager(store).prepare_resume(run_id)
 
@@ -160,6 +169,8 @@ def test_run_delegation_rejection_keeps_run_interrupted(tmp_path: Path) -> None:
             delegation_id=paused.delegation.id,
             resolution="Rejected; do not continue.",
             outcome="rejected",
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
         )
 
         assert resolved.delegation.status == "resolved"
@@ -189,11 +200,45 @@ def test_run_delegation_cancel_path_records_cancelled_state(tmp_path: Path) -> N
             delegation_id=paused.delegation.id,
             resolution="Timed out; cancel delegation.",
             outcome="cancelled",
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
         )
 
         assert cancelled.delegation.status == "cancelled"
         assert cancelled.receipt.result.metadata["outcome"] == "cancelled"
         assert cancelled.run.status == "interrupted"
+    finally:
+        store.close()
+
+
+def test_run_delegation_resolution_requires_matching_operator(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        run_id = _run(
+            store,
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
+        )
+        policy = generate_policy_envelope(task_id="task_delegate", actor="runner:fixture")
+        manager = HumanDelegationManager(store)
+        paused = manager.pause_run_for_delegation(
+            policy=policy,
+            run_id=run_id,
+            kind="approval",
+            summary="Approval needed.",
+            requested_decision="Approve continuing the run.",
+            requested_by="agent:orchestrator",
+        )
+
+        with pytest.raises(HumanDelegationStateError, match="does not match"):
+            manager.resolve_run_delegation(
+                policy=policy,
+                delegation_id=paused.delegation.id,
+                resolution="Wrong operator.",
+                outcome="accepted",
+                operator_subject="operator-b",
+                operator_issuer="https://issuer.example.test",
+            )
     finally:
         store.close()
 

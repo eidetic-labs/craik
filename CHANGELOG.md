@@ -19,9 +19,9 @@ within the `0.x.0` stability expectations described in
 - Role-based provider dispatch: `craik run execute --role` now records a
   policy-checked specialist role assignment, dispatch receipt, and run-level
   role metadata.
-- Receipt-backed agent mailbox contracts and local-store helpers for sending
-  and receiving typed multi-agent messages linked to tasks, runs, handoffs,
-  and roles.
+- Receipt-backed `craik agent-message` CLI and local-store helpers for sending
+  and receiving authenticated typed multi-agent messages linked to tasks, runs,
+  handoffs, and roles.
 - Intent-lock coordination for simultaneous runs: overlapping active scopes on
   the same project now block before new loop phases or tool dispatch and
   persist a denial receipt.
@@ -35,14 +35,27 @@ within the `0.x.0` stability expectations described in
   receipted delegation requests, resolved or cancelled by CLI, and resumed from
   the recorded response.
 - Scope-change protocol: discovered work outside the current intent lock now
-  interrupts the run, records a scope-change request receipt, and requires an
-  explicit expand, sibling-task, handoff, or denial decision before continuing.
+  interrupts the run, records a scope-change request receipt, and exposes
+  `craik scope-change decide` for explicit expand, sibling-task, handoff, or
+  denial decisions before continuing.
 - Live work graph coordination: mailbox messages, reviews, debates,
   delegations, and scope-change artifacts now persist work-graph events that can
   be queried as active coordination state.
 - Per-agent identity isolation: consuming a handoff now records an explicit
   consumer credential/operator assignment, rejects producer identity reuse by
-  default, and requires an explicit continuation flag when reuse is intentional.
+  default, and requires an explicit continuation flag plus rationale when reuse
+  is intentional.
+
+### Security
+
+- Delegation resolution now requires resolver operator identity and rejects
+  attempts to resume a paused run opened by another operator.
+- Mailbox sends authenticate `from_agent` against the sender run's role state
+  before storing the message or receipt.
+- Role dispatch now requires explicit role allowlists and gates runner
+  overrides behind the `role.runner.override` policy capability.
+- Mailbox message bodies are bounded and repeated same-subject messages receive
+  unique IDs instead of overwriting the latest message.
 
 ## 0.2.0 - 2026-05-20
 

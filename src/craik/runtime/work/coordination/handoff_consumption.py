@@ -57,6 +57,7 @@ def consume_handoff(
     runner_mode: RunnerMode = "fixture",
     max_iterations: int = 5,
     allow_identity_continuation: bool = False,
+    identity_continuation_rationale: str | None = None,
 ) -> HandoffConsumptionResult:
     """Create a new task, case file, and pending run from a source handoff."""
     try:
@@ -71,6 +72,7 @@ def consume_handoff(
             operator_subject=operator_subject,
             operator_issuer=operator_issuer,
             allow_identity_continuation=allow_identity_continuation,
+            identity_continuation_rationale=identity_continuation_rationale,
         )
     except IdentityIsolationError as error:
         raise HandoffConsumptionError(str(error)) from None

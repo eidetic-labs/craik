@@ -134,6 +134,10 @@ class SingleAgentLoopExecutor:
                 created_at=started_at,
             )
         )
+        if resuming and run.intent_lock_id is not None:
+            stored_intent_lock = self.store.get_intent_lock(run.intent_lock_id)
+            if stored_intent_lock is not None:
+                intent_lock = stored_intent_lock
         receipts: list[CapabilityReceipt] = []
         step_results: list[RunnerStepResult] = []
         output_captures: list[RunOutputCapture] = []

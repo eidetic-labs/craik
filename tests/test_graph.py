@@ -134,14 +134,26 @@ def test_live_work_graph_records_agent_message_events(store: LocalStore) -> None
         objective="Ask verifier to review docs.",
         project_id="project_craik",
     )
-    policy = generate_policy_envelope(task_id=task.id, actor="agent:docs")
+    policy = generate_policy_envelope(task_id=task.id, actor="agent:docs_reviewer")
+    run = TaskRunManager(store).create(
+        task_id=task.id,
+        case_file_id="case_docs",
+        policy_envelope_id=policy.id,
+        runner_id="provider_openai_chat",
+        runner_mode="fixture",
+        role_id="role_docs",
+        role_kind="docs_reviewer",
+    )
 
     message = send_agent_message(
         store,
         policy=policy,
         task_id=task.id,
-        from_agent="agent:docs",
+        from_agent="agent:docs_reviewer",
         to_agent="agent:verifier",
+        from_role_id="role_docs",
+        from_role_kind="docs_reviewer",
+        run_id=run.id,
         subject="Review docs",
         body="Please review the docs patch.",
     )

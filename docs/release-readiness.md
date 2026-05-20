@@ -7,8 +7,59 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current release
-gate is `0.2.0`; the historical `0.1.0` sign-off remains below for audit
-continuity.
+gate is `0.3.0`; historical sign-offs remain below for audit continuity.
+
+</div>
+
+## v0.3.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Multi-agent review and coordination gate.**
+
+`0.3.0` adds governed handoff consumption, role dispatch, authenticated
+mailbox messages, scope-change decisions, structured debate/adjudication, and
+identity isolation for follow-up agent work.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Release notes</dd>
+</div>
+
+<div>
+<dt>Coordination CLI</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>craik agent-message</code>, <code>craik scope-change decide</code>, <code>craik delegation</code>, and <code>craik task resume</code> expose the coordination workflows without requiring Python access.</dd>
+</div>
+
+<div>
+<dt>Security posture</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Delegation resolution requires matching operator identity, mailbox senders are authenticated against run role state, role dispatch requires explicit policy allowlists, and identity continuation requires a rationale.</dd>
+</div>
+
+<div>
+<dt>Reference docs</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Mailbox, scope-change, intent-lock coordination, role dispatch, and identity isolation reference pages are linked from the docs sidebar and index.</dd>
+</div>
+
+<div>
+<dt>Integration coverage</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>The v0.3.0 integration test exercises two identities, role dispatch, mailbox send/receive, debate adjudication, handoff creation, and isolated handoff consumption.</dd>
+</div>
+
+<div>
+<dt>Release actions</dt>
+<dt><span className="craik-fields__type">pending</span></dt>
+<dd>After this gate merges, bump package metadata to <code>0.3.0</code>, create immutable tag <code>v0.3.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+</div>
 
 </div>
 

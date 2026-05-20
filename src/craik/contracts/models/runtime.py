@@ -85,7 +85,7 @@ class AgentMessage(CraikModel):
     run_id: str | None = None
     handoff_id: str | None = None
     subject: str = Field(min_length=1)
-    body: str = Field(min_length=1)
+    body: str = Field(min_length=1, max_length=32768)
     receipt_ids: list[str] = Field(min_length=1)
     created_at: datetime
     received_at: datetime | None = None

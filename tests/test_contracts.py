@@ -186,6 +186,26 @@ def test_agent_message_contract_round_trip() -> None:
     assert dumped["receipt_ids"] == ["receipt_agent_message_send"]
 
 
+def test_agent_message_contract_rejects_oversized_body() -> None:
+    payload = {
+        "schema": "craik.agent_message",
+        "version": "0.1.0",
+        "id": "agent_message_task_docs_agent_a_agent_b_review",
+        "task_id": "task_docs_reconcile",
+        "kind": "request",
+        "status": "sent",
+        "from_agent": "agent:a",
+        "to_agent": "agent:b",
+        "subject": "Review docs patch",
+        "body": "x" * 32769,
+        "receipt_ids": ["receipt_agent_message_send"],
+        "created_at": "2026-05-20T12:00:00Z",
+    }
+
+    with pytest.raises(ValidationError, match="at most 32768"):
+        CONTRACT_REGISTRY["craik.agent_message"].model_validate(payload)
+
+
 def test_review_contracts_accept_handoff_subject_links(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

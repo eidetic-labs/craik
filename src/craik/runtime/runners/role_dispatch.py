@@ -108,6 +108,7 @@ def dispatch_role(
     runner_id: str | None = None,
 ) -> RoleDispatch:
     """Resolve and policy-check one role dispatch."""
+    _check_runner_override_allowed(policy=policy, runner_id=runner_id)
     role = _resolve_role(
         policy=policy,
         role_kind=role_kind,
@@ -185,6 +186,8 @@ def _resolve_role(
 
 
 def _role_allowed(policy: PolicyEnvelope, role: AgentRole) -> tuple[bool, str]:
+    if policy.allowed_agent_role_ids is None and policy.allowed_agent_role_kinds is None:
+        return False, f"policy {policy.id} does not define allowed agent roles"
     if policy.allowed_agent_role_ids is not None and role.id not in policy.allowed_agent_role_ids:
         return False, f"role id {role.id} is not allowed by policy {policy.id}"
     if (
@@ -196,6 +199,14 @@ def _role_allowed(policy: PolicyEnvelope, role: AgentRole) -> tuple[bool, str]:
     if denied:
         return False, f"role {role.id} requests capabilities denied by policy: {', '.join(denied)}"
     return True, f"role {role.id} dispatched to runner {role.runner_id}"
+
+
+def _check_runner_override_allowed(policy: PolicyEnvelope, runner_id: str | None) -> None:
+    if runner_id is None:
+        return
+    if "role.runner.override" in policy.allowed_capabilities:
+        return
+    raise RoleDispatchDeniedError(f"runner override is not allowed by policy {policy.id}")
 
 
 def _role_capabilities(kind: AgentRoleKind) -> list[str]:

@@ -73,6 +73,14 @@ def delegation_pause(
 def delegation_resolve(
     delegation_id: Annotated[str, typer.Argument(help="Delegation id to resolve.")],
     resolution: Annotated[str, typer.Option("--resolution", help="Human resolution text.")],
+    operator_subject: Annotated[
+        str,
+        typer.Option("--operator-subject", help="Resolver operator subject."),
+    ],
+    operator_issuer: Annotated[
+        str,
+        typer.Option("--operator-issuer", help="Resolver operator issuer."),
+    ],
     outcome: Annotated[
         str,
         typer.Option("--outcome", help="accepted, rejected, or cancelled."),
@@ -90,6 +98,8 @@ def delegation_resolve(
             delegation_id=delegation.id,
             resolution=resolution,
             outcome=_delegation_outcome(outcome),
+            operator_subject=operator_subject,
+            operator_issuer=operator_issuer,
         )
     except (HumanDelegationNotFoundError, HumanDelegationStateError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
