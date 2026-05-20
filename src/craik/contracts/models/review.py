@@ -193,6 +193,7 @@ class ReviewRequest(CraikModel):
     reviewer_role_id: str
     reviewer_role_kind: AgentRoleKind
     subject_worker_result_ids: list[str] = Field(default_factory=list)
+    subject_handoff_ids: list[str] = Field(default_factory=list)
     subject_debate_summary_ids: list[str] = Field(default_factory=list)
     focus: list[str] = Field(default_factory=list)
     policy_envelope_id: str | None = None
@@ -204,7 +205,11 @@ class ReviewRequest(CraikModel):
     @model_validator(mode="after")
     def validate_subjects(self) -> ReviewRequest:
         """Require at least one worker result or debate summary under review."""
-        if not self.subject_worker_result_ids and not self.subject_debate_summary_ids:
+        if (
+            not self.subject_worker_result_ids
+            and not self.subject_handoff_ids
+            and not self.subject_debate_summary_ids
+        ):
             raise ValueError("review requests require at least one review subject")
         return self
 
@@ -226,6 +231,7 @@ class ReviewResult(CraikModel):
     summary: str
     finding_ids: list[str] = Field(default_factory=list)
     worker_result_ids: list[str] = Field(default_factory=list)
+    subject_handoff_ids: list[str] = Field(default_factory=list)
     debate_summary_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     contradiction_ids: list[str] = Field(default_factory=list)

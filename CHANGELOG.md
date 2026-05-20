@@ -28,6 +28,9 @@ within the `0.x.0` stability expectations described in
 - Structured debate runtime helper that creates role-linked debate turns,
   summarizes agreement or disagreement, and resolves by adjudication receipt
   or human-delegation receipt.
+- Cross-agent review protocol helper that creates receipted review requests
+  for worker results, handoffs, or debate summaries and completes them with
+  typed findings linked to reviewed artifacts.
 
 ## 0.2.0 - 2026-05-20
 
