@@ -32,6 +32,9 @@ agent-to-agent messages linked to task, run, handoff, and role identities.
 Concurrent runs against the same project are checked against active intent-lock
 scopes before new loop phases or tool dispatch, with overlaps recorded as
 coordination denial receipts.
+Structured debates can now capture role-linked positions, preserve minority
+claims and evidence, and resolve through an adjudication receipt or human
+delegation receipt.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or
