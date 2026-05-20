@@ -37,6 +37,9 @@ within the `0.x.0` stability expectations described in
 - Scope-change protocol: discovered work outside the current intent lock now
   interrupts the run, records a scope-change request receipt, and requires an
   explicit expand, sibling-task, handoff, or denial decision before continuing.
+- Live work graph coordination: mailbox messages, reviews, debates,
+  delegations, and scope-change artifacts now persist work-graph events that can
+  be queried as active coordination state.
 
 ## 0.2.0 - 2026-05-20
 

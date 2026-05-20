@@ -18,6 +18,7 @@ from craik.contracts.models import (
     TaskRun,
 )
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.live_graph import WorkGraphCoordinator
 from craik.runtime.work.runs import TERMINAL_RUN_STATUSES, RunTransition, TaskRunManager
 
 DelegationResolution = Literal["accepted", "rejected", "cancelled"]
@@ -50,6 +51,13 @@ class HumanDelegationManager:
     def open_delegation(self, delegation: HumanDelegationPoint) -> HumanDelegationPoint:
         """Persist an open human delegation point."""
         self._store.put_human_delegation(delegation)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=delegation.task_id,
+            artifact_type="delegation",
+            artifact_id=delegation.id,
+            receipt_ids=delegation.receipt_ids,
+            metadata={"kind": delegation.kind, "status": delegation.status},
+        )
         return delegation
 
     def pause_run_for_delegation(
@@ -174,17 +182,40 @@ class HumanDelegationManager:
             }
         )
         self._store.put_human_delegation(updated)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=delegation.task_id,
+            artifact_type="delegation",
+            artifact_id=delegation.id,
+            receipt_ids=[receipt.id],
+            metadata={"status": updated.status, "outcome": outcome},
+        )
         run = _append_receipt_to_run(self._store, delegation.run_id, receipt.id)
         return RunDelegationResolution(delegation=updated, receipt=receipt, run=run)
 
     def request_scope_change(self, request: ScopeChangeRequest) -> ScopeChangeRequest:
         """Persist a pending scope-change request."""
         self._store.put_scope_change_request(request)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=request.task_id,
+            artifact_type="scope_change_request",
+            artifact_id=request.id,
+            receipt_ids=request.receipt_ids,
+            metadata={"status": request.status, "intent_lock_id": request.intent_lock_id},
+        )
         return request
 
     def decide_scope_change(self, result: ScopeChangeResult) -> ScopeChangeResult:
         """Persist a human scope-change decision and update the request status."""
         self._store.put_scope_change_result(result)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=result.task_id,
+            artifact_type="scope_change_result",
+            artifact_id=result.id,
+            receipt_ids=result.receipt_ids,
+            source_node=f"scope_change_request:{result.scope_change_request_id}",
+            relation="depends_on",
+            metadata={"decision": result.decision},
+        )
         request = self._store.get_scope_change_request(result.scope_change_request_id)
         if request is not None:
             self._store.put_scope_change_request(

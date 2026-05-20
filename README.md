@@ -44,6 +44,9 @@ run boundary.
 Scope-change handling now prevents silent expansion: discovered work outside the
 active intent lock interrupts the run, persists the proposed scope change, and
 requires an explicit expand, sibling-work, handoff, or denial decision.
+The work graph is also becoming live coordination state: v0.3.0 mailbox,
+review, debate, delegation, and scope-change artifacts persist graph events that
+operators can query before a final export.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or

@@ -23,6 +23,7 @@ from craik.contracts.models import (
 from craik.runtime.memory.contradictions import ContradictionManager
 from craik.runtime.reviewing.delegations import HumanDelegationManager
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.live_graph import WorkGraphCoordinator
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,12 @@ class DebateManager:
     def record_turn(self, turn: DebateTurn) -> DebateTurn:
         """Persist one debate turn."""
         self._store.put_debate_turn(turn)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=turn.task_id,
+            artifact_type="debate_turn",
+            artifact_id=turn.id,
+            metadata={"debate_id": turn.debate_id, "role_id": turn.role_id},
+        )
         return turn
 
     def summarize(
@@ -79,7 +86,7 @@ class DebateManager:
             key=lambda turn: (turn.created_at, turn.id),
         )
         for turn in debate_turns:
-            self._store.put_debate_turn(turn)
+            self.record_turn(turn)
 
         supports = [turn for turn in debate_turns if turn.position == "supports"]
         oppositions = [turn for turn in debate_turns if turn.position in {"opposes", "blocks"}]
@@ -130,6 +137,13 @@ class DebateManager:
             created_at=datetime.now(UTC),
         )
         self._store.put_debate_summary(summary)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=summary.task_id,
+            artifact_type="debate_summary",
+            artifact_id=summary.id,
+            source_node=f"task:{summary.task_id}",
+            metadata={"outcome": summary.outcome, "debate_id": summary.debate_id},
+        )
         return summary
 
     def run_structured_debate(

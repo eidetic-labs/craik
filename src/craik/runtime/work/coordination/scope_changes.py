@@ -20,6 +20,7 @@ from craik.contracts.models import (
 )
 from craik.runtime.policy.intent_locks import IntentLockNotFoundError
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.live_graph import WorkGraphCoordinator
 from craik.runtime.work.runs import RunTransition, TaskRunManager
 from craik.runtime.work.tasks import create_task
 
@@ -117,6 +118,13 @@ class ScopeChangeProtocolManager:
         receipt = self._store.put_receipt(receipt)
         request = request.model_copy(update={"receipt_ids": [receipt.id]})
         self._store.put_scope_change_request(request)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=request.task_id,
+            artifact_type="scope_change_request",
+            artifact_id=request.id,
+            receipt_ids=request.receipt_ids,
+            metadata={"intent_lock_id": request.intent_lock_id, "status": request.status},
+        )
         paused_run = TaskRunManager(self._store).transition(
             run.id,
             RunTransition(
@@ -199,6 +207,15 @@ class ScopeChangeProtocolManager:
         receipt = self._store.put_receipt(receipt)
         result = result.model_copy(update={"receipt_ids": [receipt.id]})
         self._store.put_scope_change_result(result)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=result.task_id,
+            artifact_type="scope_change_result",
+            artifact_id=result.id,
+            receipt_ids=result.receipt_ids,
+            source_node=f"scope_change_request:{request.id}",
+            relation="depends_on",
+            metadata={"protocol_decision": protocol_decision},
+        )
         self._store.put_scope_change_request(
             request.model_copy(
                 update={
