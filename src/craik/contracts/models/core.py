@@ -73,6 +73,11 @@ class TaskRequest(CraikModel):
     priority: Priority = "normal"
     mode: TaskMode
     auth_profile_id: str | None = None
+    operator_subject: str | None = None
+    operator_issuer: str | None = None
+    source_handoff_id: str | None = None
+    source_task_id: str | None = None
+    source_run_id: str | None = None
     expected_duration_minutes: int | None = Field(default=None, gt=0)
     constraints: list[str] = Field(default_factory=list)
     expected_outputs: list[str] = Field(default_factory=list)

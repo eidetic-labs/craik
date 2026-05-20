@@ -22,7 +22,8 @@ Craik can assemble local repository context, read optional GitHub and Stigmem
 state, compile governed runner prompts, execute fixture-backed and live-shaped
 provider requests through OpenAI Responses, Anthropic Messages, and
 OpenAI-compatible Chat Completions adapters, persist receipts/handoffs/work
-graphs, and propose memory updates for review.
+graphs, consume completed handoffs into follow-up governed runs, and propose
+memory updates for review.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or

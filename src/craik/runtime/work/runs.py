@@ -73,6 +73,9 @@ class TaskRunManager:
         auth_identity_hash: str | None = None,
         operator_subject: str | None = None,
         operator_issuer: str | None = None,
+        source_handoff_id: str | None = None,
+        source_task_id: str | None = None,
+        source_run_id: str | None = None,
         created_at: datetime | None = None,
     ) -> TaskRun:
         now = created_at or datetime.now(UTC)
@@ -96,6 +99,9 @@ class TaskRunManager:
             auth_identity_hash=auth_identity_hash,
             operator_subject=operator_subject,
             operator_issuer=operator_issuer,
+            source_handoff_id=source_handoff_id,
+            source_task_id=source_task_id,
+            source_run_id=source_run_id,
         )
         self.store.put_task_run(run)
         return run

@@ -125,7 +125,7 @@ Scheduled milestones with explicit version targets.
 <div>
 <dt>Multi-agent runtime</dt>
 <dt><span className="craik-fields__type">v0.3.0</span></dt>
-<dd>Handoff consumption, role-based dispatch, debate.</dd>
+<dd>Handoff consumption is available as a task/run bootstrap path. Role-based dispatch, concurrent coordination, and debate remain v0.3.0 work.</dd>
 </div>
 
 <div>

@@ -16,6 +16,10 @@ from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
+from craik.runtime.work.coordination.handoff_consumption import (
+    HandoffConsumptionError,
+    consume_handoff,
+)
 from craik.runtime.work.handoffs import HandoffContextError, HandoffWriter, render_markdown
 from craik.runtime.work.receipts import ReceiptStore
 from craik.runtime.work.tasks import create_task
@@ -267,6 +271,71 @@ def test_follow_up_handoff_keeps_distinct_credential_and_operator_identity(
     assert second_handoff.auth_profile_id == "openai:writer"
     assert second_handoff.auth_identity_hash == "writer-hash"
     assert second_handoff.operator_subject == "operator-b"
+
+
+def test_consume_handoff_creates_new_task_case_and_pending_run(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    source_task_id = _seed_case(store, tmp_path)
+    source_run = _task_run(source_task_id, status="completed")
+    store.put_task_run(source_run.model_copy(update={"handoff_id": "handoff_review_docs"}))
+    source_handoff = HandoffWriter(store).create(
+        task_id=source_task_id,
+        agent="agent:reader",
+        summary="Reader finished review.",
+        next_steps=["Patch stale installation docs."],
+        tests_run=["pytest"],
+    )
+
+    result = consume_handoff(
+        store,
+        handoff_id_or_task_id=source_handoff.id,
+        auth_profile_id="openai:writer",
+        operator_subject="operator-b",
+        operator_issuer="https://issuer.example.test",
+        runner_id="codex",
+        runner_mode="prompt-handoff",
+    )
+
+    assert result.source_handoff == source_handoff
+    assert result.task.id == "task_continue_from_handoff_review_docs"
+    assert result.task.source_handoff_id == source_handoff.id
+    assert result.task.source_task_id == source_task_id
+    assert result.task.source_run_id == source_run.id
+    assert result.task.auth_profile_id == "openai:writer"
+    assert result.task.operator_subject == "operator-b"
+    assert "Source next step: Patch stale installation docs." in result.task.constraints
+    assert result.case_file.task_id == result.task.id
+    assert source_handoff.id in " ".join(result.case_file.recent_handoffs)
+    assert result.run.status == "pending"
+    assert result.run.runner_id == "codex"
+    assert result.run.runner_mode == "prompt-handoff"
+    assert result.run.source_handoff_id == source_handoff.id
+    assert result.run.auth_profile_id == "openai:writer"
+    assert result.run.operator_subject == "operator-b"
+
+
+def test_consume_handoff_requires_explicit_consumer_identity(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    source_task_id = _seed_case(store, tmp_path)
+    source_handoff = HandoffWriter(store).create(
+        task_id=source_task_id,
+        agent="agent:reader",
+        summary="Reader finished review.",
+        tests_run=["pytest"],
+    )
+
+    with pytest.raises(HandoffConsumptionError, match="requires --auth-profile-id"):
+        consume_handoff(
+            store,
+            handoff_id_or_task_id=source_handoff.id,
+            auth_profile_id="",
+            operator_subject="operator-b",
+            operator_issuer="https://issuer.example.test",
+        )
 
 
 def test_handoff_requires_existing_task(store: LocalStore) -> None:

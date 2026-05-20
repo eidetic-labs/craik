@@ -10,7 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
-_No unreleased changes._
+### Added
+
+- Handoff consumption workflow: `craik task resume --from-handoff` now creates
+  a follow-up task, case file, and pending run that record source handoff
+  provenance while requiring an explicit consumer credential and operator
+  identity.
 
 ## 0.2.0 - 2026-05-20
 

@@ -220,6 +220,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_auth",
         "craik.cli_operations",
         "craik.cli_project",
+        "craik.cli_tasks",
     ):
         import_module(module_name)
 
