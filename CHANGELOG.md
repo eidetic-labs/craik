@@ -25,6 +25,9 @@ within the `0.x.0` stability expectations described in
 - Intent-lock coordination for simultaneous runs: overlapping active scopes on
   the same project now block before new loop phases or tool dispatch and
   persist a denial receipt.
+- Structured debate runtime helper that creates role-linked debate turns,
+  summarizes agreement or disagreement, and resolves by adjudication receipt
+  or human-delegation receipt.
 
 ## 0.2.0 - 2026-05-20
 
