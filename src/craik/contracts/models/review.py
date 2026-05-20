@@ -373,9 +373,11 @@ class ScopeChangeResult(CraikModel):
     task_id: str
     scope_change_request_id: str
     decision: Literal["accepted", "rejected"]
+    protocol_decision: ScopeChangeProtocolDecision | None = None
     decided_by: str
     rationale: str
     updated_intent_lock_id: str | None = None
+    sibling_task_id: str | None = None
     policy_envelope_id: str | None = None
     contradiction_ids: list[str] = Field(default_factory=list)
     handoff_ids: list[str] = Field(default_factory=list)
@@ -384,9 +386,20 @@ class ScopeChangeResult(CraikModel):
 
     @model_validator(mode="after")
     def validate_accepted_scope_change(self) -> ScopeChangeResult:
-        """Accepted scope changes must point at the updated intent lock."""
-        if self.decision == "accepted" and not self.updated_intent_lock_id:
-            raise ValueError("accepted scope changes require updated_intent_lock_id")
+        """Require the artifacts implied by each scope-change protocol decision."""
+        protocol_decision = self.protocol_decision
+        if protocol_decision is None:
+            protocol_decision = "expand" if self.decision == "accepted" else "denied"
+        if self.decision == "rejected" and protocol_decision != "denied":
+            raise ValueError("rejected scope changes must use the denied protocol decision")
+        if self.decision == "accepted" and protocol_decision == "denied":
+            raise ValueError("accepted scope changes cannot use the denied protocol decision")
+        if protocol_decision == "expand" and not self.updated_intent_lock_id:
+            raise ValueError("accepted scope expansions require updated_intent_lock_id")
+        if protocol_decision == "sibling" and not self.sibling_task_id:
+            raise ValueError("sibling scope changes require sibling_task_id")
+        if protocol_decision == "handoff" and not self.handoff_ids:
+            raise ValueError("handoff scope changes require handoff_ids")
         return self
 
 

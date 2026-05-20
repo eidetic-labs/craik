@@ -34,6 +34,9 @@ within the `0.x.0` stability expectations described in
 - Human delegation pause/resume workflow: runs can be interrupted with
   receipted delegation requests, resolved or cancelled by CLI, and resumed from
   the recorded response.
+- Scope-change protocol: discovered work outside the current intent lock now
+  interrupts the run, records a scope-change request receipt, and requires an
+  explicit expand, sibling-task, handoff, or denial decision before continuing.
 
 ## 0.2.0 - 2026-05-20
 
