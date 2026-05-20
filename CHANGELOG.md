@@ -22,6 +22,9 @@ within the `0.x.0` stability expectations described in
 - Receipt-backed agent mailbox contracts and local-store helpers for sending
   and receiving typed multi-agent messages linked to tasks, runs, handoffs,
   and roles.
+- Intent-lock coordination for simultaneous runs: overlapping active scopes on
+  the same project now block before new loop phases or tool dispatch and
+  persist a denial receipt.
 
 ## 0.2.0 - 2026-05-20
 

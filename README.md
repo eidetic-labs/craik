@@ -29,6 +29,9 @@ such as verifier, docs reviewer, policy reviewer, memory curator, and
 adjudicator.
 Multi-agent coordination now has a typed, receipt-backed mailbox contract for
 agent-to-agent messages linked to task, run, handoff, and role identities.
+Concurrent runs against the same project are checked against active intent-lock
+scopes before new loop phases or tool dispatch, with overlaps recorded as
+coordination denial receipts.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or
