@@ -32,6 +32,7 @@ def validate_handoff_consumer_identity(
     operator_subject: str,
     operator_issuer: str,
     allow_identity_continuation: bool = False,
+    identity_continuation_rationale: str | None = None,
 ) -> IdentityIsolationDecision:
     """Validate and receipt explicit consumer identity for a consumed handoff."""
     if not auth_profile_id:
@@ -71,6 +72,16 @@ def validate_handoff_consumer_identity(
             operator_subject=operator_subject,
             operator_issuer=operator_issuer,
         )
+    if continued and not _has_rationale(identity_continuation_rationale):
+        raise _denied(
+            store,
+            handoff=handoff,
+            reason="identity continuation requires a non-empty rationale",
+            auth_profile_id=auth_profile_id,
+            operator_subject=operator_subject,
+            operator_issuer=operator_issuer,
+            identity_continuation_rationale=identity_continuation_rationale,
+        )
 
     receipt = store.put_receipt(
         _receipt(
@@ -81,6 +92,7 @@ def validate_handoff_consumer_identity(
             operator_subject=operator_subject,
             operator_issuer=operator_issuer,
             continued_producer_identity=continued,
+            identity_continuation_rationale=identity_continuation_rationale,
         )
     )
     return IdentityIsolationDecision(
@@ -106,6 +118,10 @@ def _same_identity(
     )
 
 
+def _has_rationale(value: str | None) -> bool:
+    return value is not None and bool(value.strip())
+
+
 def _denied(
     store: LocalStore,
     *,
@@ -114,6 +130,7 @@ def _denied(
     auth_profile_id: str,
     operator_subject: str,
     operator_issuer: str,
+    identity_continuation_rationale: str | None = None,
 ) -> IdentityIsolationError:
     store.put_receipt(
         _receipt(
@@ -124,6 +141,7 @@ def _denied(
             operator_subject=operator_subject or None,
             operator_issuer=operator_issuer or None,
             continued_producer_identity=False,
+            identity_continuation_rationale=identity_continuation_rationale,
         )
     )
     return IdentityIsolationError(reason)
@@ -138,6 +156,7 @@ def _receipt(
     operator_subject: str | None,
     operator_issuer: str | None,
     continued_producer_identity: bool,
+    identity_continuation_rationale: str | None,
 ) -> CapabilityReceipt:
     return CapabilityReceipt(
         id=f"receipt_{handoff.id}_identity_isolation_{status}",
@@ -160,6 +179,7 @@ def _receipt(
                 "producer_operator_issuer": handoff.operator_issuer,
                 "consumer_operator_issuer": operator_issuer,
                 "continued_producer_identity": continued_producer_identity,
+                "identity_continuation_rationale": identity_continuation_rationale,
             },
         ),
         redacted=True,

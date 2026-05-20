@@ -398,6 +398,7 @@ def test_consume_handoff_allows_explicit_identity_continuation(
         operator_subject="operator-a",
         operator_issuer="https://issuer.example.test",
         allow_identity_continuation=True,
+        identity_continuation_rationale="Continue same human-controlled follow-up.",
     )
 
     identity_receipt = store.get_receipt(result.run.receipt_ids[0])
@@ -406,6 +407,36 @@ def test_consume_handoff_allows_explicit_identity_continuation(
     assert identity_receipt is not None
     assert identity_receipt.result.status == "passed"
     assert identity_receipt.result.metadata["continued_producer_identity"] is True
+    assert (
+        identity_receipt.result.metadata["identity_continuation_rationale"]
+        == "Continue same human-controlled follow-up."
+    )
+
+
+def test_consume_handoff_requires_rationale_for_identity_continuation(
+    store: LocalStore,
+    tmp_path: Path,
+) -> None:
+    source_task_id = _seed_case(store, tmp_path)
+    source_handoff = HandoffWriter(store).create(
+        task_id=source_task_id,
+        agent="agent:reader",
+        summary="Reader finished review.",
+        tests_run=["pytest"],
+        auth_profile_id="openai:reader",
+        operator_subject="operator-a",
+        operator_issuer="https://issuer.example.test",
+    )
+
+    with pytest.raises(HandoffConsumptionError, match="requires a non-empty rationale"):
+        consume_handoff(
+            store,
+            handoff_id_or_task_id=source_handoff.id,
+            auth_profile_id="openai:reader",
+            operator_subject="operator-a",
+            operator_issuer="https://issuer.example.test",
+            allow_identity_continuation=True,
+        )
 
 
 def test_handoff_requires_existing_task(store: LocalStore) -> None:

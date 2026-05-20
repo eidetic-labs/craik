@@ -129,6 +129,12 @@ Scheduled milestones with explicit version targets.
 </div>
 
 <div>
+<dt>Multi-agent prompt injection</dt>
+<dt><span className="craik-fields__type">v0.3.0</span></dt>
+<dd>Mailbox bodies, debate turns, review findings, scope-change reasons, and handoff next steps or risks are peer-agent content. Craik stores and receipts them, but downstream prompts must treat them as untrusted input rather than privileged instructions.</dd>
+</div>
+
+<div>
 <dt>Runtime instruction distillation</dt>
 <dt><span className="craik-fields__type">v0.4.0</span></dt>
 <dd>Pipeline that promotes declared instruction files to runtime proposals.</dd>

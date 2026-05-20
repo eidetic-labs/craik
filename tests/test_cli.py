@@ -10,11 +10,13 @@ from craik.cli import receipts_app as mounted_receipts_app
 from craik.cli_receipts import receipts_app
 from craik.contracts.models import (
     CapabilityReceipt,
+    IntentLock,
     ReceiptResult,
     RecoverySession,
     RunDelta,
     RunDeltaItem,
     RunOutput,
+    ScopeChangeRequest,
     TaskRun,
     TaskRunStatus,
 )
@@ -50,9 +52,11 @@ def test_receipts_app_is_mounted_from_extracted_module() -> None:
     ("command", "expected"),
     [
         (["auth", "--help"], "add"),
+        (["agent-message", "--help"], "send"),
         (["connect", "--help"], "stigmem"),
         (["demo", "--help"], "stigmem-docs"),
         (["handoff", "--help"], "create"),
+        (["scope-change", "--help"], "decide"),
     ],
 )
 def test_cli_extension_modules_register_commands(
@@ -1269,6 +1273,10 @@ def test_delegation_pause_and_resolve_cli_flow(tmp_path: Path) -> None:
             paused_payload["delegation"]["id"],
             "--resolution",
             "Approved.",
+            "--operator-subject",
+            "operator-a",
+            "--operator-issuer",
+            "https://issuer.example.test",
             "--outcome",
             "accepted",
         ],
@@ -1280,6 +1288,85 @@ def test_delegation_pause_and_resolve_cli_flow(tmp_path: Path) -> None:
     assert resolved_payload["delegation"]["status"] == "resolved"
     assert resolved_payload["receipt"]["result"]["metadata"]["outcome"] == "accepted"
     assert resolved_payload["receipt"]["id"] in resolved_payload["run"]["receipt_ids"]
+
+
+def test_agent_message_send_and_receive_cli_flow(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _seed_agent_message_state(home)
+
+    sent = runner.invoke(
+        app,
+        [
+            "agent-message",
+            "send",
+            "--task-id",
+            "task_multi_agent",
+            "--from-agent",
+            "agent:orchestrator",
+            "--to-agent",
+            "agent:verifier",
+            "--subject",
+            "Review patch",
+            "--body",
+            "Please verify the patch.",
+            "--run-id",
+            "run_multi_agent",
+            "--from-role-id",
+            "role_orchestrator",
+            "--from-role-kind",
+            "orchestrator",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert sent.exit_code == 0
+    sent_payload = json.loads(sent.stdout)
+    assert sent_payload["from_agent"] == "agent:orchestrator"
+
+    received = runner.invoke(
+        app,
+        [
+            "agent-message",
+            "receive",
+            sent_payload["id"],
+            "--received-by",
+            "agent:verifier",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert received.exit_code == 0
+    received_payload = json.loads(received.stdout)
+    assert received_payload["status"] == "received"
+    assert len(received_payload["receipt_ids"]) == 2
+
+
+def test_scope_change_decide_cli_expands_lock(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _seed_scope_change_state(home)
+
+    decided = runner.invoke(
+        app,
+        [
+            "scope-change",
+            "decide",
+            "scope_change_run_docs_intent_docs_docs_examples",
+            "--decision",
+            "expand",
+            "--rationale",
+            "Docs examples are required.",
+            "--decided-by",
+            "operator-a",
+            "--run-id",
+            "run_docs",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert decided.exit_code == 0
+    payload = json.loads(decided.stdout)
+    assert payload["result"]["protocol_decision"] == "expand"
+    assert payload["updated_intent_lock"]["id"] == payload["run"]["intent_lock_id"]
 
 
 def test_run_recover_prints_plan_for_interrupted_run(tmp_path: Path) -> None:
@@ -1410,6 +1497,83 @@ def _seed_run_state(home: Path, *, status: TaskRunStatus) -> None:
             )
         )
         ReceiptStore(store).record_receipt(_receipt("receipt_docs", task_id="task_docs"))
+    finally:
+        store.close()
+
+
+def _seed_agent_message_state(home: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_task_run(
+            TaskRun(
+                id="run_multi_agent",
+                task_id="task_multi_agent",
+                case_file_id="case_multi_agent",
+                policy_envelope_id="policy_multi_agent",
+                runner_id="provider_openai_chat",
+                runner_mode="fixture",
+                role_id="role_orchestrator",
+                role_kind="orchestrator",
+                started_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+                phase_started_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+            )
+        )
+    finally:
+        store.close()
+
+
+def _seed_scope_change_state(home: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_intent_lock(
+            IntentLock(
+                id="intent_docs",
+                task_id="task_docs",
+                original_request="Review docs.",
+                objective="Review docs.",
+                accepted_interpretation="Review docs.",
+                in_scope=["docs/"],
+                out_of_scope=[],
+                allowed_autonomy=[],
+                stop_conditions=[],
+                scope_change_rules=["Ask before expanding scope."],
+                created_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+            )
+        )
+        store.put_task_run(
+            TaskRun(
+                id="run_docs",
+                task_id="task_docs",
+                case_file_id="case_docs",
+                policy_envelope_id="policy_docs",
+                intent_lock_id="intent_docs",
+                runner_id="runner_fixture",
+                runner_mode="fixture",
+                status="interrupted",
+                started_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+                phase_started_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+                updated_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+            )
+        )
+        store.put_scope_change_request(
+            ScopeChangeRequest(
+                id="scope_change_run_docs_intent_docs_docs_examples",
+                task_id="task_docs",
+                intent_lock_id="intent_docs",
+                requested_by="agent:orchestrator",
+                reason="Need docs examples.",
+                current_scope=["docs/"],
+                proposed_scope=["docs/", "docs/examples/"],
+                policy_envelope_id="policy_docs",
+                receipt_ids=["receipt_scope_request"],
+                created_at=datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+            )
+        )
     finally:
         store.close()
 

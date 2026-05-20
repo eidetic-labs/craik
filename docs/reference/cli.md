@@ -18,6 +18,49 @@ Options:
 
 - `--version`: Print the installed Craik version and exit.; default `false`
 
+## `craik agent-message`
+
+Send and receive agent mailbox messages.
+
+```text
+craik agent-message COMMAND [ARGS]...
+```
+
+## `craik agent-message receive`
+
+Mark an agent mailbox message as received and append a receipt.
+
+```text
+craik agent-message receive [OPTIONS] MESSAGE_ID
+```
+
+Options:
+
+- `--received-by`: Receiving agent id.
+
+## `craik agent-message send`
+
+Send a receipt-backed message from one authenticated run/role to another agent.
+
+```text
+craik agent-message send [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Task id for the message.
+- `--from-agent`: Authenticated sender id.
+- `--to-agent`: Recipient agent id.
+- `--subject`: Message subject.
+- `--body`: Message body.
+- `--run-id`: Sender run id used to authenticate from-agent.
+- `--kind`: Message kind.; default `request`
+- `--from-role-id`: Sender role id.
+- `--from-role-kind`: Sender role kind.
+- `--to-role-id`: Recipient role id.
+- `--to-role-kind`: Recipient role kind.
+- `--handoff-id`: Related handoff id.
+
 ## `craik auth`
 
 Manage provider credential profiles.
@@ -242,6 +285,8 @@ craik delegation resolve [OPTIONS] DELEGATION_ID
 Options:
 
 - `--resolution`: Human resolution text.
+- `--operator-subject`: Resolver operator subject.
+- `--operator-issuer`: Resolver operator issuer.
 - `--outcome`: accepted, rejected, or cancelled.; default `accepted`
 
 ## `craik demo`
@@ -843,6 +888,31 @@ Print a contract JSON Schema by name.
 craik schema show [OPTIONS] NAME
 ```
 
+## `craik scope-change`
+
+Decide pending scope-change protocol requests.
+
+```text
+craik scope-change COMMAND [ARGS]...
+```
+
+## `craik scope-change decide`
+
+Resolve a pending scope-change request through the explicit protocol.
+
+```text
+craik scope-change decide [OPTIONS] REQUEST_ID
+```
+
+Options:
+
+- `--decision`: Decision: expand, sibling, handoff, or denied.
+- `--rationale`: Decision rationale.
+- `--decided-by`: Operator or agent deciding.
+- `--run-id`: Paused run id to resume or update.
+- `--sibling-title`: Title for a sibling task decision.
+- `--handoff-id`: Handoff id for a handoff decision.
+
 ## `craik setup`
 
 Initialize local state and write non-secret gateway setup output.
@@ -915,6 +985,7 @@ Options:
 - `--runner-mode`: Runner mode: fixture, prompt-handoff, or live.; default `fixture`
 - `--max-iterations`: Maximum run iterations.; default `5`
 - `--allow-identity-continuation`: Explicitly allow the consumer to reuse the producer identity.; default `false`
+- `--identity-continuation-rationale`: Required rationale when explicitly reusing producer identity.
 
 ## `craik update`
 

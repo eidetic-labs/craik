@@ -232,7 +232,10 @@ class ProviderBackedRunExecutor:
             case_file = CaseFileAssembler(self.store).build(task_id)
         role_dispatch = (
             dispatch_role(
-                policy=self._policy_or_create(case_file.policy_envelope_id, task_id=task_id),
+                policy=self._role_policy(
+                    self._policy_or_create(case_file.policy_envelope_id, task_id=task_id),
+                    role_kind=role_kind,
+                ),
                 role_kind=role_kind,
                 runner_id=role_runner_id,
             )
@@ -328,6 +331,18 @@ class ProviderBackedRunExecutor:
         policy = generate_policy_envelope(task_id=task_id, actor="runner:role-dispatch")
         self.store.put_policy_envelope(policy)
         return policy
+
+    def _role_policy(
+        self,
+        policy: PolicyEnvelope,
+        *,
+        role_kind: AgentRoleKind | None,
+    ) -> PolicyEnvelope:
+        if role_kind is None or policy.allowed_agent_role_kinds is not None:
+            return policy
+        updated = policy.model_copy(update={"allowed_agent_role_kinds": [role_kind]})
+        self.store.put_policy_envelope(updated)
+        return updated
 
 
 def _latest_run_for_task(store: LocalStore, task_id: str) -> TaskRun:

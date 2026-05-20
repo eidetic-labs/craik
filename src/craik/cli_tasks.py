@@ -70,6 +70,13 @@ def task_resume(
             help="Explicitly allow the consumer to reuse the producer identity.",
         ),
     ] = False,
+    identity_continuation_rationale: Annotated[
+        str | None,
+        typer.Option(
+            "--identity-continuation-rationale",
+            help="Required rationale when explicitly reusing producer identity.",
+        ),
+    ] = None,
 ) -> None:
     """Consume a handoff into a new task, case file, and pending run."""
     store = LocalStore.from_env()
@@ -90,6 +97,7 @@ def task_resume(
             runner_mode=_runner_mode(runner_mode),
             max_iterations=max_iterations,
             allow_identity_continuation=allow_identity_continuation,
+            identity_continuation_rationale=identity_continuation_rationale,
         )
     except HandoffConsumptionError as error:
         raise typer.BadParameter(str(error)) from None

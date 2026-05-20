@@ -285,14 +285,14 @@ produces structured debate artifacts with receipted resolution.
 
 <div><h4>Handoff consumption</h4><p>Shipped first slice: <code>craik task resume --from-handoff=&lt;id&gt;</code> creates a new task, case file, and pending run with source handoff provenance and explicit consumer identity.</p></div>
 <div><h4>Role-based dispatch</h4><p>Shipped first slice: provider-backed runs can dispatch implementer · verifier · adversarial reviewer · policy reviewer · docs reviewer · memory curator · adjudicator roles with policy allow-lists, dispatch receipts, and run metadata.</p></div>
-<div><h4>Multi-agent message contract</h4><p>Shipped first slice: typed agent-to-agent mailbox messages persist send/receive receipts and link to task, run, handoff, and role identities.</p></div>
+<div><h4>Multi-agent message contract</h4><p>Shipped first slice: <code>craik agent-message send</code> and <code>craik agent-message receive</code> persist authenticated send/receive receipts and link to task, run, handoff, and role identities.</p></div>
 <div><h4>Concurrent run coordination</h4><p>Shipped first slice: simultaneous loops on the same project are checked against active intent-lock scopes before new phases or tool dispatch, and overlapping scopes produce denial receipts.</p></div>
 <div><h4>Structured debate runtime</h4><p>Shipped first slice: role-linked positions become typed debate turns, summaries preserve agreement or disagreement, and resolution records an adjudication or human-delegation receipt.</p></div>
 <div><h4>Cross-agent review protocol</h4><p>Shipped first slice: review requests target worker results, handoffs, or debate summaries; review results carry typed findings, receipts, and source artifact links without mutating the reviewed artifact.</p></div>
 <div><h4>Human delegation at runtime</h4><p>Shipped first slice: <code>craik delegation pause</code> interrupts a run with a receipted delegation request, <code>craik delegation resolve</code> records accepted/rejected/cancelled responses, and existing run resume continues from the interrupted boundary.</p></div>
-<div><h4>Scope-change protocol</h4><p>Shipped first slice: discovered scope outside the active intent lock interrupts the run, persists a receipted request, and requires an explicit expand / sibling / handoff / denial decision.</p></div>
+<div><h4>Scope-change protocol</h4><p>Shipped first slice: discovered scope outside the active intent lock interrupts the run, persists a receipted request, and <code>craik scope-change decide</code> requires an explicit expand / sibling / handoff / denial decision.</p></div>
 <div><h4>Live work graph</h4><p>Shipped first slice: v0.3.0 coordination artifacts persist work-graph events, and operators can query the active graph before final export.</p></div>
-<div><h4>Per-agent isolation enforced</h4><p>Shipped first slice: handoff consumers record their own credential/operator assignment, producer identity reuse is denied by default, and intentional continuation requires an explicit flag.</p></div>
+<div><h4>Per-agent isolation enforced</h4><p>Shipped first slice: handoff consumers record their own credential/operator assignment, producer identity reuse is denied by default, and intentional continuation requires an explicit flag plus rationale.</p></div>
 
 </div>
 

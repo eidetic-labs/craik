@@ -7,11 +7,13 @@ from craik.contracts.models import AgentMessage, PolicyEnvelope
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
 from craik.runtime.work.coordination.mailbox import (
+    AgentMessageAuthorizationError,
     AgentMessageNotFoundError,
     record_agent_message_received,
     send_agent_message,
 )
 from craik.runtime.work.graph import WorkGraphExporter
+from craik.runtime.work.runs import TaskRunManager
 
 
 @pytest.fixture
@@ -26,6 +28,7 @@ def store(tmp_path: Path) -> LocalStore:
 
 
 def test_send_agent_message_persists_message_and_receipt(store: LocalStore) -> None:
+    _seed_orchestrator_run(store)
     message = send_agent_message(
         store,
         policy=_policy(),
@@ -50,13 +53,80 @@ def test_send_agent_message_persists_message_and_receipt(store: LocalStore) -> N
     assert receipt.result.metadata["to_role_kind"] == "verifier"
 
 
+def test_send_agent_message_rejects_spoofed_sender(store: LocalStore) -> None:
+    _seed_orchestrator_run(store)
+
+    with pytest.raises(AgentMessageAuthorizationError, match="not authorized"):
+        send_agent_message(
+            store,
+            policy=_policy(),
+            task_id="task_multi_agent",
+            from_agent="agent:verifier",
+            to_agent="agent:orchestrator",
+            from_role_id="role_verifier",
+            from_role_kind="verifier",
+            run_id="run_multi_agent",
+            subject="Spoofed",
+            body="This should not be accepted.",
+        )
+
+
+def test_send_agent_message_requires_sender_run(store: LocalStore) -> None:
+    with pytest.raises(AgentMessageAuthorizationError, match="require a sender run_id"):
+        send_agent_message(
+            store,
+            policy=_policy(),
+            task_id="task_multi_agent",
+            from_agent="agent:orchestrator",
+            to_agent="agent:verifier",
+            subject="Review implementation",
+            body="Please verify the patch before handoff.",
+        )
+
+
+def test_send_agent_message_preserves_same_subject_history(store: LocalStore) -> None:
+    _seed_orchestrator_run(store)
+    first = send_agent_message(
+        store,
+        policy=_policy(),
+        task_id="task_multi_agent",
+        from_agent="agent:orchestrator",
+        to_agent="agent:verifier",
+        from_role_id="role_orchestrator",
+        from_role_kind="orchestrator",
+        run_id="run_multi_agent",
+        subject="Review implementation",
+        body="First body.",
+    )
+    second = send_agent_message(
+        store,
+        policy=_policy(),
+        task_id="task_multi_agent",
+        from_agent="agent:orchestrator",
+        to_agent="agent:verifier",
+        from_role_id="role_orchestrator",
+        from_role_kind="orchestrator",
+        run_id="run_multi_agent",
+        subject="Review implementation",
+        body="Second body.",
+    )
+
+    assert first.id != second.id
+    assert store.get_agent_message(first.id).body == "First body."
+    assert store.get_agent_message(second.id).body == "Second body."
+
+
 def test_receive_agent_message_appends_receipt(store: LocalStore) -> None:
+    _seed_orchestrator_run(store)
     message = send_agent_message(
         store,
         policy=_policy(),
         task_id="task_multi_agent",
         from_agent="agent:orchestrator",
         to_agent="agent:verifier",
+        from_role_id="role_orchestrator",
+        from_role_kind="orchestrator",
+        run_id="run_multi_agent",
         subject="Review implementation",
         body="Please verify the patch before handoff.",
     )
@@ -99,12 +169,16 @@ def test_agent_message_contract_rejects_missing_receipts() -> None:
 
 
 def test_work_graph_exports_agent_message_receipt_edges(store: LocalStore) -> None:
+    _seed_orchestrator_run(store)
     message = send_agent_message(
         store,
         policy=_policy(),
         task_id="task_multi_agent",
         from_agent="agent:orchestrator",
         to_agent="agent:verifier",
+        from_role_id="role_orchestrator",
+        from_role_kind="orchestrator",
+        run_id="run_multi_agent",
         subject="Review implementation",
         body="Please verify the patch before handoff.",
     )
@@ -129,4 +203,17 @@ def _policy() -> PolicyEnvelope:
         profile="strict",
         allowed_capabilities=["repo.read", "memory.read", "receipt.write"],
         denied_capabilities=["repo.write", "memory.write"],
+    )
+
+
+def _seed_orchestrator_run(store: LocalStore) -> None:
+    TaskRunManager(store).create(
+        task_id="task_multi_agent",
+        case_file_id="case_multi_agent",
+        policy_envelope_id="policy_task_multi_agent",
+        runner_id="provider_openai_chat",
+        runner_mode="fixture",
+        run_id="run_multi_agent",
+        role_id="role_orchestrator",
+        role_kind="orchestrator",
     )
