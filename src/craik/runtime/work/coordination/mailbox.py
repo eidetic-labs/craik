@@ -13,6 +13,7 @@ from craik.contracts.models import (
     ReceiptResult,
 )
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.live_graph import WorkGraphCoordinator
 
 
 class AgentMessageNotFoundError(RuntimeError):
@@ -77,6 +78,13 @@ def send_agent_message(
         created_at=datetime.now(UTC),
     )
     store.put_agent_message(message)
+    WorkGraphCoordinator(store).record_artifact(
+        task_id=task_id,
+        artifact_type="message",
+        artifact_id=message.id,
+        receipt_ids=message.receipt_ids,
+        metadata={"from_agent": from_agent, "to_agent": to_agent, "kind": kind},
+    )
     return message
 
 
@@ -117,6 +125,13 @@ def record_agent_message_received(
         }
     )
     store.put_agent_message(updated)
+    WorkGraphCoordinator(store).record_artifact(
+        task_id=message.task_id,
+        artifact_type="message",
+        artifact_id=message.id,
+        receipt_ids=[receipt.id],
+        metadata={"status": "received", "received_by": received_by},
+    )
     return updated
 
 

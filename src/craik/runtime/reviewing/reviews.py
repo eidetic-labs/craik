@@ -21,6 +21,7 @@ from craik.contracts.models import (
     ReviewResult,
 )
 from craik.runtime.store import LocalStore
+from craik.runtime.work.coordination.live_graph import WorkGraphCoordinator
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,17 @@ class ReviewAdjudicationManager:
     def request_review(self, request: ReviewRequest) -> ReviewRequest:
         """Persist a bounded specialist review request."""
         self._store.put_review_request(request)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=request.task_id,
+            artifact_type="review_request",
+            artifact_id=request.id,
+            receipt_ids=request.receipt_ids,
+            metadata={
+                "status": request.status,
+                "reviewer_role_id": request.reviewer_role_id,
+                "reviewer_role_kind": request.reviewer_role_kind,
+            },
+        )
         return request
 
     def request_cross_agent_review(
@@ -108,6 +120,15 @@ class ReviewAdjudicationManager:
     def record_result(self, result: ReviewResult) -> ReviewResult:
         """Persist a specialist review result and mark its request complete."""
         self._store.put_review_result(result)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=result.task_id,
+            artifact_type="review_result",
+            artifact_id=result.id,
+            receipt_ids=result.receipt_ids,
+            source_node=f"review_request:{result.review_request_id}",
+            relation="depends_on",
+            metadata={"decision": result.decision, "reviewer_role_id": result.reviewer_role_id},
+        )
         request = self._store.get_review_request(result.review_request_id)
         if request is not None and request.status == "open":
             self._store.put_review_request(request.model_copy(update={"status": "completed"}))
@@ -247,6 +268,13 @@ class ReviewAdjudicationManager:
             created_at=datetime.now(UTC),
         )
         self._store.put_adjudication_outcome(outcome)
+        WorkGraphCoordinator(self._store).record_artifact(
+            task_id=task_id,
+            artifact_type="adjudication",
+            artifact_id=outcome.id,
+            receipt_ids=outcome.receipt_ids,
+            metadata={"decision": outcome.decision, "adjudicator_role_id": adjudicator_role_id},
+        )
         return outcome
 
 

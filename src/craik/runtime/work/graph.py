@@ -13,8 +13,11 @@ from craik.contracts.models import (
     ContradictionReport,
     EvidenceReference,
     Handoff,
+    HumanDelegationPoint,
+    IntentLock,
     MemoryProposal,
     TaskRequest,
+    TaskRun,
     WorkGraphEdge,
     WorkGraphExport,
     WorkGraphNode,
@@ -46,6 +49,10 @@ class WorkGraphExporter:
         tasks = _filter_by_task(self._store.list_tasks(), task_id)
         for task in tasks:
             builder.add_task(task)
+        for lock in _filter_by_task(self._store.list_intent_locks(), task_id):
+            builder.add_intent_lock(lock)
+        for run in _filter_by_task(self._store.list_task_runs(), task_id):
+            builder.add_run(run)
         for case_file in _filter_by_task(self._store.list_case_files(), task_id):
             builder.add_node(
                 id=f"case:{case_file.id}",
@@ -88,6 +95,8 @@ class WorkGraphExporter:
             builder.add_proposal(proposal)
         for handoff in _filter_by_task(self._store.list_handoffs(), task_id):
             builder.add_handoff(handoff)
+        for delegation in _filter_by_task(self._store.list_human_delegations(), task_id):
+            builder.add_human_delegation(delegation)
         for evidence in _filter_by_task(self._store.list_evidence(), task_id):
             builder.add_evidence(evidence, task_id=_task_id_from_evidence(evidence))
         for assumption in _filter_by_task(self._store.list_assumptions(), task_id):
@@ -116,6 +125,8 @@ class WorkGraphExporter:
                     to_node=f"evidence:{evidence_id}",
                 )
         for event in _filter_by_task(self._store.list_graph_events(), task_id):
+            builder.add_event_endpoint(event.from_node, task_id=event.task_id)
+            builder.add_event_endpoint(event.to_node, task_id=event.task_id)
             builder.add_edge(
                 type=event.type,
                 from_node=event.from_node,
@@ -195,6 +206,50 @@ class _GraphBuilder:
                 from_node=f"handoff:{handoff.id}",
                 to_node=f"proposal:{proposal_id}",
             )
+
+    def add_run(self, run: TaskRun) -> None:
+        self.add_node(
+            id=f"run:{run.id}",
+            type="run",
+            label=f"{run.runner_id}: {run.status}",
+            task_id=run.task_id,
+            metadata={"status": run.status, "phase": run.phase, "role_id": run.role_id},
+        )
+        self.add_edge(type="has_run", from_node=f"task:{run.task_id}", to_node=f"run:{run.id}")
+        if run.intent_lock_id:
+            self.add_edge(
+                type="depends_on",
+                from_node=f"run:{run.id}",
+                to_node=f"intent_lock:{run.intent_lock_id}",
+            )
+
+    def add_intent_lock(self, lock: IntentLock) -> None:
+        self.add_node(
+            id=f"intent_lock:{lock.id}",
+            type="intent_lock",
+            label=lock.accepted_interpretation,
+            task_id=lock.task_id,
+            metadata={"in_scope": lock.in_scope, "out_of_scope": lock.out_of_scope},
+        )
+        self.add_edge(
+            type="has_intent_lock",
+            from_node=f"task:{lock.task_id}",
+            to_node=f"intent_lock:{lock.id}",
+        )
+
+    def add_human_delegation(self, delegation: HumanDelegationPoint) -> None:
+        self.add_node(
+            id=f"delegation:{delegation.id}",
+            type="delegation",
+            label=delegation.summary,
+            task_id=delegation.task_id,
+            metadata={"kind": delegation.kind, "status": delegation.status},
+        )
+        self.add_edge(
+            type="blocks",
+            from_node=f"delegation:{delegation.id}",
+            to_node=f"task:{delegation.task_id}",
+        )
 
     def add_receipt(self, receipt: CapabilityReceipt) -> None:
         self.add_node(
@@ -332,6 +387,19 @@ class _GraphBuilder:
             label=contradiction.summary,
             task_id=task_id,
             metadata={"status": contradiction.status, "owner": contradiction.owner},
+        )
+
+    def add_event_endpoint(self, node_id: str, *, task_id: str) -> None:
+        """Ensure live graph event endpoints are visible in active graph queries."""
+        if node_id in self._nodes:
+            return
+        node_type, _, raw_label = node_id.partition(":")
+        self.add_node(
+            id=node_id,
+            type=node_type or "artifact",
+            label=raw_label or node_id,
+            task_id=task_id,
+            metadata={"source": "work_graph_event"},
         )
 
     def add_node(
