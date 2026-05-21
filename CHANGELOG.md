@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.6.0 — 2026-05-21
+
 ### Added
 
 - v0.6.0 skill ecosystem contracts for semantic skill packages,
