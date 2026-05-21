@@ -79,10 +79,7 @@ def test_prompt_compiler_is_deterministic_and_persisted(
     assert first.distillations == []
     assert first.distillation_warnings == []
     assert "Policy id: policy_task_review_docs" in first.prompt
-    assert (
-        "## Active instruction constraints\nItems:\n- none\nWarnings:\n- none"
-        in first.prompt
-    )
+    assert "## Active instruction constraints\nItems:\n- none\nWarnings:\n- none" in first.prompt
     assert "grant_docs_write: repo.write.docs" in first.prompt
     assert "Document excluded from discovery" in first.prompt
     assert "Memory facts were not loaded into the case file." in first.context_omissions
@@ -144,12 +141,14 @@ def test_prompt_compiler_renders_governing_distillations_in_category_order(
     )
     approve_instruction(
         store,
+        allow_unbound=True,
         proposal_id="distilled_instruction_z_boundary",
         operator_identity="user:maintainer",
         rationale="Boundary applies.",
     )
     approve_instruction(
         store,
+        allow_unbound=True,
         proposal_id="distilled_instruction_a_policy",
         operator_identity="user:maintainer",
         rationale="Policy applies.",
@@ -201,6 +200,7 @@ def test_prompt_compiler_excludes_stale_governing_distillation_with_warning(
     )
     approved = approve_instruction(
         store,
+        allow_unbound=True,
         proposal_id=proposal.id,
         operator_identity="user:maintainer",
         rationale="Initially valid.",
@@ -213,9 +213,7 @@ def test_prompt_compiler_excludes_stale_governing_distillation_with_warning(
         }
     )
     store.put_distilled_instruction_proposal(
-        DistilledInstructionProposal.model_validate(
-            deferred.model_dump(mode="json", by_alias=True)
-        )
+        DistilledInstructionProposal.model_validate(deferred.model_dump(mode="json", by_alias=True))
     )
     CaseFileAssembler(store).build(task.id)
 
@@ -254,6 +252,7 @@ def test_prompt_compiler_sanitizes_distillation_statement_markdown_injection(
     )
     approve_instruction(
         store,
+        allow_unbound=True,
         proposal_id="distilled_instruction_injection",
         operator_identity="user:maintainer",
         rationale="Fixture approval.",
@@ -289,6 +288,7 @@ def test_prompt_compiler_rechecks_source_drift_before_rendering(
     proposal = store.list_distilled_instruction_proposals()[0]
     approve_instruction(
         store,
+        allow_unbound=True,
         proposal_id=proposal.id,
         operator_identity="user:maintainer",
         rationale="Initial approval.",
@@ -306,8 +306,7 @@ def test_prompt_compiler_rechecks_source_drift_before_rendering(
 
     assert prompt.distillations == []
     assert any(
-        "Stale governing distillation excluded" in item
-        for item in prompt.distillation_warnings
+        "Stale governing distillation excluded" in item for item in prompt.distillation_warnings
     )
 
 

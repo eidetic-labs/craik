@@ -24,6 +24,7 @@ class InstructionSourceSnapshotError(RuntimeError):
 
 
 MAX_INSTRUCTION_SOURCE_BYTES = 10 * 1024 * 1024
+MAX_PROJECT_INSTRUCTION_SOURCE_BYTES = 100 * 1024 * 1024
 
 
 def compute_source_snapshot(
@@ -98,15 +99,29 @@ def refresh_project_snapshots(
         for snapshot in store.list_instruction_source_snapshots()
         if snapshot.project_id == project_id
     )
-    snapshots = [
-        compute_source_snapshot(
-            source,
-            base_dir=base_dir,
-            previous_snapshot=previous_by_source.get(source.id),
-            now=now,
+    snapshots: list[InstructionSourceSnapshot] = []
+    project_byte_count = 0
+    for source in _active_project_sources(store, project_id):
+        source_size = _source_size(source, base_dir=base_dir)
+        if source_size is not None:
+            project_byte_count += source_size
+            if project_byte_count > MAX_PROJECT_INSTRUCTION_SOURCE_BYTES:
+                snapshots.append(
+                    _oversize_snapshot(
+                        source,
+                        size=source_size,
+                        now=now or datetime.now(UTC),
+                    )
+                )
+                continue
+        snapshots.append(
+            compute_source_snapshot(
+                source,
+                base_dir=base_dir,
+                previous_snapshot=previous_by_source.get(source.id),
+                now=now,
+            )
         )
-        for source in _active_project_sources(store, project_id)
-    ]
     for snapshot in snapshots:
         store.put_instruction_source_snapshot(snapshot)
     return sorted(snapshots, key=lambda snapshot: (snapshot.path, snapshot.source_id))
@@ -150,6 +165,13 @@ def _oversize_source_snapshot(
     base_dir: Path,
     now: datetime,
 ) -> InstructionSourceSnapshot | None:
+    size = _source_size(source, base_dir=base_dir)
+    if size is None or size <= MAX_INSTRUCTION_SOURCE_BYTES:
+        return None
+    return _oversize_snapshot(source, size=size, now=now)
+
+
+def _source_size(source: InstructionSource, *, base_dir: Path) -> int | None:
     root = base_dir.resolve()
     abs_path = (root / source.path).resolve()
     try:
@@ -157,11 +179,17 @@ def _oversize_source_snapshot(
     except ValueError:
         return None
     try:
-        size = abs_path.stat().st_size
+        return abs_path.stat().st_size
     except OSError:
         return None
-    if size <= MAX_INSTRUCTION_SOURCE_BYTES:
-        return None
+
+
+def _oversize_snapshot(
+    source: InstructionSource,
+    *,
+    size: int,
+    now: datetime,
+) -> InstructionSourceSnapshot:
     return InstructionSourceSnapshot(
         id=f"instruction_snapshot_{source.id}_oversize",
         project_id=source.project_id,

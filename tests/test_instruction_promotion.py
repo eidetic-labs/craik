@@ -45,6 +45,7 @@ def test_approved_promotion_creates_active_constraint_and_audit_links(tmp_path) 
 
         result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Instruction is valid.",
@@ -75,6 +76,7 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
         with pytest.raises(InstructionApprovalError, match="operator identity"):
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id=proposal.id,
                 operator_identity="",
                 rationale="Missing operator.",
@@ -82,6 +84,7 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
 
         result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Instruction is valid.",
@@ -92,6 +95,34 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
         assert result.review.decided_by == "user:maintainer"
         assert result.constraint is not None
         assert list_governing(store) == [result.constraint]
+    finally:
+        store.close()
+
+
+def test_approval_requires_session_unless_unbound_explicit(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CRAIK_HOME", str(tmp_path / "sessionless-home"))
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+
+        with pytest.raises(InstructionApprovalError, match="active operator session"):
+            approve_instruction(
+                store,
+                proposal_id=proposal.id,
+                operator_identity="user:maintainer",
+                rationale="Instruction is valid.",
+            )
+
+        result = approve_instruction(
+            store,
+            allow_unbound=True,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Instruction is valid.",
+        )
+
+        assert result.proposal.promotion_status == "governing"
     finally:
         store.close()
 
@@ -117,6 +148,7 @@ def test_approval_rejects_mismatched_active_operator_session(tmp_path, monkeypat
         with pytest.raises(InstructionApprovalError, match="does not match active session"):
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id=proposal.id,
                 operator_identity="user:other",
                 rationale="Wrong operator.",
@@ -132,6 +164,7 @@ def test_tampered_approval_receipt_excludes_governing_constraint(tmp_path) -> No
         store.put_distilled_instruction_proposal(proposal)
         result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Instruction is valid.",
@@ -154,12 +187,14 @@ def test_reapproval_of_governing_instruction_is_noop(tmp_path) -> None:
         store.put_distilled_instruction_proposal(proposal)
         first = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Instruction is valid.",
         )
         second = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Still valid.",
@@ -190,6 +225,7 @@ def test_stale_or_contradicted_approval_requires_override(tmp_path) -> None:
         with pytest.raises(InstructionApprovalError, match="--override"):
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id=stale.id,
                 operator_identity="user:maintainer",
                 rationale="Approve despite stale state.",
@@ -197,6 +233,7 @@ def test_stale_or_contradicted_approval_requires_override(tmp_path) -> None:
 
         result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=stale.id,
             operator_identity="user:maintainer",
             rationale="Approve despite stale state.",
@@ -223,6 +260,7 @@ def test_contradicted_approval_records_override(tmp_path) -> None:
 
         result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Reviewed contradiction.",
@@ -243,6 +281,7 @@ def test_reject_instruction_persists_denial_receipt(tmp_path) -> None:
 
         result = reject_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Not valid for this project.",
@@ -274,12 +313,14 @@ def test_new_approval_supersedes_previous_governing_instruction(tmp_path) -> Non
 
         first_result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=first.id,
             operator_identity="user:maintainer",
             rationale="Initial rule.",
         )
         second_result = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=second.id,
             operator_identity="user:maintainer",
             rationale="Updated rule.",
@@ -302,6 +343,7 @@ def test_approved_promotion_requires_source_snapshot(tmp_path) -> None:
         with pytest.raises(InstructionApprovalError, match="source snapshot"):
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id=proposal.id,
                 operator_identity="user:maintainer",
                 rationale="Cannot approve without snapshot.",
@@ -316,6 +358,7 @@ def test_unknown_promotion_proposal_raises(tmp_path) -> None:
         with pytest.raises(InstructionApprovalError, match="unknown"):
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id="missing",
                 operator_identity="user:maintainer",
                 rationale="Missing.",

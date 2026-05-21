@@ -69,6 +69,12 @@ Review commands run through the active operator session. The runtime
 records who made the decision, when it happened, the rationale, and
 the proposal state at review time.
 
+Direct runtime API calls also require an active operator session by
+default. Test harnesses or tightly controlled internal tooling may opt
+into unbound approval by passing `allow_unbound=True`; production
+extensions should leave the default in place so the recorded operator
+identity is bound to the current session.
+
 ## Receipts
 
 `craik.instruction_promotion_review` links the decision to the

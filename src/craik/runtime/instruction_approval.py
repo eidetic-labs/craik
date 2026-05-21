@@ -47,11 +47,12 @@ def approve_instruction(
     rationale: str,
     override: bool = False,
     override_rationale: str | None = None,
+    allow_unbound: bool = False,
     now: datetime | None = None,
 ) -> InstructionApprovalResult:
     """Approve a distilled instruction and make it governing."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity)
+    _require_operator(operator_identity, allow_unbound=allow_unbound)
     hmac_key = _hmac_key_for_store(store)
     existing = store.get_instruction_promotion_review(_review_id(proposal.id))
     if proposal.promotion_status == "governing" and existing is not None:
@@ -111,11 +112,12 @@ def reject_instruction(
     proposal_id: str,
     operator_identity: str,
     rationale: str,
+    allow_unbound: bool = False,
     now: datetime | None = None,
 ) -> InstructionApprovalResult:
     """Reject a distilled instruction with an auditable denial receipt."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity)
+    _require_operator(operator_identity, allow_unbound=allow_unbound)
     hmac_key = _hmac_key_for_store(store)
     decided_at = now or datetime.now(UTC)
     review = InstructionPromotionReview(
@@ -146,9 +148,7 @@ def list_governing(
     project_id: str | None = None,
 ) -> list[PromotedInstructionConstraint]:
     """Return active constraints from governing distilled instructions only."""
-    proposals = {
-        proposal.id: proposal for proposal in store.list_distilled_instruction_proposals()
-    }
+    proposals = {proposal.id: proposal for proposal in store.list_distilled_instruction_proposals()}
     constraints = [
         constraint
         for constraint in store.list_promoted_instruction_constraints()
@@ -186,7 +186,7 @@ def verify_review_hmac(
     return hmac.compare_digest(review.receipt_hmac, expected)
 
 
-def _require_operator(operator_identity: str) -> None:
+def _require_operator(operator_identity: str, *, allow_unbound: bool) -> None:
     if not operator_identity.strip():
         raise InstructionApprovalError(
             "instruction approval requires an explicit operator identity"
@@ -194,6 +194,10 @@ def _require_operator(operator_identity: str) -> None:
     try:
         session = OperatorSessionStore.from_env().get()
     except OperatorSessionNotFoundError:
+        if not allow_unbound:
+            raise InstructionApprovalError(
+                "instruction approval requires an active operator session"
+            ) from None
         return
     if session.subject != operator_identity:
         raise InstructionApprovalError(
@@ -276,9 +280,7 @@ def _supersede_existing_governing(
             )
         )
         if existing.promoted_constraint_id:
-            constraint = store.get_promoted_instruction_constraint(
-                existing.promoted_constraint_id
-            )
+            constraint = store.get_promoted_instruction_constraint(existing.promoted_constraint_id)
             if constraint is not None:
                 store.put_promoted_instruction_constraint(
                     constraint.model_copy(update={"active": False})

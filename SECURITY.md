@@ -77,6 +77,10 @@ operator approves them.
   local secret under Craik home. Case files, onboarding context,
   handoffs, and compiled prompts exclude governing constraints whose
   approval receipt is missing or fails verification.
+- On POSIX systems Craik sets owner-only permissions on local secrets and
+  session files. Windows support currently relies on the default user
+  profile ACLs; if Windows becomes a first-class target, Craik should add
+  explicit ACL hardening and validation for these files.
 - Compiled prompts render approved instruction text as sanitized
   single-line literal content inside the `Active instruction
   constraints` section to reduce prompt-injection risk from registered

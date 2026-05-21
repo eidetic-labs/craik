@@ -61,10 +61,14 @@ within the `0.x.0` stability expectations described in
 - Instruction approval receipts now carry integrity HMACs, and active runtime
   consumers exclude governing constraints whose approval receipt is missing or
   fails verification.
+- Direct instruction approval API calls now require an active operator session
+  unless a caller explicitly opts into unbound approval for test or controlled
+  internal use.
 - Instruction source registration now rejects absolute paths, parent-directory
   escapes, and symlink escapes before a source enters the registry.
-- Oversize instruction sources are skipped during snapshot refresh and excluded
-  from proposal ingestion instead of being read without bounds.
+- Oversize instruction sources and sources exceeding the aggregate project
+  source budget are skipped during snapshot refresh and excluded from proposal
+  ingestion instead of being read without bounds.
 - GitHub Actions workflows now pin third-party actions to immutable SHAs, and
   the publish workflow emits package provenance attestations before upload.
 
