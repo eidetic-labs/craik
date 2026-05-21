@@ -24,6 +24,9 @@ within the `0.x.0` stability expectations described in
 - Instruction provenance extraction for v0.4.0: parsed statement candidates now
   persist deterministic line/column provenance records with snapshot links,
   summaries, and excerpt hashes.
+- Deterministic instruction categorization for v0.4.0: parsed and provenanced
+  statements now become persisted distillation proposals with heuristic category
+  traceability and unclassified-candidate warnings.
 
 ## 0.3.0 - 2026-05-20
 

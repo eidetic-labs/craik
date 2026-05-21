@@ -314,7 +314,7 @@ files and prompt compilation as first-class evidence.
 <div><h4>Source ingestion</h4><p><code>AGENTS.md</code> · <code>CLAUDE.md</code> · <code>GEMINI.md</code> · <code>HERMES.md</code> · <code>SKILLS.md</code> · <code>.cursorrules</code> · <code>.github/copilot-instructions.md</code> · <code>.codex/instructions.md</code> · declared policy docs, all confined to the project root.</p></div>
 <div><h4>Source hash tracking</h4><p>Real-file snapshot refresh with newline-normalized SHA-256 hashes and stale-invalidation input.</p></div>
 <div><h4>Line/range provenance</h4><p>Deterministic source snapshot, line/column range, summary, and excerpt hash attached to every extracted item.</p></div>
-<div><h4>Categorized extraction</h4><p>Instruction · policy · preference · command · boundary · handoff-rule · memory-rule · security-rule · stale-risk.</p></div>
+<div><h4>Categorized extraction</h4><p>Deterministic proposal creation for instruction · policy · preference · command · boundary · handoff-rule · memory-rule · security-rule · stale-risk, with unclassified warnings.</p></div>
 <div><h4>Inter-source contradictions</h4><p>Surfaced as Stigmem-style contradictions.</p></div>
 <div><h4>Approval flow</h4><p>Distilled items become governing only after recorded approval, producing a receipt.</p></div>
 <div><h4>Case-file integration</h4><p>Approved distillations load as first-class evidence with provenance.</p></div>
