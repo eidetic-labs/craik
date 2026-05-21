@@ -96,6 +96,7 @@ def test_handoff_preserves_runner_metadata_from_receipts(
         agent="runner:codex",
         summary="Adapter completed.",
         tests_run=["pytest"],
+        next_steps=["Continue adapter verification."],
     )
     markdown = render_markdown(handoff)
 
@@ -125,11 +126,14 @@ def test_incomplete_handoff_records_missing_validation_and_policy_exception(
         summary="Blocked before validation.",
         status="incomplete",
         policy_exceptions=["No policy exception used."],
+        allow_blocked_exit=True,
+        blocked_exit_rationale="Fixture intentionally verifies blocked check persistence.",
     )
 
     assert handoff.status == "incomplete"
     assert handoff.self_audit.validation_recorded is False
-    assert handoff.policy_exceptions == ["No policy exception used."]
+    assert handoff.policy_exceptions[0] == "No policy exception used."
+    assert handoff.policy_exceptions[1].startswith("Blocked exit override:")
     exit_check = store.get_exit_discipline_check(f"exit_discipline_{task_id}")
     assert exit_check is not None
     assert exit_check.status == "blocked"
@@ -331,6 +335,7 @@ def test_consume_handoff_requires_explicit_consumer_identity(
         agent="agent:reader",
         summary="Reader finished review.",
         tests_run=["pytest"],
+        next_steps=["Continue review follow-up."],
     )
 
     with pytest.raises(HandoffConsumptionError, match="requires --auth-profile-id"):
@@ -356,6 +361,7 @@ def test_consume_handoff_denies_implicit_producer_identity_reuse(
         agent="agent:reader",
         summary="Reader finished review.",
         tests_run=["pytest"],
+        next_steps=["Continue review follow-up."],
         auth_profile_id="openai:reader",
         operator_subject="operator-a",
         operator_issuer="https://issuer.example.test",
@@ -386,6 +392,7 @@ def test_consume_handoff_allows_explicit_identity_continuation(
         agent="agent:reader",
         summary="Reader finished review.",
         tests_run=["pytest"],
+        next_steps=["Continue review follow-up."],
         auth_profile_id="openai:reader",
         operator_subject="operator-a",
         operator_issuer="https://issuer.example.test",
@@ -423,6 +430,7 @@ def test_consume_handoff_requires_rationale_for_identity_continuation(
         agent="agent:reader",
         summary="Reader finished review.",
         tests_run=["pytest"],
+        next_steps=["Continue review follow-up."],
         auth_profile_id="openai:reader",
         operator_subject="operator-a",
         operator_issuer="https://issuer.example.test",

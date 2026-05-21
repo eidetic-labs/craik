@@ -20,6 +20,12 @@ within the `0.x.0` stability expectations described in
   exit-discipline checks.
 - Recovery and delta operator paths through `craik run recover` and
   `craik run delta`, backed by durable local-store records.
+- Production capture paths and CLI commands for scratchpad records,
+  unknowns, context requests, known traps, negative knowledge,
+  runtime critic findings, and red-team findings.
+- v0.5.0 capture-layer end-to-end coverage that validates persisted
+  continuity records flow into case files, handoffs, quality scores,
+  and exit-discipline enforcement.
 - Operator view formatting for quality gates, known traps and negative
   knowledge, run deltas, recovery sessions, scratchpad/unknown state,
   context requests, and exit-discipline status.
@@ -29,8 +35,12 @@ within the `0.x.0` stability expectations described in
 ### Changed
 
 - Case-file and handoff continuity flows now surface known traps,
-  unresolved unknowns, context debt, freshness warnings, and recovery
+  negative knowledge, scratchpad records, unresolved unknowns,
+  context requests, context debt, freshness warnings, and recovery
   state as structured runtime records rather than prose-only notes.
+- Handoff creation now persists handoff quality and evidence coverage
+  scores, and blocks incomplete exits unless an explicit blocked-exit
+  override rationale is recorded.
 - The goal workflow now requires pushed PRs, green required checks,
   agent-owned merge of clean PRs, and stale branch pruning before moving
   to the next goal.
@@ -42,6 +52,11 @@ within the `0.x.0` stability expectations described in
   policy or privileged instruction text.
 - Tool-result attestations and freshness probes distinguish observed
   outputs from stale, missing, or unverified summaries before reuse.
+- Tool-result attestations and recovery sessions now carry local HMAC
+  integrity metadata and are verified on read from the local store.
+- `craik run recover` and `craik run delta` now require an active
+  operator session before exposing recovery state for existing runs or
+  deltas.
 - Scratchpad notes require expiry, and negative knowledge requires
   evidence and explicit scope so temporary or absence-based claims do
   not silently become durable project truth.

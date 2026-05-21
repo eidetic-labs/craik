@@ -16,6 +16,7 @@ from craik.contracts.models import (
     TaskRun,
     TaskRunStatus,
 )
+from craik.runtime.companions.handoff_markdown import render_markdown as render_markdown
 from craik.runtime.policy.intent_locks import IntentLockManager
 from craik.runtime.policy.redaction import redact
 from craik.runtime.runners.runner_metadata import (
@@ -26,8 +27,13 @@ from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
 from craik.runtime.work.context_debt import context_debt_summaries, records_from_case_file
 from craik.runtime.work.exit_discipline import build_exit_discipline_check
+from craik.runtime.work.quality_scores import persist_handoff_scores
 from craik.runtime.work.receipts import ReceiptStore
-from craik.runtime.work.scratchpad import unknown_summaries
+from craik.runtime.work.scratchpad import (
+    open_context_requests,
+    unknown_summaries,
+    unresolved_unknowns,
+)
 
 
 class HandoffError(RuntimeError):
@@ -38,6 +44,9 @@ class HandoffNotFoundError(HandoffError):
 
 class HandoffContextError(HandoffError):
     """Raised when required handoff context is missing."""
+
+class HandoffBlockedByExitDisciplineError(HandoffError):
+    """Raised when a handoff cannot be persisted because exit discipline blocks it."""
 
 class RunHandoffContextError(HandoffContextError):
     """Raised when required run handoff context is missing."""
@@ -73,6 +82,8 @@ class HandoffWriter:
         auth_identity_hash: str | None = None,
         operator_subject: str | None = None,
         operator_issuer: str | None = None,
+        allow_blocked_exit: bool = False,
+        blocked_exit_rationale: str | None = None,
     ) -> Handoff:
         """Create, validate, persist, and return a structured handoff."""
         task = self.store.get_task(task_id)
@@ -113,6 +124,13 @@ class HandoffWriter:
             operator_subject=operator_subject,
             operator_issuer=operator_issuer,
         )
+        policy_exception_values = list(policy_exceptions or [])
+        if allow_blocked_exit:
+            if not (blocked_exit_rationale or "").strip():
+                raise HandoffContextError("blocked exit override requires a rationale")
+            policy_exception_values.append(
+                f"Blocked exit override: {redact(blocked_exit_rationale or '').value}"
+            )
         handoff = Handoff(
             id=handoff_id(task_id),
             task_id=task_id,
@@ -129,7 +147,7 @@ class HandoffWriter:
             tests_run=tests_run or [],
             assumptions=assumptions,
             context_debt=context_debt,
-            policy_exceptions=policy_exceptions or [],
+            policy_exceptions=policy_exception_values,
             facts_learned=facts_learned or [],
             facts_invalidated=facts_invalidated or [],
             contradictions_opened=contradictions_opened or [],
@@ -144,12 +162,23 @@ class HandoffWriter:
             operator_issuer=identity["operator_issuer"],
             created_at=datetime.now(UTC),
         )
-        self.store.put_handoff(handoff)
-        self.store.put_exit_discipline_check(
-            build_exit_discipline_check(handoff, task_id=task_id, project_id=project.id)
+        exit_check = build_exit_discipline_check(
+            handoff,
+            task_id=task_id,
+            project_id=project.id,
+            context_requests=open_context_requests(self.store, task_id),
+            unknown_ids=[record.id for record in unresolved_unknowns(self.store, task_id)],
         )
+        if exit_check.status == "blocked" and not allow_blocked_exit:
+            reasons = "; ".join(exit_check.blocking_reasons)
+            raise HandoffBlockedByExitDisciplineError(
+                f"handoff blocked by exit discipline: {reasons}"
+            )
+        self.store.put_handoff(handoff)
+        self.store.put_exit_discipline_check(exit_check)
         for debt in debt_records:
             self.store.put_context_debt_record(debt)
+        _persist_handoff_quality(self.store, handoff)
         return handoff
 
     def create_from_run(
@@ -238,64 +267,22 @@ class HandoffWriter:
         return handoff
 
 
-def render_markdown(handoff: Handoff) -> str:
-    """Render a deterministic Markdown handoff."""
-    sections = [
-        f"# Handoff: {handoff.task_id}",
-        "",
-        f"- Status: {handoff.status}",
-        f"- Agent: {handoff.agent}",
-        f"- Project: {handoff.project_id}",
-        f"- Intent lock: {handoff.intent_lock_id or 'none'}",
-        f"- Auth profile: {handoff.auth_profile_id or 'none'}",
-        f"- Operator: {_operator_label(handoff)}",
-        "",
-        "## Summary",
-        "",
-        handoff.summary,
-        "",
-        "## Self-Audit",
-        "",
-        *_checklist(handoff.self_audit),
-        "",
-        "## Completed Actions",
-        "",
-        *_bullets(handoff.completed_actions),
-        "",
-        "## Validation",
-        "",
-        *_bullets(handoff.tests_run),
-        "",
-        "## Receipts",
-        "",
-        *_bullets(handoff.receipt_ids),
-        "",
-        "## Assumptions",
-        "",
-        *_bullets(handoff.assumptions),
-        "",
-        "## Context Debt",
-        "",
-        *_bullets(handoff.context_debt),
-        "",
-        "## Policy Exceptions",
-        "",
-        *_bullets(handoff.policy_exceptions),
-        "",
-        "## Memory Proposals",
-        "",
-        *_bullets(handoff.memory_proposal_ids),
-        "",
-        "## Runner Metadata",
-        "",
-        *_runner_metadata_bullets(handoff.runner_metadata),
-        "",
-        "## Next Steps",
-        "",
-        *_bullets(handoff.next_steps),
-        "",
-    ]
-    return "\n".join(sections)
+def _persist_handoff_quality(store: LocalStore, handoff: Handoff) -> None:
+    evidence_ids = _unique(
+        [
+            *handoff.receipt_ids,
+            *handoff.artifacts,
+            *handoff.adjudication_ids,
+            *handoff.memory_proposal_ids,
+        ]
+    )
+    required = _unique([*handoff.receipt_ids, *handoff.artifacts])
+    persist_handoff_scores(
+        store,
+        handoff,
+        evidence_ids=evidence_ids,
+        required_evidence_ids=required,
+    )
 
 
 def handoff_id(task_id: str) -> str:
@@ -345,14 +332,6 @@ def _single_receipt_value(receipts: list[CapabilityReceipt], field: str) -> str 
 def _receipts_by_id(store: LocalStore, receipt_ids: list[str]) -> list[CapabilityReceipt]:
     wanted = set(receipt_ids)
     return [receipt for receipt in store.list_receipts() if receipt.id in wanted]
-
-
-def _operator_label(handoff: Handoff) -> str:
-    if handoff.operator_subject is None:
-        return "none"
-    if handoff.operator_issuer:
-        return f"{handoff.operator_issuer}#{handoff.operator_subject}"
-    return handoff.operator_subject
 
 
 def _handoff_status(status: TaskRunStatus) -> RunStatus:
@@ -455,44 +434,6 @@ def _runner_metadata(
         if (snapshot := runner_metadata_from_receipt_metadata(receipt.result.metadata)) is not None
     ]
     return unique_runner_metadata(snapshots)
-
-
-def _runner_metadata_bullets(metadata: list[dict[str, Any]]) -> list[str]:
-    if not metadata:
-        return ["- none"]
-    bullets: list[str] = []
-    for item in metadata:
-        runner_id = item.get("runner_id", "unknown")
-        adapter = item.get("adapter", "unknown")
-        version = item.get("adapter_version", "unknown")
-        mode = item.get("execution_mode", "unknown")
-        trust = item.get("trust_profile", {})
-        trust_level = trust.get("level", "unknown") if isinstance(trust, dict) else "unknown"
-        bullets.append(
-            f"- {runner_id}: adapter={adapter}; version={version}; mode={mode}; trust={trust_level}"
-        )
-    return bullets
-
-
-def _checklist(audit: SelfAudit) -> list[str]:
-    return [
-        f"- [{'x' if audit.schema_validated else ' '}] Schema validated",
-        f"- [{'x' if audit.redaction_reviewed else ' '}] Redaction reviewed",
-        f"- [{'x' if audit.receipts_reviewed else ' '}] Receipts reviewed",
-        f"- [{'x' if audit.assumptions_reviewed else ' '}] Assumptions reviewed",
-        f"- [{'x' if audit.validation_recorded else ' '}] Validation recorded",
-        (
-            f"- [{'x' if audit.policy_exceptions_disclosed else ' '}] "
-            "Policy exceptions disclosed"
-        ),
-        *_bullets(audit.notes),
-    ]
-
-
-def _bullets(values: list[str]) -> list[str]:
-    if not values:
-        return ["- None"]
-    return [f"- {value}" for value in values]
 
 
 def _redacted_strings(values: list[str] | None) -> list[str]:

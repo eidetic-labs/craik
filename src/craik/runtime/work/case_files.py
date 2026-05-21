@@ -39,8 +39,7 @@ from craik.runtime.work.case_support import (
     stale_risks as case_stale_risks,
 )
 from craik.runtime.work.case_support.receipts import case_file_denial_receipt
-from craik.runtime.work.known_traps import known_trap_summaries
-from craik.runtime.work.scratchpad import unknown_summaries
+from craik.runtime.work.case_support.v05_continuity import v05_context_budget, v05_stale_risks
 
 
 class CaseFileError(RuntimeError):
@@ -179,13 +178,32 @@ class CaseFileAssembler:
         stale_risks = [
             *case_stale_risks(repo_state, discovered.docs, assumptions),
             *instruction_stale_risk_warnings(self.store, project.id),
-            *known_trap_summaries(self.store, project.id),
-            *unknown_summaries(self.store, task.id),
+            *v05_stale_risks(self.store, task_id=task.id, project_id=project.id),
             *credential_risks,
         ]
         active_instructions = active_instruction_context(self.store, project.id)
         distillations = governing_distillations(self.store, project.id)
         intent_lock = IntentLockManager(self.store).ensure_for_task(task)
+        budget = context_budget(
+            max_tokens=max_tokens,
+            docs=discovered.docs,
+            adrs=discovered.adrs,
+            omitted_docs=discovered.omitted,
+            excluded_docs=discovered.excluded,
+            discovery_rules=discovered.rules,
+            evidence=evidence,
+            assumptions=assumptions,
+            active_instruction_constraints=active_instructions,
+            distillations=distillations,
+            memory_fact_count=len(facts),
+            recent_handoffs=recent_handoffs,
+            contradiction_ids=[item.id for item in contradictions],
+        )
+        budget["v0_5_continuity"] = v05_context_budget(
+            self.store,
+            task_id=task.id,
+            project_id=project.id,
+        )
         case_file = CaseFile(
             id=f"case_{task.id.removeprefix('task_')}",
             task_id=task.id,
@@ -204,21 +222,7 @@ class CaseFileAssembler:
             contradictions=contradictions,
             distillations=distillations,
             verification_plan=verification_plan(task),
-            context_budget=context_budget(
-                max_tokens=max_tokens,
-                docs=discovered.docs,
-                adrs=discovered.adrs,
-                omitted_docs=discovered.omitted,
-                excluded_docs=discovered.excluded,
-                discovery_rules=discovered.rules,
-                evidence=evidence,
-                assumptions=assumptions,
-                active_instruction_constraints=active_instructions,
-                distillations=distillations,
-                memory_fact_count=len(facts),
-                recent_handoffs=recent_handoffs,
-                contradiction_ids=[item.id for item in contradictions],
-            ),
+            context_budget=budget,
         )
         self.store.put_case_file(case_file)
         return case_file

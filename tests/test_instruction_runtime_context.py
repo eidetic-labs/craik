@@ -49,6 +49,7 @@ def test_approved_distillations_reach_case_file_prompt_onboarding_and_handoff(
             agent="agent:test",
             summary="Applied instruction context.",
             tests_run=["pytest"],
+            next_steps=["Continue instruction validation."],
         )
 
         active = active_instruction_context(store, project.id)

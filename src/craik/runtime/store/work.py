@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from craik.runtime.store.integrity import contract_hmac, hmac_key_for_store, verify_contract_hmac
+
 from .base import *
 
 
@@ -129,6 +131,7 @@ class WorkStoreMixin(LocalStoreCore):
         return _cast_list(IntentLock, self.list_contracts("craik.intent_lock"))
 
     def put_tool_result_attestation(self, attestation: ToolResultAttestation) -> None:
+        attestation = _signed_tool_result_attestation(self, attestation)
         self.put_contract(attestation)
 
     def get_tool_result_attestation(
@@ -136,13 +139,18 @@ class WorkStoreMixin(LocalStoreCore):
         attestation_id: str,
     ) -> ToolResultAttestation | None:
         contract = self.get_contract("craik.tool_result_attestation", attestation_id)
-        return _cast_optional(ToolResultAttestation, contract)
+        attestation = _cast_optional(ToolResultAttestation, contract)
+        _verify_tool_result_attestation_hmac(self, attestation)
+        return attestation
 
     def list_tool_result_attestations(self) -> list[ToolResultAttestation]:
-        return _cast_list(
+        attestations = _cast_list(
             ToolResultAttestation,
             self.list_contracts("craik.tool_result_attestation"),
         )
+        for attestation in attestations:
+            _verify_tool_result_attestation_hmac(self, attestation)
+        return attestations
 
     def put_knowledge_freshness_probe(self, probe: KnowledgeFreshnessProbe) -> None:
         self.put_contract(probe)
@@ -261,3 +269,25 @@ def _receipt_hash_history(receipt: CapabilityReceipt | None) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str) and item]
+
+
+def _signed_tool_result_attestation(
+    store: LocalStoreCore,
+    attestation: ToolResultAttestation,
+) -> ToolResultAttestation:
+    key = hmac_key_for_store(store)
+    payload = attestation.model_dump(mode="json", by_alias=True)
+    return attestation.model_copy(update={"receipt_hmac": contract_hmac(payload, key)})
+
+
+def _verify_tool_result_attestation_hmac(
+    store: LocalStoreCore,
+    attestation: ToolResultAttestation | None,
+) -> None:
+    if attestation is None:
+        return
+    payload = attestation.model_dump(mode="json", by_alias=True)
+    if not verify_contract_hmac(payload, hmac_key_for_store(store)):
+        raise LocalStoreCorruptError(
+            f"stored tool result attestation has invalid HMAC: {attestation.id}"
+        )

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -11,6 +14,8 @@ from craik.contracts.models import (
     KnowledgeFreshnessProbe,
     ToolResultAttestation,
 )
+from craik.runtime.policy.redaction import redact
+from craik.runtime.store import LocalStore
 
 EvidenceExpirationStatus = Literal[
     "unexpired",
@@ -126,3 +131,89 @@ def missing_attestation_warning(
     if any(attestation.id == expected_attestation_id for attestation in attestations):
         return None
     return f"Missing tool result attestation: {expected_attestation_id}."
+
+
+def record_knowledge_freshness_probe(
+    store: LocalStore,
+    *,
+    task_id: str,
+    target: str,
+    kind: str,
+    trust_class: str,
+    observed_output_summary: str,
+    project_id: str | None = None,
+    attestation_id: str | None = None,
+    captured_at: datetime | None = None,
+    expires_at: datetime | None = None,
+    evidence_ids: list[str] | None = None,
+    now: datetime | None = None,
+) -> KnowledgeFreshnessProbe:
+    """Classify and persist a knowledge freshness probe."""
+    current = now or datetime.now(UTC)
+    probe_captured_at = captured_at or current
+    status = _freshness_status(probe_captured_at, expires_at, now=current)
+    warning = (
+        None
+        if status == "fresh"
+        else f"Freshness probe for {_clean(target)} is {status}."
+    )
+    probe = KnowledgeFreshnessProbe(
+        id=_probe_id(task_id, target, current),
+        task_id=task_id,
+        project_id=project_id,
+        target=_clean(target),
+        kind=kind,  # type: ignore[arg-type]
+        status=status,
+        trust_class=trust_class,  # type: ignore[arg-type]
+        observed_output_summary=_clean(observed_output_summary),
+        attestation_id=attestation_id,
+        captured_at=probe_captured_at,
+        expires_at=expires_at,
+        stale_risk_warning=warning,
+        evidence_ids=evidence_ids or [],
+    )
+    store.put_knowledge_freshness_probe(probe)
+    return probe
+
+
+def verify_tool_result_attestation(
+    attestation: ToolResultAttestation,
+    observed_payload: object,
+) -> bool:
+    """Verify the stored attestation hash against the observed payload."""
+    if attestation.output_hash is None:
+        return False
+    encoded = json.dumps(
+        redact(observed_payload).value,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest() == attestation.output_hash
+
+
+def _freshness_status(
+    captured_at: datetime | None,
+    expires_at: datetime | None,
+    *,
+    now: datetime,
+) -> FreshnessProbeStatus:
+    if captured_at is None:
+        return "missing"
+    if expires_at is None:
+        return "fresh"
+    if expires_at <= now:
+        return "expired"
+    if expires_at <= now + timedelta(hours=1):
+        return "expiring"
+    return "fresh"
+
+
+def _clean(value: str) -> str:
+    redacted = redact(value).value
+    return re.sub(r"\s+", " ", redacted).strip()
+
+
+def _probe_id(task_id: str, target: str, created_at: datetime) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", _clean(target).lower()).strip("_")[:48] or "probe"
+    return f"freshness_probe_{task_id}_{slug}_{created_at.strftime('%Y%m%d%H%M%S%f')}"

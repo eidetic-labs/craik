@@ -142,6 +142,7 @@ class ContextDebtRecord(CraikModel):
     evidence_ids: list[str] = Field(default_factory=list)
     created_at: datetime
     resolved_at: datetime | None = None
+    resolved_by_receipt_id: str | None = None
 
     @model_validator(mode="after")
     def validate_context_debt_status(self) -> ContextDebtRecord:
@@ -177,6 +178,7 @@ class ToolResultAttestation(CraikModel):
     status: ToolAttestationStatus = "attested"
     evidence_ids: list[str] = Field(default_factory=list)
     receipt_id: str | None = None
+    receipt_hmac: str | None = None
     captured_at: datetime
     expires_at: datetime | None = None
 
@@ -335,6 +337,7 @@ class UnknownRecord(CraikModel):
     resolved_answer: str | None = None
     created_at: datetime
     resolved_at: datetime | None = None
+    resolved_by_receipt_id: str | None = None
 
     @model_validator(mode="after")
     def validate_unknown_status(self) -> UnknownRecord:
@@ -367,6 +370,7 @@ class ContextRequest(CraikModel):
     unknown_id: str | None = None
     fulfilled_by: str | None = None
     fulfilled_at: datetime | None = None
+    fulfilled_by_receipt_id: str | None = None
     created_at: datetime
 
     @model_validator(mode="after")
@@ -374,7 +378,11 @@ class ContextRequest(CraikModel):
         """Require fulfillment details only for fulfilled requests."""
         if self.status == "fulfilled" and (not self.fulfilled_by or self.fulfilled_at is None):
             raise ValueError("fulfilled context requests require fulfilled_by and fulfilled_at")
-        if self.status != "fulfilled" and (self.fulfilled_by or self.fulfilled_at is not None):
+        if self.status != "fulfilled" and (
+            self.fulfilled_by
+            or self.fulfilled_at is not None
+            or self.fulfilled_by_receipt_id is not None
+        ):
             raise ValueError("open context requests must not include fulfillment details")
         return self
 

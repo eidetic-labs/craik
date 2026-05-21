@@ -86,6 +86,34 @@ operator approves them.
   constraints` section to reduce prompt-injection risk from registered
   source files.
 
+## v0.5.0 Runtime Continuity Trust Model
+
+Craik treats quality, recovery, and continuity records as evidence and
+operator-visible signals, not as authority. These records can guide an
+agent or reviewer, but they do not approve policy changes, promote
+memory, or prove external truth by themselves.
+
+- Runtime critic and red-team findings are non-authoritative until a
+  reviewer adjudicates them. Findings can block operator workflows, but
+  they must not become hidden privileged instructions.
+- Scratchpad records expire by design. Durable project memory still
+  requires the normal memory proposal and approval flow.
+- Unknowns and context requests are first-class blocking state. Handoff
+  creation blocks when unresolved unknowns or open context requests
+  remain unless the caller records an explicit blocked-exit override
+  rationale.
+- Negative knowledge requires evidence and scope. When it contradicts a
+  positive assertion, Craik opens a contradiction record instead of
+  silently deleting or replacing the existing assertion.
+- Tool-result attestations and recovery sessions carry local HMAC
+  integrity metadata and are verified on read. This protects local audit
+  continuity against accidental or unsophisticated tampering, but it is
+  not a substitute for OS account isolation or a tamper-resistant remote
+  audit log.
+- `craik run recover` and `craik run delta` require an active operator
+  session before returning existing recovery state. Missing identifiers
+  may still return a not-found error without revealing state.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

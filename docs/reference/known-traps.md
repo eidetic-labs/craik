@@ -1,6 +1,6 @@
 # Known traps and negative knowledge
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -49,10 +49,35 @@ promote unsupported guesses about absence into negative knowledge.
 
 <div className="craik-keypoint">
 
-**Active, unexpired traps are surfaced.**
+**Active, unexpired traps and negative knowledge are surfaced.**
 
-Onboarding and case-file stale-risk warnings include active known
-traps so agents can avoid repeating known mistakes.
+Onboarding and case-file stale-risk warnings include active known traps
+and active negative knowledge so agents can avoid repeating known
+mistakes or relying on disproven availability claims.
+
+</div>
+
+## Capture commands
+
+<div className="craik-fields">
+
+<div>
+<dt>Command</dt>
+<dt><span className="craik-fields__type">Writes</span></dt>
+<dd>Boundary</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge trap</code></dt>
+<dt><span className="craik-fields__type">known trap</span></dt>
+<dd>Requires an active operator session and evidence ids. The record guides future agents but does not grant policy authority.</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge negative</code></dt>
+<dt><span className="craik-fields__type">negative knowledge</span></dt>
+<dd>Requires evidence and scope. If a positive assertion is supplied as contradicted, Craik opens a contradiction instead of silently replacing it.</dd>
+</div>
 
 </div>
 

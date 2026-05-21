@@ -14,6 +14,7 @@ from craik.contracts.models import (
     RunDelta,
     TaskRun,
 )
+from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.companions.operator_views import (
     RunDeltaSnapshot,
     format_run_delta_view,
@@ -271,6 +272,7 @@ def run_recover(
                 err=True,
             )
             raise typer.Exit(1)
+        _operator_identity()
         payload = _run_recovery_payload(store, run, dry_run=dry_run, reason=reason)
     finally:
         store.close()
@@ -294,6 +296,7 @@ def run_delta(
             raise typer.BadParameter(
                 f"unknown run delta, run, or task: {delta_id_or_run_id_or_task_id}"
             )
+        _operator_identity()
         recovery_sessions = _recovery_sessions_for_delta(store, delta.id)
         payload = _run_delta_payload(delta, recovery_sessions)
     finally:
@@ -395,6 +398,14 @@ def _find_run_delta(store: LocalStore, delta_id_or_run_id_or_task_id: str) -> Ru
     if not candidates:
         return None
     return sorted(candidates, key=lambda item: (item.created_at, item.id))[-1]
+
+
+def _operator_identity() -> str:
+    try:
+        session = OperatorSessionStore.from_env().get()
+    except OperatorSessionNotFoundError:
+        raise typer.BadParameter("active operator session required; run craik auth login") from None
+    return session.subject
 
 
 def _recovery_sessions_for_delta(

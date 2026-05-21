@@ -1289,6 +1289,7 @@ def test_run_delta_prints_operator_view_for_persisted_delta(tmp_path: Path) -> N
     home = tmp_path / "home"
     _seed_run_state(home, status="interrupted")
     _seed_run_delta_state(home)
+    _put_operator_session(home)
 
     result = runner.invoke(
         app,
@@ -1307,6 +1308,7 @@ def test_run_delta_json_resolves_latest_delta_by_run_or_task(tmp_path: Path) -> 
     home = tmp_path / "home"
     _seed_run_state(home, status="interrupted")
     _seed_run_delta_state(home)
+    _put_operator_session(home)
 
     by_run = runner.invoke(
         app,
@@ -1607,6 +1609,7 @@ def test_scope_change_decide_cli_expands_lock(tmp_path: Path) -> None:
 def test_run_recover_prints_plan_for_interrupted_run(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _seed_run_state(home, status="interrupted")
+    _put_operator_session(home)
 
     result = runner.invoke(
         app,

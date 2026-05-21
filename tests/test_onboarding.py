@@ -39,6 +39,7 @@ def test_onboarding_report_includes_project_boundaries_and_state(
         task_id=task.id,
         agent="agent:test",
         summary="Reviewed docs state.",
+        tests_run=["pytest"],
         next_steps=["Continue implementation."],
     )
     contradiction = ContradictionManager(store).open_report(

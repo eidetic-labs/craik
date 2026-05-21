@@ -375,6 +375,8 @@ Options:
 - `--policy-exception`: Policy exception or fail-open note.
 - `--self-audit-note`: Self-audit note. May be repeated.
 - `--markdown`: Print Markdown instead of JSON.; default `false`
+- `--allow-blocked-exit`: Persist the handoff despite a blocked exit-discipline check.; default `false`
+- `--blocked-exit-rationale`: Required with --allow-blocked-exit.
 
 ## `craik handoff show`
 
@@ -510,6 +512,95 @@ Show one persisted intent lock by intent lock id or task id.
 ```text
 craik intent show [OPTIONS] INTENT_OR_TASK_ID
 ```
+
+## `craik knowledge`
+
+Capture v0.5 runtime knowledge records.
+
+```text
+craik knowledge COMMAND [ARGS]...
+```
+
+## `craik knowledge context-request`
+
+Persist a context request that blocks continuation until fulfilled.
+
+```text
+craik knowledge context-request [OPTIONS] TASK_ID
+```
+
+Options:
+
+- `--question`: Requested context.
+- `--needed-for`: Why this context is needed.
+- `--kind`: Context source kind.; default `user_input`
+- `--project`: Project id.
+- `--unknown-id`: Linked unknown id.
+
+## `craik knowledge negative`
+
+Persist evidence-backed negative knowledge.
+
+```text
+craik knowledge negative [OPTIONS]
+```
+
+Options:
+
+- `--statement`: Negative knowledge statement.
+- `--scope`: Scope of the assertion.
+- `--evidence-id`: Evidence id. May be repeated.
+- `--trust-class`: Trust class.; default `observed`
+- `--project`: Project id.
+- `--task`: Task id.
+- `--contradicted-fact`: Existing positive assertion contradicted.
+
+## `craik knowledge scratchpad`
+
+Persist an expiring scratchpad note.
+
+```text
+craik knowledge scratchpad [OPTIONS] TASK_ID
+```
+
+Options:
+
+- `--note`: Temporary note to persist.
+- `--project`: Project id.
+- `--evidence-id`: Evidence id. May be repeated.
+
+## `craik knowledge trap`
+
+Persist an evidence-backed known trap.
+
+```text
+craik knowledge trap [OPTIONS]
+```
+
+Options:
+
+- `--kind`: Trap kind.
+- `--statement`: Trap statement.
+- `--avoidance`: Avoidance guidance.
+- `--evidence-id`: Evidence id. May be repeated.
+- `--project`: Project id.
+- `--task`: Task id.
+
+## `craik knowledge unknown`
+
+Persist an unresolved unknown.
+
+```text
+craik knowledge unknown [OPTIONS] TASK_ID
+```
+
+Options:
+
+- `--question`: Unknown question.
+- `--next-action`: Action needed.
+- `--needed-resolution`: Resolution source, such as user_input.; default `user_input`
+- `--project`: Project id.
+- `--evidence-id`: Evidence id. May be repeated.
 
 ## `craik login`
 
@@ -815,6 +906,53 @@ Print one capability receipt by id as JSON.
 ```text
 craik receipts show [OPTIONS] RECEIPT_ID
 ```
+
+## `craik review`
+
+Capture reviewable critic and red-team findings.
+
+```text
+craik review COMMAND [ARGS]...
+```
+
+## `craik review critic`
+
+Persist a reviewable runtime critic finding.
+
+```text
+craik review critic [OPTIONS] TASK_ID
+```
+
+Options:
+
+- `--finding-type`: Critic finding type.
+- `--summary`: Finding summary.
+- `--rationale`: Finding rationale.
+- `--severity`: Finding severity.; default `medium`
+- `--project`: Project id.
+- `--artifact`: Affected artifact. May be repeated.
+- `--evidence-id`: Evidence id. May be repeated.
+- `--proposed-action`: Proposed action. May be repeated.
+
+## `craik review red-team`
+
+Persist a reviewable red-team finding.
+
+```text
+craik review red-team [OPTIONS] TASK_ID
+```
+
+Options:
+
+- `--finding-type`: Red-team finding type.
+- `--summary`: Finding summary.
+- `--attack-path`: Attack path.
+- `--severity`: Finding severity.; default `high`
+- `--project`: Project id.
+- `--artifact`: Affected artifact. May be repeated.
+- `--evidence-id`: Evidence id. May be repeated.
+- `--proposed-action`: Proposed action. May be repeated.
+- `--blocking, --non-blocking`: Whether this is a blocking finding.; default `false`
 
 ## `craik run`
 
