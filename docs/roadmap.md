@@ -350,7 +350,7 @@ avoid stale context, and explain what changed between runs.
 <div><h4>Structured context requests</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/650">#650</a>. Missing context can be requested, fulfilled, cancelled, linked to handoffs, recovery, or unknowns, and fulfilled with receipt linkage.</p></div>
 <div><h4>"What changed since last time" deltas</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/652">#652</a>. Run deltas summarize current and previous handoff, case-file, receipt, contradiction, and constraint state.</p></div>
 <div><h4>Agent exit discipline</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/651">#651</a>. Handoff creation enforces validation, handoff, residual-risk, next-step, unknown, and open-context checks unless an explicit blocked-exit override rationale is recorded.</p></div>
-<div><h4>Release readiness and docs assessment</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/649">#649</a>. Release-readiness docs now record v0.5.0 validation and pre-release blockers.</p></div>
+<div><h4>Release readiness and docs assessment</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/649">#649</a>. Release-readiness docs now record v0.5.0 validation, remediation, and release-prep gates.</p></div>
 
 </div>
 

@@ -6,8 +6,8 @@
 
 **What you'll find here**
 
-The repository-owned readiness record for Craik releases. The current release
-gate is `0.5.0`; historical sign-offs remain below for audit continuity.
+The repository-owned readiness record for Craik releases. The current completed
+release gate is `0.5.0`; historical sign-offs remain below for audit continuity.
 
 </div>
 
@@ -55,16 +55,16 @@ docs, and requirement validation before the milestone closes.
 
 <div className="craik-keypoint">
 
-**Remediated; ready for pre-release checks.**
+**Remediated and release-ready.**
 
 The v0.5.0 quality, continuity, and recovery surface is implemented in
 typed contracts, local-store persistence, runtime helpers, operator
 views, capture CLI surfaces, recovery/delta operator gates, and
 reference documentation. The post-readiness remediation closed the gap
-between contract definitions and production capture paths. The remaining
-work before tagging is release prep: version bump, changelog date
-finalization, full CI, package verification, PyPI publish, docs
-deployment verification, and GitHub release verification.
+between contract definitions and production capture paths. Release prep
+updates the version declarations, changelog heading, generated docs
+lockfile, package verification, tag checks, PyPI publish, docs deployment
+verification, and GitHub release verification.
 
 </div>
 
@@ -109,7 +109,13 @@ deployment verification, and GitHub release verification.
 <div>
 <dt>Release blocker state</dt>
 <dt><span className="craik-fields__type">none known</span></dt>
-<dd>No critical v0.5.0 implementation blocker is known after remediation of the capture-layer readiness findings. Full pre-release checks still run before tagging.</dd>
+<dd>No critical v0.5.0 implementation blocker is known after remediation of the capture-layer readiness findings. Tagging is gated on the release-prep PR checks and version/tag validation.</dd>
+</div>
+
+<div>
+<dt>Release actions</dt>
+<dt><span className="craik-fields__type">pending tag</span></dt>
+<dd><code>0.5.0</code> version declarations, release notes, and docs lockfile are prepared in the release-prep branch. The release tag, PyPI package, docs deployment, and GitHub Release are verified after the release-prep PR lands.</dd>
 </div>
 
 </div>
