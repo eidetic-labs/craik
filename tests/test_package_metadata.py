@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
 import craik
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE_HEADING_RE = re.compile(r"^## (\d+\.\d+\.\d+) - \d{4}-\d{2}-\d{2}$", re.MULTILINE)
 
 
 def test_package_python_range_supports_current_python_releases() -> None:
@@ -24,3 +26,21 @@ def test_package_uses_pydantic_with_python_314_wheel_support() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert "pydantic==2.13.4" in pyproject["project"]["dependencies"]
+
+
+def test_changelog_has_section_for_current_package_version() -> None:
+    """The first dated CHANGELOG section must match the package version.
+
+    Catches release-prep mistakes where the version is bumped but the
+    ``## Unreleased`` block is not renamed to ``## X.Y.Z - YYYY-MM-DD``.
+    """
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    expected = pyproject["project"]["version"]
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    versions = RELEASE_HEADING_RE.findall(changelog)
+
+    assert versions, "CHANGELOG.md has no dated release sections"
+    assert versions[0] == expected, (
+        f"CHANGELOG.md top dated section is {versions[0]} but pyproject.toml declares {expected}"
+    )
