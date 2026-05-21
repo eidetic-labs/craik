@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.4.0 — 2026-05-21
+
 ### Added
 
 - Instruction source registration: projects can register declared instruction
