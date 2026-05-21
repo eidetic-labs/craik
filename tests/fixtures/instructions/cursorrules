@@ -1,0 +1,6 @@
+# Cursor rules: line-oriented, comment-tolerant.
+# Lines beginning with `#` are skipped.
+
+Never push directly to main.
+Prefer pull requests for every change.
+Run `ruff check .` before staging changes.
