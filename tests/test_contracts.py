@@ -598,6 +598,28 @@ def test_skill_registry_requires_complete_active_entry_set(
         CONTRACT_REGISTRY["craik.skill_registry"].model_validate(payload)
 
 
+def test_plugin_descriptor_requires_semantic_plugin_version(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.plugin_descriptor"])
+    payload["plugin_version"] = "0.6"
+
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        CONTRACT_REGISTRY["craik.plugin_descriptor"].model_validate(payload)
+
+
+def test_plugin_descriptor_requires_compatibility_boundaries(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.plugin_descriptor"])
+    compatibility = dict(payload["compatibility"])
+    compatibility["platforms"] = []
+    payload["compatibility"] = compatibility
+
+    with pytest.raises(ValidationError, match="platforms"):
+        CONTRACT_REGISTRY["craik.plugin_descriptor"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

@@ -27,6 +27,7 @@ plugin behavior.
 <div className="craik-grid">
 
 <div><h4>Identity</h4><p><code>id</code> · <code>name</code> · <code>publisher</code> · <code>plugin_version</code>.</p></div>
+<div><h4>Trust boundary</h4><p>Where the descriptor is valid: project, repository, organization, user, or external.</p></div>
 <div><h4>Entrypoints</h4><p>Command · module · workflow · service · docs paths exposed by the plugin.</p></div>
 <div><h4>Capability declarations</h4><p>Requested capabilities · operations · targets · risk · whether an explicit grant is required.</p></div>
 <div><h4>Docs and security notes</h4><p>Required for review.</p></div>
@@ -43,13 +44,20 @@ Craik **rejects** descriptors that:
 
 <div><h4>Omit required fields</h4><p>Entrypoints · capabilities · docs · security notes · compatibility metadata.</p></div>
 <div><h4>Use a non-version-like <code>plugin_version</code></h4></div>
+<div><h4>Use non-version-like Craik compatibility entries</h4><p>Compatibility uses semantic-version-like Craik versions.</p></div>
 <div><h4>Set <code>runtime_authority</code> to <code>true</code></h4></div>
 <div><h4>Declare high or critical risk capabilities</h4><p>Without requiring explicit grants.</p></div>
+<div><h4>Request grants without boundaries</h4><p>Grant-required capabilities must name operations and targets.</p></div>
 
 </div>
 
 This keeps plugin discovery and review independent from policy
 decisions about what the current run is allowed to do.
+
+Supported descriptors must also declare Python versions and platforms.
+Unsupported descriptors must include notes explaining the boundary so
+operators know whether the plugin is intentionally unavailable or just
+underspecified.
 
 ## What's next
 

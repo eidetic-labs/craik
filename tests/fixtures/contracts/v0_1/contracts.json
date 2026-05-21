@@ -1520,6 +1520,7 @@
     "plugin_version": "0.1.0",
     "description": "Adds governed docs reconciliation workflow entrypoints.",
     "publisher": "Eidetic Labs",
+    "trust_boundary": "project",
     "entrypoints": [
       {
         "id": "entry_workflow",
@@ -1541,7 +1542,7 @@
     ],
     "docs": ["README.md", "docs/plugin.md"],
     "compatibility": {
-      "craik_versions": ["0.7"],
+      "craik_versions": ["0.6.0"],
       "python_versions": ["3.12"],
       "platforms": ["darwin", "linux"],
       "status": "supported",

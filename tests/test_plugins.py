@@ -13,6 +13,7 @@ def _descriptor(**overrides: object) -> PluginDescriptor:
         "plugin_version": "0.1.0",
         "description": "Adds governed docs reconciliation workflow entrypoints.",
         "publisher": "Eidetic Labs",
+        "trust_boundary": "project",
         "entrypoints": [
             {
                 "id": "entry_workflow",
@@ -34,7 +35,7 @@ def _descriptor(**overrides: object) -> PluginDescriptor:
         ],
         "docs": ["README.md", "docs/plugin.md"],
         "compatibility": {
-            "craik_versions": ["0.7"],
+            "craik_versions": ["0.6.0"],
             "python_versions": ["3.12"],
             "platforms": ["darwin", "linux"],
             "status": "supported",
@@ -84,6 +85,9 @@ def test_plugin_descriptor_requires_versioned_identity() -> None:
     with pytest.raises(ValidationError, match="semantic-version-like"):
         _descriptor(plugin_version="preview")
 
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        _descriptor(plugin_version="1.2")
+
 
 def test_plugin_descriptor_separates_authority_from_declarations() -> None:
     with pytest.raises(ValidationError):
@@ -102,4 +106,64 @@ def test_plugin_descriptor_separates_authority_from_declarations() -> None:
                     "targets": ["repo"],
                 }
             ]
+        )
+
+
+def test_plugin_descriptor_requires_grant_capability_boundaries() -> None:
+    with pytest.raises(ValidationError, match="require operations"):
+        _descriptor(
+            capabilities=[
+                {
+                    "capability": "repo.read",
+                    "description": "Read project files.",
+                    "required": True,
+                    "grant_required": True,
+                    "risk": "medium",
+                    "targets": ["repo"],
+                }
+            ]
+        )
+
+    with pytest.raises(ValidationError, match="require targets"):
+        _descriptor(
+            capabilities=[
+                {
+                    "capability": "repo.read",
+                    "description": "Read project files.",
+                    "required": True,
+                    "grant_required": True,
+                    "risk": "medium",
+                    "operations": ["read"],
+                }
+            ]
+        )
+
+
+def test_plugin_descriptor_validates_compatibility_boundaries() -> None:
+    with pytest.raises(ValidationError, match="craik_versions"):
+        _descriptor(
+            compatibility={
+                "craik_versions": ["0.6"],
+                "python_versions": ["3.12"],
+                "platforms": ["darwin"],
+                "status": "supported",
+            }
+        )
+
+    with pytest.raises(ValidationError, match="python_versions"):
+        _descriptor(
+            compatibility={
+                "craik_versions": ["0.6.0"],
+                "platforms": ["darwin"],
+                "status": "supported",
+            }
+        )
+
+    with pytest.raises(ValidationError, match="platforms"):
+        _descriptor(
+            compatibility={
+                "craik_versions": ["0.6.0"],
+                "python_versions": ["3.12"],
+                "status": "supported",
+            }
         )
