@@ -56,6 +56,12 @@ They are validation fixtures, not durable trust grants.
 
 </div>
 
+Each reference kind links only the matching contract family. Skill
+references link a skill package, plugin references link a plugin
+descriptor and at least one receipt, and adapter references link an
+adapter package. Mixed links are rejected so examples stay narrow and
+reviewable.
+
 <div className="craik-keypoint">
 
 **Reproducible offline.**
