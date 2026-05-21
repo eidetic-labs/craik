@@ -578,6 +578,16 @@ def test_skill_package_requires_full_semantic_version(
         CONTRACT_REGISTRY["craik.skill_package"].model_validate(payload)
 
 
+def test_skill_registry_requires_complete_active_entry_set(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.skill_registry"])
+    payload["active_entry_ids"] = ["skill_entry_project_docs"]
+
+    with pytest.raises(ValidationError, match="active skill entries missing"):
+        CONTRACT_REGISTRY["craik.skill_registry"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
