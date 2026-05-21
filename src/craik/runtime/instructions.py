@@ -6,6 +6,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from craik.contracts.models import (
     INSTRUCTION_SOURCE_DEFAULT_PATHS,
@@ -53,6 +54,7 @@ def register_source(
     """Register one declared instruction source and persist its audit receipt."""
     registered_at = now or datetime.now(UTC)
     declared_path = _declared_path(kind, path)
+    _validate_declared_path(store, project_id=project_id, path=declared_path)
     resolved_source_id = source_id or _source_id(project_id, kind, declared_path)
     if store.get_instruction_source(resolved_source_id) is not None:
         raise InstructionRegistrationError(
@@ -163,6 +165,29 @@ def _declared_path(kind: InstructionSourceKind, path: str | None) -> str:
             "policy_doc instruction sources require a declared path"
         )
     return declared_path
+
+
+def _validate_declared_path(store: LocalStore, *, project_id: str, path: str) -> None:
+    declared = Path(path)
+    if declared.is_absolute():
+        raise InstructionRegistrationError(
+            f"instruction source path must be relative to the project root: {path}"
+        )
+    if ".." in declared.parts:
+        raise InstructionRegistrationError(
+            f"instruction source path must not contain '..': {path}"
+        )
+    project = store.get_project(project_id)
+    if project is None:
+        return
+    root = Path(project.repo.local_path).expanduser().resolve()
+    resolved = (root / declared).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise InstructionRegistrationError(
+            f"instruction source path escapes project root {root}: {path}"
+        ) from exc
 
 
 def _source_id(project_id: str, kind: InstructionSourceKind, path: str) -> str:

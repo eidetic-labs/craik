@@ -5,17 +5,14 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import cast
 
 from craik.contracts.models import (
     ContradictionReport,
     DistilledInstructionProposal,
-    InstructionPromotionDecision,
-    InstructionPromotionReview,
     InstructionProvenance,
     InstructionSourceSnapshot,
-    PromotedInstructionConstraint,
 )
+from craik.runtime.instruction_approval import verify_review_hmac
 from craik.runtime.memory.contradictions import ContradictionManager
 from craik.runtime.store import LocalStore
 
@@ -151,6 +148,11 @@ def active_instruction_context(store: LocalStore, project_id: str) -> list[dict[
             or proposal.contradiction_ids
         ):
             continue
+        review = store.get_instruction_promotion_review(
+            f"promotion_review_{constraint.proposal_id}"
+        )
+        if review is None or not verify_review_hmac(review, store):
+            continue
         active.append(
             {
                 "id": constraint.id,
@@ -211,92 +213,6 @@ def detect_instruction_contradictions(
     return sorted(reports, key=lambda report: report.id)
 
 
-def review_instruction_promotion(
-    store: LocalStore,
-    *,
-    proposal_id: str,
-    decision: str,
-    decided_by: str,
-    rationale: str,
-    policy_envelope_id: str | None = None,
-    receipt_ids: list[str] | None = None,
-    memory_proposal_ids: list[str] | None = None,
-    handoff_ids: list[str] | None = None,
-    override: bool = False,
-    override_reason: str | None = None,
-) -> InstructionPromotionReview:
-    """Persist a promotion review and update the proposal/constraint state."""
-    proposal = store.get_distilled_instruction_proposal(proposal_id)
-    if proposal is None:
-        raise InstructionPromotionError(f"unknown distilled instruction proposal: {proposal_id}")
-    now = proposal.created_at
-    normalized_decision = cast(InstructionPromotionDecision, decision)
-    approved = normalized_decision == "approved"
-    constraint_id = f"constraint_{proposal.id}" if approved else None
-    if approved:
-        stale = proposal.promotion_status == "deferred"
-        contradicted = bool(proposal.contradiction_ids)
-        if stale or contradicted:
-            if not override:
-                raise InstructionPromotionError(
-                    "stale or contradicted promotions require override and rationale"
-                )
-            if not (override_reason or "").strip():
-                raise InstructionPromotionError("override promotions require rationale")
-        if proposal.snapshot_id is None:
-            raise InstructionPromotionError("approved promotions require source snapshot")
-        active_constraint_id = f"constraint_{proposal.id}"
-        constraint = PromotedInstructionConstraint(
-            id=active_constraint_id,
-            project_id=proposal.project_id,
-            proposal_id=proposal.id,
-            source_id=proposal.source_id,
-            snapshot_id=proposal.snapshot_id,
-            category=proposal.category,
-            statement=proposal.statement,
-            provenance_ids=proposal.provenance_ids,
-            evidence_ids=proposal.evidence_ids,
-            policy_envelope_id=policy_envelope_id,
-            receipt_ids=receipt_ids or [],
-            memory_proposal_ids=memory_proposal_ids or [],
-            handoff_ids=handoff_ids or [],
-            created_at=now,
-        )
-        store.put_promoted_instruction_constraint(constraint)
-    review = InstructionPromotionReview(
-        id=f"promotion_review_{proposal.id}",
-        project_id=proposal.project_id,
-        proposal_id=proposal.id,
-        decision=normalized_decision,
-        decided_by=decided_by,
-        rationale=rationale,
-        promoted_constraint_id=constraint_id,
-        policy_envelope_id=policy_envelope_id,
-        receipt_ids=receipt_ids or [],
-        memory_proposal_ids=memory_proposal_ids or [],
-        handoff_ids=handoff_ids or [],
-        override_stale=approved and proposal.promotion_status == "deferred" and override,
-        override_contradiction=approved and bool(proposal.contradiction_ids) and override,
-        override_rationale=override_reason if override else None,
-        created_at=now,
-    )
-    store.put_instruction_promotion_review(review)
-    updated = proposal.model_copy(
-        update={
-            "promotion_status": decision,
-            "promoted_constraint_id": constraint_id,
-            "decided_by": decided_by,
-            "decided_at": now,
-        }
-    )
-    store.put_distilled_instruction_proposal(
-        DistilledInstructionProposal.model_validate(
-            updated.model_dump(mode="json", by_alias=True)
-        )
-    )
-    return review
-
-
 def _bullet_lines(values: list[str]) -> list[str]:
     if not values:
         return ["  - None"]
@@ -308,13 +224,6 @@ class _InstructionConflict:
     subject: str
     left_value: str
     right_value: str
-
-
-def _proposals_conflict(
-    left: DistilledInstructionProposal,
-    right: DistilledInstructionProposal,
-) -> bool:
-    return _instruction_conflict(left, right) is not None
 
 
 def _instruction_conflict(
@@ -425,28 +334,8 @@ def _defer_conflicting_proposal(
     )
 
 
-def _normalized_positive(statement: str) -> str:
-    value = _normalize_statement(statement)
-    for prefix in ("must ", "should ", "may "):
-        if value.startswith(prefix):
-            return value.removeprefix(prefix)
-    return value
-
-
-def _normalized_negative(statement: str) -> str:
-    value = _normalize_statement(statement)
-    for prefix in ("must not ", "should not ", "may not "):
-        if value.startswith(prefix):
-            return value.removeprefix(prefix)
-    return ""
-
-
 def _normalize_statement(statement: str) -> str:
     return " ".join(statement.lower().rstrip(".").split())
-
-
-class InstructionPromotionError(RuntimeError):
-    """Raised when a distilled instruction cannot be reviewed for promotion."""
 
 
 def _previous_snapshots_for_invalidation(
@@ -489,7 +378,9 @@ def _stale_source_ids(
         if previous is None:
             stale.add(source_id)
             continue
-        if current.hash_status in {"changed", "missing", "new"}:
+        if current.hash_status == "unchanged":
+            continue
+        if current.hash_status in {"changed", "missing", "new", "oversize"}:
             stale.add(source_id)
             continue
         if current.content_hash != previous.content_hash:

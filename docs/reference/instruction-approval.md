@@ -85,9 +85,11 @@ constraint when one is created.
 </div>
 
 Active constraints retain proposal ID, source ID, source snapshot ID,
-provenance IDs, evidence IDs, and review links. Downstream consumers
-must read governing constraints from the approval API instead of raw
-proposal rows.
+provenance IDs, evidence IDs, review links, and a receipt HMAC.
+Downstream consumers must read governing constraints from the approval
+API instead of raw proposal rows. Reviews with missing or invalid
+receipt HMACs are treated as needing re-approval and are excluded from
+active runtime context.
 
 ## Overrides
 
@@ -107,7 +109,8 @@ craik instructions approve <item-id> \
 
 The review records whether a stale guard or contradiction guard was
 bypassed. Missing rationale fails before the proposal becomes
-governing.
+governing, and the resulting review is integrity-protected before it
+is stored.
 
 </div>
 

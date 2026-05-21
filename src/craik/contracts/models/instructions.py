@@ -183,9 +183,9 @@ class InstructionSourceSnapshot(CraikModel):
     @model_validator(mode="after")
     def validate_hash_state(self) -> InstructionSourceSnapshot:
         """Require hashes for present sources and omit hashes for missing sources."""
-        if self.hash_status == "missing" and self.content_hash is not None:
-            raise ValueError("missing instruction sources must not include content_hash")
-        if self.hash_status != "missing" and not self.content_hash:
+        if self.hash_status in {"missing", "oversize"} and self.content_hash is not None:
+            raise ValueError("missing or oversize instruction sources must not include content_hash")
+        if self.hash_status not in {"missing", "oversize"} and not self.content_hash:
             raise ValueError("present instruction sources require content_hash")
         return self
 
@@ -379,6 +379,7 @@ class InstructionPromotionReview(CraikModel):
     override_stale: bool = False
     override_contradiction: bool = False
     override_rationale: str | None = None
+    receipt_hmac: str | None = None
     created_at: datetime
 
     @model_validator(mode="after")

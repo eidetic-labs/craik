@@ -23,6 +23,9 @@ class InstructionSourceSnapshotError(RuntimeError):
     """Raised when instruction source snapshots cannot be refreshed."""
 
 
+MAX_INSTRUCTION_SOURCE_BYTES = 10 * 1024 * 1024
+
+
 def compute_source_snapshot(
     source: InstructionSource,
     *,
@@ -36,6 +39,9 @@ def compute_source_snapshot(
     confinement and source-kind validation apply before bytes are hashed.
     """
     captured_at = now or datetime.now(UTC)
+    oversize = _oversize_source_snapshot(source, base_dir=base_dir, now=captured_at)
+    if oversize is not None:
+        return oversize
     try:
         parsed = parse_instruction_source(source, base_dir=base_dir)
     except InstructionIngestionError as exc:
@@ -136,6 +142,37 @@ def _latest_snapshots_by_source(
 
 def _normalize_newlines(raw_bytes: bytes) -> bytes:
     return raw_bytes.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def _oversize_source_snapshot(
+    source: InstructionSource,
+    *,
+    base_dir: Path,
+    now: datetime,
+) -> InstructionSourceSnapshot | None:
+    root = base_dir.resolve()
+    abs_path = (root / source.path).resolve()
+    try:
+        abs_path.relative_to(root)
+    except ValueError:
+        return None
+    try:
+        size = abs_path.stat().st_size
+    except OSError:
+        return None
+    if size <= MAX_INSTRUCTION_SOURCE_BYTES:
+        return None
+    return InstructionSourceSnapshot(
+        id=f"instruction_snapshot_{source.id}_oversize",
+        project_id=source.project_id,
+        source_id=source.id,
+        path=source.path,
+        content_hash=None,
+        hash_status="oversize",
+        byte_count=size,
+        line_count=None,
+        captured_at=now,
+    )
 
 
 def _line_count(raw_bytes: bytes) -> int:

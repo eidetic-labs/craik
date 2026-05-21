@@ -102,7 +102,7 @@ Every proposal links back to the source text that produced it:
 <div><h4>Snapshot ID</h4><p>The observed source hash state.</p></div>
 <div><h4>Provenance IDs</h4><p>The extracted source ranges.</p></div>
 <div><h4>Evidence IDs</h4><p>Receipts and supporting review records.</p></div>
-<div><h4>Excerpt hash</h4><p>A stable digest of the extracted statement.</p></div>
+<div><h4>Excerpt hash</h4><p>A stable digest of the extracted statement after newline normalization.</p></div>
 <div><h4>Summary</h4><p>The first non-empty statement line, capped for display.</p></div>
 
 </div>
@@ -127,7 +127,7 @@ follows that snapshot history:
 
 Case files and prompts consume only governing constraints. Compiled
 prompts render them in the `Active instruction constraints` section as
-`(category) statement [source_id @ path:line-range]`, sorted by
+``(category) `statement` [source_id @ path:line-range]``, sorted by
 category, source ID, and statement.
 
 ## What's next

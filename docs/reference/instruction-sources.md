@@ -137,6 +137,12 @@ also records byte count and line count for present files.
 <dd>Source exists but has no previous known state.</dd>
 </div>
 
+<div>
+<dt><code>oversize</code></dt>
+<dt><span className="craik-fields__type">skipped</span></dt>
+<dd>Source exceeds the per-file snapshot budget and is excluded from proposal ingestion.</dd>
+</div>
+
 </div>
 
 `refresh_project_snapshots(store, project_id)` persists the current

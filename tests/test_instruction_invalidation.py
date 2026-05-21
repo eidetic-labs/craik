@@ -175,6 +175,33 @@ def test_refresh_project_snapshots_tracks_file_lifecycle(tmp_path: Path) -> None
         store.close()
 
 
+def test_refresh_project_snapshots_skips_oversize_sources(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        register_source(
+            store,
+            project_id=project.id,
+            kind="agents_md",
+            owner="team:runtime",
+            registered_by="agent:test",
+        )
+        monkeypatch.setattr(
+            "craik.runtime.instruction_snapshots.MAX_INSTRUCTION_SOURCE_BYTES",
+            8,
+        )
+        (repo / "AGENTS.md").write_text("- Prefer deterministic tests.\n", encoding="utf-8")
+
+        snapshot = refresh_project_snapshots(store, project.id)[0]
+
+        assert snapshot.hash_status == "oversize"
+        assert snapshot.content_hash is None
+        assert snapshot.byte_count > 8
+    finally:
+        store.close()
+
+
 def test_refresh_snapshots_feed_stale_invalidation(tmp_path: Path) -> None:
     store = _store(tmp_path)
     try:

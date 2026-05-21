@@ -32,9 +32,10 @@ within the `0.x.0` stability expectations described in
 - Operator approval receipts: proposed distillations become governing
   constraints only through explicit approve decisions, and reject decisions are
   recorded with receipts.
-- Distillation CLI: `craik instructions register`, `list`, `approve`,
-  `reject`, and `show` expose the registration, review, decision, and
-  provenance-inspection workflow through the active operator session.
+- Distillation CLI: `craik instructions register`, `ingest`, `list`,
+  `approve`, `reject`, and `show` expose registration, pipeline execution,
+  review, decisions, and provenance inspection through the active operator
+  session.
 - Instruction distillation documentation: operators now have reference pages
   for sources, distilled proposal lifecycle, approval reviews, and an
   end-to-end management guide for the `craik instructions` workflow.
@@ -49,13 +50,23 @@ within the `0.x.0` stability expectations described in
   approval receipt snapshots.
 - Compiled prompts now include one authoritative `Active instruction
   constraints` section for governing distillations, sorted by category, source
-  ID, and statement with provenance annotations and stale-exclusion warnings.
+  ID, and sanitized literal statement text with provenance annotations and
+  stale-exclusion warnings.
 
 ### Security
 
 - Stale or contradicted distillation approvals now require an explicit operator
   override rationale, and review receipts record whether stale or contradiction
   overrides were used.
+- Instruction approval receipts now carry integrity HMACs, and active runtime
+  consumers exclude governing constraints whose approval receipt is missing or
+  fails verification.
+- Instruction source registration now rejects absolute paths, parent-directory
+  escapes, and symlink escapes before a source enters the registry.
+- Oversize instruction sources are skipped during snapshot refresh and excluded
+  from proposal ingestion instead of being read without bounds.
+- GitHub Actions workflows now pin third-party actions to immutable SHAs, and
+  the publish workflow emits package provenance attestations before upload.
 
 ## 0.3.0 - 2026-05-20
 

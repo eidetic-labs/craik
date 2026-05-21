@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, Any, NoReturn, get_args
 
 import typer
 
@@ -14,6 +14,10 @@ from craik.runtime.instruction_approval import (
     InstructionApprovalError,
     approve_instruction,
     reject_instruction,
+)
+from craik.runtime.instruction_distillation import (
+    InstructionDistillationError,
+    ingest_project_instructions,
 )
 from craik.runtime.instructions import (
     InstructionRegistrationError,
@@ -74,6 +78,47 @@ def instructions_register(
     finally:
         store.close()
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@instructions_app.command("ingest")
+def instructions_ingest(
+    project: Annotated[
+        str | None,
+        typer.Option("--project", help="Project id or name. Defaults when one project exists."),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json/--table", help="Print JSON instead of a table."),
+    ] = False,
+) -> None:
+    """Ingest registered instruction sources into reviewable proposals."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        project_id = _project_id(store, project)
+        _operator_identity()
+        try:
+            summary = ingest_project_instructions(store, project_id)
+        except InstructionDistillationError as error:
+            _fail(str(error))
+        payload = {
+            "project_id": summary.project_id,
+            "source_count": summary.source_count,
+            "snapshot_count": summary.snapshot_count,
+            "provenance_count": summary.provenance_count,
+            "proposal_count": summary.proposal_count,
+            "invalidated_count": summary.invalidated_count,
+            "contradiction_count": summary.contradiction_count,
+            "skipped_existing_count": summary.skipped_existing_count,
+            "unclassified_count": summary.unclassified_count,
+            "warnings": summary.warnings,
+        }
+    finally:
+        store.close()
+    if as_json:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    _print_ingest_summary(payload)
 
 
 @instructions_app.command("list")
@@ -333,8 +378,26 @@ def _print_table(items: list[dict[str, Any]]) -> None:
         )
 
 
+def _print_ingest_summary(payload: dict[str, Any]) -> None:
+    typer.echo("FIELD\tVALUE")
+    for key in (
+        "project_id",
+        "source_count",
+        "snapshot_count",
+        "provenance_count",
+        "proposal_count",
+        "invalidated_count",
+        "contradiction_count",
+        "skipped_existing_count",
+        "unclassified_count",
+    ):
+        typer.echo(f"{key}\t{payload[key]}")
+    for warning in payload["warnings"]:
+        typer.echo(f"warning\t{warning}")
+
+
 def _instruction_source_kind(value: str) -> InstructionSourceKind:
-    allowed = {"agents_md", "cursor_rules", "policy_doc", "readme", "codex_md"}
+    allowed = set(get_args(InstructionSourceKind))
     if value not in allowed:
         raise typer.BadParameter(f"unsupported instruction source kind: {value}")
     return value  # type: ignore[return-value]

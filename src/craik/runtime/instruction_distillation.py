@@ -19,6 +19,10 @@ from craik.runtime.projects.instruction_ingestion import (
     InstructionStatement,
     parse_instruction_source,
 )
+from craik.runtime.projects.instruction_sources import (
+    detect_instruction_contradictions,
+    invalidate_stale_distillations,
+)
 from craik.runtime.store import LocalStore
 
 
@@ -41,6 +45,9 @@ class IngestionSummary:
     provenance_count: int
     proposal_count: int
     unclassified_count: int
+    invalidated_count: int = 0
+    contradiction_count: int = 0
+    skipped_existing_count: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -91,58 +98,75 @@ def ingest_project_instructions(
         raise InstructionDistillationError(f"unknown project: {project_id}")
     created_at = now or datetime.now(UTC)
     base_dir = Path(project.repo.local_path).expanduser().resolve()
-    sources = list_sources(store, project_id=project_id, active=True)
-    snapshots = refresh_project_snapshots(store, project_id, now=created_at)
-    snapshot_by_source = {snapshot.source_id: snapshot for snapshot in snapshots}
-
-    provenance_count = 0
-    proposal_count = 0
-    unclassified_count = 0
-    warnings: list[str] = []
-    for source in sources:
-        snapshot = snapshot_by_source.get(source.id)
-        if snapshot is None or snapshot.hash_status == "missing":
-            continue
-        parsed = parse_instruction_source(source, base_dir=base_dir)
-        provenance = persist_instruction_provenance(
+    with store.transaction():
+        sources = list_sources(store, project_id=project_id, active=True)
+        snapshots = refresh_project_snapshots(store, project_id, now=created_at)
+        invalidated = invalidate_stale_distillations(
             store,
-            parsed,
-            snapshot=snapshot,
-            project_id=project_id,
+            current_snapshots=snapshots,
         )
-        provenance_count += len(provenance)
-        for statement, record in zip(parsed.statements, provenance, strict=True):
-            result = categorize_instruction(statement, source_kind=parsed.source_kind)
-            if result.category is None:
-                unclassified_count += 1
-                warnings.append(
-                    f"Unclassified instruction candidate {record.id} in {record.path}: "
-                    f"{record.summary}"
-                )
-                continue
-            proposal = _proposal(
-                project_id=project_id,
-                snapshot_id=snapshot.id,
-                source_id=snapshot.source_id,
-                statement=statement.text,
-                provenance_id=record.id,
-                category=result.category,
-                confidence=result.confidence,
-                matched_rule=result.matched_rule,
-                created_at=created_at,
-            )
-            store.put_distilled_instruction_proposal(proposal)
-            proposal_count += 1
+        snapshot_by_source = {snapshot.source_id: snapshot for snapshot in snapshots}
 
-    return IngestionSummary(
-        project_id=project_id,
-        source_count=len(sources),
-        snapshot_count=len(snapshots),
-        provenance_count=provenance_count,
-        proposal_count=proposal_count,
-        unclassified_count=unclassified_count,
-        warnings=warnings,
-    )
+        provenance_count = 0
+        proposal_count = 0
+        skipped_existing_count = 0
+        unclassified_count = 0
+        warnings: list[str] = []
+        for source in sources:
+            snapshot = snapshot_by_source.get(source.id)
+            if snapshot is None or snapshot.hash_status in {"missing", "oversize"}:
+                continue
+            parsed = parse_instruction_source(source, base_dir=base_dir)
+            provenance = persist_instruction_provenance(
+                store,
+                parsed,
+                snapshot=snapshot,
+                project_id=project_id,
+            )
+            provenance_count += len(provenance)
+            for statement, record in zip(parsed.statements, provenance, strict=True):
+                result = categorize_instruction(statement, source_kind=parsed.source_kind)
+                if result.category is None:
+                    unclassified_count += 1
+                    warnings.append(
+                        f"Unclassified instruction candidate {record.id} in {record.path}: "
+                        f"{record.summary}"
+                    )
+                    continue
+                proposal = _proposal(
+                    project_id=project_id,
+                    snapshot_id=snapshot.id,
+                    source_id=snapshot.source_id,
+                    statement=statement.text,
+                    provenance_id=record.id,
+                    category=result.category,
+                    confidence=result.confidence,
+                    matched_rule=result.matched_rule,
+                    created_at=created_at,
+                )
+                if store.get_distilled_instruction_proposal(proposal.id) is not None:
+                    skipped_existing_count += 1
+                    continue
+                store.put_distilled_instruction_proposal(proposal)
+                proposal_count += 1
+        reports = detect_instruction_contradictions(
+            store,
+            task_id=f"instruction_distillation_{project_id}_{created_at.isoformat()}",
+            owner="agent:instruction-distillation",
+        )
+
+        return IngestionSummary(
+            project_id=project_id,
+            source_count=len(sources),
+            snapshot_count=len(snapshots),
+            provenance_count=provenance_count,
+            proposal_count=proposal_count,
+            invalidated_count=len(invalidated),
+            contradiction_count=len(reports),
+            skipped_existing_count=skipped_existing_count,
+            unclassified_count=unclassified_count,
+            warnings=warnings,
+        )
 
 
 def _proposal(

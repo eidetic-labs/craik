@@ -4,7 +4,6 @@ from pathlib import Path
 from craik.contracts.models import (
     DistilledInstructionProposal,
     InstructionProvenance,
-    PromotedInstructionConstraint,
 )
 from craik.runtime.instruction_approval import approve_instruction, reject_instruction
 from craik.runtime.instruction_distillation import ingest_project_instructions
@@ -250,26 +249,13 @@ def test_case_file_orders_governing_distillations_by_category(tmp_path: Path) ->
 
 
 def _approved_constraint(store: LocalStore, project_id: str) -> None:
-    proposal = _proposal(
-        project_id,
-        status="governing",
-        promoted_constraint_id="constraint_distilled_instruction",
-    )
+    proposal = _proposal(project_id, status="proposed")
     store.put_distilled_instruction_proposal(proposal)
-    store.put_promoted_instruction_constraint(
-        PromotedInstructionConstraint(
-            id="constraint_distilled_instruction",
-            project_id=project_id,
-            proposal_id=proposal.id,
-            source_id=proposal.source_id,
-            snapshot_id=proposal.snapshot_id,
-            category=proposal.category,
-            statement=proposal.statement,
-            provenance_ids=proposal.provenance_ids,
-            evidence_ids=proposal.evidence_ids,
-            active=True,
-            created_at="2026-05-15T22:31:00Z",
-        )
+    approve_instruction(
+        store,
+        proposal_id=proposal.id,
+        operator_identity="user:maintainer",
+        rationale="Valid project instruction.",
     )
 
 

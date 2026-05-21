@@ -70,7 +70,7 @@ def _provenance_id(
     index: int,
     statement_text: str,
 ) -> str:
-    digest = hashlib.sha256(statement_text.encode("utf-8")).hexdigest()[:12]
+    digest = hashlib.sha256(_normalize_newlines(statement_text).encode("utf-8")).hexdigest()[:12]
     return f"instruction_provenance_{snapshot.source_id}_{snapshot.id}_{index:04d}_{digest}"
 
 
@@ -83,4 +83,8 @@ def _summary(statement_text: str) -> str:
 
 
 def _excerpt_hash(statement_text: str) -> str:
-    return hashlib.sha256(statement_text.encode("utf-8")).hexdigest()
+    return hashlib.sha256(_normalize_newlines(statement_text).encode("utf-8")).hexdigest()
+
+
+def _normalize_newlines(statement_text: str) -> str:
+    return statement_text.replace("\r\n", "\n").replace("\r", "\n")

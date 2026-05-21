@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from craik.contracts.models import DistilledInstructionProposal
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.instruction_approval import (
     InstructionApprovalError,
     approve_instruction,
@@ -10,10 +11,6 @@ from craik.runtime.instruction_approval import (
     reject_instruction,
 )
 from craik.runtime.paths import ensure_craik_home
-from craik.runtime.projects.instruction_sources import (
-    InstructionPromotionError,
-    review_instruction_promotion,
-)
 from craik.runtime.store import LocalStore
 
 
@@ -46,27 +43,23 @@ def test_approved_promotion_creates_active_constraint_and_audit_links(tmp_path) 
         proposal = _proposal()
         store.put_distilled_instruction_proposal(proposal)
 
-        review = review_instruction_promotion(
+        result = approve_instruction(
             store,
             proposal_id=proposal.id,
-            decision="approved",
-            decided_by="user:maintainer",
+            operator_identity="user:maintainer",
             rationale="Instruction is valid.",
-            policy_envelope_id="policy_distill",
-            receipt_ids=["receipt_review"],
-            memory_proposal_ids=["proposal_memory"],
-            handoff_ids=["handoff_distill"],
         )
 
         updated = store.get_distilled_instruction_proposal(proposal.id)
-        constraint = store.get_promoted_instruction_constraint(review.promoted_constraint_id)
+        review = result.review
+        constraint = result.constraint
         assert review.decision == "approved"
-        assert updated.promotion_status == "approved"
+        assert updated.promotion_status == "governing"
         assert updated.promoted_constraint_id == constraint.id
         assert constraint.active is True
         assert constraint.snapshot_id == proposal.snapshot_id
         assert constraint.provenance_ids == proposal.provenance_ids
-        assert constraint.receipt_ids == ["receipt_review"]
+        assert review.receipt_hmac is not None
         assert store.list_instruction_promotion_reviews() == [review]
         assert store.list_promoted_instruction_constraints() == [constraint]
     finally:
@@ -99,6 +92,57 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
         assert result.review.decided_by == "user:maintainer"
         assert result.constraint is not None
         assert list_governing(store) == [result.constraint]
+    finally:
+        store.close()
+
+
+def test_approval_rejects_mismatched_active_operator_session(tmp_path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("CRAIK_HOME", str(home))
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="user:active",
+            email="active@example.test",
+            groups=[],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+
+        with pytest.raises(InstructionApprovalError, match="does not match active session"):
+            approve_instruction(
+                store,
+                proposal_id=proposal.id,
+                operator_identity="user:other",
+                rationale="Wrong operator.",
+            )
+    finally:
+        store.close()
+
+
+def test_tampered_approval_receipt_excludes_governing_constraint(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+        result = approve_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Instruction is valid.",
+        )
+        assert list_governing(store) == [result.constraint]
+
+        store.put_instruction_promotion_review(
+            result.review.model_copy(update={"rationale": "Tampered after approval."})
+        )
+
+        assert list_governing(store) == []
     finally:
         store.close()
 
@@ -163,98 +207,6 @@ def test_stale_or_contradicted_approval_requires_override(tmp_path) -> None:
         assert result.proposal.promotion_status == "governing"
         assert result.review.override_stale is True
         assert result.review.override_rationale == "Source change reviewed manually."
-    finally:
-        store.close()
-
-
-def test_review_promotion_override_on_stale_records_bypass(tmp_path) -> None:
-    store = _store(tmp_path)
-    try:
-        stale = _proposal().model_copy(
-            update={
-                "promotion_status": "deferred",
-                "decided_by": "agent:instruction-distillation",
-                "decided_at": datetime(2026, 5, 15, 22, 31, tzinfo=UTC),
-            }
-        )
-        stale = DistilledInstructionProposal.model_validate(
-            stale.model_dump(mode="json", by_alias=True)
-        )
-        store.put_distilled_instruction_proposal(stale)
-
-        with pytest.raises(InstructionPromotionError, match="override"):
-            review_instruction_promotion(
-                store,
-                proposal_id=stale.id,
-                decision="approved",
-                decided_by="user:maintainer",
-                rationale="Reviewed stale instruction.",
-            )
-
-        review = review_instruction_promotion(
-            store,
-            proposal_id=stale.id,
-            decision="approved",
-            decided_by="user:maintainer",
-            rationale="Reviewed stale instruction.",
-            override=True,
-            override_reason="Source drift reviewed manually.",
-        )
-
-        assert review.override_stale is True
-        assert review.override_contradiction is False
-        assert review.override_rationale == "Source drift reviewed manually."
-    finally:
-        store.close()
-
-
-def test_review_promotion_override_on_contradiction_records_bypass(tmp_path) -> None:
-    store = _store(tmp_path)
-    try:
-        proposal = _proposal().model_copy(
-            update={"contradiction_ids": ["contradiction_docs"]}
-        )
-        proposal = DistilledInstructionProposal.model_validate(
-            proposal.model_dump(mode="json", by_alias=True)
-        )
-        store.put_distilled_instruction_proposal(proposal)
-
-        review = review_instruction_promotion(
-            store,
-            proposal_id=proposal.id,
-            decision="approved",
-            decided_by="user:maintainer",
-            rationale="Reviewed contradiction.",
-            override=True,
-            override_reason="Contradiction resolved offline.",
-        )
-
-        assert review.override_stale is False
-        assert review.override_contradiction is True
-        assert review.override_rationale == "Contradiction resolved offline."
-    finally:
-        store.close()
-
-
-def test_review_promotion_override_without_need_is_informational(tmp_path) -> None:
-    store = _store(tmp_path)
-    try:
-        proposal = _proposal()
-        store.put_distilled_instruction_proposal(proposal)
-
-        review = review_instruction_promotion(
-            store,
-            proposal_id=proposal.id,
-            decision="approved",
-            decided_by="user:maintainer",
-            rationale="Operator requested explicit override audit.",
-            override=True,
-            override_reason="Operator checked source state before approval.",
-        )
-
-        assert review.override_stale is False
-        assert review.override_contradiction is False
-        assert review.override_rationale == "Operator checked source state before approval."
     finally:
         store.close()
 
@@ -341,47 +293,17 @@ def test_new_approval_supersedes_previous_governing_instruction(tmp_path) -> Non
         store.close()
 
 
-@pytest.mark.parametrize("decision", ["rejected", "deferred"])
-def test_unapproved_promotion_decisions_are_persisted_without_constraints(
-    tmp_path,
-    decision: str,
-) -> None:
-    store = _store(tmp_path)
-    try:
-        proposal = _proposal()
-        store.put_distilled_instruction_proposal(proposal)
-
-        review = review_instruction_promotion(
-            store,
-            proposal_id=proposal.id,
-            decision=decision,
-            decided_by="user:maintainer",
-            rationale=f"Promotion {decision}.",
-            receipt_ids=["receipt_review"],
-        )
-
-        updated = store.get_distilled_instruction_proposal(proposal.id)
-        assert review.decision == decision
-        assert review.promoted_constraint_id is None
-        assert updated.promotion_status == decision
-        assert updated.promoted_constraint_id is None
-        assert store.list_promoted_instruction_constraints() == []
-    finally:
-        store.close()
-
-
 def test_approved_promotion_requires_source_snapshot(tmp_path) -> None:
     store = _store(tmp_path)
     try:
         proposal = _proposal(snapshot_id=None)
         store.put_distilled_instruction_proposal(proposal)
 
-        with pytest.raises(InstructionPromotionError, match="source snapshot"):
-            review_instruction_promotion(
+        with pytest.raises(InstructionApprovalError, match="source snapshot"):
+            approve_instruction(
                 store,
                 proposal_id=proposal.id,
-                decision="approved",
-                decided_by="user:maintainer",
+                operator_identity="user:maintainer",
                 rationale="Cannot approve without snapshot.",
             )
     finally:
@@ -391,12 +313,11 @@ def test_approved_promotion_requires_source_snapshot(tmp_path) -> None:
 def test_unknown_promotion_proposal_raises(tmp_path) -> None:
     store = _store(tmp_path)
     try:
-        with pytest.raises(InstructionPromotionError, match="unknown"):
-            review_instruction_promotion(
+        with pytest.raises(InstructionApprovalError, match="unknown"):
+            approve_instruction(
                 store,
                 proposal_id="missing",
-                decision="approved",
-                decided_by="user:maintainer",
+                operator_identity="user:maintainer",
                 rationale="Missing.",
             )
     finally:

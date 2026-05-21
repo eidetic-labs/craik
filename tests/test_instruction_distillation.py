@@ -226,6 +226,41 @@ def test_ingest_project_instructions_reports_unclassified_candidates(
         store.close()
 
 
+def test_ingest_project_instructions_rolls_back_on_pipeline_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        (repo / "AGENTS.md").write_text("- Always ensure tests pass.\n", encoding="utf-8")
+        register_source(
+            store,
+            project_id=project.id,
+            kind="agents_md",
+            owner="team:runtime",
+            registered_by="agent:test",
+        )
+
+        def fail_contradiction_detection(*args: object, **kwargs: object) -> object:
+            raise RuntimeError("forced contradiction failure")
+
+        monkeypatch.setattr(
+            "craik.runtime.instruction_distillation.detect_instruction_contradictions",
+            fail_contradiction_detection,
+        )
+
+        with pytest.raises(RuntimeError, match="forced contradiction failure"):
+            ingest_project_instructions(store, project.id)
+
+        assert store.list_instruction_source_snapshots() == []
+        assert store.list_instruction_provenance() == []
+        assert store.list_distilled_instruction_proposals() == []
+    finally:
+        store.close()
+
+
 def test_distilled_instruction_proposals_require_provenance() -> None:
     with pytest.raises(ValidationError, match="at least 1 item"):
         DistilledInstructionProposal(
