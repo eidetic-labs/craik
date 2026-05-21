@@ -870,7 +870,10 @@ or marking the goal complete.
 
 Do not close milestone issues from local validation alone. The goal
 workflow requires the PR branch to be current on GitHub and the required
-PR gates to be green.
+PR gates to be green. If the agent opened the PR and the checks are
+clean, the agent merges the PR, verifies the merge landed on the base
+branch, prunes stale local and remote branches, and only then moves to
+the next goal.
 
 ## Documentation definition of done
 
