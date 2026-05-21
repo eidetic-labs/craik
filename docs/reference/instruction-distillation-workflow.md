@@ -43,6 +43,7 @@ human approves them.
 <div><h4>Visible but inactive</h4><p>Stale, contradicted, rejected, and deferred distillations remain visible but inactive.</p></div>
 <div><h4>Audit trail required</h4><p>Active constraints retain source ID, source snapshot ID, provenance IDs, evidence IDs, and review links.</p></div>
 <div><h4>Stale-risk warnings</h4><p>Case files and onboarding surface stale-risk warnings instead of treating stale distillations as facts.</p></div>
+<div><h4>CLI lifecycle</h4><p><code>craik instructions</code> registers sources, lists proposals, records approval decisions, and shows provenance through the active operator session.</p></div>
 <div><h4>Forward to next agent</h4><p>Handoffs carry active instruction constraint IDs forward so later agents can audit what shaped the run.</p></div>
 
 </div>

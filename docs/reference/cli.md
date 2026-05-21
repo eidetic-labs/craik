@@ -412,6 +412,76 @@ Print resolved Craik local state paths without creating directories.
 craik home show
 ```
 
+## `craik instructions`
+
+Manage runtime instruction distillation.
+
+```text
+craik instructions COMMAND [ARGS]...
+```
+
+## `craik instructions approve`
+
+Approve a distilled instruction and make it governing.
+
+```text
+craik instructions approve [OPTIONS] ITEM_ID
+```
+
+Options:
+
+- `--rationale`: Approval rationale.; default ``
+- `--override`: Approve a stale or contradicted item intentionally.; default `false`
+- `--override-rationale`: Required rationale for override approval.
+
+## `craik instructions list`
+
+List distilled instruction proposals.
+
+```text
+craik instructions list [OPTIONS]
+```
+
+Options:
+
+- `--status`: Filter by proposed, governing, rejected, superseded, or stale.
+- `--source`: Filter by instruction source id.
+- `--category`: Filter by distillation category.
+- `--json, --table`: Print JSON instead of a table.; default `false`
+
+## `craik instructions register`
+
+Register an instruction source idempotently and print its receipt.
+
+```text
+craik instructions register [OPTIONS] KIND PATH
+```
+
+Options:
+
+- `--project`: Project id or name. Defaults when one project exists.
+- `--owner`: Owning team or operator. Defaults to active operator.
+
+## `craik instructions reject`
+
+Reject a distilled instruction with an auditable receipt.
+
+```text
+craik instructions reject [OPTIONS] ITEM_ID
+```
+
+Options:
+
+- `--rationale`: Rejection rationale.; default ``
+
+## `craik instructions show`
+
+Show one distilled instruction with provenance and freshness.
+
+```text
+craik instructions show [OPTIONS] ITEM_ID
+```
+
 ## `craik intent`
 
 Inspect task intent locks.

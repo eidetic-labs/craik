@@ -10,6 +10,8 @@ from craik.cli import receipts_app as mounted_receipts_app
 from craik.cli_receipts import receipts_app
 from craik.contracts.models import (
     CapabilityReceipt,
+    DistilledInstructionProposal,
+    InstructionProvenance,
     IntentLock,
     ReceiptResult,
     RecoverySession,
@@ -20,6 +22,7 @@ from craik.contracts.models import (
     TaskRun,
     TaskRunStatus,
 )
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.store import LocalStore
@@ -363,6 +366,205 @@ def test_contradiction_commands_open_list_show(tmp_path: Path) -> None:
     assert shown.exit_code == 0
     assert [item["id"] for item in json.loads(listed.stdout)] == [report_id]
     assert json.loads(shown.stdout)["contradiction"]["id"] == report_id
+
+
+def test_instruction_register_cli_is_idempotent_and_requires_operator(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    _seed_instruction_project(tmp_path, home)
+    _put_operator_session(home)
+    env = {"CRAIK_HOME": str(home)}
+
+    first = runner.invoke(
+        app,
+        ["instructions", "register", "agents_md", "AGENTS.md", "--project", "Example"],
+        env=env,
+    )
+    second = runner.invoke(
+        app,
+        ["instructions", "register", "agents_md", "AGENTS.md", "--project", "Example"],
+        env=env,
+    )
+    missing_operator_home = tmp_path / "missing-operator-home"
+    _seed_instruction_project(tmp_path, missing_operator_home, name="No Operator")
+    missing_operator = runner.invoke(
+        app,
+        [
+            "instructions",
+            "register",
+            "agents_md",
+            "AGENTS.md",
+            "--project",
+            "No Operator",
+        ],
+        env={"CRAIK_HOME": str(missing_operator_home)},
+    )
+
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    first_payload = json.loads(first.stdout)
+    second_payload = json.loads(second.stdout)
+    assert first_payload["registered"] is True
+    assert second_payload["registered"] is False
+    assert second_payload["source_id"] == first_payload["source_id"]
+    assert second_payload["receipt_id"] == first_payload["receipt_id"]
+    assert missing_operator.exit_code != 0
+    assert "operator identity required" in missing_operator.output
+
+
+def test_instruction_list_cli_filters_and_prints_json(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    project_id = _seed_instruction_project(tmp_path, home).id
+    _put_instruction_proposal(
+        home,
+        project_id=project_id,
+        proposal_id="distilled_instruction_policy",
+        category="policy",
+        status="proposed",
+    )
+    _put_instruction_proposal(
+        home,
+        project_id=project_id,
+        proposal_id="distilled_instruction_boundary",
+        category="boundary",
+        status="rejected",
+    )
+    env = {"CRAIK_HOME": str(home)}
+
+    table = runner.invoke(app, ["instructions", "list"], env=env)
+    listed = runner.invoke(
+        app,
+        ["instructions", "list", "--status", "proposed", "--category", "policy", "--json"],
+        env=env,
+    )
+
+    assert table.exit_code == 0, table.output
+    assert "distilled_instruction_policy" in table.output
+    assert listed.exit_code == 0, listed.output
+    payload = json.loads(listed.stdout)
+    assert [item["id"] for item in payload] == ["distilled_instruction_policy"]
+
+
+def test_instruction_approve_cli_records_override_and_handles_errors(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    project_id = _seed_instruction_project(tmp_path, home).id
+    _put_operator_session(home)
+    _put_instruction_proposal(
+        home,
+        project_id=project_id,
+        proposal_id="distilled_instruction_stale",
+        category="policy",
+        status="deferred",
+        decided_by="agent:instruction-distillation",
+    )
+    env = {"CRAIK_HOME": str(home)}
+
+    refused = runner.invoke(
+        app,
+        ["instructions", "approve", "distilled_instruction_stale", "--rationale", "Reviewed."],
+        env=env,
+    )
+    approved = runner.invoke(
+        app,
+        [
+            "instructions",
+            "approve",
+            "distilled_instruction_stale",
+            "--rationale",
+            "Reviewed stale source.",
+            "--override",
+        ],
+        env=env,
+    )
+    missing_id = runner.invoke(app, ["instructions", "approve", "missing"], env=env)
+    missing_operator_home = tmp_path / "approve-missing-operator"
+    missing_operator_project = _seed_instruction_project(tmp_path, missing_operator_home).id
+    _put_instruction_proposal(
+        missing_operator_home,
+        project_id=missing_operator_project,
+        proposal_id="distilled_instruction_no_operator",
+        category="command",
+    )
+    missing_operator = runner.invoke(
+        app,
+        ["instructions", "approve", "distilled_instruction_no_operator"],
+        env={"CRAIK_HOME": str(missing_operator_home)},
+    )
+
+    assert refused.exit_code != 0
+    assert "require --override" in refused.output
+    assert approved.exit_code == 0, approved.output
+    payload = json.loads(approved.stdout)
+    assert payload["status"] == "governing"
+    assert payload["override_stale"] is True
+    assert payload["receipt_id"] == "promotion_review_distilled_instruction_stale"
+    assert missing_id.exit_code != 0
+    assert "unknown distilled instruction proposal" in missing_id.output
+    assert missing_operator.exit_code != 0
+    assert "operator identity required" in missing_operator.output
+
+
+def test_instruction_reject_and_show_cli_surface_provenance(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    project_id = _seed_instruction_project(tmp_path, home).id
+    _put_operator_session(home)
+    _put_instruction_proposal(
+        home,
+        project_id=project_id,
+        proposal_id="distilled_instruction_command",
+        category="command",
+    )
+    env = {"CRAIK_HOME": str(home)}
+
+    rejected = runner.invoke(
+        app,
+        [
+            "instructions",
+            "reject",
+            "distilled_instruction_command",
+            "--rationale",
+            "Not applicable.",
+        ],
+        env=env,
+    )
+    shown = runner.invoke(
+        app,
+        ["instructions", "show", "distilled_instruction_command"],
+        env=env,
+    )
+    missing_id = runner.invoke(app, ["instructions", "show", "missing"], env=env)
+    missing_reject = runner.invoke(app, ["instructions", "reject", "missing"], env=env)
+    missing_operator_home = tmp_path / "reject-missing-operator"
+    missing_operator_project = _seed_instruction_project(tmp_path, missing_operator_home).id
+    _put_instruction_proposal(
+        missing_operator_home,
+        project_id=missing_operator_project,
+        proposal_id="distilled_instruction_reject_no_operator",
+        category="command",
+    )
+    missing_operator = runner.invoke(
+        app,
+        ["instructions", "reject", "distilled_instruction_reject_no_operator"],
+        env={"CRAIK_HOME": str(missing_operator_home)},
+    )
+
+    assert rejected.exit_code == 0, rejected.output
+    assert json.loads(rejected.stdout)["receipt_id"] == (
+        "promotion_review_distilled_instruction_command"
+    )
+    assert shown.exit_code == 0, shown.output
+    payload = json.loads(shown.stdout)
+    assert payload["status"] == "rejected"
+    assert payload["provenance"][0]["quote"] == "Run tests before merge."
+    assert missing_id.exit_code != 0
+    assert "unknown distilled instruction proposal" in missing_id.output
+    assert missing_reject.exit_code != 0
+    assert "unknown distilled instruction proposal" in missing_reject.output
+    assert missing_operator.exit_code != 0
+    assert "operator identity required" in missing_operator.output
 
 
 def test_onboard_command_prints_runner_readable_project_context(tmp_path: Path) -> None:
@@ -1625,6 +1827,90 @@ def _seed_run_delta_state(home: Path) -> None:
                 contradiction_ids=["contradiction_docs"],
                 active_instruction_constraint_ids=["constraint_docs"],
                 created_at=datetime(2026, 5, 16, 12, 4, tzinfo=UTC),
+            )
+        )
+    finally:
+        store.close()
+
+
+def _seed_instruction_project(
+    tmp_path: Path,
+    home: Path,
+    *,
+    name: str = "Example",
+):
+    repo = tmp_path / f"repo-{name.lower().replace(' ', '-')}-{home.name}"
+    repo.mkdir()
+    (repo / "AGENTS.md").write_text("- Run tests before merge.\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "AGENTS.md")
+    _run_git(repo, "commit", "-m", "initial")
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        return ProjectRegistry(store).add_project(repo, name=name)
+    finally:
+        store.close()
+
+
+def _put_operator_session(home: Path) -> None:
+    ensure_craik_home({"CRAIK_HOME": str(home)})
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator-123",
+            email="operator@example.test",
+            groups=["platform"],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
+
+
+def _put_instruction_proposal(
+    home: Path,
+    *,
+    project_id: str,
+    proposal_id: str,
+    category: str,
+    status: str = "proposed",
+    decided_by: str | None = None,
+) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        provenance_id = f"provenance_{proposal_id}"
+        created_at = datetime(2026, 5, 15, 22, 30, tzinfo=UTC)
+        proposal = DistilledInstructionProposal(
+            id=proposal_id,
+            project_id=project_id,
+            source_id="instruction_source_agents_md",
+            snapshot_id="snapshot_agents",
+            category=category,
+            statement="Run tests before merge.",
+            rationale="Extracted from AGENTS.md.",
+            confidence=0.9,
+            provenance_ids=[provenance_id],
+            evidence_ids=[provenance_id],
+            promotion_status=status,
+            decided_by=decided_by or ("user:maintainer" if status != "proposed" else None),
+            decided_at=created_at if status != "proposed" else None,
+            created_at=created_at,
+        )
+        store.put_distilled_instruction_proposal(proposal)
+        store.put_instruction_provenance(
+            InstructionProvenance(
+                id=provenance_id,
+                project_id=project_id,
+                source_id=proposal.source_id,
+                snapshot_id=proposal.snapshot_id,
+                path="AGENTS.md",
+                start_line=1,
+                end_line=1,
+                summary=proposal.statement,
+                captured_at=created_at,
             )
         )
     finally:

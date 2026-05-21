@@ -70,6 +70,8 @@ prompt_app = typer.Typer(help="Compile runner-ready prompts from Craik runtime s
 app.add_typer(prompt_app, name="prompt")
 provider_app = typer.Typer(help="Inspect and select model providers.")
 app.add_typer(provider_app, name="provider")
+instructions_app = typer.Typer(help="Manage runtime instruction distillation.")
+app.add_typer(instructions_app, name="instructions")
 
 
 def package_version() -> str:
@@ -226,6 +228,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_agent_messages",
         "craik.cli_auth",
         "craik.cli_delegations",
+        "craik.cli_instructions",
         "craik.cli_operations",
         "craik.cli_project",
         "craik.cli_scope_changes",
