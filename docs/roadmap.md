@@ -887,7 +887,7 @@ issue is explicitly internal-only scaffolding.
 <div><h4>Security notes</h4></div>
 <div><h4>Migration notes</h4><p>When local state or schemas change.</p></div>
 <div><h4>Runnable demo status</h4></div>
-<div><h4>Stigmem fact</h4><p>Summarizing the release state.</p></div>
+<div><h4>Memory update</h4><p>Optional release-state memory only when Stigmem is available; this is not a release gate.</p></div>
 
 </div>
 
