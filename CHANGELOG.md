@@ -27,6 +27,9 @@ within the `0.x.0` stability expectations described in
 - Deterministic instruction categorization for v0.4.0: parsed and provenanced
   statements now become persisted distillation proposals with heuristic category
   traceability and unclassified-candidate warnings.
+- Inter-source instruction contradiction detection for v0.4.0: normalized
+  policy, boundary, command, instruction, and security-rule proposals now open
+  contradiction reports while skipping same-source and deferred stale items.
 
 ## 0.3.0 - 2026-05-20
 

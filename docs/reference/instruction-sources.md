@@ -225,6 +225,14 @@ constraints.
 Conflicting proposals are deferred and excluded from automatic
 promotion until the contradiction is reviewed.
 
+Contradiction detection compares proposals across different sources
+only. It normalizes each governing candidate into a category, subject,
+and value before comparison, so tool allowlist policies, command
+allow/deny rules, and boundary negations can disagree without relying
+on raw string equality. Deferred stale proposals and rejected proposals
+are skipped; same-source disagreements remain local to that source
+until a later operator review path handles them.
+
 ## Promotion reviews
 
 `craik.instruction_promotion_review` records approved, rejected, and

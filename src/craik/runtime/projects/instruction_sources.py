@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import cast
 
 from craik.contracts.models import (
@@ -169,17 +171,25 @@ def detect_instruction_contradictions(
 ) -> list[ContradictionReport]:
     """Open contradiction reports for incompatible distilled instruction proposals."""
     proposals = sorted(
-        store.list_distilled_instruction_proposals(),
+        (
+            proposal
+            for proposal in store.list_distilled_instruction_proposals()
+            if proposal.promotion_status not in {"deferred", "rejected"}
+        ),
         key=lambda proposal: proposal.id,
     )
     reports: list[ContradictionReport] = []
     for index, left in enumerate(proposals):
         for right in proposals[index + 1 :]:
-            if not _proposals_conflict(left, right):
+            conflict = _instruction_conflict(left, right)
+            if conflict is None:
                 continue
             report = ContradictionManager(store).open_report(
                 task_id=task_id or left.task_id or right.task_id,
-                facts=[left.statement, right.statement],
+                facts=[
+                    f"{conflict.subject}: {conflict.left_value}",
+                    f"{conflict.subject}: {conflict.right_value}",
+                ],
                 summary=f"Instruction source conflict: {left.category}",
                 affected_artifacts=[
                     left.id,
@@ -189,7 +199,10 @@ def detect_instruction_contradictions(
                 ],
                 evidence_ids=sorted({*left.provenance_ids, *right.provenance_ids}),
                 owner=owner,
-                proposed_resolution="Human review must decide which instruction source applies.",
+                proposed_resolution=(
+                    "Human review must decide which instruction source applies: "
+                    f"{conflict.subject}."
+                ),
             )
             _defer_conflicting_proposal(store, left, report.id)
             _defer_conflicting_proposal(store, right, report.id)
@@ -274,17 +287,106 @@ def _bullet_lines(values: list[str]) -> list[str]:
     return [f"  - {value}" for value in values]
 
 
+@dataclass(frozen=True)
+class _InstructionConflict:
+    subject: str
+    left_value: str
+    right_value: str
+
+
 def _proposals_conflict(
     left: DistilledInstructionProposal,
     right: DistilledInstructionProposal,
 ) -> bool:
+    return _instruction_conflict(left, right) is not None
+
+
+def _instruction_conflict(
+    left: DistilledInstructionProposal,
+    right: DistilledInstructionProposal,
+) -> _InstructionConflict | None:
     if left.source_id == right.source_id or left.category != right.category:
-        return False
+        return None
     if left.category not in {"instruction", "policy", "command", "boundary", "security_rule"}:
-        return False
-    return _normalized_positive(left.statement) == _normalized_negative(
-        right.statement
-    ) or _normalized_positive(right.statement) == _normalized_negative(left.statement)
+        return None
+    left_fact = _instruction_fact(left)
+    right_fact = _instruction_fact(right)
+    if left_fact is None or right_fact is None:
+        return None
+    left_subject, left_value = left_fact
+    right_subject, right_value = right_fact
+    if left_subject != right_subject or left_value == right_value:
+        return None
+    return _InstructionConflict(
+        subject=left_subject,
+        left_value=left_value,
+        right_value=right_value,
+    )
+
+
+def _instruction_fact(proposal: DistilledInstructionProposal) -> tuple[str, str] | None:
+    statement = _normalize_statement(proposal.statement)
+    if proposal.category == "policy":
+        policy_fact = _policy_fact(statement)
+        if policy_fact is not None:
+            return policy_fact
+    if proposal.category == "command":
+        command_fact = _command_fact(statement)
+        if command_fact is not None:
+            return command_fact
+    subject = _normalized_subject(statement)
+    if not subject:
+        return None
+    return (f"{proposal.category}:{subject}", _polarity(statement))
+
+
+def _policy_fact(statement: str) -> tuple[str, str] | None:
+    if "tool-allowlist" in statement:
+        _, _, remainder = statement.partition("tool-allowlist")
+        parts = [part for part in re.split(r"[:=\s]+", remainder.strip()) if part]
+        if len(parts) >= 2:
+            return (f"policy:tool-allowlist:{parts[0]}", " ".join(parts[1:]))
+    allow_match = re.search(r"\ballow(?:list)? tool (?P<tool>[a-z0-9_.-]+)\b", statement)
+    if allow_match:
+        return (f"policy:tool-allowlist:{allow_match.group('tool')}", "allowed")
+    deny_match = re.search(r"\b(?:deny|block) tool (?P<tool>[a-z0-9_.-]+)\b", statement)
+    if deny_match:
+        return (f"policy:tool-allowlist:{deny_match.group('tool')}", "denied")
+    return None
+
+
+def _command_fact(statement: str) -> tuple[str, str] | None:
+    command_match = re.search(
+        r"\b(?:run|execute|call|invoke)\s+(?P<command>[a-z0-9_.:/-]+)",
+        statement,
+    )
+    if command_match is None:
+        return None
+    value = "denied" if _polarity(statement) == "deny" else "allowed"
+    return (f"command:{command_match.group('command')}", value)
+
+
+def _polarity(statement: str) -> str:
+    if any(term in statement for term in ("must not", "do not", "never", "deny", "block")):
+        return "deny"
+    return "allow"
+
+
+def _normalized_subject(statement: str) -> str:
+    value = statement
+    for phrase in (
+        "must not",
+        "should not",
+        "do not",
+        "never",
+        "must",
+        "should",
+        "may",
+        "always",
+        "ensure",
+    ):
+        value = re.sub(rf"\b{phrase}\b", " ", value)
+    return " ".join(value.strip(". ").split())
 
 
 def _defer_conflicting_proposal(
