@@ -858,6 +858,20 @@ needed to avoid rework.
 checklist · documentation checklist · security/policy impact · Stigmem
 fact update requirement when relevant.
 
+## Goal issue workflow
+
+For each `0.x.0` goal issue, implementation is not complete until the
+change has a pull request and the pull request has passed required CI.
+The working branch is pushed after implementation, tests, docs, and
+local validation are complete. Then the PR checks are watched to a
+terminal state. If any required check fails, fix the failure in the same
+PR branch, push again, and repeat the check wait before closing the issue
+or marking the goal complete.
+
+Do not close milestone issues from local validation alone. The goal
+workflow requires the PR branch to be current on GitHub and the required
+PR gates to be green.
+
 ## Documentation definition of done
 
 <div className="craik-grid">
