@@ -381,6 +381,13 @@ class PluginProbationCriterion(CraikModel):
     summary: str
     evidence_ids: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_plugin_probation_criterion(self) -> PluginProbationCriterion:
+        """Require evidence for criteria marked as passed."""
+        if self.passed and not self.evidence_ids:
+            raise ValueError("passed plugin probation criteria require evidence")
+        return self
+
 
 class PluginProbationDecision(CraikModel):
     """Promotion, rejection, or expiration decision for plugin probation."""
@@ -388,7 +395,7 @@ class PluginProbationDecision(CraikModel):
     decision: PluginProbationDecisionKind
     decided_by: str
     rationale: str
-    evidence_ids: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(min_length=1)
     decided_at: datetime
 
 
