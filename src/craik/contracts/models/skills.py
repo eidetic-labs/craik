@@ -187,10 +187,24 @@ class SkillRegistry(CraikModel):
         )
         if inactive:
             raise ValueError(f"inactive skill entry ids marked active: {inactive}")
+        missing_active_entries = sorted(
+            entry.id
+            for entry in self.entries
+            if entry.active and entry.id not in self.active_entry_ids
+        )
+        if missing_active_entries:
+            raise ValueError(f"active skill entries missing active_entry_ids: {missing_active_entries}")
         if self.precedence_order:
             unknown_order = sorted(set(self.precedence_order) - set(entry_by_id))
             if unknown_order:
                 raise ValueError(f"unknown precedence skill entry ids: {unknown_order}")
+            inactive_order = sorted(
+                entry_id
+                for entry_id in self.precedence_order
+                if not entry_by_id[entry_id].active
+            )
+            if inactive_order:
+                raise ValueError(f"inactive skill entry ids in precedence_order: {inactive_order}")
             missing_active = sorted(set(self.active_entry_ids) - set(self.precedence_order))
             if missing_active:
                 raise ValueError(f"active skill entry ids missing precedence: {missing_active}")

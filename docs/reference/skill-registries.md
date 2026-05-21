@@ -52,7 +52,11 @@ Lower `precedence` values win. **Active precedence values must be
 unique.**
 
 The registry can also record `precedence_order` for consumers that
-want a stable ordered list of active skill entry ids.
+want a stable ordered list of active skill entry ids. Every active
+entry must appear in `active_entry_ids`, and `precedence_order` must
+not include inactive entries. This keeps project-local overrides and
+global defaults auditable without consumers guessing which entries are
+currently live.
 
 ## Provenance
 

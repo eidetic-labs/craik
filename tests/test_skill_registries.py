@@ -104,9 +104,26 @@ def test_skill_registry_rejects_inactive_active_entry() -> None:
         _registry(entries=[inactive], active_entry_ids=["skill_entry_inactive"])
 
 
+def test_skill_registry_requires_active_entries_to_be_listed() -> None:
+    with pytest.raises(ValidationError, match="active skill entries missing"):
+        _registry(active_entry_ids=["skill_entry_project_docs"])
+
+
 def test_skill_registry_rejects_unknown_precedence_entries() -> None:
     with pytest.raises(ValidationError, match="unknown precedence"):
         _registry(precedence_order=["skill_entry_missing"])
+
+
+def test_skill_registry_rejects_inactive_precedence_entries() -> None:
+    active = _entry("skill_entry_project_docs", scope="project", precedence=0)
+    inactive = _entry("skill_entry_inactive", scope="global", precedence=10, active=False)
+
+    with pytest.raises(ValidationError, match="inactive skill entry ids in precedence_order"):
+        _registry(
+            entries=[active, inactive],
+            active_entry_ids=["skill_entry_project_docs"],
+            precedence_order=["skill_entry_project_docs", "skill_entry_inactive"],
+        )
 
 
 def test_skill_registry_project_entries_outrank_global_entries() -> None:
