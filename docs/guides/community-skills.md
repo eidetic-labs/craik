@@ -33,6 +33,7 @@ A community skill should include:
 <div><h4>Clear <code>SKILL.md</code> entrypoint</h4></div>
 <div><h4>Versioned skill package record</h4></div>
 <div><h4>Input / output schemas</h4></div>
+<div><h4>Context requirements</h4><p>Required inputs, trust boundary, and missing-context behavior.</p></div>
 <div><h4>Docs</h4><p>Intended use and limitations.</p></div>
 <div><h4>Provenance</h4><p>For copied, generated, or externally sourced material.</p></div>
 <div><h4>Examples or fixtures</h4><p>That can be validated locally.</p></div>
@@ -44,6 +45,12 @@ package metadata. Use
 [`craik.skill_registry`](../reference/skill-registries.md) to record
 whether a skill is project-local or global and how precedence is
 resolved.
+
+Each expected input schema needs a matching context requirement. The
+requirement records whether the input is required, which trust boundary
+is acceptable, and whether missing context should reject the run, be
+recorded as an omission, or allow a degraded run. This prevents
+community skills from depending on implicit agent state.
 
 ## Scoping
 
@@ -61,6 +68,11 @@ resolved.
 
 </div>
 
+Registries must list every active entry in `active_entry_ids`, and
+`precedence_order` must include only active entries. Project-scoped
+entries outrank global entries for the same package, so a repository
+can override a global default without silently inheriting it.
+
 Skill invocation context is per-run state. Use
 [`craik.skill_invocation_context`](../reference/skill-contexts.md)
 to record inputs, outputs, omissions, policy links, receipts, and
@@ -74,7 +86,9 @@ Review community skills before adopting them:
 <li>Confirm the package version and entrypoints.</li>
 <li>Inspect docs and examples.</li>
 <li>Verify expected input and output schemas.</li>
+<li>Verify context requirements cover every expected input schema.</li>
 <li>Check provenance links.</li>
+<li>Confirm registry scope and precedence match the project boundary.</li>
 <li>Confirm the skill does not claim runtime authority.</li>
 <li>Run local checks for linked fixtures or examples.</li>
 </ol>
