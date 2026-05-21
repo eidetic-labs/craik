@@ -647,10 +647,18 @@ class ReferenceIntegration(CraikModel):
         """Require the reference id that matches the integration kind."""
         if self.kind == "skill" and not self.skill_package_id:
             raise ValueError("skill reference integrations require skill_package_id")
+        if self.kind == "skill" and (self.plugin_descriptor_id or self.adapter_package_id):
+            raise ValueError("skill reference integrations must not link plugin or adapter ids")
         if self.kind == "plugin" and not self.plugin_descriptor_id:
             raise ValueError("plugin reference integrations require plugin_descriptor_id")
+        if self.kind == "plugin" and (self.skill_package_id or self.adapter_package_id):
+            raise ValueError("plugin reference integrations must not link skill or adapter ids")
+        if self.kind == "plugin" and not self.receipt_ids:
+            raise ValueError("plugin reference integrations require receipt_ids")
         if self.kind == "adapter" and not self.adapter_package_id:
             raise ValueError("adapter reference integrations require adapter_package_id")
+        if self.kind == "adapter" and (self.skill_package_id or self.plugin_descriptor_id):
+            raise ValueError("adapter reference integrations must not link skill or plugin ids")
         if not self.safe_to_run_locally or not self.reproducible:
             raise ValueError("reference integrations must be safe and reproducible")
         return self

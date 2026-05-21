@@ -690,6 +690,16 @@ def test_adapter_package_requires_semantic_versions(
         CONTRACT_REGISTRY["craik.adapter_package"].model_validate(payload)
 
 
+def test_reference_integrations_reject_mismatched_links(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.reference_integration"])
+    payload["plugin_descriptor_id"] = "plugin_docs_reconcile"
+
+    with pytest.raises(ValidationError, match="must not link plugin or adapter"):
+        CONTRACT_REGISTRY["craik.reference_integration"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

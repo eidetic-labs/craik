@@ -21,7 +21,7 @@ def _integration(kind: str = "skill", **overrides: object) -> ReferenceIntegrati
         "fixture_paths": ["tests/fixtures/contracts/v0_1/contracts.json"],
         "check_commands": ["uv run --extra dev pytest tests/test_contracts.py"],
         "receipt_ids": ["plugin_receipt_docs_reconcile"] if kind == "plugin" else [],
-        "compatibility_notes": ["Compatible with v0.7 reference contracts."],
+        "compatibility_notes": ["Compatible with v0.6 reference contracts."],
         "safe_to_run_locally": True,
         "reproducible": True,
         "provenance_ids": ["evidence_readme_status"],
@@ -64,6 +64,20 @@ def test_reference_integrations_require_matching_reference_ids() -> None:
 
     with pytest.raises(ValidationError, match="adapter_package_id"):
         _integration("adapter", adapter_package_id=None)
+
+    with pytest.raises(ValidationError, match="must not link plugin or adapter"):
+        _integration("skill", plugin_descriptor_id="plugin_docs_reconcile")
+
+    with pytest.raises(ValidationError, match="must not link skill or adapter"):
+        _integration("plugin", skill_package_id="skill_docs_reconcile")
+
+    with pytest.raises(ValidationError, match="must not link skill or plugin"):
+        _integration("adapter", plugin_descriptor_id="plugin_docs_reconcile")
+
+
+def test_plugin_reference_integrations_require_receipts() -> None:
+    with pytest.raises(ValidationError, match="receipt_ids"):
+        _integration("plugin", receipt_ids=[])
 
 
 def test_reference_integrations_require_reproducible_artifacts() -> None:
