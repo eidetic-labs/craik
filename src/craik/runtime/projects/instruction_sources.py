@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import cast
 
 from craik.contracts.models import (
@@ -74,9 +75,7 @@ def invalidate_stale_distillations(
     decided_by: str = "agent:instruction-distillation",
 ) -> list[DistilledInstructionProposal]:
     """Mark proposals stale when their source snapshot changed, disappeared, or is new."""
-    previous_by_source = {
-        snapshot.source_id: snapshot for snapshot in store.list_instruction_source_snapshots()
-    }
+    previous_by_source = _previous_snapshots_for_invalidation(store, current_snapshots)
     stale_source_ids = _stale_source_ids(previous_by_source, current_snapshots)
     if not stale_source_ids:
         for snapshot in current_snapshots:
@@ -330,6 +329,35 @@ def _normalize_statement(statement: str) -> str:
 
 class InstructionPromotionError(RuntimeError):
     """Raised when a distilled instruction cannot be reviewed for promotion."""
+
+
+def _previous_snapshots_for_invalidation(
+    store: LocalStore,
+    current_snapshots: list[InstructionSourceSnapshot],
+) -> dict[str, InstructionSourceSnapshot]:
+    current_ids = {snapshot.id for snapshot in current_snapshots}
+    all_snapshots = store.list_instruction_source_snapshots()
+    previous_by_source = _latest_snapshots_by_source(
+        snapshot for snapshot in all_snapshots if snapshot.id not in current_ids
+    )
+    current_by_source = {snapshot.source_id: snapshot for snapshot in current_snapshots}
+    for source_id, snapshot in current_by_source.items():
+        previous_by_source.setdefault(source_id, snapshot)
+    return previous_by_source
+
+
+def _latest_snapshots_by_source(
+    snapshots: Iterable[InstructionSourceSnapshot],
+) -> dict[str, InstructionSourceSnapshot]:
+    latest: dict[str, InstructionSourceSnapshot] = {}
+    for snapshot in snapshots:
+        existing = latest.get(snapshot.source_id)
+        if existing is None or (snapshot.captured_at, snapshot.id) > (
+            existing.captured_at,
+            existing.id,
+        ):
+            latest[snapshot.source_id] = snapshot
+    return latest
 
 
 def _stale_source_ids(
