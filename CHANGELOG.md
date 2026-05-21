@@ -38,6 +38,9 @@ within the `0.x.0` stability expectations described in
 - Instruction distillation documentation: operators now have reference pages
   for sources, distilled proposal lifecycle, approval reviews, and an
   end-to-end management guide for the `craik instructions` workflow.
+- v0.4.0 release readiness documentation now records the instruction
+  distillation sign-off, verification commands, and security notes before
+  release prep.
 
 ### Changed
 
