@@ -31,6 +31,7 @@ from craik.runtime.work.case_support import (
     case_assumptions,
     context_budget,
     credential_context,
+    governing_distillations,
     open_contradictions,
     verification_plan,
 )
@@ -183,6 +184,7 @@ class CaseFileAssembler:
             *credential_risks,
         ]
         active_instructions = active_instruction_context(self.store, project.id)
+        distillations = governing_distillations(self.store, project.id)
         intent_lock = IntentLockManager(self.store).ensure_for_task(task)
         case_file = CaseFile(
             id=f"case_{task.id.removeprefix('task_')}",
@@ -200,6 +202,7 @@ class CaseFileAssembler:
             recent_handoffs=recent_handoffs,
             stale_risks=stale_risks,
             contradictions=contradictions,
+            distillations=distillations,
             verification_plan=verification_plan(task),
             context_budget=context_budget(
                 max_tokens=max_tokens,
@@ -211,6 +214,7 @@ class CaseFileAssembler:
                 evidence=evidence,
                 assumptions=assumptions,
                 active_instruction_constraints=active_instructions,
+                distillations=distillations,
                 memory_fact_count=len(facts),
                 recent_handoffs=recent_handoffs,
                 contradiction_ids=[item.id for item in contradictions],

@@ -436,6 +436,7 @@ docs/
 <div><h4>Distillation proposal store</h4><p>Categorizes provenanced statements with deterministic rules and writes reviewable proposals while surfacing unclassified candidates.</p></div>
 <div><h4>Inter-source contradictions</h4><p>Normalizes proposal triples across sources and opens contradiction reports for diverging policy, boundary, command, instruction, and security-rule guidance.</p></div>
 <div><h4>Operator approval flow</h4><p>Requires explicit operator approval or denial receipts before proposals become governing runtime constraints.</p></div>
+<div><h4>Case-file distillation evidence</h4><p>Loads governing distillations into case files with category, source, provenance ranges, and approval receipt snapshots.</p></div>
 <div><h4>Task intent lock</h4></div>
 <div><h4>Expiring scratchpad</h4></div>
 <div><h4>Scope-change proposal model</h4></div>
@@ -458,6 +459,7 @@ docs/
 <li>Categorized distillation proposals are deterministic and report unclassified candidates.</li>
 <li>Inter-source conflicts surface as contradiction reports and defer conflicted proposals.</li>
 <li>Only explicitly approved governing instructions are visible to runtime consumers.</li>
+<li>Case files carry governing distillations as first-class evidence with provenance.</li>
 <li>Source-hash changes invalidate stale distillations.</li>
 <li>Extracted instruction facts remain proposals until approved.</li>
 <li>Intent lock is included in case files and handoffs.</li>
