@@ -1,6 +1,6 @@
 # Instruction sources
 
-<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -99,7 +99,11 @@ Registration is a receipted discovery action. The runtime
 ## Hash state and provenance
 
 `craik.instruction_source_snapshot` records observed source identity
-with a `sha256` content hash when the source is present.
+with a `sha256` content hash when the source is present. Snapshot
+refresh reads each active registered source relative to the project
+repo root, applies the same path confinement as ingestion, normalizes
+line endings to `\n`, and hashes the normalized bytes. Each refresh
+also records byte count and line count for present files.
 
 <div className="craik-fields">
 
@@ -134,6 +138,13 @@ with a `sha256` content hash when the source is present.
 </div>
 
 </div>
+
+`refresh_project_snapshots(store, project_id)` persists the current
+snapshot set before returning it. That returned set is the input to
+stale invalidation; invalidation compares it with the prior stored
+snapshot for each source so a persisted refresh can still defer
+distillations whose source changed, disappeared, or was newly
+observed.
 
 `craik.instruction_provenance` links distilled material back to a
 source and optional snapshot. Provenance uses a precise line range

@@ -3,6 +3,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from craik.contracts.models import DistilledInstructionProposal, InstructionSourceSnapshot
+from craik.runtime.instruction_snapshots import (
+    compute_source_snapshot,
+    refresh_project_snapshots,
+)
+from craik.runtime.instructions import register_source
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.instruction_sources import (
     instruction_stale_risk_warnings,
@@ -118,6 +123,99 @@ def test_missing_and_new_sources_mark_distillations_stale(tmp_path: Path) -> Non
             "distilled_instruction_source_agents_md",
             "distilled_instruction_source_new",
         ]
+    finally:
+        store.close()
+
+
+def test_refresh_project_snapshots_tracks_file_lifecycle(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        source = register_source(
+            store,
+            project_id=project.id,
+            kind="agents_md",
+            owner="team:runtime",
+            registered_by="agent:test",
+        ).source
+
+        agents = repo / "AGENTS.md"
+        agents.write_text("- Prefer deterministic tests.\n", encoding="utf-8")
+        first = refresh_project_snapshots(store, project.id)[0]
+        assert first.hash_status == "new"
+        assert first.byte_count == len(b"- Prefer deterministic tests.\n")
+        assert first.line_count == 1
+
+        second = refresh_project_snapshots(store, project.id)[0]
+        assert second.hash_status == "unchanged"
+        assert second.content_hash == first.content_hash
+
+        agents.write_text("- Prefer deterministic tests.\n- Update docs.\n", encoding="utf-8")
+        changed = refresh_project_snapshots(store, project.id)[0]
+        assert changed.hash_status == "changed"
+        assert changed.content_hash != first.content_hash
+        assert changed.line_count == 2
+
+        agents.unlink()
+        missing = refresh_project_snapshots(store, project.id)[0]
+        assert missing.hash_status == "missing"
+        assert missing.content_hash is None
+        assert missing.byte_count is None
+        assert missing.line_count is None
+
+        stored = store.get_instruction_source_snapshot(missing.id)
+        assert stored == missing
+        assert compute_source_snapshot(
+            source,
+            base_dir=repo,
+            previous_snapshot=missing,
+        ).hash_status == "missing"
+    finally:
+        store.close()
+
+
+def test_refresh_snapshots_feed_stale_invalidation(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        source = register_source(
+            store,
+            project_id=project.id,
+            kind="agents_md",
+            owner="team:runtime",
+            registered_by="agent:test",
+        ).source
+        agents = repo / "AGENTS.md"
+        agents.write_text("- Prefer deterministic tests.\n", encoding="utf-8")
+        [first] = refresh_project_snapshots(store, project.id)
+
+        proposal = _proposal(source.id).model_copy(
+            update={
+                "project_id": project.id,
+                "snapshot_id": first.id,
+                "promotion_status": "approved",
+                "promoted_constraint_id": f"constraint_{source.id}",
+                "decided_by": "agent:test",
+                "decided_at": datetime(2026, 5, 15, 22, 30, tzinfo=UTC),
+            }
+        )
+        store.put_distilled_instruction_proposal(
+            DistilledInstructionProposal.model_validate(
+                proposal.model_dump(mode="json", by_alias=True)
+            )
+        )
+
+        agents.write_text("- Prefer deterministic tests.\n- Update docs.\n", encoding="utf-8")
+        current = refresh_project_snapshots(store, project.id)
+        invalidated = invalidate_stale_distillations(store, current_snapshots=current)
+
+        assert [item.id for item in invalidated] == [proposal.id]
+        updated = store.get_distilled_instruction_proposal(proposal.id)
+        assert updated is not None
+        assert updated.promotion_status == "deferred"
+        assert store.get_instruction_source_snapshot(current[0].id) == current[0]
     finally:
         store.close()
 

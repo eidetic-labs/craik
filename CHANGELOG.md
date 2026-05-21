@@ -18,6 +18,9 @@ within the `0.x.0` stability expectations described in
 - Declared instruction source parsing for v0.4.0, including Markdown, Cursor
   rules, Codex, Copilot, and policy document sources with project-root path
   confinement.
+- Instruction source snapshot refresh for v0.4.0: registered sources now hash
+  real project files with normalized newlines, persist `new` / `unchanged` /
+  `changed` / `missing` state, and feed stale distillation invalidation.
 
 ## 0.3.0 - 2026-05-20
 
