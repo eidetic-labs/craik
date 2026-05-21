@@ -79,6 +79,12 @@ promotion review, and active-context consumption.
 <small>Registry boundaries, categories, and stale invalidation.</small>
 </a>
 
+<a href="../instruction-approval/">
+<strong>Reference</strong>
+<span>Instruction approval</span>
+<small>Review receipts, override rationale, and active constraints.</small>
+</a>
+
 <a href="../instruction-distillation-view/">
 <strong>Reference</strong>
 <span>Instruction distillation view</span>

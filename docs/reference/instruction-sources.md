@@ -296,6 +296,12 @@ the context available at build time.
 <small>The 9-step pipeline these contracts feed.</small>
 </a>
 
+<a href="../distilled-instructions/">
+<strong>Reference</strong>
+<span>Distilled instructions</span>
+<small>Proposal lifecycle, categories, provenance, and snapshot linkage.</small>
+</a>
+
 <a href="../instruction-distillation-view/">
 <strong>Reference</strong>
 <span>Instruction distillation view</span>
