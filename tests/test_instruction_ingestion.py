@@ -38,7 +38,7 @@ EXPECTED_STATEMENT_COUNT: dict[str, int] = {
     "cursor_rules": 3,
     "github_copilot_instructions": 2,
     "codex_instructions": 2,
-    "policy_doc": 2,
+    "policy_doc": 1,
 }
 
 
@@ -118,6 +118,21 @@ def test_policy_doc_accepts_arbitrary_declared_path(tmp_path: Path) -> None:
     parsed = parse_instruction_source(source, base_dir=tmp_path)
     assert parsed.path == "docs/runtime-policy.md"
     assert len(parsed.statements) == EXPECTED_STATEMENT_COUNT["policy_doc"]
+    statement = parsed.statements[0]
+    assert statement.start_line == 1
+    assert statement.end_line == 4
+    assert "# Declared policy document" in statement.text
+    assert "Side effects must be policy-gated" in statement.text
+
+
+def test_parser_rejects_paths_outside_base_dir(tmp_path: Path) -> None:
+    """Declared source paths must not escape the project root."""
+    outside = tmp_path.parent / "outside-policy.md"
+    outside.write_text("# Outside\n\n- Do not read this.\n", encoding="utf-8")
+    source = _make_source("policy_doc", f"../{outside.name}")
+
+    with pytest.raises(InstructionIngestionError, match="escapes project root"):
+        parse_instruction_source(source, base_dir=tmp_path)
 
 
 def test_missing_path_raises_typed_error(tmp_path: Path) -> None:

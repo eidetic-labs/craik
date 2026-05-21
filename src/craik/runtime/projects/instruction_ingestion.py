@@ -16,8 +16,10 @@ for the same input bytes. They distinguish two source families:
 
 * **Markdown-style** sources where instructions live in bulleted lists under
   level-2+ headings. Used for AGENTS.md, CLAUDE.md, GEMINI.md, HERMES.md,
-  SKILLS.md, the GitHub Copilot instructions file, the Codex instructions
-  file, and declared policy documents.
+  SKILLS.md, the GitHub Copilot instructions file, and the Codex instructions
+  file.
+* **Policy document** sources where the declared Markdown file is captured as
+  one free-form statement block.
 * **Cursor-rules style** sources where every non-empty, non-comment line is
   one statement. Used for ``.cursorrules``.
 
@@ -42,7 +44,6 @@ _MARKDOWN_KINDS: frozenset[InstructionSourceKind] = frozenset(
         "skills_md",
         "github_copilot_instructions",
         "codex_instructions",
-        "policy_doc",
     }
 )
 _CURSOR_KINDS: frozenset[InstructionSourceKind] = frozenset({"cursor_rules"})
@@ -90,7 +91,14 @@ def parse_instruction_source(
     :class:`InstructionIngestionError` so callers can surface operator
     guidance instead of an opaque OSError.
     """
-    abs_path = (base_dir / source.path).resolve()
+    root = base_dir.resolve()
+    abs_path = (root / source.path).resolve()
+    try:
+        abs_path.relative_to(root)
+    except ValueError as exc:
+        raise InstructionIngestionError(
+            f"instruction source path escapes project root: {source.path}"
+        ) from exc
     if not abs_path.exists():
         raise InstructionIngestionError(
             f"instruction source path does not exist: {source.path}"
@@ -108,6 +116,8 @@ def parse_instruction_source(
 
     if source.kind in _MARKDOWN_KINDS:
         statements = _parse_markdown(raw_bytes)
+    elif source.kind == "policy_doc":
+        statements = _parse_policy_doc(raw_bytes)
     elif source.kind in _CURSOR_KINDS:
         statements = _parse_cursor_rules(raw_bytes)
     else:  # pragma: no cover - exhaustive over the InstructionSourceKind literal
@@ -200,6 +210,37 @@ def _parse_cursor_rules(raw_bytes: bytes) -> tuple[InstructionStatement, ...]:
             )
         )
     return tuple(statements)
+
+
+def _parse_policy_doc(raw_bytes: bytes) -> tuple[InstructionStatement, ...]:
+    """Treat a declared policy document as one free-form statement block."""
+    text = _decode(raw_bytes)
+    lines = text.splitlines()
+    first_line: int | None = None
+    last_line: int | None = None
+    for index, line in enumerate(lines, start=1):
+        if line.strip():
+            first_line = index if first_line is None else first_line
+            last_line = index
+    if first_line is None or last_line is None:
+        return ()
+
+    statement_text = "\n".join(lines[first_line - 1 : last_line]).strip()
+    first_source_line = lines[first_line - 1]
+    last_source_line = lines[last_line - 1]
+    first_stripped = first_source_line.lstrip()
+    last_stripped = last_source_line.rstrip()
+    start_column = len(first_source_line) - len(first_stripped) + 1
+    end_column = len(last_stripped)
+    return (
+        InstructionStatement(
+            text=statement_text,
+            start_line=first_line,
+            end_line=last_line,
+            start_column=start_column,
+            end_column=end_column,
+        ),
+    )
 
 
 __all__ = [

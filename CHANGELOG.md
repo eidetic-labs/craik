@@ -15,6 +15,9 @@ within the `0.x.0` stability expectations described in
 - Instruction source registration foundation for v0.4.0: typed registration
   and registry receipt contracts, a forward-only local-store table, and a
   runtime API for registering declared instruction sources before ingestion.
+- Declared instruction source parsing for v0.4.0, including Markdown, Cursor
+  rules, Codex, Copilot, and policy document sources with project-root path
+  confinement.
 
 ## 0.3.0 - 2026-05-20
 
