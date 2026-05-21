@@ -146,6 +146,7 @@ ExitDisciplineStatus = Literal["complete", "blocked"]
 SkillEntrypointKind = Literal["prompt", "script", "module", "workflow", "docs"]
 SkillOmissionSeverity = Literal["low", "medium", "high", "critical"]
 SkillScope = Literal["project", "global"]
+SkillMissingContextBehavior = Literal["reject", "record_omission", "degrade"]
 PluginEntrypointKind = Literal["command", "module", "workflow", "service", "docs"]
 PluginCapabilityRisk = Literal["low", "medium", "high", "critical"]
 PluginCompatibilityStatus = Literal["supported", "experimental", "unsupported"]
@@ -297,6 +298,7 @@ __all__ = [
     "ContextRequestKind",
     "ExitDisciplineStatus",
     "SkillEntrypointKind",
+    "SkillMissingContextBehavior",
     "SkillOmissionSeverity",
     "SkillScope",
     "PluginEntrypointKind",

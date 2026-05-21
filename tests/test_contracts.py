@@ -578,6 +578,16 @@ def test_skill_package_requires_full_semantic_version(
         CONTRACT_REGISTRY["craik.skill_package"].model_validate(payload)
 
 
+def test_skill_package_requires_expected_input_context_declarations(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.skill_package"])
+    payload["context_requirements"] = []
+
+    with pytest.raises(ValidationError, match="require context requirements"):
+        CONTRACT_REGISTRY["craik.skill_package"].model_validate(payload)
+
+
 def test_skill_registry_requires_complete_active_entry_set(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

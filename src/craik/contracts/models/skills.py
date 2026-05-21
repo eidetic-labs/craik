@@ -27,6 +27,17 @@ class SkillEntrypoint(CraikModel):
     expected_output_schemas: list[str] = Field(default_factory=list)
 
 
+class SkillContextRequirement(CraikModel):
+    """Context input a skill package expects callers to supply or explain."""
+
+    schema_name: str
+    required: bool = True
+    trust_boundary: InstructionTrustBoundary
+    missing_context_behavior: SkillMissingContextBehavior = "reject"
+    summary: str
+    evidence_ids: list[str] = Field(default_factory=list)
+
+
 class SkillPackage(CraikModel):
     """Reusable skill package metadata without plugin runtime authority."""
 
@@ -44,6 +55,7 @@ class SkillPackage(CraikModel):
     assets: list[str] = Field(default_factory=list)
     expected_input_schemas: list[str] = Field(default_factory=list)
     expected_output_schemas: list[str] = Field(default_factory=list)
+    context_requirements: list[SkillContextRequirement] = Field(default_factory=list)
     provenance_ids: list[str] = Field(default_factory=list)
     plugin_descriptor_id: str | None = None
     runtime_authority: Literal[False] = False
@@ -58,7 +70,39 @@ class SkillPackage(CraikModel):
             raise ValueError("skill packages require docs")
         if self.runtime_authority is not False:
             raise ValueError("skill packages must not carry runtime authority")
+        declared_context = {requirement.schema_name for requirement in self.context_requirements}
+        missing_context_declarations = sorted(set(self.expected_input_schemas) - declared_context)
+        if missing_context_declarations:
+            raise ValueError(
+                f"skill expected input schemas require context requirements: {missing_context_declarations}"
+            )
         return self
+
+    def validate_invocation_context(self, context: SkillInvocationContext) -> None:
+        """Validate one invocation context against this package's context requirements."""
+        if context.skill_package_id != self.id:
+            raise ValueError("skill invocation context skill_package_id does not match package")
+        supplied_inputs = {context_input.schema_name: context_input for context_input in context.inputs}
+        omitted_schemas = {omission.schema_name for omission in context.omissions}
+        for requirement in self.context_requirements:
+            context_input = supplied_inputs.get(requirement.schema_name)
+            if context_input is not None:
+                if context_input.trust_boundary != requirement.trust_boundary:
+                    raise ValueError(
+                        f"skill context input trust_boundary does not match requirement: {requirement.schema_name}"
+                    )
+                continue
+            if not requirement.required:
+                continue
+            if requirement.missing_context_behavior == "reject":
+                raise ValueError(f"missing required skill context input: {requirement.schema_name}")
+            if (
+                requirement.missing_context_behavior == "record_omission"
+                and requirement.schema_name not in omitted_schemas
+            ):
+                raise ValueError(
+                    f"missing skill context input requires omission: {requirement.schema_name}"
+                )
 
 
 class SkillContextInput(CraikModel):
@@ -67,6 +111,7 @@ class SkillContextInput(CraikModel):
     schema_name: str
     contract_id: str
     required: bool = True
+    trust_boundary: InstructionTrustBoundary = "project"
     summary: str
     evidence_ids: list[str] = Field(default_factory=list)
 
