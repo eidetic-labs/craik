@@ -1,6 +1,6 @@
 # Roadmap
 
-<p className="craik-meta"><span>20 min read</span><span>For maintainers &amp; integrators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>20 min read</span><span>For maintainers &amp; integrators</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -310,16 +310,16 @@ files and prompt compilation as first-class evidence.
 
 <div className="craik-grid">
 
-<div><h4>Source registry</h4><p>Declared registry with explicit receipted registration and documented detection order.</p></div>
-<div><h4>Source ingestion</h4><p><code>AGENTS.md</code> · <code>CLAUDE.md</code> · <code>GEMINI.md</code> · <code>HERMES.md</code> · <code>SKILLS.md</code> · <code>.cursorrules</code> · <code>.github/copilot-instructions.md</code> · <code>.codex/instructions.md</code> · declared policy docs, all confined to the project root.</p></div>
-<div><h4>Source hash tracking</h4><p>Real-file snapshot refresh with newline-normalized SHA-256 hashes and stale-invalidation input.</p></div>
-<div><h4>Line/range provenance</h4><p>Deterministic source snapshot, line/column range, summary, and excerpt hash attached to every extracted item.</p></div>
-<div><h4>Categorized extraction</h4><p>Deterministic proposal creation for instruction · policy · preference · command · boundary · handoff-rule · memory-rule · security-rule · stale-risk, with unclassified warnings.</p></div>
-<div><h4>Inter-source contradictions</h4><p>Normalized cross-source conflicts surface as contradiction reports while same-source and stale candidates are skipped.</p></div>
-<div><h4>Approval flow</h4><p>Distilled items become governing only after explicit operator approval, producing a receipt; stale or contradicted approvals require recorded overrides.</p></div>
-<div><h4>Case-file integration</h4><p>Governing distillations load as first-class evidence with provenance ranges and approval receipt snapshots.</p></div>
-<div><h4>Prompt compilation</h4><p>Governing distillations appear in compiled prompts as a separate authoritative section with deterministic ordering and stale-exclusion warnings.</p></div>
-<div><h4>Distillation CLI</h4><p><code>craik instructions register / list / approve / reject / show</code> drives the lifecycle through the active operator session.</p></div>
+<div><h4>Source registry</h4><p>Shipped first slice: declared sources are registered explicitly with receipts, project confinement, symlink escape protection, and active source lists.</p></div>
+<div><h4>Source ingestion</h4><p>Shipped first slice: <code>AGENTS.md</code> · <code>CLAUDE.md</code> · <code>GEMINI.md</code> · <code>HERMES.md</code> · <code>SKILLS.md</code> · <code>.cursorrules</code> · <code>.github/copilot-instructions.md</code> · <code>.codex/instructions.md</code> · declared policy docs parse through a project-confined pipeline.</p></div>
+<div><h4>Source hash tracking</h4><p>Shipped first slice: newline-normalized SHA-256 snapshots track new, unchanged, changed, missing, and oversize source states with stale-invalidation input.</p></div>
+<div><h4>Line/range provenance</h4><p>Shipped first slice: extracted statements retain source snapshot IDs, line/column ranges, summaries, and canonical excerpt hashes.</p></div>
+<div><h4>Categorized extraction</h4><p>Shipped first slice: deterministic proposal creation covers instruction · policy · preference · command · boundary · handoff-rule · memory-rule · security-rule · stale-risk with unclassified warnings.</p></div>
+<div><h4>Inter-source contradictions</h4><p>Shipped first slice: normalized cross-source conflicts create contradiction reports while same-source and stale candidates are skipped.</p></div>
+<div><h4>Approval flow</h4><p>Shipped first slice: governing constraints require explicit operator approval, receipt HMAC verification, active-session identity binding, and override rationale for stale or contradicted proposals.</p></div>
+<div><h4>Case-file integration</h4><p>Shipped first slice: governing distillations load as first-class evidence with provenance ranges and approval receipt snapshots.</p></div>
+<div><h4>Prompt compilation</h4><p>Shipped first slice: governing distillations render in one sanitized, deterministic <code>Active instruction constraints</code> section with stale-exclusion warnings.</p></div>
+<div><h4>Distillation CLI</h4><p>Shipped first slice: <code>craik instructions register / ingest / list / approve / reject / show</code> drives the lifecycle through the active operator session.</p></div>
 
 </div>
 
@@ -334,22 +334,23 @@ avoid stale context, and explain what changed between runs.
 
 <div className="craik-grid">
 
-<div><h4>Recovery mode</h4></div>
-<div><h4>Runtime critic</h4></div>
-<div><h4>Red team mode</h4></div>
-<div><h4>Handoff quality score</h4></div>
-<div><h4>Evidence coverage score</h4></div>
-<div><h4>Context debt tracking</h4></div>
-<div><h4>Tool result attestation</h4></div>
-<div><h4>Knowledge freshness probes</h4></div>
-<div><h4>Evidence expiration rules</h4></div>
-<div><h4>Known traps</h4></div>
-<div><h4>Negative knowledge</h4></div>
-<div><h4>Scratchpad with expiry</h4></div>
-<div><h4>First-class unknowns</h4></div>
-<div><h4>Structured context requests</h4></div>
-<div><h4>"What changed since last time" deltas</h4></div>
-<div><h4>Agent exit discipline</h4></div>
+<div><h4>Recovery mode</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/636">#636</a>.</p></div>
+<div><h4>Runtime critic</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/637">#637</a>.</p></div>
+<div><h4>Red team mode</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/638">#638</a>.</p></div>
+<div><h4>Handoff quality score</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/640">#640</a>.</p></div>
+<div><h4>Evidence coverage score</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/639">#639</a>.</p></div>
+<div><h4>Context debt tracking</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/641">#641</a>.</p></div>
+<div><h4>Tool result attestation</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/643">#643</a>.</p></div>
+<div><h4>Knowledge freshness probes</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/644">#644</a>.</p></div>
+<div><h4>Evidence expiration rules</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/642">#642</a>.</p></div>
+<div><h4>Known traps</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/646">#646</a>.</p></div>
+<div><h4>Negative knowledge</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/647">#647</a>.</p></div>
+<div><h4>Scratchpad with expiry</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/645">#645</a>.</p></div>
+<div><h4>First-class unknowns</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/648">#648</a>.</p></div>
+<div><h4>Structured context requests</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/650">#650</a>.</p></div>
+<div><h4>"What changed since last time" deltas</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/652">#652</a>.</p></div>
+<div><h4>Agent exit discipline</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/651">#651</a>.</p></div>
+<div><h4>Release readiness and docs assessment</h4><p>Goal issue: <a href="https://github.com/eidetic-labs/craik/issues/649">#649</a>.</p></div>
 
 </div>
 
@@ -886,7 +887,7 @@ issue is explicitly internal-only scaffolding.
 <div><h4>Security notes</h4></div>
 <div><h4>Migration notes</h4><p>When local state or schemas change.</p></div>
 <div><h4>Runnable demo status</h4></div>
-<div><h4>Stigmem fact</h4><p>Summarizing the release state.</p></div>
+<div><h4>Memory update</h4><p>Optional release-state memory only when Stigmem is available; this is not a release gate.</p></div>
 
 </div>
 

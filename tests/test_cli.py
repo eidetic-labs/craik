@@ -413,6 +413,39 @@ def test_instruction_register_cli_is_idempotent_and_requires_operator(
     assert "operator identity required" in missing_operator.output
 
 
+def test_instruction_ingest_cli_runs_pipeline_and_is_idempotent(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    project = _seed_instruction_project(tmp_path, home)
+    _put_operator_session(home)
+    env = {"CRAIK_HOME": str(home)}
+    registered = runner.invoke(
+        app,
+        ["instructions", "register", "agents_md", "AGENTS.md", "--project", "Example"],
+        env=env,
+    )
+
+    first = runner.invoke(
+        app,
+        ["instructions", "ingest", "--project", project.id, "--json"],
+        env=env,
+    )
+    second = runner.invoke(
+        app,
+        ["instructions", "ingest", "--project", project.id, "--json"],
+        env=env,
+    )
+    listed = runner.invoke(app, ["instructions", "list", "--json"], env=env)
+
+    assert registered.exit_code == 0, registered.output
+    assert first.exit_code == 0, first.output
+    assert second.exit_code == 0, second.output
+    assert json.loads(first.stdout)["proposal_count"] == 1
+    assert json.loads(second.stdout)["proposal_count"] == 0
+    assert json.loads(second.stdout)["skipped_existing_count"] == 1
+    proposals = json.loads(listed.stdout)
+    assert [proposal["statement"] for proposal in proposals] == ["Run tests before merge."]
+
+
 def test_instruction_list_cli_filters_and_prints_json(tmp_path: Path) -> None:
     home = tmp_path / "home"
     project_id = _seed_instruction_project(tmp_path, home).id

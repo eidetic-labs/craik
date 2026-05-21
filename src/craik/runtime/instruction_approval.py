@@ -2,19 +2,66 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+import os
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from craik.contracts.models import (
     DistilledInstructionProposal,
     InstructionPromotionReview,
     PromotedInstructionConstraint,
 )
+from craik.runtime.auth.operator import (
+    OperatorSessionNotFoundError,
+    OperatorSessionStore,
+)
 from craik.runtime.store import LocalStore
+
+_HMAC_SECRET_FILENAME = "instruction-approval-hmac.key"  # nosec B105
+_OWNER_ONLY_FILE_MODE = 0o600
 
 
 class InstructionApprovalError(RuntimeError):
     """Raised when instruction approval cannot proceed."""
+
+    code = "approval.error"
+
+
+class MissingOperatorIdentityError(InstructionApprovalError):
+    """Raised when an approval caller does not supply an operator identity."""
+
+    code = "operator.identity.missing"
+
+    def __init__(self) -> None:
+        super().__init__("instruction approval rejected: explicit operator identity is required")
+
+
+class MissingOperatorSessionError(InstructionApprovalError):
+    """Raised when approval requires a bound operator session but none exists."""
+
+    code = "operator.session.missing"
+    remediation = "run `craik auth login`, or pass allow_unbound=True for unattended use"
+
+    def __init__(self) -> None:
+        super().__init__("instruction approval rejected: active operator session is required")
+
+
+class OperatorIdentityMismatchError(InstructionApprovalError):
+    """Raised when supplied operator identity differs from the active session."""
+
+    code = "operator.session.mismatch"
+
+    def __init__(self, supplied: str) -> None:
+        super().__init__(
+            "instruction approval rejected: supplied operator identity does not "
+            "match the active session subject"
+        )
+        self.supplied_identity = supplied
 
 
 @dataclass(frozen=True)
@@ -34,11 +81,17 @@ def approve_instruction(
     rationale: str,
     override: bool = False,
     override_rationale: str | None = None,
+    allow_unbound: bool = False,
     now: datetime | None = None,
 ) -> InstructionApprovalResult:
     """Approve a distilled instruction and make it governing."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity)
+    _require_operator(
+        operator_identity,
+        proposal_id=proposal.id,
+        allow_unbound=allow_unbound,
+    )
+    hmac_key = _hmac_key_for_store(store)
     existing = store.get_instruction_promotion_review(_review_id(proposal.id))
     if proposal.promotion_status == "governing" and existing is not None:
         constraint = store.get_promoted_instruction_constraint(
@@ -77,6 +130,7 @@ def approve_instruction(
         override_rationale=override_rationale if override else None,
         created_at=decided_at,
     )
+    review = _attach_receipt_hmac(review, hmac_key)
     updated = _proposal_update(
         proposal,
         promotion_status="governing",
@@ -96,11 +150,17 @@ def reject_instruction(
     proposal_id: str,
     operator_identity: str,
     rationale: str,
+    allow_unbound: bool = False,
     now: datetime | None = None,
 ) -> InstructionApprovalResult:
     """Reject a distilled instruction with an auditable denial receipt."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity)
+    _require_operator(
+        operator_identity,
+        proposal_id=proposal.id,
+        allow_unbound=allow_unbound,
+    )
+    hmac_key = _hmac_key_for_store(store)
     decided_at = now or datetime.now(UTC)
     review = InstructionPromotionReview(
         id=_review_id(proposal.id),
@@ -111,6 +171,7 @@ def reject_instruction(
         rationale=rationale,
         created_at=decided_at,
     )
+    review = _attach_receipt_hmac(review, hmac_key)
     updated = _proposal_update(
         proposal,
         promotion_status="rejected",
@@ -129,9 +190,7 @@ def list_governing(
     project_id: str | None = None,
 ) -> list[PromotedInstructionConstraint]:
     """Return active constraints from governing distilled instructions only."""
-    proposals = {
-        proposal.id: proposal for proposal in store.list_distilled_instruction_proposals()
-    }
+    proposals = {proposal.id: proposal for proposal in store.list_distilled_instruction_proposals()}
     constraints = [
         constraint
         for constraint in store.list_promoted_instruction_constraints()
@@ -141,6 +200,9 @@ def list_governing(
     for constraint in constraints:
         proposal = proposals.get(constraint.proposal_id)
         if proposal is None:
+            continue
+        review = store.get_instruction_promotion_review(_review_id(proposal.id))
+        if review is None or not verify_review_hmac(review, store):
             continue
         if proposal.promotion_status == "governing" and not proposal.contradiction_ids:
             governing.append(constraint)
@@ -154,11 +216,88 @@ def _proposal(store: LocalStore, proposal_id: str) -> DistilledInstructionPropos
     return proposal
 
 
-def _require_operator(operator_identity: str) -> None:
+def verify_review_hmac(
+    review: InstructionPromotionReview,
+    store: LocalStore,
+) -> bool:
+    """Return whether a promotion review has a valid integrity HMAC."""
+    if not review.receipt_hmac:
+        return False
+    key = _hmac_key_for_store(store)
+    expected = _review_hmac(review, key)
+    return hmac.compare_digest(review.receipt_hmac, expected)
+
+
+def _require_operator(
+    operator_identity: str,
+    *,
+    proposal_id: str,
+    allow_unbound: bool,
+) -> None:
     if not operator_identity.strip():
-        raise InstructionApprovalError(
-            "instruction approval requires an explicit operator identity"
+        raise MissingOperatorIdentityError()
+    try:
+        session = OperatorSessionStore.from_env().get()
+    except OperatorSessionNotFoundError:
+        if not allow_unbound:
+            error: InstructionApprovalError = MissingOperatorSessionError()
+            _audit_event(
+                "instruction_approval.operator_check_failed",
+                code=error.code,
+                proposal_id=proposal_id,
+                supplied_identity_hash=_identity_hash(operator_identity),
+            )
+            raise error from None
+        return
+    if session.subject != operator_identity:
+        error = OperatorIdentityMismatchError(operator_identity)
+        _audit_event(
+            "instruction_approval.operator_check_failed",
+            code=error.code,
+            proposal_id=proposal_id,
+            supplied_identity_hash=_identity_hash(operator_identity),
         )
+        raise error
+
+
+def _audit_event(name: str, **fields: object) -> None:
+    """Hook for structured approval audit events."""
+
+
+def _identity_hash(operator_identity: str) -> str:
+    return hashlib.sha256(operator_identity.encode("utf-8")).hexdigest()[:16]
+
+
+def _hmac_key_for_store(store: LocalStore) -> bytes:
+    secret = _approval_secret_path(store)
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    if secret.exists():
+        raw = secret.read_text(encoding="utf-8").strip()
+    else:
+        raw = secrets.token_hex(32)
+        secret.write_text(f"{raw}\n", encoding="utf-8")
+        if os.name == "posix":
+            secret.chmod(_OWNER_ONLY_FILE_MODE)
+    return hashlib.sha256(raw.encode("utf-8")).digest()
+
+
+def _approval_secret_path(store: LocalStore) -> Path:
+    home = store.database_path.parent.parent
+    return home / "secrets" / _HMAC_SECRET_FILENAME
+
+
+def _attach_receipt_hmac(
+    review: InstructionPromotionReview,
+    key: bytes,
+) -> InstructionPromotionReview:
+    return review.model_copy(update={"receipt_hmac": _review_hmac(review, key)})
+
+
+def _review_hmac(review: InstructionPromotionReview, key: bytes) -> str:
+    payload = review.model_dump(mode="json", by_alias=True)
+    payload.pop("receipt_hmac", None)
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key, encoded, hashlib.sha256).hexdigest()
 
 
 def _require_approvable(
@@ -204,9 +343,7 @@ def _supersede_existing_governing(
             )
         )
         if existing.promoted_constraint_id:
-            constraint = store.get_promoted_instruction_constraint(
-                existing.promoted_constraint_id
-            )
+            constraint = store.get_promoted_instruction_constraint(existing.promoted_constraint_id)
             if constraint is not None:
                 store.put_promoted_instruction_constraint(
                     constraint.model_copy(update={"active": False})

@@ -69,6 +69,20 @@ Review commands run through the active operator session. The runtime
 records who made the decision, when it happened, the rationale, and
 the proposal state at review time.
 
+Direct runtime API calls also require an active operator session by
+default. Test harnesses or tightly controlled internal tooling may opt
+into unbound approval by passing `allow_unbound=True`; production
+extensions should leave the default in place so the recorded operator
+identity is bound to the current session.
+
+Approval operator checks raise typed `InstructionApprovalError`
+subclasses with stable `code` values:
+`operator.identity.missing`, `operator.session.missing`, and
+`operator.session.mismatch`. Missing-session errors also expose a
+`remediation` hint. Session-related failures emit a structured audit
+hook with the proposal ID and a short hash of the supplied identity,
+never the active session subject.
+
 ## Receipts
 
 `craik.instruction_promotion_review` links the decision to the
@@ -85,9 +99,11 @@ constraint when one is created.
 </div>
 
 Active constraints retain proposal ID, source ID, source snapshot ID,
-provenance IDs, evidence IDs, and review links. Downstream consumers
-must read governing constraints from the approval API instead of raw
-proposal rows.
+provenance IDs, evidence IDs, review links, and a receipt HMAC.
+Downstream consumers must read governing constraints from the approval
+API instead of raw proposal rows. Reviews with missing or invalid
+receipt HMACs are treated as needing re-approval and are excluded from
+active runtime context.
 
 ## Overrides
 
@@ -107,7 +123,8 @@ craik instructions approve <item-id> \
 
 The review records whether a stale guard or contradiction guard was
 bypassed. Missing rationale fails before the proposal becomes
-governing.
+governing, and the resulting review is integrity-protected before it
+is stored.
 
 </div>
 

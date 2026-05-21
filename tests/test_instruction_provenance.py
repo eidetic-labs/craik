@@ -167,10 +167,39 @@ def test_extracts_and_persists_provenance_for_each_source_kind(
             assert record.end_line <= len(source_lines)
             assert record.summary == statement.text.splitlines()[0].strip()[:200]
             assert record.excerpt_hash == hashlib.sha256(
-                statement.text.encode("utf-8")
+                statement.text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
             ).hexdigest()
     finally:
         store.close()
+
+
+def test_excerpt_hash_normalizes_newlines(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "lf-policy.md").write_text("Line one.\nLine two.\n", encoding="utf-8")
+    (tmp_path / "docs" / "crlf-policy.md").write_bytes(b"Line one.\r\nLine two.\r\n")
+    source = _source("policy_doc", "docs/lf-policy.md")
+    snapshot = _snapshot("new").model_copy(update={"path": "docs/lf-policy.md"})
+    lf = parse_instruction_source(
+        source,
+        base_dir=tmp_path,
+    )
+    crlf = parse_instruction_source(
+        source.model_copy(update={"path": "docs/crlf-policy.md"}),
+        base_dir=tmp_path,
+    )
+
+    lf_record = extract_instruction_provenance(
+        lf,
+        snapshot=snapshot,
+        project_id=source.project_id,
+    )[0]
+    crlf_record = extract_instruction_provenance(
+        crlf,
+        snapshot=snapshot.model_copy(update={"path": "docs/crlf-policy.md"}),
+        project_id=source.project_id,
+    )[0]
+
+    assert lf_record.excerpt_hash == crlf_record.excerpt_hash
 
 
 def test_provenance_extraction_is_deterministic_and_idempotent(tmp_path: Path) -> None:

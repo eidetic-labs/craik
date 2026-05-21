@@ -40,17 +40,14 @@ use declared project policy paths.
 ## 2 · Ingest proposals
 
 Ingestion refreshes snapshots, parses sources, attaches provenance,
-categorizes statements, and creates inactive proposals. In v0.4.0 the
-ingestion entrypoint is the runtime API used by project workflows and
-tests:
+categorizes statements, defers stale proposals, opens contradiction
+reports, and creates inactive proposals.
 
-```python
-from craik.runtime.instruction_distillation import ingest_project_instructions
-
-summary = ingest_project_instructions(store, project_id)
+```sh
+craik instructions ingest --project my-project
 ```
 
-The operator CLI starts from the resulting review queue:
+Then inspect the resulting review queue:
 
 ```sh
 craik instructions list --status proposed
@@ -89,8 +86,9 @@ craik instructions approve <item-id> \
 ```
 
 Use overrides sparingly. The review receipt records whether the
-approval bypassed stale or contradiction guards, and future release
-assessments should be able to explain that decision.
+approval bypassed stale or contradiction guards. Approval receipts also
+carry an integrity HMAC; constraints with missing or invalid receipt
+HMACs are excluded from case files and compiled prompts.
 
 ## 4 · Verify runtime use
 

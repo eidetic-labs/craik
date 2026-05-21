@@ -4,7 +4,6 @@ from pathlib import Path
 from craik.contracts.models import (
     DistilledInstructionProposal,
     InstructionProvenance,
-    PromotedInstructionConstraint,
 )
 from craik.runtime.instruction_approval import approve_instruction, reject_instruction
 from craik.runtime.instruction_distillation import ingest_project_instructions
@@ -109,6 +108,7 @@ def test_case_file_loads_governing_distillations_with_provenance_and_receipt(
         proposal = store.list_distilled_instruction_proposals()[0]
         approval = approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=proposal.id,
             operator_identity="user:maintainer",
             rationale="Valid project instruction.",
@@ -169,6 +169,7 @@ def test_case_file_removes_rejected_or_superseded_distillations_from_new_builds(
             )
         approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=first.id,
             operator_identity="user:maintainer",
             rationale="Initial approval.",
@@ -176,12 +177,14 @@ def test_case_file_removes_rejected_or_superseded_distillations_from_new_builds(
         first_case = CaseFileAssembler(store).build(task.id)
         reject_instruction(
             store,
+            allow_unbound=True,
             proposal_id=first.id,
             operator_identity="user:maintainer",
             rationale="Revoked.",
         )
         approve_instruction(
             store,
+            allow_unbound=True,
             proposal_id=second.id,
             operator_identity="user:maintainer",
             rationale="Replacement.",
@@ -234,6 +237,7 @@ def test_case_file_orders_governing_distillations_by_category(tmp_path: Path) ->
             )
             approve_instruction(
                 store,
+                allow_unbound=True,
                 proposal_id=proposal.id,
                 operator_identity="user:maintainer",
                 rationale="Valid project instruction.",
@@ -250,26 +254,14 @@ def test_case_file_orders_governing_distillations_by_category(tmp_path: Path) ->
 
 
 def _approved_constraint(store: LocalStore, project_id: str) -> None:
-    proposal = _proposal(
-        project_id,
-        status="governing",
-        promoted_constraint_id="constraint_distilled_instruction",
-    )
+    proposal = _proposal(project_id, status="proposed")
     store.put_distilled_instruction_proposal(proposal)
-    store.put_promoted_instruction_constraint(
-        PromotedInstructionConstraint(
-            id="constraint_distilled_instruction",
-            project_id=project_id,
-            proposal_id=proposal.id,
-            source_id=proposal.source_id,
-            snapshot_id=proposal.snapshot_id,
-            category=proposal.category,
-            statement=proposal.statement,
-            provenance_ids=proposal.provenance_ids,
-            evidence_ids=proposal.evidence_ids,
-            active=True,
-            created_at="2026-05-15T22:31:00Z",
-        )
+    approve_instruction(
+        store,
+        allow_unbound=True,
+        proposal_id=proposal.id,
+        operator_identity="user:maintainer",
+        rationale="Valid project instruction.",
     )
 
 
@@ -308,7 +300,7 @@ def _repo(tmp_path: Path) -> Path:
     (repo / "README.md").write_text("# Example\n")
     (repo / "docs" / "guide.md").write_text("# Guide\n")
     (repo / "docs" / "adr" / "0001.md").write_text("# ADR\n")
-    (repo / "pyproject.toml").write_text("[project]\nname = \"example\"\n")
+    (repo / "pyproject.toml").write_text('[project]\nname = "example"\n')
     _run_git(repo, "init", "-b", "main")
     _run_git(repo, "add", "README.md", "docs", "pyproject.toml")
     _run_git(repo, "commit", "-m", "initial")

@@ -1,13 +1,53 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-20</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current release
-gate is `0.4.0`; historical sign-offs remain below for audit continuity.
+gate is `0.5.0`; historical sign-offs remain below for audit continuity.
+
+</div>
+
+## v0.5.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Quality, continuity, and recovery gate.**
+
+`0.5.0` starts with one goal issue for each roadmap capability plus a
+release-readiness issue. Each issue must ship implementation, tests,
+docs, and requirement validation before the milestone closes.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Recovery mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/636">#636</a></dd></div>
+<div><dt>Runtime critic</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/637">#637</a></dd></div>
+<div><dt>Red team mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/638">#638</a></dd></div>
+<div><dt>Evidence coverage score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/639">#639</a></dd></div>
+<div><dt>Handoff quality score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/640">#640</a></dd></div>
+<div><dt>Context debt tracking</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/641">#641</a></dd></div>
+<div><dt>Evidence expiration rules</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/642">#642</a></dd></div>
+<div><dt>Tool result attestation</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/643">#643</a></dd></div>
+<div><dt>Knowledge freshness probes</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/644">#644</a></dd></div>
+<div><dt>Scratchpad with expiry</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/645">#645</a></dd></div>
+<div><dt>Known traps</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/646">#646</a></dd></div>
+<div><dt>Negative knowledge</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/647">#647</a></dd></div>
+<div><dt>First-class unknowns</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/648">#648</a></dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/649">#649</a></dd></div>
+<div><dt>Structured context requests</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/650">#650</a></dd></div>
+<div><dt>Agent exit discipline</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/651">#651</a></dd></div>
+<div><dt>What changed since last time deltas</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/652">#652</a></dd></div>
 
 </div>
 
@@ -37,8 +77,8 @@ and active constraints flow into case files and compiled prompts.
 
 <div>
 <dt>Package version</dt>
-<dt><span className="craik-fields__type">ready</span></dt>
-<dd>The implementation and documentation are ready for the release-prep commit that bumps <code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> to <code>0.4.0</code>.</dd>
+<dt><span className="craik-fields__type">shipped</span></dt>
+<dd><code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> declare <code>0.4.0</code>.</dd>
 </div>
 
 <div>
@@ -80,7 +120,7 @@ and active constraints flow into case files and compiled prompts.
 <div>
 <dt>Approval flow and receipts</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Proposals become governing only through explicit operator approval receipts; re-approval is idempotent, rejections are receipted, and stale or contradicted approvals require override rationale.</dd>
+<dd>Proposals become governing only through explicit operator approval receipts; re-approval is idempotent, rejections are receipted, stale or contradicted approvals require override rationale, and active consumers exclude constraints whose approval receipt HMAC is missing or invalid.</dd>
 </div>
 
 <div>
@@ -92,7 +132,7 @@ and active constraints flow into case files and compiled prompts.
 <div>
 <dt>Distillation CLI</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd><code>craik instructions register</code>, <code>list</code>, <code>approve</code>, <code>reject</code>, and <code>show</code> expose source registration, proposal review, approval decisions, rejection decisions, and provenance-aware item inspection through the active operator session.</dd>
+<dd><code>craik instructions register</code>, <code>ingest</code>, <code>list</code>, <code>approve</code>, <code>reject</code>, and <code>show</code> expose source registration, pipeline execution, proposal review, approval decisions, rejection decisions, and provenance-aware item inspection through the active operator session.</dd>
 </div>
 
 <div>
@@ -103,8 +143,8 @@ and active constraints flow into case files and compiled prompts.
 
 <div>
 <dt>Release actions</dt>
-<dt><span className="craik-fields__type">pending</span></dt>
-<dd>Rename <code>CHANGELOG.md</code> <code>Unreleased</code> to <code>0.4.0 - YYYY-MM-DD</code>, bump package and docs versions, create immutable tag <code>v0.4.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+<dt><span className="craik-fields__type">complete</span></dt>
+<dd><code>v0.4.0</code> is tagged, published to PyPI, and represented by the GitHub Release. The GitHub milestone is closed with zero open issues.</dd>
 </div>
 
 </div>
@@ -118,10 +158,13 @@ uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_doc_links.py
 uv run python scripts/check_public_docs_hygiene.py
-uv run pytest tests/test_instruction_sources.py tests/test_instruction_ingestion.py tests/test_instruction_provenance.py tests/test_instruction_distillation.py tests/test_instruction_invalidation.py tests/test_instruction_contradictions.py tests/test_instruction_promotion.py tests/test_instruction_runtime_context.py tests/test_instruction_workflow_docs.py tests/test_case_files.py tests/test_prompts.py tests/test_contracts.py -q
+uv run pytest tests/test_instruction_sources.py tests/test_instruction_ingestion.py tests/test_instruction_provenance.py tests/test_instruction_distillation.py tests/test_instruction_invalidation.py tests/test_instruction_contradictions.py tests/test_instruction_promotion.py tests/test_instruction_runtime_context.py tests/test_instruction_workflow_docs.py tests/test_instruction_pipeline_e2e.py tests/test_case_files.py tests/test_prompts.py tests/test_contracts.py -q
 ```
 
 ### v0.4.0 Security Notes
+
+The v0.4.0 trust boundary is also documented in
+[SECURITY.md](https://github.com/eidetic-labs/craik/blob/main/SECURITY.md).
 
 - Instruction sources must be registered explicitly and remain confined
   to the registered project root before ingestion.
@@ -131,6 +174,11 @@ uv run pytest tests/test_instruction_sources.py tests/test_instruction_ingestion
 - Stale or contradicted approvals require an explicit override and
   rationale, and review receipts record whether stale or contradiction
   guards were bypassed.
+- Approval receipt HMACs, backed by an owner-only local secret, are
+  verified before governing constraints are rendered into case files,
+  onboarding context, handoffs, or compiled prompts.
+- Release workflows pin GitHub Actions to immutable SHAs and attest package
+  provenance before PyPI publish.
 - Stale governing items are excluded from compiled prompt context and
   surfaced as distillation warnings instead of silent authority.
 - Contradiction detection opens reviewable reports for cross-source

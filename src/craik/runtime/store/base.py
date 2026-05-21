@@ -128,6 +128,7 @@ class LocalStoreCore:
         self._connection = sqlite3.connect(self.database_path)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
+        self._transaction_depth = 0
 
     @classmethod
     def from_paths(cls, paths: CraikPaths) -> Self:
@@ -181,11 +182,37 @@ class LocalStoreCore:
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
         """Run statements in a commit-or-rollback transaction."""
-        try:
-            with self._connection:
+        if self._transaction_depth:
+            name = f"craik_savepoint_{self._transaction_depth}"
+            self._transaction_depth += 1
+            try:
+                self._connection.execute(f"SAVEPOINT {name}")
                 yield self._connection
+                self._connection.execute(f"RELEASE SAVEPOINT {name}")
+            except Exception as error:
+                self._connection.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                self._connection.execute(f"RELEASE SAVEPOINT {name}")
+                if not isinstance(error, sqlite3.DatabaseError):
+                    raise
+                raise LocalStoreCorruptError(
+                    f"local store transaction failed: {error}"
+                ) from error
+            finally:
+                self._transaction_depth -= 1
+            return
+        self._transaction_depth = 1
+        try:
+            self._connection.execute("BEGIN IMMEDIATE")
+            yield self._connection
+            self._connection.execute("COMMIT")
         except sqlite3.DatabaseError as error:
+            self._connection.execute("ROLLBACK")
             raise LocalStoreCorruptError(f"local store transaction failed: {error}") from error
+        except Exception:
+            self._connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._transaction_depth = 0
 
     def put_contract(self, contract: BaseModel) -> None:
         """Persist a supported contract payload after validation."""

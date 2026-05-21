@@ -13,7 +13,10 @@ from craik.contracts.models import (
     RunnerCapabilityMatrix,
     TaskRequest,
 )
+from craik.runtime.instruction_approval import verify_review_hmac
+from craik.runtime.instruction_snapshots import refresh_project_snapshots
 from craik.runtime.policy.policy import generate_policy_envelope
+from craik.runtime.projects.instruction_sources import invalidate_stale_distillations
 from craik.runtime.runners.runners import get_runner_capability_matrix
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
@@ -66,6 +69,8 @@ class PromptCompiler:
             "craik.handoff",
         ]
         context_omissions = _context_omissions(case_file)
+        if task.project_id:
+            _refresh_instruction_freshness(self.store, task.project_id)
         distillations = governing_distillations(self.store, task.project_id or "")
         distillation_warnings = _distillation_warnings(self.store, task.project_id)
         sections = _sections(
@@ -245,6 +250,15 @@ def _distillation_warnings(store: LocalStore, project_id: str | None) -> list[st
                 f"Stale governing distillation excluded: {proposal.id} "
                 f"from {proposal.source_id}"
             )
+        if proposal.project_id == project_id and proposal.promotion_status == "governing":
+            review = store.get_instruction_promotion_review(
+                f"promotion_review_{proposal.id}"
+            )
+            if review is None or not verify_review_hmac(review, store):
+                warnings.append(
+                    f"Tampered or unverified governing distillation excluded: {proposal.id} "
+                    f"from {proposal.source_id}"
+                )
     return sorted(set(warnings))
 
 
@@ -290,7 +304,7 @@ def _distillation_block(
 
 def _render_distillation_item(item: dict[str, object]) -> str:
     category = str(item.get("category", "uncategorized"))
-    statement = str(item.get("statement", ""))
+    statement = _sanitize_distillation_statement(str(item.get("statement", "")))
     source_id = str(item.get("source_id", "unknown_source"))
     provenance = item.get("provenance", [])
     locations = []
@@ -308,7 +322,36 @@ def _render_distillation_item(item: dict[str, object]) -> str:
             else:
                 locations.append(f"{path}:{start_line}-{end_line}")
     location_text = ", ".join(locations) if locations else "unknown"
-    return f"({category}) {statement} [{source_id} @ {location_text}]"
+    rendered = f"({category}) `{statement}` [{source_id} @ {location_text}]"
+    if "\n" in rendered or "\r" in rendered or "##" in rendered:
+        raise PromptCompilerError("unsafe instruction constraint rendering blocked")
+    return rendered
+
+
+def _sanitize_distillation_statement(statement: str) -> str:
+    without_controls = "".join(
+        " " if _is_forbidden_control(char) else char for char in statement
+    )
+    single_line = " ".join(without_controls.replace("\r", "\n").splitlines())
+    normalized = " ".join(single_line.split())
+    escaped = normalized.replace("`", "\\`")
+    while "##" in escaped:
+        escaped = escaped.replace("##", "# #")
+    return escaped[:2000]
+
+
+def _is_forbidden_control(char: str) -> bool:
+    codepoint = ord(char)
+    return codepoint < 32 or codepoint == 127
+
+
+def _refresh_instruction_freshness(store: LocalStore, project_id: str) -> None:
+    snapshots = refresh_project_snapshots(store, project_id)
+    invalidate_stale_distillations(
+        store,
+        current_snapshots=snapshots,
+        decided_by="agent:prompt-compiler",
+    )
 
 
 def _distillation_sort_key(item: dict[str, object]) -> tuple[int, str, str]:

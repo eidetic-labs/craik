@@ -55,6 +55,37 @@ Please report issues involving:
 - plugin sandbox failures,
 - and unsafe default configuration.
 
+## Runtime Instruction Distillation Trust Model
+
+Craik treats declared instruction files as content-untrusted evidence.
+Anyone who can change a registered source file can propose runtime
+constraints, but those proposals do not become authority until an
+operator approves them.
+
+- `~/.craik/` must be private to the operator account. Shared write
+  access to the local store, operator session, or receipt files is a
+  full compromise of local audit integrity.
+- Registration is explicit and project-confined. Absolute paths,
+  parent-directory escapes, and symlink escapes are rejected before a
+  source enters the instruction registry.
+- Ingestion refreshes source snapshots, defers stale proposals, and
+  opens contradiction reports before review.
+- Approval is the authority boundary. Governing constraints require an
+  operator approval receipt, and stale or contradicted approvals require
+  explicit override rationale.
+- Approval receipts carry an integrity HMAC backed by an owner-only
+  local secret under Craik home. Case files, onboarding context,
+  handoffs, and compiled prompts exclude governing constraints whose
+  approval receipt is missing or fails verification.
+- On POSIX systems Craik sets owner-only permissions on local secrets and
+  session files. Windows support currently relies on the default user
+  profile ACLs; if Windows becomes a first-class target, Craik should add
+  explicit ACL hardening and validation for these files.
+- Compiled prompts render approved instruction text as sanitized
+  single-line literal content inside the `Active instruction
+  constraints` section to reduce prompt-injection risk from registered
+  source files.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

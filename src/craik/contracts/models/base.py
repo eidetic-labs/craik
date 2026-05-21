@@ -170,7 +170,7 @@ InstructionSourceKind = Literal[
     "policy_doc",
 ]
 InstructionTrustBoundary = Literal["project", "repository", "organization", "user", "external"]
-InstructionSourceHashStatus = Literal["unchanged", "changed", "missing", "new"]
+InstructionSourceHashStatus = Literal["unchanged", "changed", "missing", "new", "oversize"]
 DistilledInstructionCategory = Literal[
     "instruction",
     "policy",

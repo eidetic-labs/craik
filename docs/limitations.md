@@ -137,7 +137,7 @@ Scheduled milestones with explicit version targets.
 <div>
 <dt>Runtime instruction distillation</dt>
 <dt><span className="craik-fields__type">v0.4.0</span></dt>
-<dd>Pipeline that promotes declared instruction files to runtime proposals.</dd>
+<dd>Declared instruction sources now flow through registration, ingestion, stale invalidation, contradiction surfacing, approval receipts, and prompt/case-file integration. The remaining limitation is operational maturity: teams still need project-specific review habits for deciding which distilled proposals should become governing.</dd>
 </div>
 
 <div>

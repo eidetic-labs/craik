@@ -131,9 +131,9 @@ def test_policy_envelope_operator_fields_round_trip(
 def test_instruction_registration_contracts_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
-    registration = CONTRACT_REGISTRY[
-        "craik.instruction_source_registration"
-    ].model_validate(fixtures["craik.instruction_source_registration"])
+    registration = CONTRACT_REGISTRY["craik.instruction_source_registration"].model_validate(
+        fixtures["craik.instruction_source_registration"]
+    )
     receipt = CONTRACT_REGISTRY["craik.instruction_registry_receipt"].model_validate(
         fixtures["craik.instruction_registry_receipt"]
     )
@@ -171,9 +171,7 @@ def test_instruction_approval_contract_fields_round_trip(
     proposal = CONTRACT_REGISTRY["craik.distilled_instruction_proposal"].model_validate(
         proposal_payload
     )
-    review = CONTRACT_REGISTRY["craik.instruction_promotion_review"].model_validate(
-        review_payload
-    )
+    review = CONTRACT_REGISTRY["craik.instruction_promotion_review"].model_validate(review_payload)
 
     assert proposal.promotion_status == "governing"
     dumped_review = review.model_dump(mode="json", by_alias=True)
@@ -277,6 +275,38 @@ def test_task_request_auth_context_fields_round_trip(
     assert dumped["source_task_id"] == "task_docs_reconcile"
     assert dumped["source_run_id"] == "run_docs_reconcile"
     assert dumped["expected_duration_minutes"] == 90
+
+
+def test_instruction_source_snapshot_accepts_oversize_without_hash(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.instruction_source_snapshot"])
+    payload.update(
+        {
+            "id": "instruction_snapshot_agents_md_oversize",
+            "content_hash": None,
+            "hash_status": "oversize",
+            "byte_count": 10485761,
+            "line_count": None,
+        }
+    )
+
+    parsed = CONTRACT_REGISTRY["craik.instruction_source_snapshot"].model_validate(payload)
+
+    assert parsed.hash_status == "oversize"
+    assert parsed.content_hash is None
+
+
+def test_instruction_promotion_review_receipt_hmac_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.instruction_promotion_review"])
+    payload["receipt_hmac"] = "a" * 64
+
+    parsed = CONTRACT_REGISTRY["craik.instruction_promotion_review"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["receipt_hmac"] == "a" * 64
 
 
 def test_agent_message_contract_round_trip() -> None:

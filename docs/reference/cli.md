@@ -434,6 +434,19 @@ Options:
 - `--override`: Approve a stale or contradicted item intentionally.; default `false`
 - `--override-rationale`: Required rationale for override approval.
 
+## `craik instructions ingest`
+
+Ingest registered instruction sources into reviewable proposals.
+
+```text
+craik instructions ingest [OPTIONS]
+```
+
+Options:
+
+- `--project`: Project id or name. Defaults when one project exists.
+- `--json, --table`: Print JSON instead of a table.; default `false`
+
 ## `craik instructions list`
 
 List distilled instruction proposals.

@@ -219,10 +219,11 @@ through the v0.12 roadmap.
 The remaining MVP work is to harden these contract and helper surfaces into one
 complete release-quality workflow: remote Stigmem write promotion,
 God-file/runtime package cleanup, ADR-backed design decisions, and docs/test
-depth comparable to Stigmem. Package version `0.2.0` marks the durable
-execution continuity gate after the first governed provider, credential, and
-operator-identity substrate; roadmap sections remain implementation gates, not
-`1.0.0` readiness claims. See
+depth comparable to Stigmem. Package version `0.4.0` marks the runtime
+instruction distillation gate after declared instruction sources, stale
+invalidation, contradiction surfacing, approval receipts, and prompt/case-file
+integration shipped; roadmap sections remain implementation gates, not `1.0.0`
+readiness claims. See
 [Robust MVP Roadmap](docs/mvp-roadmap.md).
 
 ## Implementation Stack

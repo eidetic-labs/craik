@@ -166,11 +166,75 @@ def test_refresh_project_snapshots_tracks_file_lifecycle(tmp_path: Path) -> None
 
         stored = store.get_instruction_source_snapshot(missing.id)
         assert stored == missing
-        assert compute_source_snapshot(
-            source,
-            base_dir=repo,
-            previous_snapshot=missing,
-        ).hash_status == "missing"
+        assert (
+            compute_source_snapshot(
+                source,
+                base_dir=repo,
+                previous_snapshot=missing,
+            ).hash_status
+            == "missing"
+        )
+    finally:
+        store.close()
+
+
+def test_refresh_project_snapshots_skips_oversize_sources(tmp_path: Path, monkeypatch) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        register_source(
+            store,
+            project_id=project.id,
+            kind="agents_md",
+            owner="team:runtime",
+            registered_by="agent:test",
+        )
+        monkeypatch.setattr(
+            "craik.runtime.instruction_snapshots.MAX_INSTRUCTION_SOURCE_BYTES",
+            8,
+        )
+        (repo / "AGENTS.md").write_text("- Prefer deterministic tests.\n", encoding="utf-8")
+
+        snapshot = refresh_project_snapshots(store, project.id)[0]
+
+        assert snapshot.hash_status == "oversize"
+        assert snapshot.content_hash is None
+        assert snapshot.byte_count > 8
+    finally:
+        store.close()
+
+
+def test_refresh_project_snapshots_enforces_project_byte_budget(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = _repo(tmp_path)
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+        for name in ("a.md", "b.md", "c.md"):
+            register_source(
+                store,
+                project_id=project.id,
+                kind="policy_doc",
+                path=name,
+                owner="team:runtime",
+                registered_by="agent:test",
+            )
+            (repo / name).write_text("- Prefer deterministic tests.\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "craik.runtime.instruction_snapshots.MAX_PROJECT_INSTRUCTION_SOURCE_BYTES",
+            60,
+        )
+
+        snapshots = refresh_project_snapshots(store, project.id)
+        snapshot_by_path = {snapshot.path: snapshot for snapshot in snapshots}
+
+        assert snapshot_by_path["a.md"].hash_status == "new"
+        assert snapshot_by_path["b.md"].hash_status == "new"
+        assert snapshot_by_path["c.md"].hash_status == "oversize"
+        assert snapshot_by_path["c.md"].content_hash is None
     finally:
         store.close()
 

@@ -1,3 +1,4 @@
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from craik.runtime.instructions import (
     register_source,
 )
 from craik.runtime.paths import ensure_craik_home
+from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.store import LocalStore
 
 
@@ -234,3 +236,66 @@ def test_register_source_rejects_duplicate_source_id(tmp_path: Path) -> None:
             )
     finally:
         store.close()
+
+
+def test_register_source_rejects_absolute_parent_and_symlink_escape_paths(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "policy.md").write_text("Policy authority applies.\n")
+        (repo / "link.md").symlink_to(outside / "policy.md")
+        _run_git(repo, "init", "-b", "main")
+        _run_git(repo, "add", "link.md")
+        _run_git(repo, "commit", "-m", "initial")
+        project = ProjectRegistry(store).add_project(repo, name="Docs")
+
+        with pytest.raises(InstructionRegistrationError, match="relative"):
+            register_source(
+                store,
+                project_id=project.id,
+                kind="policy_doc",
+                path=str(outside / "policy.md"),
+                owner="team:runtime",
+                registered_by="user:maintainer",
+            )
+        with pytest.raises(InstructionRegistrationError, match="must not contain"):
+            register_source(
+                store,
+                project_id=project.id,
+                kind="policy_doc",
+                path="../outside/policy.md",
+                owner="team:runtime",
+                registered_by="user:maintainer",
+            )
+        with pytest.raises(InstructionRegistrationError, match="escapes project root"):
+            register_source(
+                store,
+                project_id=project.id,
+                kind="policy_doc",
+                path="link.md",
+                owner="team:runtime",
+                registered_by="user:maintainer",
+            )
+
+        assert store.list_instruction_sources() == []
+    finally:
+        store.close()
+
+
+def _run_git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ("git", *args),
+        cwd=repo,
+        check=True,
+        env={
+            "GIT_AUTHOR_EMAIL": "test@example.invalid",
+            "GIT_AUTHOR_NAME": "Craik Test",
+            "GIT_COMMITTER_EMAIL": "test@example.invalid",
+            "GIT_COMMITTER_NAME": "Craik Test",
+        },
+    )
