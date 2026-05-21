@@ -1426,6 +1426,16 @@
     "assets": ["fixtures/example.md"],
     "expected_input_schemas": ["craik.case_file"],
     "expected_output_schemas": ["craik.worker_result"],
+    "context_requirements": [
+      {
+        "schema_name": "craik.case_file",
+        "required": true,
+        "trust_boundary": "project",
+        "missing_context_behavior": "reject",
+        "summary": "Task case file required before invoking the skill.",
+        "evidence_ids": ["evidence_readme_status"]
+      }
+    ],
     "provenance_ids": ["evidence_readme_status"],
     "plugin_descriptor_id": null,
     "runtime_authority": false,
@@ -1481,6 +1491,7 @@
         "schema_name": "craik.case_file",
         "contract_id": "case_docs_reconcile",
         "required": true,
+        "trust_boundary": "project",
         "summary": "Task case file supplied to the skill.",
         "evidence_ids": ["evidence_readme_status"]
       }

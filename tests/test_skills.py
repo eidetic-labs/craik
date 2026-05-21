@@ -26,6 +26,16 @@ def _package(**overrides: object) -> SkillPackage:
         "assets": ["fixtures/example.md"],
         "expected_input_schemas": ["craik.case_file"],
         "expected_output_schemas": ["craik.worker_result"],
+        "context_requirements": [
+            {
+                "schema_name": "craik.case_file",
+                "required": True,
+                "trust_boundary": "project",
+                "missing_context_behavior": "reject",
+                "summary": "Task case file required before invoking the skill.",
+                "evidence_ids": ["evidence_skill_package"],
+            }
+        ],
         "provenance_ids": ["evidence_skill_package"],
         "runtime_authority": False,
         "created_at": "2026-05-16T15:30:00Z",
@@ -74,3 +84,8 @@ def test_skill_package_accepts_semantic_version_suffixes() -> None:
 
     assert prerelease.package_version == "1.2.3-beta.1"
     assert build.package_version == "1.2.3+build.7"
+
+
+def test_skill_package_declares_expected_input_context() -> None:
+    with pytest.raises(ValidationError, match="require context requirements"):
+        _package(context_requirements=[])

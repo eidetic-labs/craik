@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from craik.contracts.models import SkillInvocationContext
+from craik.contracts.models import SkillInvocationContext, SkillPackage
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
 
@@ -18,6 +18,7 @@ def _context(**overrides: object) -> SkillInvocationContext:
                 "schema_name": "craik.case_file",
                 "contract_id": "case_docs_reconcile",
                 "required": True,
+                "trust_boundary": "project",
                 "summary": "Task case file supplied to the skill.",
                 "evidence_ids": ["evidence_readme_status"],
             }
@@ -40,6 +41,40 @@ def _context(**overrides: object) -> SkillInvocationContext:
     }
     payload.update(overrides)
     return SkillInvocationContext.model_validate(payload)
+
+
+def _package(**overrides: object) -> SkillPackage:
+    payload = {
+        "id": "skill_docs_reconcile",
+        "name": "Docs Reconcile",
+        "package_version": "0.1.0",
+        "description": "Review docs against implementation state.",
+        "entrypoints": [
+            {
+                "id": "entry_prompt",
+                "kind": "prompt",
+                "path": "SKILL.md",
+                "description": "Skill instructions.",
+                "expected_input_schemas": ["craik.case_file"],
+                "expected_output_schemas": ["craik.worker_result"],
+            }
+        ],
+        "docs": ["SKILL.md"],
+        "expected_input_schemas": ["craik.case_file"],
+        "expected_output_schemas": ["craik.worker_result"],
+        "context_requirements": [
+            {
+                "schema_name": "craik.case_file",
+                "required": True,
+                "trust_boundary": "project",
+                "missing_context_behavior": "reject",
+                "summary": "Task case file required before invoking the skill.",
+            }
+        ],
+        "created_at": "2026-05-16T15:30:00Z",
+    }
+    payload.update(overrides)
+    return SkillPackage.model_validate(payload)
 
 
 def test_skill_invocation_context_round_trips_in_store(tmp_path) -> None:
@@ -98,3 +133,109 @@ def test_skill_invocation_context_requires_policy_links_and_redaction() -> None:
 
     with pytest.raises(ValidationError, match="must be redacted"):
         _context(redacted=False)
+
+
+def test_skill_package_validates_supplied_invocation_context() -> None:
+    package = _package()
+    context = _context()
+
+    package.validate_invocation_context(context)
+
+
+def test_skill_package_rejects_missing_required_context() -> None:
+    package = _package()
+    context = _context(
+        inputs=[
+            {
+                "schema_name": "craik.other_context",
+                "contract_id": "other_context",
+                "required": True,
+                "trust_boundary": "project",
+                "summary": "Wrong context supplied.",
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="missing required skill context input"):
+        package.validate_invocation_context(context)
+
+
+def test_skill_package_rejects_context_from_wrong_trust_boundary() -> None:
+    package = _package()
+    context = _context(
+        inputs=[
+            {
+                "schema_name": "craik.case_file",
+                "contract_id": "case_docs_reconcile",
+                "required": True,
+                "trust_boundary": "external",
+                "summary": "Case file supplied across the wrong boundary.",
+            }
+        ]
+    )
+
+    with pytest.raises(ValueError, match="trust_boundary does not match"):
+        package.validate_invocation_context(context)
+
+
+def test_skill_package_can_require_omission_for_missing_context() -> None:
+    package = _package(
+        context_requirements=[
+            {
+                "schema_name": "craik.case_file",
+                "required": True,
+                "trust_boundary": "project",
+                "missing_context_behavior": "record_omission",
+                "summary": "Task case file should be supplied or omitted explicitly.",
+            }
+        ]
+    )
+    context = _context(
+        inputs=[
+            {
+                "schema_name": "craik.other_context",
+                "contract_id": "other_context",
+                "required": True,
+                "trust_boundary": "project",
+                "summary": "Alternative context supplied.",
+            }
+        ],
+        omissions=[
+            {
+                "schema_name": "craik.case_file",
+                "reason": "Case file was unavailable.",
+                "impact": "Skill can only produce a partial result.",
+                "severity": "medium",
+                "mitigation": "Create a context request before a complete rerun.",
+            }
+        ],
+    )
+
+    package.validate_invocation_context(context)
+
+
+def test_skill_package_can_degrade_when_context_is_missing() -> None:
+    package = _package(
+        context_requirements=[
+            {
+                "schema_name": "craik.case_file",
+                "required": True,
+                "trust_boundary": "project",
+                "missing_context_behavior": "degrade",
+                "summary": "Task case file enables a complete result.",
+            }
+        ]
+    )
+    context = _context(
+        inputs=[
+            {
+                "schema_name": "craik.other_context",
+                "contract_id": "other_context",
+                "required": True,
+                "trust_boundary": "project",
+                "summary": "Alternative context supplied.",
+            }
+        ],
+    )
+
+    package.validate_invocation_context(context)

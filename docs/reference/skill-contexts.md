@@ -28,7 +28,7 @@ The `craik.skill_invocation_context` contract records:
 <div className="craik-grid">
 
 <div><h4>Task · skill package · policy envelope · optional handoff</h4></div>
-<div><h4>Input contracts</h4><p>Supplied to the skill.</p></div>
+<div><h4>Input contracts</h4><p>Supplied to the skill, with trust boundary metadata.</p></div>
 <div><h4>Output contracts</h4><p>Expected or produced.</p></div>
 <div><h4>Omitted context</h4><p>Reason · impact · severity · mitigation.</p></div>
 <div><h4>Evidence and receipt links</h4></div>
@@ -50,6 +50,26 @@ omissions, and records that claim unredacted persisted context.
 Missing required outputs are represented as omissions. This makes
 failed or partial skill runs reviewable instead of silently treating
 absent context as irrelevant.
+
+## Package requirements
+
+`craik.skill_package` declares `context_requirements` for each expected
+input schema. Each requirement names the schema, whether the input is
+required, the trust boundary where it is acceptable, and the
+missing-context behavior:
+
+<div className="craik-grid">
+
+<div><h4><code>reject</code></h4><p>Do not invoke the skill without that context.</p></div>
+<div><h4><code>record_omission</code></h4><p>Allow the run only when the missing input is recorded as an omission.</p></div>
+<div><h4><code>degrade</code></h4><p>Allow a partial run while keeping the missing input visible to reviewers.</p></div>
+
+</div>
+
+Runtime callers can validate a `SkillInvocationContext` against its
+`SkillPackage` before execution. That check rejects package mismatches,
+missing required inputs, and missing omission records for requirements
+that explicitly demand them.
 
 ## What's next
 

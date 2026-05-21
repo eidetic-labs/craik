@@ -29,6 +29,7 @@ and grant model.
 <div><h4>Package id · name · version · description</h4></div>
 <div><h4>One or more entrypoints</h4></div>
 <div><h4>Expected input &amp; output schemas</h4></div>
+<div><h4>Context requirements</h4><p>Required inputs, trust boundary, missing-context behavior.</p></div>
 <div><h4>Documentation files</h4></div>
 <div><h4>Asset paths</h4></div>
 <div><h4>Provenance links</h4></div>
@@ -56,6 +57,13 @@ recorded by `craik.skill_registry`, invocation context is recorded by
 `craik.skill_invocation_context`, and executable authority remains in
 the plugin governance model. A package that needs runtime side effects
 links to a plugin descriptor instead of carrying authority itself.
+
+Every expected input schema must have a matching context requirement.
+The requirement records whether the input is required, the trust
+boundary where it is valid, and what the runtime should do if the
+input is missing: reject the invocation, require an omission record, or
+continue in degraded mode. This keeps skill packages from depending on
+implicit agent state.
 
 ## What's next
 
