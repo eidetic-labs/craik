@@ -107,7 +107,7 @@ def test_initialize_creates_database_and_migration(tmp_path: Path) -> None:
 
     assert (paths.state / DATABASE_NAME).is_file()
     assert local_store.migration_version() == CURRENT_MIGRATION
-    assert [item["version"] for item in local_store.applied_migrations()] == [1, 2, 3]
+    assert [item["version"] for item in local_store.applied_migrations()] == [1, 2, 3, 4]
     local_store.close()
 
 
@@ -129,6 +129,7 @@ def test_initialize_records_local_store_metadata(tmp_path: Path) -> None:
 
     assert ("schema_version", str(CURRENT_MIGRATION)) in rows
     assert ("contract_registry_count", str(len(CONTRACT_REGISTRY))) in rows
+    assert ("instruction_sources_table", "registered") in rows
     local_store.close()
 
 
@@ -168,7 +169,7 @@ def test_v1_fixture_database_migrates_deterministically(tmp_path: Path) -> None:
     local_store.initialize()
 
     assert local_store.migration_version() == CURRENT_MIGRATION
-    assert [item["version"] for item in local_store.applied_migrations()] == [1, 2, 3]
+    assert [item["version"] for item in local_store.applied_migrations()] == [1, 2, 3, 4]
     assert local_store.get_task("task_fixture") is not None
     with sqlite3.connect(database_path) as connection:
         indexes = {

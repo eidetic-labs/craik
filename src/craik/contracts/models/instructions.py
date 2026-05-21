@@ -39,6 +39,9 @@ class InstructionSource(CraikModel):
     trust_boundary: InstructionTrustBoundary = "project"
     active: bool = True
     declared_by: str
+    registered_by: str | None = None
+    registered_at: datetime | None = None
+    content_hash: str | None = None
     policy_envelope_id: str | None = None
     notes: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -52,7 +55,69 @@ class InstructionSource(CraikModel):
             raise ValueError(f"{self.kind} instruction source path must be {expected_path!r}")
         if self.kind == "policy_doc" and not self.path:
             raise ValueError("policy_doc instruction sources require a declared path")
+        if self.content_hash is not None and not _is_sha256(self.content_hash):
+            raise ValueError("instruction source content_hash must be a sha256 hex digest")
+        if self.registered_by is None:
+            self.registered_by = self.declared_by
+        if self.registered_at is None:
+            self.registered_at = self.created_at
         return self
+
+
+class InstructionSourceRegistration(CraikModel):
+    """Receiptable registration event for one declared instruction source."""
+
+    schema_: Literal["craik.instruction_source_registration"] = Field(
+        default="craik.instruction_source_registration",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    project_id: str
+    source_id: str
+    kind: InstructionSourceKind
+    path: str
+    owner: str
+    registered_by: str
+    registered_at: datetime
+    trust_boundary: InstructionTrustBoundary = "project"
+    content_hash: str | None = None
+    policy_envelope_id: str | None = None
+    notes: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_registration_path(self) -> InstructionSourceRegistration:
+        """Ensure source registrations use the same canonical-path rules as sources."""
+        expected_path = INSTRUCTION_SOURCE_DEFAULT_PATHS[self.kind]
+        if expected_path and self.path != expected_path:
+            raise ValueError(f"{self.kind} instruction source path must be {expected_path!r}")
+        if self.kind == "policy_doc" and not self.path:
+            raise ValueError("policy_doc instruction sources require a declared path")
+        if self.content_hash is not None and not _is_sha256(self.content_hash):
+            raise ValueError("instruction source content_hash must be a sha256 hex digest")
+        return self
+
+
+class InstructionRegistryReceipt(CraikModel):
+    """Audit record proving an instruction source registration was persisted."""
+
+    schema_: Literal["craik.instruction_registry_receipt"] = Field(
+        default="craik.instruction_registry_receipt",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    project_id: str
+    source_id: str
+    registration_id: str
+    action: Literal["registered"] = "registered"
+    registered_by: str
+    capability: Literal["instructions.register"] = "instructions.register"
+    target: str
+    result_status: ReceiptStatus = "passed"
+    summary: str
+    created_at: datetime
 
 
 class InstructionSourceRegistry(CraikModel):
@@ -90,6 +155,10 @@ class InstructionSourceRegistry(CraikModel):
         if sorted(self.declared_policy_doc_paths) != policy_paths:
             raise ValueError("declared policy doc paths must match policy_doc sources")
         return self
+
+
+def _is_sha256(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
 
 
 class InstructionSourceSnapshot(CraikModel):

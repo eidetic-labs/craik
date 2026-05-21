@@ -144,6 +144,7 @@ class ExtensionStoreMixin(LocalStoreCore):
 
     def put_instruction_source(self, source: InstructionSource) -> None:
         self.put_contract(source)
+        _upsert_instruction_source_row(self, source)
 
     def get_instruction_source(self, source_id: str) -> InstructionSource | None:
         contract = self.get_contract("craik.instruction_source", source_id)
@@ -153,6 +154,46 @@ class ExtensionStoreMixin(LocalStoreCore):
         return _cast_list(
             InstructionSource,
             self.list_contracts("craik.instruction_source"),
+        )
+
+    def put_instruction_source_registration(
+        self,
+        registration: InstructionSourceRegistration,
+    ) -> None:
+        self.put_contract(registration)
+
+    def get_instruction_source_registration(
+        self,
+        registration_id: str,
+    ) -> InstructionSourceRegistration | None:
+        contract = self.get_contract("craik.instruction_source_registration", registration_id)
+        return _cast_optional(InstructionSourceRegistration, contract)
+
+    def list_instruction_source_registrations(
+        self,
+    ) -> list[InstructionSourceRegistration]:
+        return _cast_list(
+            InstructionSourceRegistration,
+            self.list_contracts("craik.instruction_source_registration"),
+        )
+
+    def put_instruction_registry_receipt(
+        self,
+        receipt: InstructionRegistryReceipt,
+    ) -> None:
+        self.put_contract(receipt)
+
+    def get_instruction_registry_receipt(
+        self,
+        receipt_id: str,
+    ) -> InstructionRegistryReceipt | None:
+        contract = self.get_contract("craik.instruction_registry_receipt", receipt_id)
+        return _cast_optional(InstructionRegistryReceipt, contract)
+
+    def list_instruction_registry_receipts(self) -> list[InstructionRegistryReceipt]:
+        return _cast_list(
+            InstructionRegistryReceipt,
+            self.list_contracts("craik.instruction_registry_receipt"),
         )
 
     def put_instruction_source_registry(self, registry: InstructionSourceRegistry) -> None:
@@ -315,3 +356,53 @@ class ExtensionStoreMixin(LocalStoreCore):
 
     def list_red_team_findings(self) -> list[RedTeamFinding]:
         return _cast_list(RedTeamFinding, self.list_contracts("craik.red_team_finding"))
+
+
+def _upsert_instruction_source_row(store: LocalStoreCore, source: InstructionSource) -> None:
+    payload = source.model_dump(mode="json", by_alias=True)
+    now = datetime.now(UTC).isoformat()
+    registered_by = source.registered_by or source.declared_by
+    registered_at = (source.registered_at or source.created_at).isoformat()
+    try:
+        with store.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO instruction_sources (
+                  id, project_id, kind, path, owner, trust_boundary, active,
+                  registered_by, registered_at, content_hash, payload_json,
+                  created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  project_id = excluded.project_id,
+                  kind = excluded.kind,
+                  path = excluded.path,
+                  owner = excluded.owner,
+                  trust_boundary = excluded.trust_boundary,
+                  active = excluded.active,
+                  registered_by = excluded.registered_by,
+                  registered_at = excluded.registered_at,
+                  content_hash = excluded.content_hash,
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    source.id,
+                    source.project_id,
+                    source.kind,
+                    source.path,
+                    source.owner,
+                    source.trust_boundary,
+                    1 if source.active else 0,
+                    registered_by,
+                    registered_at,
+                    source.content_hash,
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    now,
+                    now,
+                ),
+            )
+    except sqlite3.DatabaseError as error:
+        raise LocalStoreCorruptError(
+            f"cannot mirror instruction source registration: {error}"
+        ) from error

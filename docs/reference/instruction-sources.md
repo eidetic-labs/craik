@@ -39,6 +39,22 @@ Standard source kinds must use their canonical path. `policy_doc`
 sources declare their own path and must be listed in the registry's
 `declared_policy_doc_paths`.
 
+## Detection order
+
+Craik never scans arbitrary Markdown as authority. A source becomes
+eligible only after registration, and downstream ingestion follows the
+registered source list in deterministic order:
+
+<ol className="craik-steps">
+<li>Canonical root instruction files: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>GEMINI.md</code>, <code>HERMES.md</code>, <code>SKILLS.md</code>.</li>
+<li>Tool-specific instruction files: <code>.cursorrules</code>, <code>.github/copilot-instructions.md</code>, <code>.codex/instructions.md</code>.</li>
+<li>Explicitly declared <code>policy_doc</code> paths in registry order.</li>
+</ol>
+
+Within a project, the runtime registry stores active sources in stable
+kind/path order so repeated registration and ingestion passes produce
+predictable downstream records.
+
 ## Registry boundaries
 
 `craik.instruction_source_registry` is project-scoped. It records
@@ -53,6 +69,18 @@ The registry is a discovery boundary, not an approval boundary. Later
 distillation and promotion steps must still preserve provenance,
 stale-source state, contradiction reports, and human approval before
 extracted instructions become active runtime constraints.
+
+</div>
+
+Registration is a receipted discovery action. The runtime
+`register_source` API writes four records:
+
+<div className="craik-grid">
+
+<div><h4><code>craik.instruction_source</code></h4><p>The current declared source entry used by ingestion.</p></div>
+<div><h4><code>craik.instruction_source_registration</code></h4><p>The immutable registration event with owner, actor, path, trust boundary, and optional content hash.</p></div>
+<div><h4><code>craik.instruction_registry_receipt</code></h4><p>The audit record proving the registration action completed.</p></div>
+<div><h4><code>craik.instruction_source_registry</code></h4><p>The project-level registry containing active source IDs and policy document paths.</p></div>
 
 </div>
 

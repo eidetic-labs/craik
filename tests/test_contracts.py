@@ -128,6 +128,25 @@ def test_policy_envelope_operator_fields_round_trip(
     assert dumped["allowed_agent_role_ids"] == ["role_verifier"]
 
 
+def test_instruction_registration_contracts_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    registration = CONTRACT_REGISTRY[
+        "craik.instruction_source_registration"
+    ].model_validate(fixtures["craik.instruction_source_registration"])
+    receipt = CONTRACT_REGISTRY["craik.instruction_registry_receipt"].model_validate(
+        fixtures["craik.instruction_registry_receipt"]
+    )
+
+    registration_payload = registration.model_dump(mode="json", by_alias=True)
+    receipt_payload = receipt.model_dump(mode="json", by_alias=True)
+
+    assert registration_payload["source_id"] == "instruction_source_agents_md"
+    assert registration_payload["registered_by"] == "agent:orchestrator"
+    assert receipt_payload["registration_id"] == registration_payload["id"]
+    assert receipt_payload["capability"] == "instructions.register"
+
+
 def test_task_request_auth_context_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

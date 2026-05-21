@@ -66,9 +66,11 @@ craik schema show craik.task_request
 | `craik.handoff` | Summarizes durable run state for future agents. |
 | `craik.handoff_quality_score` | Scores handoff completeness, validation, evidence links, debt, and risks. |
 | `craik.human_delegation_point` | Records an open or resolved human approval, clarification, escalation, or ownership-transfer point. |
+| `craik.instruction_registry_receipt` | Records the auditable result of registering a declared instruction source. |
 | `craik.instruction_provenance` | Links distilled instruction material to source-level or line/range provenance. |
 | `craik.instruction_promotion_review` | Records approved, rejected, or deferred promotion decisions for distilled instructions. |
 | `craik.instruction_source` | Declares one runtime instruction source file or policy doc. |
+| `craik.instruction_source_registration` | Captures one source-registration event with owner, actor, trust boundary, and optional content hash. |
 | `craik.instruction_source_registry` | Registers declared instruction sources for a project. |
 | `craik.instruction_source_snapshot` | Records source hash state for one observed instruction source. |
 | `craik.intent_lock` | Preserves task intent and scope boundaries. |
