@@ -22,7 +22,7 @@ from craik.runtime.auth.operator import (
 )
 from craik.runtime.store import LocalStore
 
-_HMAC_SECRET_FILENAME = "instruction-approval-hmac.key"
+_HMAC_SECRET_FILENAME = "instruction-approval-hmac.key"  # nosec B105
 _OWNER_ONLY_FILE_MODE = 0o600
 
 
