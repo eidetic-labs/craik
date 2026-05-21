@@ -146,11 +146,17 @@ snapshot for each source so a persisted refresh can still defer
 distillations whose source changed, disappeared, or was newly
 observed.
 
-`craik.instruction_provenance` links distilled material back to a
-source and optional snapshot. Provenance uses a precise line range
-when available or a source-level fallback when the extractor cannot
-identify stable lines. **Partial line ranges are invalid** because
-they make review ambiguous.
+`craik.instruction_provenance` links each parsed statement candidate
+back to its source snapshot. The extractor emits one provenance record
+per statement with deterministic ID, source ID, snapshot ID, path,
+line range, column range, summary, and `excerpt_hash`. The summary is
+the first non-empty statement line capped at 200 characters. The
+excerpt hash is the SHA-256 digest of the extracted statement text, so
+future quote readers can verify the source excerpt before display.
+
+Provenance uses a precise line range when available or a source-level
+fallback when the extractor cannot identify stable lines. **Partial
+line ranges are invalid** because they make review ambiguous.
 
 ## Distilled instruction categories
 
