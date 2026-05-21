@@ -67,7 +67,12 @@ Release tags use `vMAJOR.MINOR.PATCH` — e.g. `v0.1.0`.
 ## Release Notes
 
 Every release needs a GitHub release entry and a matching
-`CHANGELOG.md` section.
+`CHANGELOG.md` section. The Publish workflow's `create-github-release`
+job extracts the `## X.Y.Z - YYYY-MM-DD` block from `CHANGELOG.md` on
+tag push and creates the GitHub Release automatically — title
+`Craik X.Y.Z`, body verbatim from the CHANGELOG section, marked latest.
+The job fails fast if the CHANGELOG has no section for the tag version,
+so the CHANGELOG is the single source of truth for release notes.
 
 <div className="craik-grid">
 
