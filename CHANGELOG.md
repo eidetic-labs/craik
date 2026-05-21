@@ -12,40 +12,44 @@ within the `0.x.0` stability expectations described in
 
 ### Added
 
-- Instruction source registration foundation for v0.4.0: typed registration
-  and registry receipt contracts, a forward-only local-store table, and a
-  runtime API for registering declared instruction sources before ingestion.
-- Declared instruction source parsing for v0.4.0, including Markdown, Cursor
-  rules, Codex, Copilot, and policy document sources with project-root path
-  confinement.
-- Instruction source snapshot refresh for v0.4.0: registered sources now hash
-  real project files with normalized newlines, persist `new` / `unchanged` /
-  `changed` / `missing` state, and feed stale distillation invalidation.
-- Instruction provenance extraction for v0.4.0: parsed statement candidates now
-  persist deterministic line/column provenance records with snapshot links,
-  summaries, and excerpt hashes.
-- Deterministic instruction categorization for v0.4.0: parsed and provenanced
-  statements now become persisted distillation proposals with heuristic category
-  traceability and unclassified-candidate warnings.
-- Inter-source instruction contradiction detection for v0.4.0: normalized
-  policy, boundary, command, instruction, and security-rule proposals now open
-  contradiction reports while skipping same-source and deferred stale items.
-- Operator approval workflow for v0.4.0 instruction distillations: proposed
-  items become governing only through explicit approval receipts, stale or
-  contradicted approvals require recorded overrides, and denials are receipted.
-- Case-file integration for v0.4.0 governing distillations: case files now carry
-  a deterministic `distillations` section with category, source, provenance
-  ranges, and approval receipt snapshots.
-- Prompt compilation for v0.4.0 governing distillations: compiled prompts now
-  include a separate authoritative `Active instruction constraints` section
-  with deterministic ordering, provenance annotations, and stale-exclusion
-  warnings.
-- Instruction distillation CLI for v0.4.0: `craik instructions` now supports
-  source registration, filtered proposal listing, approve/reject decisions, and
-  provenance-aware item inspection through the active operator session.
-- Legacy promotion review hardening for v0.4.0: `review_instruction_promotion`
-  now requires explicit override rationale for stale or contradicted approvals
-  and records informational override rationale when requested.
+- Instruction source registration: projects can register declared instruction
+  files with typed source metadata, path-bound registry records, and
+  receipt-backed local-store persistence before ingestion.
+- Declared instruction ingestion: Markdown, Cursor rules, Codex, Copilot, and
+  policy document sources are parsed from project-confined paths into
+  candidate instruction statements.
+- Source snapshot refresh: registered files are hashed with normalized
+  newlines, tracked as `new` / `unchanged` / `changed` / `missing`, and used to
+  mark derived distillations stale when source text changes or disappears.
+- Line/range provenance: extracted instruction candidates retain deterministic
+  source snapshot links, line and column ranges, summaries, and excerpt hashes.
+- Instruction categorization: provenanced statements become persisted
+  distillation proposals with category traceability and warnings for
+  unclassified candidates.
+- Inter-source contradiction reports: normalized policy, boundary, command,
+  instruction, and security-rule proposals now surface cross-source conflicts
+  while ignoring same-source and stale deferred items.
+- Operator approval receipts: proposed distillations become governing
+  constraints only through explicit approve decisions, and reject decisions are
+  recorded with receipts.
+- Distillation CLI: `craik instructions register`, `list`, `approve`,
+  `reject`, and `show` expose the registration, review, decision, and
+  provenance-inspection workflow through the active operator session.
+
+### Changed
+
+- Case files now include governing distillations as deterministic
+  `distillations` evidence with category, source, provenance ranges, and
+  approval receipt snapshots.
+- Compiled prompts now include one authoritative `Active instruction
+  constraints` section for governing distillations, sorted by category, source
+  ID, and statement with provenance annotations and stale-exclusion warnings.
+
+### Security
+
+- Stale or contradicted distillation approvals now require an explicit operator
+  override rationale, and review receipts record whether stale or contradiction
+  overrides were used.
 
 ## 0.3.0 - 2026-05-20
 
