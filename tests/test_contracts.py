@@ -672,6 +672,24 @@ def test_plugin_receipt_rejects_unredacted_result_metadata(
         CONTRACT_REGISTRY["craik.plugin_receipt"].model_validate(payload)
 
 
+def test_adapter_package_requires_semantic_versions(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.adapter_package"])
+    payload["package_version"] = "0.6"
+
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        CONTRACT_REGISTRY["craik.adapter_package"].model_validate(payload)
+
+    payload = dict(fixtures["craik.adapter_package"])
+    compatibility = dict(payload["compatibility"])
+    compatibility["craik_versions"] = ["0.6"]
+    payload["compatibility"] = compatibility
+
+    with pytest.raises(ValidationError, match="craik_versions"):
+        CONTRACT_REGISTRY["craik.adapter_package"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

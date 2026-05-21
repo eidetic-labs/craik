@@ -41,8 +41,14 @@ capability grants still decide what a run may do.
 <li>At least one capability surface.</li>
 <li>Docs and provenance.</li>
 <li>Version-like package version.</li>
-<li>Compatibility names at least one supported runner mode.</li>
+<li>Semantic-version-like package and Craik compatibility versions.</li>
+<li>Compatibility names at least one supported runner mode, Python version, and platform.</li>
 </ol>
+
+Compatibility is an execution boundary, not a suggestion. Adapter
+packages must declare the Craik versions they support as
+`MAJOR.MINOR.PATCH` values, plus the runner modes, Python versions,
+and platforms used for validation.
 
 ## What's next
 
