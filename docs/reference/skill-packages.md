@@ -42,6 +42,21 @@ and grant model.
 
 </div>
 
+## Versioning
+
+`package_version` must be semantic-version-like: `MAJOR.MINOR.PATCH`
+with an optional prerelease or build suffix, such as `1.2.3-beta.1`
+or `1.2.3+build.7`. Partial versions like `1.2` are rejected so
+operators can compare package revisions deterministically.
+
+## Required Boundaries
+
+Skill packages describe reusable instructions and examples. Scope is
+recorded by `craik.skill_registry`, invocation context is recorded by
+`craik.skill_invocation_context`, and executable authority remains in
+the plugin governance model. A package that needs runtime side effects
+links to a plugin descriptor instead of carrying authority itself.
+
 ## What's next
 
 <div className="craik-next">

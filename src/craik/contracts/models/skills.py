@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from .base import *
@@ -11,6 +12,8 @@ from .core import *
 from .instructions import *
 from .memory import *
 from .runtime import *
+
+_SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
 class SkillEntrypoint(CraikModel):
@@ -49,7 +52,7 @@ class SkillPackage(CraikModel):
     @model_validator(mode="after")
     def validate_skill_package(self) -> SkillPackage:
         """Require versioned packages with docs and at least one entrypoint."""
-        if "." not in self.package_version:
+        if not _SEMVER_RE.fullmatch(self.package_version):
             raise ValueError("skill package_version must be semantic-version-like")
         if not self.docs:
             raise ValueError("skill packages require docs")
