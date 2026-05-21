@@ -63,6 +63,7 @@ The command persists and prints a `craik.compiled_prompt` contract.
 <div><h4>Selected <code>craik.runner_capability_matrix</code></h4></div>
 <div><h4>Context-budget omissions</h4><p>And discovery exclusions.</p></div>
 <div><h4>Case-file signals</h4><p>Assumptions · stale risks · contradictions · docs · immutable docs.</p></div>
+<div><h4>Governing distillations</h4><p>Approved instruction distillations with provenance annotations and stale-exclusion warnings.</p></div>
 <div><h4>Expected output schemas</h4></div>
 
 </div>
@@ -79,6 +80,8 @@ The command persists and prints a `craik.compiled_prompt` contract.
 <div><h4>Expected output schemas</h4></div>
 <div><h4>Context omissions</h4></div>
 <div><h4>Stop conditions</h4></div>
+<div><h4>Distillations</h4><p>Typed ordered items rendered in a separate authoritative section.</p></div>
+<div><h4>Distillation warnings</h4><p>Typed warnings for stale governing items excluded from prompt context.</p></div>
 <div><h4>Named prompt sections</h4></div>
 <div><h4>Rendered prompt text</h4></div>
 
@@ -92,6 +95,12 @@ The rendered prompt has stable section order so fixture tests can
 compare output across runs.
 
 </div>
+
+The `Distillations` section is present even when no governing
+distillations exist. Items are grouped by deterministic category order
+and render as `(category) statement [source_id @ path:line-range]`.
+Only `governing` distillations are included; stale governing items are
+excluded and recorded in `distillation_warnings`.
 
 ## What's next
 

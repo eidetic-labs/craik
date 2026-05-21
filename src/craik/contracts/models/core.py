@@ -309,6 +309,8 @@ class CompiledPrompt(CraikModel):
     expected_output_schemas: list[str] = Field(default_factory=list)
     context_omissions: list[str] = Field(default_factory=list)
     stop_conditions: list[str] = Field(default_factory=list)
+    distillations: list[dict[str, Any]] = Field(default_factory=list)
+    distillation_warnings: list[str] = Field(default_factory=list)
     sections: list[PromptSection] = Field(default_factory=list)
     prompt: str
 

@@ -17,6 +17,7 @@ from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.runners.runners import get_runner_capability_matrix
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
+from craik.runtime.work.case_support import governing_distillations
 
 
 class PromptCompilerError(RuntimeError):
@@ -65,6 +66,8 @@ class PromptCompiler:
             "craik.handoff",
         ]
         context_omissions = _context_omissions(case_file)
+        distillations = governing_distillations(self.store, task.project_id or "")
+        distillation_warnings = _distillation_warnings(self.store, task.project_id)
         sections = _sections(
             task=task,
             case_file=case_file,
@@ -74,6 +77,8 @@ class PromptCompiler:
             expected_output_schemas=output_schemas,
             context_omissions=context_omissions,
             stop_conditions=stop_conditions,
+            distillations=distillations,
+            distillation_warnings=distillation_warnings,
         )
         prompt_text = _render_sections(sections)
 
@@ -88,6 +93,8 @@ class PromptCompiler:
             expected_output_schemas=output_schemas,
             context_omissions=context_omissions,
             stop_conditions=stop_conditions,
+            distillations=distillations,
+            distillation_warnings=distillation_warnings,
             sections=sections,
             prompt=prompt_text,
         )
@@ -105,6 +112,8 @@ def _sections(
     expected_output_schemas: list[str],
     context_omissions: list[str],
     stop_conditions: list[str],
+    distillations: list[dict[str, object]],
+    distillation_warnings: list[str],
 ) -> list[PromptSection]:
     return [
         PromptSection(
@@ -152,6 +161,10 @@ def _sections(
                     _grants_block(grants),
                 ]
             ),
+        ),
+        PromptSection(
+            title="Distillations",
+            body=_distillation_block(distillations, distillation_warnings),
         ),
         PromptSection(
             title="Context",
@@ -228,6 +241,23 @@ def _context_omissions(case_file: CaseFile) -> list[str]:
     return sorted(set(omitted))
 
 
+def _distillation_warnings(store: LocalStore, project_id: str | None) -> list[str]:
+    if project_id is None:
+        return []
+    warnings = []
+    for proposal in store.list_distilled_instruction_proposals():
+        if (
+            proposal.project_id == project_id
+            and proposal.promotion_status == "deferred"
+            and proposal.promoted_constraint_id is not None
+        ):
+            warnings.append(
+                f"Stale governing distillation excluded: {proposal.id} "
+                f"from {proposal.source_id}"
+            )
+    return sorted(set(warnings))
+
+
 def _stop_conditions(store: LocalStore, case_file: CaseFile) -> list[str]:
     if case_file.intent_lock_id:
         intent_lock = store.get_intent_lock(case_file.intent_lock_id)
@@ -247,6 +277,48 @@ def _capability_block(matrix: RunnerCapabilityMatrix) -> str:
         suffix = f" ({capability.notes})" if capability.notes else ""
         lines.append(f"- {capability.name}: {capability.support}; {grant}{suffix}")
     return "\n".join(lines)
+
+
+def _distillation_block(
+    distillations: list[dict[str, object]],
+    warnings: list[str],
+) -> str:
+    lines = ["Items:"]
+    if not distillations:
+        lines.append("- none")
+    current_category: str | None = None
+    for item in distillations:
+        category = str(item.get("category", "uncategorized"))
+        if category != current_category:
+            lines.append(f"- {category}:")
+            current_category = category
+        lines.append(f"  - {_render_distillation_item(item)}")
+    lines.append("Warnings:")
+    lines.extend(f"- {warning}" for warning in warnings or ["none"])
+    return "\n".join(lines)
+
+
+def _render_distillation_item(item: dict[str, object]) -> str:
+    category = str(item.get("category", "uncategorized"))
+    statement = str(item.get("statement", ""))
+    source_id = str(item.get("source_id", "unknown_source"))
+    provenance = item.get("provenance", [])
+    locations = []
+    if isinstance(provenance, list):
+        for raw in provenance:
+            if not isinstance(raw, dict):
+                continue
+            path = str(raw.get("path", "unknown"))
+            start_line = raw.get("start_line")
+            end_line = raw.get("end_line")
+            if start_line is None:
+                locations.append(path)
+            elif end_line is None or end_line == start_line:
+                locations.append(f"{path}:{start_line}")
+            else:
+                locations.append(f"{path}:{start_line}-{end_line}")
+    location_text = ", ".join(locations) if locations else "unknown"
+    return f"({category}) {statement} [{source_id} @ {location_text}]"
 
 
 def _grants_block(grants: list[CapabilityGrant]) -> str:
