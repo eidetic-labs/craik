@@ -160,6 +160,12 @@ line ranges are invalid** because they make review ambiguous.
 
 ## Distilled instruction categories
 
+Categorization is deterministic and heuristic; no model call is made
+when a source is ingested. Each categorization result records the
+matched rule name and confidence. Unmatched statements are not written
+as proposals; they are returned in the ingestion summary as
+unclassified warnings for operator review.
+
 | Category | Meaning |
 | --- | --- |
 | `instruction` | General runtime guidance for agents. |
@@ -181,6 +187,11 @@ constraint ID plus reviewer and decision time. Rejected and deferred
 proposals also preserve reviewer and decision time.
 
 </div>
+
+`ingest_project_instructions(store, project_id)` runs the declared
+source pipeline end to end: refresh snapshots, parse sources, persist
+provenance, categorize statements, persist distillation proposals, and
+return source, snapshot, provenance, proposal, and unclassified counts.
 
 ## Stale invalidation
 
