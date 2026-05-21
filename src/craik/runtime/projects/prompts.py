@@ -163,7 +163,7 @@ def _sections(
             ),
         ),
         PromptSection(
-            title="Distillations",
+            title="Active instruction constraints",
             body=_distillation_block(distillations, distillation_warnings),
         ),
         PromptSection(
@@ -179,16 +179,6 @@ def _sections(
                         [item.statement for item in case_file.assumptions],
                     ),
                     _bullet_block("Stale risks", case_file.stale_risks),
-                    _bullet_block(
-                        "Active instruction constraints",
-                        [
-                            str(item.get("statement", item))
-                            for item in case_file.context_budget.get(
-                                "active_instruction_constraints",
-                                [],
-                            )
-                        ],
-                    ),
                     _bullet_block(
                         "Open contradictions",
                         [item.summary for item in case_file.contradictions],
@@ -287,7 +277,7 @@ def _distillation_block(
     if not distillations:
         lines.append("- none")
     current_category: str | None = None
-    for item in distillations:
+    for item in sorted(distillations, key=_distillation_sort_key):
         category = str(item.get("category", "uncategorized"))
         if category != current_category:
             lines.append(f"- {category}:")
@@ -313,12 +303,32 @@ def _render_distillation_item(item: dict[str, object]) -> str:
             end_line = raw.get("end_line")
             if start_line is None:
                 locations.append(path)
-            elif end_line is None or end_line == start_line:
-                locations.append(f"{path}:{start_line}")
+            elif end_line is None:
+                locations.append(f"{path}:{start_line}-{start_line}")
             else:
                 locations.append(f"{path}:{start_line}-{end_line}")
     location_text = ", ".join(locations) if locations else "unknown"
     return f"({category}) {statement} [{source_id} @ {location_text}]"
+
+
+def _distillation_sort_key(item: dict[str, object]) -> tuple[int, str, str]:
+    category_order = {
+        "policy": 0,
+        "security_rule": 1,
+        "boundary": 2,
+        "command": 3,
+        "instruction": 4,
+        "handoff_rule": 5,
+        "memory_rule": 6,
+        "preference": 7,
+        "stale_risk": 8,
+    }
+    category = str(item.get("category", "uncategorized"))
+    return (
+        category_order.get(category, 99),
+        str(item.get("source_id", "")),
+        str(item.get("statement", "")),
+    )
 
 
 def _grants_block(grants: list[CapabilityGrant]) -> str:
