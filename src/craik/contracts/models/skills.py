@@ -506,14 +506,18 @@ class PluginCapabilityGrant(CraikModel):
     approval_required: bool = False
     approved_by: str | None = None
     expires_at: datetime | None = None
-    reason: str
-    evidence_ids: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=1)
+    evidence_ids: list[str] = Field(min_length=1)
     receipt_ids: list[str] = Field(default_factory=list)
     created_at: datetime
 
     @model_validator(mode="after")
     def validate_plugin_capability_grant(self) -> PluginCapabilityGrant:
         """Validate plugin grant state and least-privilege approval boundaries."""
+        if "*" in self.operations or "all" in self.operations:
+            raise ValueError("plugin grants must name explicit operations")
+        if not self.target.repo and not self.target.paths and not self.target.metadata:
+            raise ValueError("plugin grants require a scoped target")
         if self.status == "allowed":
             if self.approval_required and not self.approved_by:
                 raise ValueError("approval-required allowed plugin grants require approved_by")
@@ -529,6 +533,16 @@ class PluginCapabilityGrant(CraikModel):
             if self.approved_by is not None:
                 raise ValueError("approval_required grants must not include approved_by")
         return self
+
+    def permits_operation(self, operation: str, *, at: datetime) -> bool:
+        """Return whether this grant currently authorizes one operation."""
+        if self.status != "allowed":
+            return False
+        if operation not in self.operations:
+            return False
+        if self.expires_at is None or at >= self.expires_at:
+            return False
+        return True
 
 
 class AdapterEntrypoint(CraikModel):

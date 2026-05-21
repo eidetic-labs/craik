@@ -650,6 +650,16 @@ def test_plugin_probation_passed_criteria_require_evidence(
         CONTRACT_REGISTRY["craik.plugin_probation"].model_validate(payload)
 
 
+def test_plugin_capability_grant_rejects_broad_operations(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.plugin_capability_grant"])
+    payload["operations"] = ["*"]
+
+    with pytest.raises(ValidationError, match="explicit operations"):
+        CONTRACT_REGISTRY["craik.plugin_capability_grant"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
