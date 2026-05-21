@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
-import json
-import os
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
 from craik.contracts.models import (
     DistilledInstructionProposal,
@@ -21,9 +17,7 @@ from craik.runtime.auth.operator import (
     OperatorSessionStore,
 )
 from craik.runtime.store import LocalStore
-
-_HMAC_SECRET_FILENAME = "instruction-approval-hmac.key"  # nosec B105
-_OWNER_ONLY_FILE_MODE = 0o600
+from craik.runtime.store.integrity import contract_hmac, hmac_key_for_store
 
 
 class InstructionApprovalError(RuntimeError):
@@ -225,7 +219,7 @@ def verify_review_hmac(
         return False
     key = _hmac_key_for_store(store)
     expected = _review_hmac(review, key)
-    return hmac.compare_digest(review.receipt_hmac, expected)
+    return secrets.compare_digest(review.receipt_hmac, expected)
 
 
 def _require_operator(
@@ -269,21 +263,7 @@ def _identity_hash(operator_identity: str) -> str:
 
 
 def _hmac_key_for_store(store: LocalStore) -> bytes:
-    secret = _approval_secret_path(store)
-    secret.parent.mkdir(parents=True, exist_ok=True)
-    if secret.exists():
-        raw = secret.read_text(encoding="utf-8").strip()
-    else:
-        raw = secrets.token_hex(32)
-        secret.write_text(f"{raw}\n", encoding="utf-8")
-        if os.name == "posix":
-            secret.chmod(_OWNER_ONLY_FILE_MODE)
-    return hashlib.sha256(raw.encode("utf-8")).digest()
-
-
-def _approval_secret_path(store: LocalStore) -> Path:
-    home = store.database_path.parent.parent
-    return home / "secrets" / _HMAC_SECRET_FILENAME
+    return hmac_key_for_store(store)
 
 
 def _attach_receipt_hmac(
@@ -295,9 +275,7 @@ def _attach_receipt_hmac(
 
 def _review_hmac(review: InstructionPromotionReview, key: bytes) -> str:
     payload = review.model_dump(mode="json", by_alias=True)
-    payload.pop("receipt_hmac", None)
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hmac.new(key, encoded, hashlib.sha256).hexdigest()
+    return contract_hmac(payload, key)
 
 
 def _require_approvable(

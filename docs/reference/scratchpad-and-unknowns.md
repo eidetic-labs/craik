@@ -1,6 +1,6 @@
 # Scratchpad and unknowns
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -40,7 +40,7 @@ through an explicit review path.
 <div>
 <dt><code>craik.unknown_record</code></dt>
 <dt><span className="craik-fields__type">explicit gap</span></dt>
-<dd>Question · owner · what is needed to resolve it · next action · evidence · resolution details when available.</dd>
+<dd>Question · owner · what is needed to resolve it · next action · evidence · resolution details and receipt linkage when available.</dd>
 </div>
 
 </div>
@@ -49,9 +49,39 @@ through an explicit review path.
 
 **Visible incompleteness.**
 
-Unresolved unknowns are surfaced in case-file stale risks and handoff
-context debt so future agents see what remains unknown before
-continuing.
+Unresolved unknowns and open context requests are surfaced in case-file
+stale risks and handoff context debt. Handoff creation blocks on them
+unless the caller records an explicit blocked-exit override rationale.
+
+</div>
+
+## Capture commands
+
+<div className="craik-fields">
+
+<div>
+<dt>Command</dt>
+<dt><span className="craik-fields__type">Writes</span></dt>
+<dd>Use when</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge scratchpad</code></dt>
+<dt><span className="craik-fields__type">scratchpad</span></dt>
+<dd>An agent needs to preserve temporary working context without promoting it to durable memory.</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge unknown</code></dt>
+<dt><span className="craik-fields__type">unknown</span></dt>
+<dd>The next agent or operator needs a clear unresolved question, resolution source, and next action.</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge context-request</code></dt>
+<dt><span className="craik-fields__type">context request</span></dt>
+<dd>Work needs missing human, repo, web, tool, memory, or external context before it can continue safely.</dd>
+</div>
 
 </div>
 

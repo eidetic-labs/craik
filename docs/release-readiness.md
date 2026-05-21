@@ -55,13 +55,15 @@ docs, and requirement validation before the milestone closes.
 
 <div className="craik-keypoint">
 
-**Ready for pre-release checks.**
+**Remediated; ready for pre-release checks.**
 
 The v0.5.0 quality, continuity, and recovery surface is implemented in
 typed contracts, local-store persistence, runtime helpers, operator
-views, CLI recovery/delta surfaces, and reference documentation. The
-remaining work before tagging is release prep: version bump, changelog
-date finalization, full CI, package verification, PyPI publish, docs
+views, capture CLI surfaces, recovery/delta operator gates, and
+reference documentation. The post-readiness remediation closed the gap
+between contract definitions and production capture paths. The remaining
+work before tagging is release prep: version bump, changelog date
+finalization, full CI, package verification, PyPI publish, docs
 deployment verification, and GitHub release verification.
 
 </div>
@@ -83,31 +85,31 @@ deployment verification, and GitHub release verification.
 <div>
 <dt>Operator surfaces</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Quality gate, known traps, run delta, recovery, scratchpad, unknowns, context requests, and exit-discipline states are formatted for inspection without granting policy authority.</dd>
+<dd>Quality gate, known traps, negative knowledge, run delta, recovery, scratchpad, unknowns, context requests, critic findings, red-team findings, and exit-discipline states are formatted or captured without granting policy authority.</dd>
 </div>
 
 <div>
 <dt>CLI exercise path</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd><code>craik run recover</code> and <code>craik run delta</code> expose recovery and changed-since-last-time summaries from local durable state.</dd>
+<dd><code>craik knowledge</code> captures scratchpad, unknown, context-request, known-trap, and negative-knowledge records; <code>craik review</code> captures critic and red-team findings; <code>craik run recover</code> and <code>craik run delta</code> expose recovery and changed-since-last-time summaries from local durable state behind an active operator session.</dd>
 </div>
 
 <div>
 <dt>Validation commands</dt>
 <dt><span className="craik-fields__type">passed</span></dt>
-<dd><code>uv run pytest tests/test_recovery.py tests/test_critics.py tests/test_quality_scores.py tests/test_context_debt.py tests/test_freshness.py tests/test_known_traps.py tests/test_scratchpad.py tests/test_exit_discipline.py tests/test_operator_views.py tests/test_store.py</code>.</dd>
+<dd><code>uv run pytest tests/test_v0_5_0_pipeline_e2e.py</code> plus the focused readiness slice: <code>uv run pytest tests/test_recovery.py tests/test_critics.py tests/test_quality_scores.py tests/test_context_debt.py tests/test_freshness.py tests/test_known_traps.py tests/test_scratchpad.py tests/test_exit_discipline.py tests/test_operator_views.py tests/test_store.py</code>.</dd>
 </div>
 
 <div>
 <dt>Security notes</dt>
 <dt><span className="craik-fields__type">reviewed</span></dt>
-<dd>Critic and red-team findings are non-authoritative by default; freshness and evidence-expiry checks warn or block silent reliance but do not prove truth; scratchpad content expires instead of becoming project memory; negative knowledge requires evidence and scope.</dd>
+<dd>Critic and red-team findings are non-authoritative by default; freshness and evidence-expiry checks warn or block silent reliance but do not prove truth; scratchpad content expires instead of becoming project memory; negative knowledge requires evidence and scope; tool attestations and recovery sessions carry local HMAC integrity metadata; existing recovery/delta state requires an active operator session.</dd>
 </div>
 
 <div>
 <dt>Release blocker state</dt>
 <dt><span className="craik-fields__type">none known</span></dt>
-<dd>No critical v0.5.0 implementation blocker is known after the goal validation slice. Full pre-release checks still run before tagging.</dd>
+<dd>No critical v0.5.0 implementation blocker is known after remediation of the capture-layer readiness findings. Full pre-release checks still run before tagging.</dd>
 </div>
 
 </div>

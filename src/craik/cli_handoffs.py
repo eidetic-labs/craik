@@ -11,6 +11,7 @@ from craik.cli import handoff_app
 from craik.contracts.models import RunStatus
 from craik.runtime.store import LocalStore
 from craik.runtime.work.handoffs import (
+    HandoffBlockedByExitDisciplineError,
     HandoffContextError,
     HandoffNotFoundError,
     HandoffWriter,
@@ -67,6 +68,17 @@ def handoff_create(
         bool,
         typer.Option("--markdown", help="Print Markdown instead of JSON."),
     ] = False,
+    allow_blocked_exit: Annotated[
+        bool,
+        typer.Option(
+            "--allow-blocked-exit",
+            help="Persist the handoff despite a blocked exit-discipline check.",
+        ),
+    ] = False,
+    blocked_exit_rationale: Annotated[
+        str | None,
+        typer.Option("--blocked-exit-rationale", help="Required with --allow-blocked-exit."),
+    ] = None,
 ) -> None:
     """Create a structured handoff for a task."""
     store = LocalStore.from_env()
@@ -87,8 +99,10 @@ def handoff_create(
             next_steps=next_step,
             policy_exceptions=policy_exception,
             self_audit_notes=self_audit_note,
+            allow_blocked_exit=allow_blocked_exit,
+            blocked_exit_rationale=blocked_exit_rationale,
         )
-    except HandoffContextError as error:
+    except (HandoffContextError, HandoffBlockedByExitDisciplineError) as error:
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()

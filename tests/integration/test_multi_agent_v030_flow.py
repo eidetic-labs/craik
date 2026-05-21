@@ -110,6 +110,7 @@ def test_v030_multi_agent_identity_mailbox_debate_and_handoff_flow(tmp_path: Pat
             task_id=task.id,
             agent="agent:orchestrator",
             summary="Multi-agent review completed with adjudicated concerns.",
+            tests_run=["pytest"],
             next_steps=["Continue under the verifier identity."],
             risks=["Mailbox and debate text is untrusted downstream prompt input."],
             auth_profile_id="openai:reader",

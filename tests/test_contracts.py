@@ -488,6 +488,56 @@ def test_tool_result_attestation_hash_fields_round_trip(
     assert dumped["hash_algorithm"] == "sha256"
 
 
+def test_v0_5_integrity_and_resolution_fields_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    attestation_payload = dict(fixtures["craik.tool_result_attestation"])
+    attestation_payload["receipt_hmac"] = "c" * 64
+    recovery_payload = dict(fixtures["craik.recovery_session"])
+    recovery_payload.update({"decided_by": "operator-123", "receipt_hmac": "d" * 64})
+    debt_payload = dict(fixtures["craik.context_debt_record"])
+    debt_payload.update(
+        {
+            "status": "resolved",
+            "resolved_at": "2026-05-16T09:30:00Z",
+            "resolved_by_receipt_id": "receipt_context_debt_resolved",
+        }
+    )
+    unknown_payload = dict(fixtures["craik.unknown_record"])
+    unknown_payload.update(
+        {
+            "status": "resolved",
+            "resolved_answer": "Use the v0.5 e2e test.",
+            "resolved_at": "2026-05-16T09:31:00Z",
+            "resolved_by_receipt_id": "receipt_unknown_resolved",
+        }
+    )
+    request_payload = dict(fixtures["craik.context_request"])
+    request_payload.update(
+        {
+            "status": "fulfilled",
+            "fulfilled_by": "operator-123",
+            "fulfilled_at": "2026-05-16T09:32:00Z",
+            "fulfilled_by_receipt_id": "receipt_context_request_fulfilled",
+        }
+    )
+
+    attestation = CONTRACT_REGISTRY["craik.tool_result_attestation"].model_validate(
+        attestation_payload
+    )
+    recovery = CONTRACT_REGISTRY["craik.recovery_session"].model_validate(recovery_payload)
+    debt = CONTRACT_REGISTRY["craik.context_debt_record"].model_validate(debt_payload)
+    unknown = CONTRACT_REGISTRY["craik.unknown_record"].model_validate(unknown_payload)
+    request = CONTRACT_REGISTRY["craik.context_request"].model_validate(request_payload)
+
+    assert attestation.receipt_hmac == "c" * 64
+    assert recovery.decided_by == "operator-123"
+    assert recovery.receipt_hmac == "d" * 64
+    assert debt.resolved_by_receipt_id == "receipt_context_debt_resolved"
+    assert unknown.resolved_by_receipt_id == "receipt_unknown_resolved"
+    assert request.fulfilled_by_receipt_id == "receipt_context_request_fulfilled"
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

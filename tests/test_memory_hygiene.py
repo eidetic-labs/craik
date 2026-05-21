@@ -73,6 +73,7 @@ def test_memory_hygiene_reports_pending_proposals_contradictions_and_handoffs(
         agent="agent:codex",
         summary="Memory hygiene handoff.",
         tests_run=["pytest"],
+        next_steps=["Review memory hygiene contradiction."],
     )
     contradiction = ContradictionManager(store).open_report(
         task_id=task.id,

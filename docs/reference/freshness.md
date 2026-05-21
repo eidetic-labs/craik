@@ -1,6 +1,6 @@
 # Tool attestations and freshness
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -35,7 +35,7 @@ the underlying claim is true.
 <div>
 <dt><code>craik.tool_result_attestation</code></dt>
 <dt><span className="craik-fields__type">tool output</span></dt>
-<dd>Tool name &amp; identity · command when available · observed output summary · trust class · evidence/receipt links · capture time · optional expiry.</dd>
+<dd>Tool name &amp; identity · command when available · observed output summary · output hash · trust class · evidence/receipt links · capture time · optional expiry · local HMAC integrity metadata.</dd>
 </div>
 
 <div>

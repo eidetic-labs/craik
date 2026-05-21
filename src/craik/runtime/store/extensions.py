@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from craik.runtime.store.integrity import contract_hmac, hmac_key_for_store, verify_contract_hmac
+
 from .base import *
 
 
@@ -322,14 +324,20 @@ class ExtensionStoreMixin(LocalStoreCore):
         return _cast_list(RunDelta, self.list_contracts("craik.run_delta"))
 
     def put_recovery_session(self, session: RecoverySession) -> None:
+        session = _signed_recovery_session(self, session)
         self.put_contract(session)
 
     def get_recovery_session(self, session_id: str) -> RecoverySession | None:
         contract = self.get_contract("craik.recovery_session", session_id)
-        return _cast_optional(RecoverySession, contract)
+        session = _cast_optional(RecoverySession, contract)
+        _verify_recovery_session_hmac(self, session)
+        return session
 
     def list_recovery_sessions(self) -> list[RecoverySession]:
-        return _cast_list(RecoverySession, self.list_contracts("craik.recovery_session"))
+        sessions = _cast_list(RecoverySession, self.list_contracts("craik.recovery_session"))
+        for session in sessions:
+            _verify_recovery_session_hmac(self, session)
+        return sessions
 
     def put_runtime_critic_finding(self, finding: RuntimeCriticFinding) -> None:
         self.put_contract(finding)
@@ -356,6 +364,26 @@ class ExtensionStoreMixin(LocalStoreCore):
 
     def list_red_team_findings(self) -> list[RedTeamFinding]:
         return _cast_list(RedTeamFinding, self.list_contracts("craik.red_team_finding"))
+
+
+def _signed_recovery_session(
+    store: LocalStoreCore,
+    session: RecoverySession,
+) -> RecoverySession:
+    payload = session.model_dump(mode="json", by_alias=True)
+    receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
+    return session.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _verify_recovery_session_hmac(
+    store: LocalStoreCore,
+    session: RecoverySession | None,
+) -> None:
+    if session is None:
+        return
+    payload = session.model_dump(mode="json", by_alias=True)
+    if not verify_contract_hmac(payload, hmac_key_for_store(store)):
+        raise LocalStoreCorruptError(f"stored recovery session has invalid HMAC: {session.id}")
 
 
 def _upsert_instruction_source_row(store: LocalStoreCore, source: InstructionSource) -> None:

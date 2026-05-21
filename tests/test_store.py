@@ -383,7 +383,10 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.get_case_file(case_file.id) == case_file
     assert store.get_handoff(handoff.id) == handoff
     assert store.get_intent_lock(intent_lock.id) == intent_lock
-    assert store.get_tool_result_attestation(attestation.id) == attestation
+    stored_attestation = store.get_tool_result_attestation(attestation.id)
+    assert stored_attestation is not None
+    assert stored_attestation.receipt_hmac
+    assert stored_attestation.model_copy(update={"receipt_hmac": None}) == attestation
     assert store.get_knowledge_freshness_probe(freshness_probe.id) == freshness_probe
     assert store.get_known_trap(known_trap.id) == known_trap
     assert store.get_negative_knowledge(negative_knowledge.id) == negative_knowledge
@@ -436,7 +439,10 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
         == reference_integration
     )
     assert store.get_run_delta(run_delta.id) == run_delta
-    assert store.get_recovery_session(recovery_session.id) == recovery_session
+    stored_recovery_session = store.get_recovery_session(recovery_session.id)
+    assert stored_recovery_session is not None
+    assert stored_recovery_session.receipt_hmac
+    assert stored_recovery_session.model_copy(update={"receipt_hmac": None}) == recovery_session
     assert store.get_runtime_critic_finding(critic_finding.id) == critic_finding
     assert store.get_red_team_finding(red_team_finding.id) == red_team_finding
     assert store.get_scratchpad_record(scratchpad.id) == scratchpad
@@ -445,7 +451,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.list_case_files() == [case_file]
     assert store.list_handoffs() == [handoff]
     assert store.list_intent_locks() == [intent_lock]
-    assert store.list_tool_result_attestations() == [attestation]
+    assert store.list_tool_result_attestations() == [stored_attestation]
     assert store.list_knowledge_freshness_probes() == [freshness_probe]
     assert store.list_known_traps() == [known_trap]
     assert store.list_negative_knowledge() == [negative_knowledge]
@@ -485,7 +491,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.list_promoted_instruction_constraints() == [promoted_constraint]
     assert store.list_reference_integrations() == [reference_integration]
     assert store.list_run_deltas() == [run_delta]
-    assert store.list_recovery_sessions() == [recovery_session]
+    assert store.list_recovery_sessions() == [stored_recovery_session]
     assert store.list_runtime_critic_findings() == [critic_finding]
     assert store.list_red_team_findings() == [red_team_finding]
     assert store.list_scratchpad_records() == [scratchpad]

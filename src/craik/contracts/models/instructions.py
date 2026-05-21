@@ -347,6 +347,8 @@ class RecoverySession(CraikModel):
     receipt_ids: list[str] = Field(default_factory=list)
     contradiction_ids: list[str] = Field(default_factory=list)
     active_instruction_constraint_ids: list[str] = Field(default_factory=list)
+    decided_by: str | None = None
+    receipt_hmac: str | None = None
     created_at: datetime
 
     @model_validator(mode="after")

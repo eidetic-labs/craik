@@ -26,6 +26,7 @@ class RecoveryBuilder:
         *,
         project_id: str,
         task_id: str | None = None,
+        decided_by: str | None = None,
         persist: bool = True,
     ) -> RecoverySession:
         """Build a recovery session for a project or one task."""
@@ -119,6 +120,7 @@ class RecoveryBuilder:
             receipt_ids=delta.receipt_ids,
             contradiction_ids=delta.contradiction_ids,
             active_instruction_constraint_ids=delta.active_instruction_constraint_ids,
+            decided_by=decided_by,
             created_at=now,
         )
         if persist:

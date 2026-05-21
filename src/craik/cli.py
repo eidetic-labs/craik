@@ -72,6 +72,10 @@ provider_app = typer.Typer(help="Inspect and select model providers.")
 app.add_typer(provider_app, name="provider")
 instructions_app = typer.Typer(help="Manage runtime instruction distillation.")
 app.add_typer(instructions_app, name="instructions")
+knowledge_app = typer.Typer(help="Capture v0.5 runtime knowledge records.")
+app.add_typer(knowledge_app, name="knowledge")
+review_app = typer.Typer(help="Capture reviewable critic and red-team findings.")
+app.add_typer(review_app, name="review")
 
 
 def package_version() -> str:
@@ -228,9 +232,12 @@ def _load_cli_extensions() -> None:
         "craik.cli_agent_messages",
         "craik.cli_auth",
         "craik.cli_delegations",
+        "craik.cli_handoffs",
         "craik.cli_instructions",
+        "craik.cli_knowledge",
         "craik.cli_operations",
         "craik.cli_project",
+        "craik.cli_review",
         "craik.cli_scope_changes",
         "craik.cli_tasks",
     ):

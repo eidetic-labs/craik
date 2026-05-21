@@ -185,6 +185,7 @@ def test_case_file_loads_memory_handoffs_and_contradictions(
         agent="agent:codex",
         summary="Prior memory handoff.",
         tests_run=["pytest"],
+        next_steps=["Continue with case-file assembly."],
     )
     contradiction = ContradictionManager(store).open_report(
         task_id=task.id,

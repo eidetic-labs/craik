@@ -334,22 +334,22 @@ avoid stale context, and explain what changed between runs.
 
 <div className="craik-grid">
 
-<div><h4>Recovery mode</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/636">#636</a>. Recovery sessions and run deltas are persisted and exposed through <code>craik run recover</code> / <code>craik run delta</code>.</p></div>
-<div><h4>Runtime critic</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/637">#637</a>. Reviewable, non-authoritative critic findings link to affected artifacts and proposed actions.</p></div>
-<div><h4>Red team mode</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/638">#638</a>. Red-team findings are durable quality evidence without becoming privileged instructions.</p></div>
-<div><h4>Handoff quality score</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/640">#640</a>. Deterministic score bands name blocking reasons for poor handoffs.</p></div>
-<div><h4>Evidence coverage score</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/639">#639</a>. Missing evidence ids and weak claims are surfaced as inspectable gaps.</p></div>
+<div><h4>Recovery mode</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/636">#636</a>. Recovery sessions and run deltas are persisted, HMAC-protected in the local store, and exposed through operator-gated <code>craik run recover</code> / <code>craik run delta</code>.</p></div>
+<div><h4>Runtime critic</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/637">#637</a>. Reviewable, non-authoritative critic findings are captured through production helpers and <code>craik review critic</code>.</p></div>
+<div><h4>Red team mode</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/638">#638</a>. Red-team findings are durable quality evidence captured through <code>craik review red-team</code> without becoming privileged instructions.</p></div>
+<div><h4>Handoff quality score</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/640">#640</a>. Handoff creation persists deterministic score bands and names blocking reasons for poor handoffs.</p></div>
+<div><h4>Evidence coverage score</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/639">#639</a>. Handoff creation persists missing evidence ids and weak claims as inspectable gaps.</p></div>
 <div><h4>Context debt tracking</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/641">#641</a>. Omitted, stale, missing, and unresolved context becomes queryable debt with remediation state.</p></div>
-<div><h4>Tool result attestation</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/643">#643</a>. Observed tool outputs can be attested with trust class, evidence or receipt links, and expiry.</p></div>
-<div><h4>Knowledge freshness probes</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/644">#644</a>. Fresh, expiring, expired, and missing probes produce stale-risk warnings.</p></div>
+<div><h4>Tool result attestation</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/643">#643</a>. Observed tool outputs are attested with trust class, evidence or receipt links, expiry, output-hash verification, and local HMAC integrity metadata.</p></div>
+<div><h4>Knowledge freshness probes</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/644">#644</a>. Fresh, expiring, expired, and missing probes are captured through production helpers and produce stale-risk warnings.</p></div>
 <div><h4>Evidence expiration rules</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/642">#642</a>. Expired and missing attestations are classified before reuse.</p></div>
-<div><h4>Known traps</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/646">#646</a>. Active traps carry evidence, avoidance guidance, and expiry or contradiction state.</p></div>
-<div><h4>Negative knowledge</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/647">#647</a>. Evidence-backed negative statements remain scoped and freshness-bounded.</p></div>
-<div><h4>Scratchpad with expiry</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/645">#645</a>. Temporary working notes expire and are excluded from active summaries after expiry.</p></div>
-<div><h4>First-class unknowns</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/648">#648</a>. Unresolved and resolved unknowns carry owner, next action, and resolution state.</p></div>
-<div><h4>Structured context requests</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/650">#650</a>. Missing context can be requested, fulfilled, cancelled, and linked to handoffs, recovery, or unknowns.</p></div>
+<div><h4>Known traps</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/646">#646</a>. Active traps carry evidence, avoidance guidance, and expiry or contradiction state, and can be captured with <code>craik knowledge trap</code>.</p></div>
+<div><h4>Negative knowledge</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/647">#647</a>. Evidence-backed negative statements remain scoped and freshness-bounded, and contradictions are opened instead of silently replacing positive assertions.</p></div>
+<div><h4>Scratchpad with expiry</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/645">#645</a>. Temporary working notes are captured, expire, and are excluded from active summaries after expiry.</p></div>
+<div><h4>First-class unknowns</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/648">#648</a>. Unresolved and resolved unknowns carry owner, next action, resolution state, and receipt linkage for resolution.</p></div>
+<div><h4>Structured context requests</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/650">#650</a>. Missing context can be requested, fulfilled, cancelled, linked to handoffs, recovery, or unknowns, and fulfilled with receipt linkage.</p></div>
 <div><h4>"What changed since last time" deltas</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/652">#652</a>. Run deltas summarize current and previous handoff, case-file, receipt, contradiction, and constraint state.</p></div>
-<div><h4>Agent exit discipline</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/651">#651</a>. Exit checks require validation, handoff, residual risks, next steps, and open-context visibility.</p></div>
+<div><h4>Agent exit discipline</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/651">#651</a>. Handoff creation enforces validation, handoff, residual-risk, next-step, unknown, and open-context checks unless an explicit blocked-exit override rationale is recorded.</p></div>
 <div><h4>Release readiness and docs assessment</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/649">#649</a>. Release-readiness docs now record v0.5.0 validation and pre-release blockers.</p></div>
 
 </div>
