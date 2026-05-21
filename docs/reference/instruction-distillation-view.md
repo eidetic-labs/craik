@@ -87,6 +87,12 @@ promoting a distilled instruction.
 <small>The pipeline this view audits.</small>
 </a>
 
+<a href="../distilled-instructions/">
+<strong>Reference</strong>
+<span>Distilled instructions</span>
+<small>Proposal states, categories, provenance, and snapshots.</small>
+</a>
+
 <a href="../operator-surface/">
 <strong>Reference</strong>
 <span>Operator surface</span>

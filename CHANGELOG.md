@@ -35,6 +35,9 @@ within the `0.x.0` stability expectations described in
 - Distillation CLI: `craik instructions register`, `list`, `approve`,
   `reject`, and `show` expose the registration, review, decision, and
   provenance-inspection workflow through the active operator session.
+- Instruction distillation documentation: operators now have reference pages
+  for sources, distilled proposal lifecycle, approval reviews, and an
+  end-to-end management guide for the `craik instructions` workflow.
 
 ### Changed
 

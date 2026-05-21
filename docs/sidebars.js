@@ -150,6 +150,7 @@ const sidebars = {
         'reference/provider-budgets',
         'guides/authentication',
         'reference/prompt-compiler',
+        'guides/managing-instructions',
       ],
     },
     {
@@ -285,6 +286,8 @@ const sidebars = {
         'reference/instruction-distillation-view',
         'reference/instruction-distillation-workflow',
         'reference/instruction-sources',
+        'reference/distilled-instructions',
+        'reference/instruction-approval',
       ],
     },
     {
@@ -421,6 +424,8 @@ const sidebars = {
         'guides/memory-proposals',
         'guides/memory-diffs',
         'guides/memory-impact-preview',
+        'guides/managing-instructions',
+        'reference/instruction-approval',
       ],
     },
     {
