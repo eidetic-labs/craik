@@ -17,9 +17,13 @@ gate is `0.3.0`; historical sign-offs remain below for audit continuity.
 
 **Multi-agent review and coordination gate.**
 
-`0.3.0` adds governed handoff consumption, role dispatch, authenticated
-mailbox messages, scope-change decisions, structured debate/adjudication, and
-identity isolation for follow-up agent work.
+`0.3.0` lands the governed multi-agent surface: authenticated mailbox
+messages, intent-lock coordination across simultaneous runs, structured
+debate with adjudication, cross-agent review, human delegation pause and
+resume, scope-change decisions, and live work-graph coordination. The same
+release tightens the security boundary: identity-isolated handoff
+consumption, role-allowlist dispatch, operator-bound delegation resolution,
+and authenticated mailbox sends.
 
 </div>
 
@@ -32,36 +36,105 @@ identity isolation for follow-up agent work.
 </div>
 
 <div>
-<dt>Coordination CLI</dt>
+<dt>Package version</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd><code>craik agent-message</code>, <code>craik scope-change decide</code>, <code>craik delegation</code>, and <code>craik task resume</code> expose the coordination workflows without requiring Python access.</dd>
+<dd><code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> declare <code>0.3.0</code>.</dd>
 </div>
 
 <div>
-<dt>Security posture</dt>
+<dt>Multi-agent messaging</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Delegation resolution requires matching operator identity, mailbox senders are authenticated against run role state, role dispatch requires explicit policy allowlists, and identity continuation requires a rationale.</dd>
+<dd>Receipt-backed <code>craik agent-message</code> and local-store helpers send and receive authenticated typed messages linked to tasks, runs, handoffs, and roles. Senders are authenticated against the run's role state, message bodies are bounded, and same-subject repeats get unique IDs instead of overwriting.</dd>
 </div>
 
 <div>
-<dt>Reference docs</dt>
+<dt>Intent-lock coordination</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Mailbox, scope-change, intent-lock coordination, role dispatch, and identity isolation reference pages are linked from the docs sidebar and index.</dd>
+<dd>Overlapping active scopes on the same project block before new loop phases or tool dispatch and persist a denial receipt, so simultaneous runs cannot race the same intent lock.</dd>
 </div>
 
 <div>
-<dt>Integration coverage</dt>
+<dt>Structured debate</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>The v0.3.0 integration test exercises two identities, role dispatch, mailbox send/receive, debate adjudication, handoff creation, and isolated handoff consumption.</dd>
+<dd>The debate runtime helper creates role-linked debate turns, summarizes agreement or disagreement, and resolves by adjudication receipt or human-delegation receipt.</dd>
+</div>
+
+<div>
+<dt>Cross-agent review</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>The review protocol helper creates receipted review requests for worker results, handoffs, or debate summaries and completes them with typed findings linked back to the reviewed artifacts.</dd>
+</div>
+
+<div>
+<dt>Human delegation</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Runs can be interrupted with receipted delegation requests, resolved or cancelled by CLI, and resumed from the recorded response. Resolution requires resolver operator identity and rejects attempts to resume a paused run opened by another operator.</dd>
+</div>
+
+<div>
+<dt>Scope-change protocol</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Discovered work outside the current intent lock interrupts the run, records a scope-change request receipt, and exposes <code>craik scope-change decide</code> for explicit expand, sibling-task, handoff, or denial decisions before continuing.</dd>
+</div>
+
+<div>
+<dt>Live work graph</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Mailbox messages, reviews, debates, delegations, and scope-change artifacts persist work-graph events that can be queried as active coordination state.</dd>
+</div>
+
+<div>
+<dt>Identity isolation</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Consuming a handoff records an explicit consumer credential and operator assignment, rejects producer identity reuse by default, and requires an explicit continuation flag plus rationale when reuse is intentional.</dd>
+</div>
+
+<div>
+<dt>Handoff consumption</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>craik task resume --from-handoff</code> creates a follow-up task, case file, and pending run that record source handoff provenance while requiring an explicit consumer credential and operator identity.</dd>
+</div>
+
+<div>
+<dt>Role-based dispatch</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>craik run execute --role</code> records a policy-checked specialist role assignment, dispatch receipt, and run-level role metadata. Role dispatch requires explicit role allowlists and gates runner overrides behind the <code>role.runner.override</code> policy capability.</dd>
 </div>
 
 <div>
 <dt>Release actions</dt>
 <dt><span className="craik-fields__type">pending</span></dt>
-<dd>After this gate merges, bump package metadata to <code>0.3.0</code>, create immutable tag <code>v0.3.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+<dd>Create immutable tag <code>v0.3.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
 </div>
 
 </div>
+
+### v0.3.0 Verification Commands
+
+Run these before tagging:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_release_tag.py --tag v0.3.0 --expected-version 0.3.0
+uv run pytest tests/test_agent_mailbox.py tests/test_intent_lock_coordination.py tests/test_role_dispatch.py tests/test_scope_changes.py tests/integration/test_multi_agent_v030_flow.py -q
+```
+
+### v0.3.0 Security Notes
+
+- Delegation resolution requires resolver operator identity and rejects
+  attempts to resume a paused run opened by another operator.
+- Mailbox sends authenticate `from_agent` against the sender run's role
+  state before storing the message or receipt.
+- Role dispatch requires explicit role allowlists and gates runner
+  overrides behind the `role.runner.override` policy capability.
+- Mailbox message bodies are bounded and repeated same-subject messages
+  receive unique IDs instead of overwriting the latest message.
+- Handoff consumption records an explicit consumer credential and
+  operator assignment, rejects producer identity reuse by default, and
+  requires an explicit continuation flag plus rationale when reuse is
+  intentional.
 
 ## v0.2.0 Release Readiness
 

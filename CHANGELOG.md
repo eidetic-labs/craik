@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.3.0 - 2026-05-20
+
 ### Added
 
 - Handoff consumption workflow: `craik task resume --from-handoff` now creates
