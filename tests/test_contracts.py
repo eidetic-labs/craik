@@ -568,6 +568,16 @@ def test_v0_5_resolved_runtime_records_require_receipt_linkage(
         CONTRACT_REGISTRY["craik.context_request"].model_validate(request_payload)
 
 
+def test_skill_package_requires_full_semantic_version(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.skill_package"])
+    payload["package_version"] = "1.2"
+
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        CONTRACT_REGISTRY["craik.skill_package"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

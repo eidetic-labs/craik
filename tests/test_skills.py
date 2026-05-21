@@ -58,5 +58,19 @@ def test_skill_package_requires_version_and_docs() -> None:
     with pytest.raises(ValidationError, match="semantic-version-like"):
         _package(package_version="preview")
 
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        _package(package_version="1.2")
+
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        _package(package_version="1.2.x")
+
     with pytest.raises(ValidationError, match="require docs"):
         _package(docs=[])
+
+
+def test_skill_package_accepts_semantic_version_suffixes() -> None:
+    prerelease = _package(id="skill_docs_reconcile_beta", package_version="1.2.3-beta.1")
+    build = _package(id="skill_docs_reconcile_build", package_version="1.2.3+build.7")
+
+    assert prerelease.package_version == "1.2.3-beta.1"
+    assert build.package_version == "1.2.3+build.7"
