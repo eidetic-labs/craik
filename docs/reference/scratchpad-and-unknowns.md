@@ -40,7 +40,13 @@ through an explicit review path.
 <div>
 <dt><code>craik.unknown_record</code></dt>
 <dt><span className="craik-fields__type">explicit gap</span></dt>
-<dd>Question · owner · what is needed to resolve it · next action · evidence · resolution details and receipt linkage when available.</dd>
+<dd>Question · owner · what is needed to resolve it · next action · evidence · resolution answer, timestamp, and receipt linkage when resolved.</dd>
+</div>
+
+<div>
+<dt><code>craik.context_request</code></dt>
+<dt><span className="craik-fields__type">blocking ask</span></dt>
+<dd>Requester · requested context · why it is needed · optional links to handoffs, recovery sessions, or unknowns · fulfiller, timestamp, and receipt linkage when fulfilled.</dd>
 </div>
 
 </div>
@@ -81,6 +87,18 @@ unless the caller records an explicit blocked-exit override rationale.
 <dt><code>craik knowledge context-request</code></dt>
 <dt><span className="craik-fields__type">context request</span></dt>
 <dd>Work needs missing human, repo, web, tool, memory, or external context before it can continue safely.</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge resolve-unknown</code></dt>
+<dt><span className="craik-fields__type">unknown</span></dt>
+<dd>An operator has the answer and needs to close the unknown with a durable resolution receipt.</dd>
+</div>
+
+<div>
+<dt><code>craik knowledge fulfill-context-request</code></dt>
+<dt><span className="craik-fields__type">context request</span></dt>
+<dd>The requested context has been supplied and the request can be fulfilled with receipt provenance.</dd>
 </div>
 
 </div>

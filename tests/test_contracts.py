@@ -538,6 +538,36 @@ def test_v0_5_integrity_and_resolution_fields_round_trip(
     assert request.fulfilled_by_receipt_id == "receipt_context_request_fulfilled"
 
 
+def test_v0_5_resolved_runtime_records_require_receipt_linkage(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    debt_payload = dict(fixtures["craik.context_debt_record"])
+    debt_payload.update({"status": "resolved", "resolved_at": "2026-05-16T09:30:00Z"})
+    unknown_payload = dict(fixtures["craik.unknown_record"])
+    unknown_payload.update(
+        {
+            "status": "resolved",
+            "resolved_answer": "Use the v0.5 e2e test.",
+            "resolved_at": "2026-05-16T09:31:00Z",
+        }
+    )
+    request_payload = dict(fixtures["craik.context_request"])
+    request_payload.update(
+        {
+            "status": "fulfilled",
+            "fulfilled_by": "operator-123",
+            "fulfilled_at": "2026-05-16T09:32:00Z",
+        }
+    )
+
+    with pytest.raises(ValidationError, match="resolved context debt requires"):
+        CONTRACT_REGISTRY["craik.context_debt_record"].model_validate(debt_payload)
+    with pytest.raises(ValidationError, match="resolved unknowns require"):
+        CONTRACT_REGISTRY["craik.unknown_record"].model_validate(unknown_payload)
+    with pytest.raises(ValidationError, match="fulfilled context requests require"):
+        CONTRACT_REGISTRY["craik.context_request"].model_validate(request_payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

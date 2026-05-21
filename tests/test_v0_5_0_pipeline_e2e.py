@@ -14,6 +14,7 @@ from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.reviewing.critics import record_red_team_finding, record_runtime_critic_finding
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
+from craik.runtime.work.context_debt import resolve_context_debt
 from craik.runtime.work.handoffs import HandoffBlockedByExitDisciplineError, HandoffWriter
 from craik.runtime.work.known_traps import record_known_trap, record_negative_knowledge
 from craik.runtime.work.scratchpad import (
@@ -180,6 +181,15 @@ def test_v0_5_capture_records_flow_into_case_handoff_and_quality(tmp_path: Path)
 
         assert store.get_handoff_quality_score(f"handoff_quality_{handoff.id}") is not None
         assert store.get_evidence_coverage_score(f"evidence_coverage_{handoff.id}") is not None
+        debt = store.list_context_debt_records()[0]
+        resolved_debt = resolve_context_debt(
+            store,
+            debt.id,
+            resolved_by="operator-123",
+            summary="Context debt reviewed after handoff.",
+        )
+        assert resolved_debt.resolved_by_receipt_id
+        assert store.get_receipt(resolved_debt.resolved_by_receipt_id) is not None
     finally:
         store.close()
 

@@ -85,13 +85,13 @@ deployment verification, and GitHub release verification.
 <div>
 <dt>Operator surfaces</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd>Quality gate, known traps, negative knowledge, run delta, recovery, scratchpad, unknowns, context requests, critic findings, red-team findings, and exit-discipline states are formatted or captured without granting policy authority.</dd>
+<dd>Quality gate, known traps, negative knowledge, run delta, recovery, scratchpad, unknowns, context requests, context debt, critic findings, red-team findings, and exit-discipline states are formatted or captured without granting policy authority. Knowledge-resolution views distinguish unresolved records, verified receipt links, and missing or tampered receipt links.</dd>
 </div>
 
 <div>
 <dt>CLI exercise path</dt>
 <dt><span className="craik-fields__type">ready</span></dt>
-<dd><code>craik knowledge</code> captures scratchpad, unknown, context-request, known-trap, and negative-knowledge records; <code>craik review</code> captures critic and red-team findings; <code>craik run recover</code> and <code>craik run delta</code> expose recovery and changed-since-last-time summaries from local durable state behind an active operator session.</dd>
+<dd><code>craik knowledge</code> captures scratchpad, unknown, context-request, known-trap, and negative-knowledge records, and resolves unknown, context-request, and context-debt records with operator receipt linkage; <code>craik review</code> captures critic and red-team findings; <code>craik run recover</code> and <code>craik run delta</code> expose recovery and changed-since-last-time summaries from local durable state behind an active operator session.</dd>
 </div>
 
 <div>
@@ -103,7 +103,7 @@ deployment verification, and GitHub release verification.
 <div>
 <dt>Security notes</dt>
 <dt><span className="craik-fields__type">reviewed</span></dt>
-<dd>Critic and red-team findings are non-authoritative by default; freshness and evidence-expiry checks warn or block silent reliance but do not prove truth; scratchpad content expires instead of becoming project memory; negative knowledge requires evidence and scope; tool attestations and recovery sessions carry local HMAC integrity metadata; existing recovery/delta state requires an active operator session.</dd>
+<dd>Critic and red-team findings are non-authoritative by default; freshness and evidence-expiry checks warn or block silent reliance but do not prove truth; scratchpad content expires instead of becoming project memory; negative knowledge requires evidence and scope; resolved unknowns, fulfilled context requests, and resolved context debt require operator receipt links; tool attestations and recovery sessions carry local HMAC integrity metadata; existing recovery/delta state requires an active operator session.</dd>
 </div>
 
 <div>

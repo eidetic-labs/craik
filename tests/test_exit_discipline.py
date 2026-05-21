@@ -80,6 +80,7 @@ def test_context_request_handoff_can_be_fulfilled() -> None:
         status="fulfilled",
         fulfilled_by="user:maintainer",
         fulfilled_at=NOW,
+        fulfilled_by_receipt_id="receipt_context_request_fulfilled",
         handoff_id="handoff_exit",
         recovery_session_id="recovery_session_task_exit",
     )

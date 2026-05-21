@@ -10,8 +10,15 @@ import typer
 from craik.cli import knowledge_app
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.store import LocalStore
+from craik.runtime.work.context_debt import resolve_context_debt
 from craik.runtime.work.known_traps import record_known_trap, record_negative_knowledge
-from craik.runtime.work.scratchpad import record_unknown, request_context, write_scratchpad_record
+from craik.runtime.work.scratchpad import (
+    fulfill_context_request,
+    record_unknown,
+    request_context,
+    resolve_unknown,
+    write_scratchpad_record,
+)
 
 
 @knowledge_app.command("scratchpad")
@@ -100,6 +107,70 @@ def knowledge_context_request(
             question=question,
             needed_for=needed_for,
             unknown_id=unknown_id,
+        )
+    finally:
+        store.close()
+    _print(record)
+
+
+@knowledge_app.command("resolve-unknown")
+def knowledge_resolve_unknown(
+    unknown_id: Annotated[str, typer.Argument(help="Unknown record id.")],
+    answer: Annotated[str, typer.Option("--answer", help="Resolution answer.")],
+) -> None:
+    """Resolve an unknown and link the operator receipt."""
+    operator = _operator_identity()
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        record = resolve_unknown(
+            store,
+            unknown_id,
+            answer=answer,
+            resolved_by=operator,
+        )
+    finally:
+        store.close()
+    _print(record)
+
+
+@knowledge_app.command("fulfill-context-request")
+def knowledge_fulfill_context_request(
+    request_id: Annotated[str, typer.Argument(help="Context request id.")],
+) -> None:
+    """Fulfill a context request and link the operator receipt."""
+    operator = _operator_identity()
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        record = fulfill_context_request(
+            store,
+            request_id,
+            fulfilled_by=operator,
+        )
+    finally:
+        store.close()
+    _print(record)
+
+
+@knowledge_app.command("resolve-context-debt")
+def knowledge_resolve_context_debt(
+    debt_id: Annotated[str, typer.Argument(help="Context debt record id.")],
+    summary: Annotated[
+        str | None,
+        typer.Option("--summary", help="Resolution summary."),
+    ] = None,
+) -> None:
+    """Resolve a context debt record and link the operator receipt."""
+    operator = _operator_identity()
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        record = resolve_context_debt(
+            store,
+            debt_id,
+            resolved_by=operator,
+            summary=summary,
         )
     finally:
         store.close()

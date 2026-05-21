@@ -3,6 +3,8 @@ from datetime import UTC, datetime, timedelta
 from craik.contracts.models import (
     Assumption,
     CapabilityReceipt,
+    ContextDebtRecord,
+    ContextRequest,
     ContradictionReport,
     DistilledInstructionProposal,
     EvidenceCoverageScore,
@@ -23,6 +25,7 @@ from craik.contracts.models import (
     RedTeamFinding,
     RunDelta,
     RuntimeCriticFinding,
+    UnknownRecord,
     WorkGraphEdge,
     WorkGraphExport,
     WorkGraphNode,
@@ -30,6 +33,7 @@ from craik.contracts.models import (
 from craik.runtime.companions.operator_views import (
     BudgetQuotaSnapshot,
     InstructionDistillationSnapshot,
+    KnowledgeResolutionSnapshot,
     KnownTrapsSnapshot,
     MemoryImpactPreviewSnapshot,
     QualityGateSnapshot,
@@ -40,6 +44,7 @@ from craik.runtime.companions.operator_views import (
     format_evidence_assumption_view,
     format_handoff_viewer,
     format_instruction_distillation_view,
+    format_knowledge_resolution_view,
     format_known_traps_view,
     format_memory_impact_preview_view,
     format_quality_gate_view,
@@ -813,6 +818,64 @@ def test_known_traps_view_empty_state() -> None:
         "Negative Knowledge",
         "- none",
     ]
+
+
+def test_knowledge_resolution_view_formats_receipt_provenance() -> None:
+    debt = ContextDebtRecord(
+        id="context_debt_docs",
+        task_id="task_docs",
+        kind="omitted_doc",
+        status="resolved",
+        summary="Docs were omitted.",
+        created_at=NOW,
+        resolved_at=NOW,
+        resolved_by_receipt_id="receipt_context_debt",
+    )
+    unknown = UnknownRecord(
+        id="unknown_docs",
+        task_id="task_docs",
+        status="resolved",
+        question="Which docs prove this?",
+        needed_resolution="repo_inspection",
+        next_action="Read docs.",
+        resolved_answer="README has the state.",
+        created_at=NOW,
+        resolved_at=NOW,
+        resolved_by_receipt_id="receipt_missing",
+    )
+    request = ContextRequest(
+        id="context_request_docs",
+        task_id="task_docs",
+        requester="operator-123",
+        kind="repo_inspection",
+        question="Need docs state.",
+        needed_for="Release readiness.",
+        created_at=NOW,
+    )
+    receipt = CapabilityReceipt(
+        id="receipt_context_debt",
+        task_id="task_docs",
+        actor="operator-123",
+        capability="context_debt.resolve",
+        target="context_debt_docs",
+        policy_profile="strict",
+        reason="Resolved context debt.",
+        result={"status": "passed", "summary": "Resolved context debt."},
+        created_at=NOW,
+    )
+
+    lines = format_knowledge_resolution_view(
+        KnowledgeResolutionSnapshot(
+            context_debt=[debt],
+            unknowns=[unknown],
+            context_requests=[request],
+            receipts=[receipt],
+        )
+    )
+
+    assert "  Resolution Receipt: receipt_context_debt (verified)" in lines
+    assert "  Resolution Receipt: receipt_missing (missing or tampered)" in lines
+    assert "  Fulfillment Receipt: unresolved" in lines
 
 
 def test_run_delta_view_formats_change_kinds_and_recovery_links() -> None:

@@ -75,6 +75,7 @@ def test_unresolved_and_resolved_unknowns_surface_summaries(tmp_path) -> None:
             status="resolved",
             resolved_answer="No change.",
             resolved_at=NOW + timedelta(minutes=5),
+            resolved_by_receipt_id="receipt_unknown_resolved",
         )
         store.put_unknown_record(unresolved)
         store.put_unknown_record(resolved)

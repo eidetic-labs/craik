@@ -23,6 +23,8 @@ within the `0.x.0` stability expectations described in
 - Production capture paths and CLI commands for scratchpad records,
   unknowns, context requests, known traps, negative knowledge,
   runtime critic findings, and red-team findings.
+- Receipt-linked resolution paths and CLI commands for unknowns,
+  context requests, and context debt.
 - v0.5.0 capture-layer end-to-end coverage that validates persisted
   continuity records flow into case files, handoffs, quality scores,
   and exit-discipline enforcement.
@@ -60,6 +62,8 @@ within the `0.x.0` stability expectations described in
 - Scratchpad notes require expiry, and negative knowledge requires
   evidence and explicit scope so temporary or absence-based claims do
   not silently become durable project truth.
+- Resolved unknowns, fulfilled context requests, and resolved context
+  debt must link the operator receipt that closed the record.
 
 ## 0.4.0 — 2026-05-21
 
