@@ -46,6 +46,11 @@ for plugin identity, entrypoints, declared capabilities, docs,
 security metadata, and compatibility. **Descriptors declare needs;
 they do not grant runtime authority.**
 
+Descriptors must declare a trust boundary and semantic-version-like
+plugin and Craik compatibility versions. Grant-required capabilities
+must name concrete operations and targets so review can compare the
+descriptor request to the eventual grant.
+
 ## Review and probation
 
 New or changed community plugins should start in probation. Use
@@ -60,6 +65,8 @@ promotion / rejection / expiration decisions.
 Promotion requires passing required criteria and compatibility checks.
 Rejected and expired plugins must preserve the decision rationale so
 later agents don't repeat the same review.
+Decisions require evidence, and criteria marked as passed require
+evidence links before a plugin can be promoted.
 
 </div>
 
@@ -77,6 +84,10 @@ approval requirements, and expiry.
 Do not infer authority from descriptor metadata, package names, docs,
 or prior successful runs. Capability grants and policy envelopes
 decide what a plugin may do in the current run.
+Grants must name explicit operations and scoped targets. Denied,
+expired, and approval-required grants must not be treated as ambient
+authority; runtime callers should check the current operation and
+expiry before execution.
 
 </div>
 
@@ -89,6 +100,19 @@ trust boundaries, and results.
 
 Receipts summarize passed, failed, and denied actions without storing
 raw secrets or unredacted plugin output.
+Receipt result metadata must not contradict the receipt redaction
+flag, and probation links should be preserved while a plugin is under
+review.
+
+## Adapters
+
+Adapter packages are distribution metadata for runner integrations,
+not authority grants. Use
+[`craik.adapter_package`](../reference/adapter-packages.md) to record
+adapter entrypoints, capability surfaces, supported runner modes,
+Python versions, platforms, linked plugin descriptors, docs, and
+provenance. Adapter compatibility should be treated as a hard
+execution boundary.
 
 ## Reference paths
 
@@ -135,6 +159,12 @@ are examples, not trust grants.**
 <dt>Policy envelopes</dt>
 <dt><span className="craik-fields__type">runtime authority</span></dt>
 <dd>Remain the source of runtime authority.</dd>
+</div>
+
+<div>
+<dt>Adapter packages</dt>
+<dt><span className="craik-fields__type">distribution</span></dt>
+<dd>Describe runner integration surfaces without granting authority.</dd>
 </div>
 
 </div>
