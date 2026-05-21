@@ -252,7 +252,7 @@ def test_case_file_orders_governing_distillations_by_category(tmp_path: Path) ->
 def _approved_constraint(store: LocalStore, project_id: str) -> None:
     proposal = _proposal(
         project_id,
-        status="approved",
+        status="governing",
         promoted_constraint_id="constraint_distilled_instruction",
     )
     store.put_distilled_instruction_proposal(proposal)

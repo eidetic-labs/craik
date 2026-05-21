@@ -77,7 +77,10 @@ def test_prompt_compiler_is_deterministic_and_persisted(
     assert first.distillations == []
     assert first.distillation_warnings == []
     assert "Policy id: policy_task_review_docs" in first.prompt
-    assert "## Distillations\nItems:\n- none\nWarnings:\n- none" in first.prompt
+    assert (
+        "## Active instruction constraints\nItems:\n- none\nWarnings:\n- none"
+        in first.prompt
+    )
     assert "grant_docs_write: repo.write.docs" in first.prompt
     assert "Document excluded from discovery" in first.prompt
     assert "Memory facts were not loaded into the case file." in first.context_omissions
@@ -154,16 +157,24 @@ def test_prompt_compiler_renders_governing_distillations_in_category_order(
 
     first = compiler.compile(task.id, runner_id="codex")
     second = compiler.compile(task.id, runner_id="codex")
-    section = _section_body(first, "Distillations")
+    section = _section_body(first, "Active instruction constraints")
 
     assert [item["category"] for item in first.distillations] == ["policy", "boundary"]
     assert first.distillations == second.distillations
-    assert section == _section_body(second, "Distillations")
-    assert "(policy) Follow the release approval policy." in section
-    assert "(boundary) Stay inside the repository boundary." in section
+    assert section == _section_body(second, "Active instruction constraints")
+    assert first.prompt.count("## Active instruction constraints") == 1
+    assert section == (
+        "Items:\n"
+        "- policy:\n"
+        "  - (policy) Follow the release approval policy. "
+        "[instruction_source_agents_md @ AGENTS.md:3-3]\n"
+        "- boundary:\n"
+        "  - (boundary) Stay inside the repository boundary. "
+        "[instruction_source_agents_md @ AGENTS.md:8-8]\n"
+        "Warnings:\n"
+        "- none"
+    )
     assert section.index("(policy)") < section.index("(boundary)")
-    assert "[instruction_source_agents_md @ AGENTS.md:3]" in section
-    assert "[instruction_source_agents_md @ AGENTS.md:8]" in section
 
 
 def test_prompt_compiler_excludes_stale_governing_distillation_with_warning(
@@ -215,7 +226,7 @@ def test_prompt_compiler_excludes_stale_governing_distillation_with_warning(
     ]
     assert "Stale governing distillation excluded" in _section_body(
         compiled,
-        "Distillations",
+        "Active instruction constraints",
     )
 
 
