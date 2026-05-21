@@ -1,13 +1,53 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-20</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current release
-gate is `0.4.0`; historical sign-offs remain below for audit continuity.
+gate is `0.5.0`; historical sign-offs remain below for audit continuity.
+
+</div>
+
+## v0.5.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Quality, continuity, and recovery gate.**
+
+`0.5.0` starts with one goal issue for each roadmap capability plus a
+release-readiness issue. Each issue must ship implementation, tests,
+docs, and requirement validation before the milestone closes.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Recovery mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/636">#636</a></dd></div>
+<div><dt>Runtime critic</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/637">#637</a></dd></div>
+<div><dt>Red team mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/638">#638</a></dd></div>
+<div><dt>Evidence coverage score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/639">#639</a></dd></div>
+<div><dt>Handoff quality score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/640">#640</a></dd></div>
+<div><dt>Context debt tracking</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/641">#641</a></dd></div>
+<div><dt>Evidence expiration rules</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/642">#642</a></dd></div>
+<div><dt>Tool result attestation</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/643">#643</a></dd></div>
+<div><dt>Knowledge freshness probes</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/644">#644</a></dd></div>
+<div><dt>Scratchpad with expiry</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/645">#645</a></dd></div>
+<div><dt>Known traps</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/646">#646</a></dd></div>
+<div><dt>Negative knowledge</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/647">#647</a></dd></div>
+<div><dt>First-class unknowns</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/648">#648</a></dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/649">#649</a></dd></div>
+<div><dt>Structured context requests</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/650">#650</a></dd></div>
+<div><dt>Agent exit discipline</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/651">#651</a></dd></div>
+<div><dt>What changed since last time deltas</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/652">#652</a></dd></div>
 
 </div>
 
@@ -37,8 +77,8 @@ and active constraints flow into case files and compiled prompts.
 
 <div>
 <dt>Package version</dt>
-<dt><span className="craik-fields__type">ready</span></dt>
-<dd>The implementation and documentation are ready for the release-prep commit that bumps <code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> to <code>0.4.0</code>.</dd>
+<dt><span className="craik-fields__type">shipped</span></dt>
+<dd><code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> declare <code>0.4.0</code>.</dd>
 </div>
 
 <div>
@@ -103,8 +143,8 @@ and active constraints flow into case files and compiled prompts.
 
 <div>
 <dt>Release actions</dt>
-<dt><span className="craik-fields__type">pending</span></dt>
-<dd>Rename <code>CHANGELOG.md</code> <code>Unreleased</code> to <code>0.4.0 - YYYY-MM-DD</code>, bump package and docs versions, create immutable tag <code>v0.4.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+<dt><span className="craik-fields__type">complete</span></dt>
+<dd><code>v0.4.0</code> is tagged, published to PyPI, and represented by the GitHub Release. The GitHub milestone is closed with zero open issues.</dd>
 </div>
 
 </div>
