@@ -85,7 +85,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           awk -v ver="$version" '
-            $0 ~ "^## " ver " - " {p=1; next}
+            $0 ~ "^## " ver " (—|-|–) " {p=1; next}
             /^## / && p {exit}
             p
           ' CHANGELOG.md > release_notes.md

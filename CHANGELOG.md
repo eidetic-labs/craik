@@ -10,6 +10,45 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.6.0 skill ecosystem contracts for semantic skill packages,
+  project/global skill registries, package-level context requirements,
+  and redacted skill invocation contexts.
+- Governed plugin ecosystem contracts for plugin descriptors,
+  probation records, least-privilege plugin capability grants, plugin
+  receipts, adapter packages, and reference integrations.
+- Community skill and plugin guides covering authoring, scope, review,
+  installation boundaries, grants, receipts, adapters, and security
+  expectations.
+- v0.6.0 release-readiness documentation with goal issue status,
+  validation commands, security notes, blocker state, and release
+  automation hygiene.
+
+### Changed
+
+- Skill packages now require expected input schemas to be declared as
+  context requirements, including trust boundary and missing-context
+  behavior.
+- Skill registries now require every active entry to appear in
+  `active_entry_ids` and reject inactive entries in precedence order.
+- Plugin and adapter compatibility versions now use semantic-version
+  validation for deterministic release and runtime comparisons.
+- Release automation now accepts changelog release headings that use an
+  em dash, en dash, or ASCII hyphen between version and date.
+
+### Security
+
+- Plugin descriptors declare trust boundaries and grant-required
+  capabilities must name concrete operations and targets.
+- Plugin probation promotion now requires evidence-backed criteria and
+  decisions before durable trust can be granted.
+- Plugin capability grants reject ambient operations such as `*` or
+  `all`, require scoped targets, and expose a current-operation
+  authorization helper.
+- Plugin receipts reject unredacted result metadata and preserve
+  probation links while a plugin is under review.
+
 ## 0.5.0 — 2026-05-21
 
 ### Added
