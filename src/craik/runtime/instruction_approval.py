@@ -29,6 +29,40 @@ _OWNER_ONLY_FILE_MODE = 0o600
 class InstructionApprovalError(RuntimeError):
     """Raised when instruction approval cannot proceed."""
 
+    code = "approval.error"
+
+
+class MissingOperatorIdentityError(InstructionApprovalError):
+    """Raised when an approval caller does not supply an operator identity."""
+
+    code = "operator.identity.missing"
+
+    def __init__(self) -> None:
+        super().__init__("instruction approval rejected: explicit operator identity is required")
+
+
+class MissingOperatorSessionError(InstructionApprovalError):
+    """Raised when approval requires a bound operator session but none exists."""
+
+    code = "operator.session.missing"
+    remediation = "run `craik auth login`, or pass allow_unbound=True for unattended use"
+
+    def __init__(self) -> None:
+        super().__init__("instruction approval rejected: active operator session is required")
+
+
+class OperatorIdentityMismatchError(InstructionApprovalError):
+    """Raised when supplied operator identity differs from the active session."""
+
+    code = "operator.session.mismatch"
+
+    def __init__(self, supplied: str) -> None:
+        super().__init__(
+            "instruction approval rejected: supplied operator identity does not "
+            "match the active session subject"
+        )
+        self.supplied_identity = supplied
+
 
 @dataclass(frozen=True)
 class InstructionApprovalResult:
@@ -52,7 +86,11 @@ def approve_instruction(
 ) -> InstructionApprovalResult:
     """Approve a distilled instruction and make it governing."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity, allow_unbound=allow_unbound)
+    _require_operator(
+        operator_identity,
+        proposal_id=proposal.id,
+        allow_unbound=allow_unbound,
+    )
     hmac_key = _hmac_key_for_store(store)
     existing = store.get_instruction_promotion_review(_review_id(proposal.id))
     if proposal.promotion_status == "governing" and existing is not None:
@@ -117,7 +155,11 @@ def reject_instruction(
 ) -> InstructionApprovalResult:
     """Reject a distilled instruction with an auditable denial receipt."""
     proposal = _proposal(store, proposal_id)
-    _require_operator(operator_identity, allow_unbound=allow_unbound)
+    _require_operator(
+        operator_identity,
+        proposal_id=proposal.id,
+        allow_unbound=allow_unbound,
+    )
     hmac_key = _hmac_key_for_store(store)
     decided_at = now or datetime.now(UTC)
     review = InstructionPromotionReview(
@@ -186,23 +228,44 @@ def verify_review_hmac(
     return hmac.compare_digest(review.receipt_hmac, expected)
 
 
-def _require_operator(operator_identity: str, *, allow_unbound: bool) -> None:
+def _require_operator(
+    operator_identity: str,
+    *,
+    proposal_id: str,
+    allow_unbound: bool,
+) -> None:
     if not operator_identity.strip():
-        raise InstructionApprovalError(
-            "instruction approval requires an explicit operator identity"
-        )
+        raise MissingOperatorIdentityError()
     try:
         session = OperatorSessionStore.from_env().get()
     except OperatorSessionNotFoundError:
         if not allow_unbound:
-            raise InstructionApprovalError(
-                "instruction approval requires an active operator session"
-            ) from None
+            error: InstructionApprovalError = MissingOperatorSessionError()
+            _audit_event(
+                "instruction_approval.operator_check_failed",
+                code=error.code,
+                proposal_id=proposal_id,
+                supplied_identity_hash=_identity_hash(operator_identity),
+            )
+            raise error from None
         return
     if session.subject != operator_identity:
-        raise InstructionApprovalError(
-            "instruction approval operator identity does not match active session"
+        error = OperatorIdentityMismatchError(operator_identity)
+        _audit_event(
+            "instruction_approval.operator_check_failed",
+            code=error.code,
+            proposal_id=proposal_id,
+            supplied_identity_hash=_identity_hash(operator_identity),
         )
+        raise error
+
+
+def _audit_event(name: str, **fields: object) -> None:
+    """Hook for structured approval audit events."""
+
+
+def _identity_hash(operator_identity: str) -> str:
+    return hashlib.sha256(operator_identity.encode("utf-8")).hexdigest()[:16]
 
 
 def _hmac_key_for_store(store: LocalStore) -> bytes:

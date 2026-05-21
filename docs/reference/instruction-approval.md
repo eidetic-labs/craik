@@ -75,6 +75,14 @@ into unbound approval by passing `allow_unbound=True`; production
 extensions should leave the default in place so the recorded operator
 identity is bound to the current session.
 
+Approval operator checks raise typed `InstructionApprovalError`
+subclasses with stable `code` values:
+`operator.identity.missing`, `operator.session.missing`, and
+`operator.session.mismatch`. Missing-session errors also expose a
+`remediation` hint. Session-related failures emit a structured audit
+hook with the proposal ID and a short hash of the supplied identity,
+never the active session subject.
+
 ## Receipts
 
 `craik.instruction_promotion_review` links the decision to the

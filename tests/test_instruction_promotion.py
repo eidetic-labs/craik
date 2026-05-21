@@ -6,6 +6,9 @@ from craik.contracts.models import DistilledInstructionProposal
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.instruction_approval import (
     InstructionApprovalError,
+    MissingOperatorIdentityError,
+    MissingOperatorSessionError,
+    OperatorIdentityMismatchError,
     approve_instruction,
     list_governing,
     reject_instruction,
@@ -73,7 +76,7 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
         proposal = _proposal()
         store.put_distilled_instruction_proposal(proposal)
 
-        with pytest.raises(InstructionApprovalError, match="operator identity"):
+        with pytest.raises(MissingOperatorIdentityError) as exc_info:
             approve_instruction(
                 store,
                 allow_unbound=True,
@@ -81,6 +84,7 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
                 operator_identity="",
                 rationale="Missing operator.",
             )
+        assert exc_info.value.code == "operator.identity.missing"
 
         result = approve_instruction(
             store,
@@ -101,18 +105,35 @@ def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) ->
 
 def test_approval_requires_session_unless_unbound_explicit(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("CRAIK_HOME", str(tmp_path / "sessionless-home"))
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "craik.runtime.instruction_approval._audit_event",
+        lambda name, **fields: events.append((name, fields)),
+    )
     store = _store(tmp_path)
     try:
         proposal = _proposal()
         store.put_distilled_instruction_proposal(proposal)
 
-        with pytest.raises(InstructionApprovalError, match="active operator session"):
+        with pytest.raises(MissingOperatorSessionError) as exc_info:
             approve_instruction(
                 store,
                 proposal_id=proposal.id,
                 operator_identity="user:maintainer",
                 rationale="Instruction is valid.",
             )
+        assert exc_info.value.code == "operator.session.missing"
+        assert "craik auth login" in exc_info.value.remediation
+        assert events == [
+            (
+                "instruction_approval.operator_check_failed",
+                {
+                    "code": "operator.session.missing",
+                    "proposal_id": proposal.id,
+                    "supplied_identity_hash": "96007b128038cb7f",
+                },
+            )
+        ]
 
         result = approve_instruction(
             store,
@@ -130,6 +151,11 @@ def test_approval_requires_session_unless_unbound_explicit(tmp_path, monkeypatch
 def test_approval_rejects_mismatched_active_operator_session(tmp_path, monkeypatch) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("CRAIK_HOME", str(home))
+    events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "craik.runtime.instruction_approval._audit_event",
+        lambda name, **fields: events.append((name, fields)),
+    )
     OperatorSessionStore(home).put(
         OperatorSession(
             subject="user:active",
@@ -145,7 +171,7 @@ def test_approval_rejects_mismatched_active_operator_session(tmp_path, monkeypat
         proposal = _proposal()
         store.put_distilled_instruction_proposal(proposal)
 
-        with pytest.raises(InstructionApprovalError, match="does not match active session"):
+        with pytest.raises(OperatorIdentityMismatchError) as exc_info:
             approve_instruction(
                 store,
                 allow_unbound=True,
@@ -153,6 +179,18 @@ def test_approval_rejects_mismatched_active_operator_session(tmp_path, monkeypat
                 operator_identity="user:other",
                 rationale="Wrong operator.",
             )
+        assert exc_info.value.code == "operator.session.mismatch"
+        assert exc_info.value.supplied_identity == "user:other"
+        assert events == [
+            (
+                "instruction_approval.operator_check_failed",
+                {
+                    "code": "operator.session.mismatch",
+                    "proposal_id": proposal.id,
+                    "supplied_identity_hash": "f7d51c98670089e7",
+                },
+            )
+        ]
     finally:
         store.close()
 

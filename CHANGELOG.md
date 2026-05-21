@@ -63,7 +63,8 @@ within the `0.x.0` stability expectations described in
   fails verification.
 - Direct instruction approval API calls now require an active operator session
   unless a caller explicitly opts into unbound approval for test or controlled
-  internal use.
+  internal use; operator-check failures now expose typed error codes and emit
+  hashed structured audit-hook fields for session failures.
 - Instruction source registration now rejects absolute paths, parent-directory
   escapes, and symlink escapes before a source enters the registry.
 - Oversize instruction sources and sources exceeding the aggregate project
