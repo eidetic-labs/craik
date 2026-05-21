@@ -39,6 +39,18 @@ Standard source kinds must use their canonical path. `policy_doc`
 sources declare their own path and must be listed in the registry's
 `declared_policy_doc_paths`.
 
+<div className="craik-keypoint">
+
+**Declared paths stay inside the project.**
+
+Instruction ingestion resolves every source path under the registered
+project root and rejects paths that escape it. Standard Markdown-shaped
+sources emit one candidate per bullet outside fenced code blocks.
+Declared policy documents are captured as one free-form statement block
+so policy prose keeps its review context.
+
+</div>
+
 ## Detection order
 
 Craik never scans arbitrary Markdown as authority. A source becomes
