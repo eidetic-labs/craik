@@ -42,6 +42,9 @@ within the `0.x.0` stability expectations described in
 - Instruction distillation CLI for v0.4.0: `craik instructions` now supports
   source registration, filtered proposal listing, approve/reject decisions, and
   provenance-aware item inspection through the active operator session.
+- Legacy promotion review hardening for v0.4.0: `review_instruction_promotion`
+  now requires explicit override rationale for stale or contradicted approvals
+  and records informational override rationale when requested.
 
 ## 0.3.0 - 2026-05-20
 

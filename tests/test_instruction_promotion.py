@@ -167,6 +167,98 @@ def test_stale_or_contradicted_approval_requires_override(tmp_path) -> None:
         store.close()
 
 
+def test_review_promotion_override_on_stale_records_bypass(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        stale = _proposal().model_copy(
+            update={
+                "promotion_status": "deferred",
+                "decided_by": "agent:instruction-distillation",
+                "decided_at": datetime(2026, 5, 15, 22, 31, tzinfo=UTC),
+            }
+        )
+        stale = DistilledInstructionProposal.model_validate(
+            stale.model_dump(mode="json", by_alias=True)
+        )
+        store.put_distilled_instruction_proposal(stale)
+
+        with pytest.raises(InstructionPromotionError, match="override"):
+            review_instruction_promotion(
+                store,
+                proposal_id=stale.id,
+                decision="approved",
+                decided_by="user:maintainer",
+                rationale="Reviewed stale instruction.",
+            )
+
+        review = review_instruction_promotion(
+            store,
+            proposal_id=stale.id,
+            decision="approved",
+            decided_by="user:maintainer",
+            rationale="Reviewed stale instruction.",
+            override=True,
+            override_reason="Source drift reviewed manually.",
+        )
+
+        assert review.override_stale is True
+        assert review.override_contradiction is False
+        assert review.override_rationale == "Source drift reviewed manually."
+    finally:
+        store.close()
+
+
+def test_review_promotion_override_on_contradiction_records_bypass(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal().model_copy(
+            update={"contradiction_ids": ["contradiction_docs"]}
+        )
+        proposal = DistilledInstructionProposal.model_validate(
+            proposal.model_dump(mode="json", by_alias=True)
+        )
+        store.put_distilled_instruction_proposal(proposal)
+
+        review = review_instruction_promotion(
+            store,
+            proposal_id=proposal.id,
+            decision="approved",
+            decided_by="user:maintainer",
+            rationale="Reviewed contradiction.",
+            override=True,
+            override_reason="Contradiction resolved offline.",
+        )
+
+        assert review.override_stale is False
+        assert review.override_contradiction is True
+        assert review.override_rationale == "Contradiction resolved offline."
+    finally:
+        store.close()
+
+
+def test_review_promotion_override_without_need_is_informational(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+
+        review = review_instruction_promotion(
+            store,
+            proposal_id=proposal.id,
+            decision="approved",
+            decided_by="user:maintainer",
+            rationale="Operator requested explicit override audit.",
+            override=True,
+            override_reason="Operator checked source state before approval.",
+        )
+
+        assert review.override_stale is False
+        assert review.override_contradiction is False
+        assert review.override_rationale == "Operator checked source state before approval."
+    finally:
+        store.close()
+
+
 def test_contradicted_approval_records_override(tmp_path) -> None:
     store = _store(tmp_path)
     try:
