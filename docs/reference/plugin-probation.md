@@ -48,7 +48,7 @@ include a decision or grant durable trust.
 <div>
 <dt><code>promoted</code></dt>
 <dt><span className="craik-fields__type">promote decision</span></dt>
-<dd>Plus passing required criteria and compatibility checks. Promotion does not have to grant durable trust — the field defaults to false so callers make durable trust explicit.</dd>
+<dd>Plus passing required criteria, criterion evidence, and compatibility checks. Promotion does not have to grant durable trust — the field defaults to false so callers make durable trust explicit.</dd>
 </div>
 
 <div>
@@ -73,6 +73,10 @@ These states make plugin review auditable without mixing descriptor
 metadata with runtime authority or policy grants.
 
 </div>
+
+Decisions require evidence links. Criteria marked as passed also
+require evidence links, so a plugin cannot become promoted based only
+on an unchecked status change.
 
 ## What's next
 

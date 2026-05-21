@@ -620,6 +620,36 @@ def test_plugin_descriptor_requires_compatibility_boundaries(
         CONTRACT_REGISTRY["craik.plugin_descriptor"].model_validate(payload)
 
 
+def test_plugin_probation_passed_criteria_require_evidence(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.plugin_probation"])
+    payload.update(
+        {
+            "status": "promoted",
+            "criteria": [
+                {
+                    "name": "security_review",
+                    "required": True,
+                    "passed": True,
+                    "summary": "Review plugin security posture.",
+                    "evidence_ids": [],
+                }
+            ],
+            "decision": {
+                "decision": "promote",
+                "decided_by": "user:maintainer",
+                "rationale": "Promote without criterion evidence.",
+                "evidence_ids": ["evidence_readme_status"],
+                "decided_at": "2026-05-16T16:10:00Z",
+            },
+        }
+    )
+
+    with pytest.raises(ValidationError, match="criteria require evidence"):
+        CONTRACT_REGISTRY["craik.plugin_probation"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

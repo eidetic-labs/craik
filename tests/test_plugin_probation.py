@@ -77,10 +77,28 @@ def test_promoted_plugins_require_passed_criteria_and_compatibility() -> None:
 
     assert promoted.status == "promoted"
 
+    trusted = _probation(
+        status="promoted",
+        criteria=[_criterion(passed=True)],
+        decision=_decision("promote"),
+        durable_trust_granted=True,
+    )
+
+    assert trusted.durable_trust_granted is True
+
     with pytest.raises(ValidationError, match="required criteria"):
         _probation(
             status="promoted",
             criteria=[_criterion(passed=False)],
+            decision=_decision("promote"),
+        )
+
+    criterion_without_evidence = _criterion(passed=True)
+    criterion_without_evidence["evidence_ids"] = []
+    with pytest.raises(ValidationError, match="criteria require evidence"):
+        _probation(
+            status="promoted",
+            criteria=[criterion_without_evidence],
             decision=_decision("promote"),
         )
 
@@ -91,6 +109,14 @@ def test_promoted_plugins_require_passed_criteria_and_compatibility() -> None:
             compatibility_check_ids=[],
             decision=_decision("promote"),
         )
+
+
+def test_plugin_probation_decisions_require_evidence() -> None:
+    decision = _decision("reject")
+    decision["evidence_ids"] = []
+
+    with pytest.raises(ValidationError):
+        _probation(status="rejected", decision=decision)
 
 
 def test_rejected_plugins_require_reject_decision() -> None:
