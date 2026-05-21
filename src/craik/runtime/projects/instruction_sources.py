@@ -147,7 +147,8 @@ def active_instruction_context(store: LocalStore, project_id: str) -> list[dict[
     for constraint in sorted(constraints, key=lambda item: item.id):
         proposal = proposal_by_id.get(constraint.proposal_id)
         if proposal is not None and (
-            proposal.promotion_status != "approved" or proposal.contradiction_ids
+            proposal.promotion_status not in {"approved", "governing"}
+            or proposal.contradiction_ids
         ):
             continue
         active.append(

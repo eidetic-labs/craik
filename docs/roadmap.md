@@ -316,7 +316,7 @@ files and prompt compilation as first-class evidence.
 <div><h4>Line/range provenance</h4><p>Deterministic source snapshot, line/column range, summary, and excerpt hash attached to every extracted item.</p></div>
 <div><h4>Categorized extraction</h4><p>Deterministic proposal creation for instruction · policy · preference · command · boundary · handoff-rule · memory-rule · security-rule · stale-risk, with unclassified warnings.</p></div>
 <div><h4>Inter-source contradictions</h4><p>Normalized cross-source conflicts surface as contradiction reports while same-source and stale candidates are skipped.</p></div>
-<div><h4>Approval flow</h4><p>Distilled items become governing only after recorded approval, producing a receipt.</p></div>
+<div><h4>Approval flow</h4><p>Distilled items become governing only after explicit operator approval, producing a receipt; stale or contradicted approvals require recorded overrides.</p></div>
 <div><h4>Case-file integration</h4><p>Approved distillations load as first-class evidence with provenance.</p></div>
 <div><h4>Prompt compilation</h4><p>Distilled constraints appear in compiled prompts as a separate authoritative section.</p></div>
 <div><h4>Distillation CLI</h4><p><code>craik instructions register / list / approve / show</code>.</p></div>

@@ -182,7 +182,14 @@ DistilledInstructionCategory = Literal[
     "security_rule",
     "stale_risk",
 ]
-DistilledInstructionPromotionStatus = Literal["proposed", "approved", "rejected", "deferred"]
+DistilledInstructionPromotionStatus = Literal[
+    "proposed",
+    "approved",
+    "governing",
+    "rejected",
+    "deferred",
+    "superseded",
+]
 InstructionPromotionDecision = Literal["approved", "rejected", "deferred"]
 RecoveryStatus = Literal["clean_resume", "changed_state", "missing_prior_context"]
 GatewayMode = Literal["foreground", "daemon"]
