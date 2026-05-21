@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.5.0 — 2026-05-21
+
 ### Added
 
 - v0.5.0 quality and continuity contracts for recovery sessions, run
