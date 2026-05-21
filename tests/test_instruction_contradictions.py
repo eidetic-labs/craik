@@ -146,3 +146,98 @@ def test_preference_conflicts_are_preserved_for_later_review_without_reports(
         assert store.list_contradictions() == []
     finally:
         store.close()
+
+
+def test_tool_allowlist_policy_conflict_is_inter_source_and_idempotent(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    try:
+        left = _proposal(
+            proposal_id="proposal_agents_policy_tool",
+            source_id="instruction_source_agents_md",
+            category="policy",
+            statement="tool-allowlist pytest: allowed",
+        )
+        right = _proposal(
+            proposal_id="proposal_codex_policy_tool",
+            source_id="instruction_source_codex",
+            category="policy",
+            statement="tool-allowlist pytest: denied",
+        )
+        store.put_distilled_instruction_proposal(left)
+        store.put_distilled_instruction_proposal(right)
+
+        reports = detect_instruction_contradictions(store, task_id="task_distill")
+        second = detect_instruction_contradictions(store, task_id="task_distill")
+
+        assert len(reports) == 1
+        assert second == []
+        assert len(store.list_contradictions()) == 1
+        report = reports[0]
+        assert report.facts == [
+            "policy:tool-allowlist:pytest: allowed",
+            "policy:tool-allowlist:pytest: denied",
+        ]
+        assert report.evidence_ids == [
+            "provenance_proposal_agents_policy_tool",
+            "provenance_proposal_codex_policy_tool",
+        ]
+        assert left.source_id in report.affected_artifacts
+        assert right.source_id in report.affected_artifacts
+    finally:
+        store.close()
+
+
+def test_single_source_internal_conflict_is_excluded(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        store.put_distilled_instruction_proposal(
+            _proposal(
+                proposal_id="proposal_agents_policy_allow",
+                source_id="instruction_source_agents_md",
+                category="policy",
+                statement="tool-allowlist pytest: allowed",
+            )
+        )
+        store.put_distilled_instruction_proposal(
+            _proposal(
+                proposal_id="proposal_agents_policy_deny",
+                source_id="instruction_source_agents_md",
+                category="policy",
+                statement="tool-allowlist pytest: denied",
+            )
+        )
+
+        reports = detect_instruction_contradictions(store, task_id="task_distill")
+
+        assert reports == []
+        assert store.list_contradictions() == []
+    finally:
+        store.close()
+
+
+def test_command_conflict_uses_normalized_command_subject(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    try:
+        left = _proposal(
+            proposal_id="proposal_agents_command",
+            source_id="instruction_source_agents_md",
+            category="command",
+            statement="Run pytest before release.",
+        )
+        right = _proposal(
+            proposal_id="proposal_codex_command",
+            source_id="instruction_source_codex",
+            category="command",
+            statement="Do not run pytest before release.",
+        )
+        store.put_distilled_instruction_proposal(left)
+        store.put_distilled_instruction_proposal(right)
+
+        reports = detect_instruction_contradictions(store, task_id="task_distill")
+
+        assert len(reports) == 1
+        assert reports[0].facts == ["command:pytest: allowed", "command:pytest: denied"]
+    finally:
+        store.close()
