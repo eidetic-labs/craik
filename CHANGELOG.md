@@ -10,6 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- Instruction source registration foundation for v0.4.0: typed registration
+  and registry receipt contracts, a forward-only local-store table, and a
+  runtime API for registering declared instruction sources before ingestion.
+
 ## 0.3.0 - 2026-05-20
 
 ### Added

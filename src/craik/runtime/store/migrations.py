@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from craik.contracts.registry import CONTRACT_REGISTRY
 
-CURRENT_MIGRATION = 3
+CURRENT_MIGRATION = 4
 MIGRATION_RECOVERY_GUIDANCE = (
     "Back up state/craik.sqlite3, keep the original file unchanged, and run "
     "`craik doctor` for diagnostics. If the database version is newer than this "
@@ -127,6 +127,38 @@ def _migration_3(connection: sqlite3.Connection) -> None:
     _record_migration(connection, 3)
 
 
+def _migration_4(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS instruction_sources (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          path TEXT NOT NULL,
+          owner TEXT NOT NULL,
+          trust_boundary TEXT NOT NULL,
+          active INTEGER NOT NULL,
+          registered_by TEXT NOT NULL,
+          registered_at TEXT NOT NULL,
+          content_hash TEXT,
+          payload_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_instruction_sources_project
+          ON instruction_sources(project_id, kind, path);
+        """
+    )
+    _write_metadata(
+        connection,
+        {
+            "instruction_sources_table": "registered",
+            "schema_version": str(CURRENT_MIGRATION),
+        },
+    )
+    _record_migration(connection, 4)
+
+
 def _write_metadata(connection: sqlite3.Connection, metadata: dict[str, str]) -> None:
     now = _utc_now()
     for key, value in metadata.items():
@@ -159,6 +191,7 @@ LOCAL_STORE_MIGRATIONS = StoreMigrationRunner(
         StoreMigration(1, "initial_records", _migration_1),
         StoreMigration(2, "local_store_metadata", _migration_2),
         StoreMigration(3, "migration_framework_metadata", _migration_3),
+        StoreMigration(4, "instruction_sources_table", _migration_4),
     ]
 )
 

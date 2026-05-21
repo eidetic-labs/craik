@@ -1631,6 +1631,38 @@
     "metadata": {},
     "created_at": "2026-05-16T06:39:00Z"
   },
+  "craik.instruction_source_registration": {
+    "schema": "craik.instruction_source_registration",
+    "version": "0.1.0",
+    "id": "instruction_source_registration_agents_md",
+    "project_id": "project_stigmem",
+    "source_id": "instruction_source_agents_md",
+    "kind": "agents_md",
+    "path": "AGENTS.md",
+    "owner": "team:runtime",
+    "registered_by": "agent:orchestrator",
+    "registered_at": "2026-05-16T06:39:00Z",
+    "trust_boundary": "project",
+    "content_hash": null,
+    "policy_envelope_id": "policy_docs_reconcile",
+    "notes": ["Fixture registration for standard agent instructions."],
+    "metadata": {}
+  },
+  "craik.instruction_registry_receipt": {
+    "schema": "craik.instruction_registry_receipt",
+    "version": "0.1.0",
+    "id": "instruction_registry_receipt_agents_md",
+    "project_id": "project_stigmem",
+    "source_id": "instruction_source_agents_md",
+    "registration_id": "instruction_source_registration_agents_md",
+    "action": "registered",
+    "registered_by": "agent:orchestrator",
+    "capability": "instructions.register",
+    "target": "AGENTS.md",
+    "result_status": "passed",
+    "summary": "Registered agents_md instruction source at AGENTS.md.",
+    "created_at": "2026-05-16T06:39:00Z"
+  },
   "craik.instruction_source_registry": {
     "schema": "craik.instruction_source_registry",
     "version": "0.1.0",

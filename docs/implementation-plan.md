@@ -429,7 +429,7 @@ docs/
 
 <div className="craik-grid">
 
-<div><h4>Runtime instruction source registry</h4></div>
+<div><h4>Runtime instruction source registry</h4><p>Receipted registration records declared sources before ingestion or promotion.</p></div>
 <div><h4>Markdown instruction distiller</h4></div>
 <div><h4>Source hash tracking</h4></div>
 <div><h4>Distillation proposal store</h4></div>

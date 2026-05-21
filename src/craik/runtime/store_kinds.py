@@ -28,6 +28,8 @@ CONTRACT_KINDS: dict[str, str] = {
     "craik.handoff": "handoffs",
     "craik.human_delegation_point": "human_delegations",
     "craik.instruction_source": "instruction_sources",
+    "craik.instruction_source_registration": "instruction_source_registrations",
+    "craik.instruction_registry_receipt": "instruction_registry_receipts",
     "craik.instruction_promotion_review": "instruction_promotion_reviews",
     "craik.instruction_provenance": "instruction_provenance",
     "craik.instruction_source_registry": "instruction_source_registries",
