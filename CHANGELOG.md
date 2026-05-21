@@ -33,6 +33,9 @@ within the `0.x.0` stability expectations described in
 - Operator approval workflow for v0.4.0 instruction distillations: proposed
   items become governing only through explicit approval receipts, stale or
   contradicted approvals require recorded overrides, and denials are receipted.
+- Case-file integration for v0.4.0 governing distillations: case files now carry
+  a deterministic `distillations` section with category, source, provenance
+  ranges, and approval receipt snapshots.
 
 ## 0.3.0 - 2026-05-20
 

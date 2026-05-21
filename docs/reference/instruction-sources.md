@@ -271,12 +271,20 @@ remain visible for review but inactive.
 
 <div className="craik-grid">
 
-<div><h4>Case files</h4><p>Include active constraints in <code>context_budget.active_instruction_constraints</code>.</p></div>
+<div><h4>Case files</h4><p>Include active constraints in <code>context_budget.active_instruction_constraints</code> and first-class governing distillation entries in <code>distillations</code>.</p></div>
 <div><h4>Prompts</h4><p>Compilation renders constraints in the context section.</p></div>
 <div><h4>Onboarding</h4><p>Reports include active instruction summaries in the project model.</p></div>
 <div><h4>Handoffs</h4><p>Carry active constraint IDs forward as context debt.</p></div>
 
 </div>
+
+Case-file distillation entries are grouped in deterministic category
+order and include proposal ID, constraint ID, source ID, source
+snapshot ID, category, statement, provenance ranges, and a snapshot of
+the approval review. Rejected, superseded, deferred stale, or
+contradicted proposals are excluded from newly built case files;
+previously persisted case-file revisions remain immutable records of
+the context available at build time.
 
 ## What's next
 

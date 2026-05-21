@@ -182,6 +182,42 @@ def test_instruction_approval_contract_fields_round_trip(
     assert dumped_review["override_rationale"] == "Operator reviewed stale conflict manually."
 
 
+def test_case_file_distillation_section_round_trips(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.case_file"])
+    payload["distillations"] = [
+        {
+            "id": "distilled_instruction_agents_rule",
+            "constraint_id": "constraint_distilled_instruction_agents_rule",
+            "source_id": "instruction_source_agents_md",
+            "snapshot_id": "instruction_snapshot_agents_md",
+            "category": "command",
+            "statement": "Run tests before merge.",
+            "provenance": [
+                {
+                    "id": "provenance_agents_rule",
+                    "path": "AGENTS.md",
+                    "start_line": 1,
+                    "end_line": 1,
+                    "summary": "Run tests before merge.",
+                }
+            ],
+            "approval_receipt": {
+                "id": "promotion_review_distilled_instruction_agents_rule",
+                "decision": "approved",
+                "decided_by": "user:maintainer",
+            },
+        }
+    ]
+
+    parsed = CONTRACT_REGISTRY["craik.case_file"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["distillations"][0]["id"] == "distilled_instruction_agents_rule"
+    assert dumped["distillations"][0]["approval_receipt"]["decision"] == "approved"
+
+
 def test_task_request_auth_context_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

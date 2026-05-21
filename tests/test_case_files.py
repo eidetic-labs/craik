@@ -153,6 +153,7 @@ def test_case_context_budget_counts_extracted_context_inputs() -> None:
         evidence=[],
         assumptions=[],
         active_instruction_constraints=[{"path": "AGENTS.md"}],
+        distillations=[{"id": "distilled_instruction_docs"}],
         memory_fact_count=2,
         recent_handoffs=["handoff_1: completed: Done"],
         contradiction_ids=["contradiction_1"],
@@ -163,6 +164,7 @@ def test_case_context_budget_counts_extracted_context_inputs() -> None:
     assert budget["docs_omitted"] == ["docs/large.md"]
     assert budget["memory_fact_count"] == 2
     assert budget["contradiction_ids"] == ["contradiction_1"]
+    assert budget["distillations"] == [{"id": "distilled_instruction_docs"}]
 
 
 def test_case_file_loads_memory_handoffs_and_contradictions(

@@ -112,6 +112,7 @@ class CaseFile(CraikModel):
     recent_handoffs: list[str] = Field(default_factory=list)
     stale_risks: list[str] = Field(default_factory=list)
     contradictions: list[ContradictionReport] = Field(default_factory=list)
+    distillations: list[dict[str, Any]] = Field(default_factory=list)
     verification_plan: list[str] = Field(default_factory=list)
     context_budget: dict[str, Any] = Field(default_factory=dict)
 
