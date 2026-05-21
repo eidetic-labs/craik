@@ -72,6 +72,24 @@ def test_plugin_receipt_requires_redaction() -> None:
     with pytest.raises(ValidationError, match="must be redacted"):
         _receipt(redacted=False)
 
+    with pytest.raises(ValidationError, match="must not mark output unredacted"):
+        _receipt(
+            result={
+                "status": "passed",
+                "summary": "Raw output.",
+                "metadata": {"redacted": False},
+            }
+        )
+
+
+def test_plugin_receipt_probation_link_is_optional_but_non_empty() -> None:
+    without_probation = _receipt(plugin_probation_id=None)
+
+    assert without_probation.plugin_probation_id is None
+
+    with pytest.raises(ValidationError, match="probation ids"):
+        _receipt(plugin_probation_id="")
+
 
 def test_plugin_receipt_requires_grant_descriptor_evidence_and_handoff_links() -> None:
     with pytest.raises(ValidationError):

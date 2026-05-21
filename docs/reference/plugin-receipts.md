@@ -74,6 +74,11 @@ Successful, failed, and denied plugin receipts all require evidence
 and handoff links so reviewers can reconstruct the action boundary
 without reading raw plugin output.
 
+The optional probation link is shown in the operator receipt view when
+present. Receipts may omit the probation id for already-promoted
+plugins, but an empty probation id is rejected. Result metadata must
+not contradict the receipt redaction flag.
+
 </div>
 
 ## What's next

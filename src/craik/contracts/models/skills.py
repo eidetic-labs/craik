@@ -480,6 +480,10 @@ class PluginReceipt(CraikModel):
         """Require redacted plugin receipts with grant and evidence links."""
         if not self.redacted:
             raise ValueError("plugin receipts must be redacted")
+        if self.plugin_probation_id == "":
+            raise ValueError("plugin receipts require non-empty probation ids")
+        if self.result.metadata.get("redacted") is False:
+            raise ValueError("plugin receipt result metadata must not mark output unredacted")
         if self.result.status == "passed" and not self.capability_grant_ids:
             raise ValueError("successful plugin receipts require capability grants")
         if self.result.status == "denied" and not self.result.summary:
