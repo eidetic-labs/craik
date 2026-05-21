@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from craik import __version__
 from craik.cli import app, package_version
 from craik.cli import receipts_app as mounted_receipts_app
 from craik.cli_receipts import receipts_app
@@ -34,7 +35,7 @@ runner = CliRunner()
 
 
 def test_package_import_exposes_version() -> None:
-    assert package_version()
+    assert package_version() == __version__
 
 
 def test_version_option_prints_version() -> None:
