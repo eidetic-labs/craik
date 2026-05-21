@@ -23,7 +23,7 @@ def _package(**overrides: object) -> AdapterPackage:
         ],
         "capability_surfaces": ["prompt.read", "result.structured"],
         "compatibility": {
-            "craik_versions": ["0.7"],
+            "craik_versions": ["0.6.0"],
             "runner_modes": ["prompt-handoff"],
             "python_versions": ["3.12"],
             "platforms": ["darwin", "linux"],
@@ -33,7 +33,7 @@ def _package(**overrides: object) -> AdapterPackage:
         "plugin_descriptor_ids": ["plugin_docs_reconcile"],
         "docs": ["docs/reference/codex-runner-adapter.md"],
         "provenance_ids": ["evidence_readme_status"],
-        "version_constraints": ["craik>=0.7,<0.8"],
+        "version_constraints": ["craik>=0.6,<0.7"],
         "created_at": "2026-05-16T16:40:00Z",
     }
     payload.update(overrides)
@@ -61,10 +61,41 @@ def test_adapter_package_requires_metadata_and_entrypoints() -> None:
     with pytest.raises(ValidationError, match="semantic-version-like"):
         _package(package_version="preview")
 
+    with pytest.raises(ValidationError, match="semantic-version-like"):
+        _package(package_version="1.2")
+
 
 def test_adapter_package_requires_compatibility() -> None:
     with pytest.raises(ValidationError):
-        _package(compatibility={"craik_versions": ["0.7"], "runner_modes": []})
+        _package(compatibility={"craik_versions": ["0.6.0"], "runner_modes": []})
+
+    with pytest.raises(ValidationError, match="craik_versions"):
+        _package(
+            compatibility={
+                "craik_versions": ["0.6"],
+                "runner_modes": ["prompt-handoff"],
+                "python_versions": ["3.12"],
+                "platforms": ["darwin"],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="python_versions"):
+        _package(
+            compatibility={
+                "craik_versions": ["0.6.0"],
+                "runner_modes": ["prompt-handoff"],
+                "platforms": ["darwin"],
+            }
+        )
+
+    with pytest.raises(ValidationError, match="platforms"):
+        _package(
+            compatibility={
+                "craik_versions": ["0.6.0"],
+                "runner_modes": ["prompt-handoff"],
+                "python_versions": ["3.12"],
+            }
+        )
 
 
 def test_adapter_package_requires_capability_surfaces_docs_and_provenance() -> None:

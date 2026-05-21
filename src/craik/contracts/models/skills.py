@@ -567,6 +567,22 @@ class AdapterCompatibility(CraikModel):
     platforms: list[str] = Field(default_factory=list)
     notes: str | None = None
 
+    @model_validator(mode="after")
+    def validate_adapter_compatibility(self) -> AdapterCompatibility:
+        """Require semantic Craik compatibility and concrete runtime boundaries."""
+        invalid_craik_versions = [
+            version for version in self.craik_versions if not _SEMVER_RE.fullmatch(version)
+        ]
+        if invalid_craik_versions:
+            raise ValueError(
+                f"adapter compatibility craik_versions must be semantic-version-like: {invalid_craik_versions}"
+            )
+        if not self.python_versions:
+            raise ValueError("adapter compatibility requires python_versions")
+        if not self.platforms:
+            raise ValueError("adapter compatibility requires platforms")
+        return self
+
 
 class AdapterPackage(CraikModel):
     """Adapter package metadata and compatibility contract."""
@@ -594,7 +610,7 @@ class AdapterPackage(CraikModel):
     @model_validator(mode="after")
     def validate_adapter_package(self) -> AdapterPackage:
         """Require versioned adapter packages with entrypoints and compatibility."""
-        if "." not in self.package_version:
+        if not _SEMVER_RE.fullmatch(self.package_version):
             raise ValueError("adapter package_version must be semantic-version-like")
         if not self.compatibility.runner_modes:
             raise ValueError("adapter packages require runner mode compatibility")
