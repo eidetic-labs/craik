@@ -660,6 +660,18 @@ def test_plugin_capability_grant_rejects_broad_operations(
         CONTRACT_REGISTRY["craik.plugin_capability_grant"].model_validate(payload)
 
 
+def test_plugin_receipt_rejects_unredacted_result_metadata(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.plugin_receipt"])
+    result = dict(payload["result"])
+    result["metadata"] = {"redacted": False}
+    payload["result"] = result
+
+    with pytest.raises(ValidationError, match="unredacted"):
+        CONTRACT_REGISTRY["craik.plugin_receipt"].model_validate(payload)
+
+
 def test_blocked_tool_result_attestation_requires_receipt(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

@@ -61,6 +61,7 @@ def format_receipt_viewer(receipt: CapabilityReceipt | PluginReceipt) -> list[st
             f"Task: {receipt.task_id}",
             f"Actor: {receipt.actor}",
             f"Plugin: {receipt.plugin_descriptor_id}",
+            f"Probation: {receipt.plugin_probation_id or 'None'}",
             f"Action: {receipt.action}",
             f"Trust Boundary: {receipt.trust_boundary}",
             f"Status: {receipt.result.status}",

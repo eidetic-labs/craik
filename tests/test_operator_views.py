@@ -255,6 +255,7 @@ def test_receipt_viewer_formats_plugin_receipt_links() -> None:
 
     assert "Plugin Receipt: plugin_receipt_docs_reconcile" in lines
     assert "Plugin: plugin_docs_reconcile" in lines
+    assert "Probation: None" in lines
     assert "Status: denied" in lines
     assert "- plugin_grant_docs_reconcile" in lines
     assert "- evidence_readme_status" in lines
