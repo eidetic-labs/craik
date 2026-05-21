@@ -55,11 +55,27 @@ owner, source links, next action, carry-forward state, and resolution.
 
 <div>
 <dt>Resolved</dt>
-<dt><span className="craik-fields__type"><code>resolved_at</code></span></dt>
-<dd>Must include the resolution timestamp.</dd>
+<dt><span className="craik-fields__type"><code>resolved_at</code> · <code>resolved_by_receipt_id</code></span></dt>
+<dd>Must include the resolution timestamp and the operator receipt that closed the debt record.</dd>
 </div>
 
 </div>
+
+## Resolution
+
+`resolve_context_debt` is a store-backed transition helper. It loads
+the debt record, mints or links an operator receipt, writes the updated
+record, and returns the persisted resolved form. Operators can exercise
+the same path from the CLI:
+
+```bash
+craik knowledge resolve-context-debt context_debt_task_docs_missing_external_state_github \
+  --summary "GitHub state was refreshed."
+```
+
+The command requires an active operator session. The output includes
+`resolved_by_receipt_id`, and the receipt is persisted in the local
+store for later operator review.
 
 ## Handoff summary
 

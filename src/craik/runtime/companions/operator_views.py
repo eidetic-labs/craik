@@ -25,6 +25,7 @@ from craik.contracts.models import (
     RuntimeCriticFinding,
 )
 from craik.runtime.companions import operator_artifact_views as _operator_artifact_views
+from craik.runtime.companions import operator_knowledge_views as _operator_knowledge_views
 from craik.runtime.memory import operator_memory_views as _operator_memory_views
 
 format_contradiction_inbox = _operator_artifact_views.format_contradiction_inbox
@@ -32,6 +33,8 @@ format_evidence_assumption_view = _operator_artifact_views.format_evidence_assum
 format_handoff_viewer = _operator_artifact_views.format_handoff_viewer
 format_receipt_viewer = _operator_artifact_views.format_receipt_viewer
 format_work_graph_explorer = _operator_artifact_views.format_work_graph_explorer
+KnowledgeResolutionSnapshot = _operator_knowledge_views.KnowledgeResolutionSnapshot
+format_knowledge_resolution_view = _operator_knowledge_views.format_knowledge_resolution_view
 MemoryImpactPreviewSnapshot = _operator_memory_views.MemoryImpactPreviewSnapshot
 format_memory_impact_preview_view = _operator_memory_views.format_memory_impact_preview_view
 

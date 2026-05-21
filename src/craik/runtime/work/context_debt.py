@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from craik.contracts.models import CaseFile, ContextDebtRecord
+from craik.runtime.store import LocalStore
+from craik.runtime.work.scratchpad import _clean, _resolution_receipt
 
 
 def records_from_case_file(
@@ -179,17 +181,38 @@ def carry_forward_context_debt(
 
 
 def resolve_context_debt(
-    record: ContextDebtRecord,
+    store: LocalStore,
+    debt_id: str,
     *,
-    resolved_at: datetime | None = None,
+    resolved_by: str,
+    receipt_id: str | None = None,
+    summary: str | None = None,
+    now: datetime | None = None,
 ) -> ContextDebtRecord:
-    """Return a resolved copy of a context debt record."""
-    return record.model_copy(
+    """Mark a context debt record resolved and retain operator receipt linkage."""
+    existing = store.get_context_debt_record(debt_id)
+    if existing is None:
+        raise ValueError(f"unknown context debt record: {debt_id}")
+    resolved_at = now or datetime.now(UTC)
+    resolution_summary = _clean(summary or f"Resolved context debt {debt_id}.")
+    resolved_receipt_id = receipt_id or _resolution_receipt(
+        store,
+        task_id=existing.task_id,
+        actor=resolved_by,
+        capability="context_debt.resolve",
+        target=debt_id,
+        summary=resolution_summary,
+        created_at=resolved_at,
+    ).id
+    updated = existing.model_copy(
         update={
             "status": "resolved",
-            "resolved_at": resolved_at or datetime.now(UTC),
+            "resolved_at": resolved_at,
+            "resolved_by_receipt_id": resolved_receipt_id,
         }
     )
+    store.put_context_debt_record(updated)
+    return updated
 
 
 def context_debt_summaries(records: list[ContextDebtRecord]) -> list[str]:

@@ -102,6 +102,11 @@ memory, or prove external truth by themselves.
   creation blocks when unresolved unknowns or open context requests
   remain unless the caller records an explicit blocked-exit override
   rationale.
+- Unknown, context-request, and context-debt resolution paths require
+  receipt linkage. Operators can resolve these records through the
+  `craik knowledge resolve-unknown`, `fulfill-context-request`, and
+  `resolve-context-debt` commands; direct runtime callers receive the
+  same receipt-linked state transition helpers.
 - Negative knowledge requires evidence and scope. When it contradicts a
   positive assertion, Craik opens a contradiction record instead of
   silently deleting or replacing the existing assertion.

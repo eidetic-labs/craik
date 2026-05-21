@@ -537,6 +537,14 @@ Options:
 - `--project`: Project id.
 - `--unknown-id`: Linked unknown id.
 
+## `craik knowledge fulfill-context-request`
+
+Fulfill a context request and link the operator receipt.
+
+```text
+craik knowledge fulfill-context-request [OPTIONS] REQUEST_ID
+```
+
 ## `craik knowledge negative`
 
 Persist evidence-backed negative knowledge.
@@ -554,6 +562,30 @@ Options:
 - `--project`: Project id.
 - `--task`: Task id.
 - `--contradicted-fact`: Existing positive assertion contradicted.
+
+## `craik knowledge resolve-context-debt`
+
+Resolve a context debt record and link the operator receipt.
+
+```text
+craik knowledge resolve-context-debt [OPTIONS] DEBT_ID
+```
+
+Options:
+
+- `--summary`: Resolution summary.
+
+## `craik knowledge resolve-unknown`
+
+Resolve an unknown and link the operator receipt.
+
+```text
+craik knowledge resolve-unknown [OPTIONS] UNKNOWN_ID
+```
+
+Options:
+
+- `--answer`: Resolution answer.
 
 ## `craik knowledge scratchpad`
 

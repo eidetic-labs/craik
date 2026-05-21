@@ -146,13 +146,17 @@ class ContextDebtRecord(CraikModel):
 
     @model_validator(mode="after")
     def validate_context_debt_status(self) -> ContextDebtRecord:
-        """Require open debt to be actionable and resolved debt to be timestamped."""
+        """Require open debt to be actionable and resolved debt to carry provenance."""
         if self.status in {"created", "carried_forward"} and not self.next_action:
             raise ValueError("open context debt requires next_action")
-        if self.status == "resolved" and self.resolved_at is None:
-            raise ValueError("resolved context debt requires resolved_at")
-        if self.status != "resolved" and self.resolved_at is not None:
-            raise ValueError("unresolved context debt must not set resolved_at")
+        if self.status == "resolved" and (
+            self.resolved_at is None or not self.resolved_by_receipt_id
+        ):
+            raise ValueError("resolved context debt requires resolved_at and receipt linkage")
+        if self.status != "resolved" and (
+            self.resolved_at is not None or self.resolved_by_receipt_id is not None
+        ):
+            raise ValueError("unresolved context debt must not set resolution details")
         return self
 
 
@@ -341,11 +345,21 @@ class UnknownRecord(CraikModel):
 
     @model_validator(mode="after")
     def validate_unknown_status(self) -> UnknownRecord:
-        """Require resolved unknowns to carry answer and timestamp."""
-        if self.status == "resolved" and (not self.resolved_answer or self.resolved_at is None):
-            raise ValueError("resolved unknowns require resolved_answer and resolved_at")
-        if self.status == "unresolved" and self.resolved_at is not None:
-            raise ValueError("unresolved unknowns must not set resolved_at")
+        """Require resolved unknowns to carry answer, timestamp, and provenance."""
+        if self.status == "resolved" and (
+            not self.resolved_answer
+            or self.resolved_at is None
+            or not self.resolved_by_receipt_id
+        ):
+            raise ValueError(
+                "resolved unknowns require resolved_answer, resolved_at, and receipt linkage"
+            )
+        if self.status == "unresolved" and (
+            self.resolved_answer is not None
+            or self.resolved_at is not None
+            or self.resolved_by_receipt_id is not None
+        ):
+            raise ValueError("unresolved unknowns must not set resolution details")
         return self
 
 
@@ -376,8 +390,14 @@ class ContextRequest(CraikModel):
     @model_validator(mode="after")
     def validate_context_request_status(self) -> ContextRequest:
         """Require fulfillment details only for fulfilled requests."""
-        if self.status == "fulfilled" and (not self.fulfilled_by or self.fulfilled_at is None):
-            raise ValueError("fulfilled context requests require fulfilled_by and fulfilled_at")
+        if self.status == "fulfilled" and (
+            not self.fulfilled_by
+            or self.fulfilled_at is None
+            or not self.fulfilled_by_receipt_id
+        ):
+            raise ValueError(
+                "fulfilled context requests require fulfilled_by, fulfilled_at, and receipt linkage"
+            )
         if self.status != "fulfilled" and (
             self.fulfilled_by
             or self.fulfilled_at is not None

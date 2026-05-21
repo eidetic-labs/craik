@@ -10,6 +10,7 @@ from craik.cli import receipts_app as mounted_receipts_app
 from craik.cli_receipts import receipts_app
 from craik.contracts.models import (
     CapabilityReceipt,
+    ContextDebtRecord,
     DistilledInstructionProposal,
     InstructionProvenance,
     IntentLock,
@@ -70,6 +71,122 @@ def test_cli_extension_modules_register_commands(
 
     assert result.exit_code == 0
     assert expected in result.output
+
+
+def test_knowledge_resolution_commands_require_operator_session(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["knowledge", "resolve-unknown", "unknown_missing", "--answer", "No session."],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    assert "active operator session required; run craik auth login" in result.output
+
+
+def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
+    env = {"CRAIK_HOME": str(home)}
+
+    unknown = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "unknown",
+            "task_knowledge",
+            "--question",
+            "Which validation proves this?",
+            "--next-action",
+            "Run pytest.",
+        ],
+        env=env,
+    )
+    request = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "context-request",
+            "task_knowledge",
+            "--question",
+            "Need current validation state.",
+            "--needed-for",
+            "Release readiness.",
+        ],
+        env=env,
+    )
+    debt_id = "context_debt_task_knowledge_missing_external_state_github"
+    paths = ensure_craik_home(env)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_context_debt_record(
+            ContextDebtRecord(
+                id=debt_id,
+                task_id="task_knowledge",
+                kind="missing_external_state",
+                summary="GitHub state was not loaded.",
+                next_action="Refresh GitHub state.",
+                created_at=datetime(2026, 5, 16, 9, 10, tzinfo=UTC),
+            )
+        )
+    finally:
+        store.close()
+
+    assert unknown.exit_code == 0
+    assert request.exit_code == 0
+    unknown_id = json.loads(unknown.stdout)["id"]
+    request_id = json.loads(request.stdout)["id"]
+
+    resolved_unknown = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "resolve-unknown",
+            unknown_id,
+            "--answer",
+            "The v0.5 pipeline test proves it.",
+        ],
+        env=env,
+    )
+    fulfilled_request = runner.invoke(
+        app,
+        ["knowledge", "fulfill-context-request", request_id],
+        env=env,
+    )
+    resolved_debt = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "resolve-context-debt",
+            debt_id,
+            "--summary",
+            "GitHub state was refreshed.",
+        ],
+        env=env,
+    )
+
+    assert resolved_unknown.exit_code == 0
+    assert fulfilled_request.exit_code == 0
+    assert resolved_debt.exit_code == 0
+    assert json.loads(resolved_unknown.stdout)["resolved_by_receipt_id"]
+    assert json.loads(fulfilled_request.stdout)["fulfilled_by_receipt_id"]
+    assert json.loads(resolved_debt.stdout)["resolved_by_receipt_id"]
+
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        assert store.get_receipt(
+            json.loads(resolved_unknown.stdout)["resolved_by_receipt_id"]
+        ) is not None
+        assert store.get_receipt(
+            json.loads(fulfilled_request.stdout)["fulfilled_by_receipt_id"]
+        ) is not None
+        assert store.get_receipt(
+            json.loads(resolved_debt.stdout)["resolved_by_receipt_id"]
+        ) is not None
+    finally:
+        store.close()
 
 
 def test_version_command_prints_version() -> None:
