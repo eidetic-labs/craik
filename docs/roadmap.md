@@ -365,17 +365,18 @@ plugins without weakening the runtime security model.
 
 <div className="craik-grid">
 
-<div><h4>Skill package format</h4></div>
-<div><h4>Project-scoped &amp; global skills</h4></div>
-<div><h4>Context contracts for skills</h4></div>
-<div><h4>Plugin descriptor format</h4></div>
-<div><h4>Probationary plugins</h4></div>
-<div><h4>Plugin capability grants</h4></div>
-<div><h4>Plugin receipts</h4></div>
-<div><h4>Adapter packages</h4></div>
-<div><h4>Reference integrations</h4></div>
-<div><h4>Community skills docs</h4></div>
-<div><h4>Community plugins docs</h4></div>
+<div><h4>Skill package format</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/659">#659</a>. Skill packages use semantic package versions, docs and entrypoints, no runtime authority, and explicit context declarations for expected inputs.</p></div>
+<div><h4>Project-scoped &amp; global skills</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/660">#660</a>. Registries enforce project/global scope, active entry completeness, active-only precedence, and project override precedence.</p></div>
+<div><h4>Context contracts for skills</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/661">#661</a>. Invocation contexts capture redacted inputs, outputs, omissions, policy links, receipts, and package requirement validation.</p></div>
+<div><h4>Plugin descriptor format</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/662">#662</a>. Descriptors declare identity, trust boundary, semantic versioning, entrypoints, capability requests, docs, security notes, and compatibility without granting authority.</p></div>
+<div><h4>Probationary plugins</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/663">#663</a>. Probation records keep new or changed plugins out of durable trust until criteria, evidence, compatibility checks, and decisions are recorded.</p></div>
+<div><h4>Plugin capability grants</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/664">#664</a>. Plugin grants are descriptor-bound, evidence-linked, scoped to explicit operations and targets, approval-aware, and expiry-checked.</p></div>
+<div><h4>Plugin receipts</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/665">#665</a>. Plugin receipts are redacted, descriptor-linked, grant-linked, evidence-linked, handoff-linked, and operator-visible with optional probation state.</p></div>
+<div><h4>Adapter packages</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/666">#666</a>. Adapter packages declare semantic versions, entrypoints, capability surfaces, runner modes, Python/platform compatibility, docs, provenance, and linked plugins.</p></div>
+<div><h4>Reference integrations</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/667">#667</a>. Reference integrations provide safe reproducible skill, plugin, and adapter examples with narrow matching links, checks, fixtures, receipts, and provenance.</p></div>
+<div><h4>Community skills docs</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/668">#668</a>. The guide covers package authoring, context declarations, project/global registry scope, review expectations, and security boundaries.</p></div>
+<div><h4>Community plugins docs</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/669">#669</a>. The guide covers descriptors, probation, grants, receipts, adapters, references, and no-ambient-authority review boundaries.</p></div>
+<div><h4>Release readiness and docs assessment</h4><p>Ready: <a href="https://github.com/eidetic-labs/craik/issues/670">#670</a>. Release-readiness docs record v0.6.0 goal status, validation, security notes, blockers, changelog coverage, and release automation hygiene.</p></div>
 
 </div>
 

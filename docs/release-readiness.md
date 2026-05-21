@@ -6,8 +6,114 @@
 
 **What you'll find here**
 
-The repository-owned readiness record for Craik releases. The current completed
-release gate is `0.5.0`; historical sign-offs remain below for audit continuity.
+The repository-owned readiness record for Craik releases. The current
+pre-release gate is `0.6.0`; historical sign-offs remain below for
+audit continuity.
+
+</div>
+
+## v0.6.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Skills, plugins, and ecosystem foundations gate.**
+
+`0.6.0` ships reusable skill contracts and governed plugin ecosystem
+contracts without weakening Craik's no-ambient-authority runtime
+model. Each goal issue shipped implementation, tests, docs, validation,
+a green PR, merge, issue closure, and branch pruning before the next
+goal began.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Skill package format</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/659">#659</a> · <code>craik.skill_package</code> · semantic package versions and no runtime authority</dd></div>
+<div><dt>Project-scoped and global skills</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/660">#660</a> · <code>craik.skill_registry</code> · active entry and precedence invariants</dd></div>
+<div><dt>Context contracts for skills</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/661">#661</a> · <code>craik.skill_invocation_context</code> · package context requirements and redacted invocation records</dd></div>
+<div><dt>Plugin descriptor format</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/662">#662</a> · <code>craik.plugin_descriptor</code> · trust boundary, capabilities, docs, security notes, and compatibility</dd></div>
+<div><dt>Probationary plugins</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/663">#663</a> · <code>craik.plugin_probation</code> · evidence-backed criteria and decisions before durable trust</dd></div>
+<div><dt>Plugin capability grants</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/664">#664</a> · <code>craik.plugin_capability_grant</code> · explicit operations, scoped targets, approvals, expiry, and authorization helper</dd></div>
+<div><dt>Plugin receipts</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/665">#665</a> · <code>craik.plugin_receipt</code> · redacted descriptor, grant, probation, evidence, and handoff links</dd></div>
+<div><dt>Adapter packages</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/666">#666</a> · <code>craik.adapter_package</code> · semantic versions, runner modes, Python/platform compatibility, docs, and provenance</dd></div>
+<div><dt>Reference integrations</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/667">#667</a> · <code>craik.reference_integration</code> · safe reproducible skill, plugin, and adapter examples</dd></div>
+<div><dt>Community skills docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/668">#668</a> · package, context, registry, review, and security guidance</dd></div>
+<div><dt>Community plugins docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/669">#669</a> · descriptors, probation, grants, receipts, adapters, references, and security guidance</dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/670">#670</a> · this release record, roadmap, changelog, and release automation hygiene</dd></div>
+
+</div>
+
+## v0.6.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Ready for release prep.**
+
+The v0.6.0 skills, plugins, and ecosystem foundations surface is
+implemented in typed contracts, local-store persistence, validation
+helpers, operator-visible receipt formatting, reference documentation,
+and community guides. Release prep still owns the version bump,
+generated docs lockfile, release heading promotion, full release
+validation, tag creation, PyPI publish, docs deployment, and GitHub
+Release verification.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Validation</dd>
+</div>
+
+<div>
+<dt>Runtime contracts</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>skill_package</code> · <code>skill_registry</code> · <code>skill_invocation_context</code> · <code>plugin_descriptor</code> · <code>plugin_probation</code> · <code>plugin_capability_grant</code> · <code>plugin_receipt</code> · <code>adapter_package</code> · <code>reference_integration</code>.</dd>
+</div>
+
+<div>
+<dt>Docs</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Reference pages and guides cover skill packages, skill registries, skill contexts, plugin descriptors, plugin probation, plugin grants, plugin receipts, adapter packages, reference integrations, community skills, and community plugins. Sidebars and index navigation include the community guides.</dd>
+</div>
+
+<div>
+<dt>Validation commands</dt>
+<dt><span className="craik-fields__type">passed</span></dt>
+<dd>Focused slices passed across goal PRs. Final readiness validation passed <code>uv run python scripts/check_version_consistency.py</code>, <code>uv run ruff check</code>, <code>uv run mypy src</code>, <code>uv run python scripts/check_doc_links.py</code>, <code>uv run python scripts/check_public_docs_hygiene.py</code>, <code>uv run python scripts/check_release_readiness.py</code>, and full <code>uv run pytest</code> with loopback access enabled for local HTTP-server tests.</dd>
+</div>
+
+<div>
+<dt>Security notes</dt>
+<dt><span className="craik-fields__type">reviewed</span></dt>
+<dd>Skills remain instruction packages with no runtime authority. Plugin descriptors declare needs but grant nothing. Probation blocks durable trust until evidence-backed criteria and decisions pass. Plugin grants require explicit operations, scoped targets, expiry, and approval metadata. Denied, expired, and approval-required grants do not authorize execution. Plugin receipts must be redacted and cannot mark result metadata as unredacted.</dd>
+</div>
+
+<div>
+<dt>Release automation hygiene</dt>
+<dt><span className="craik-fields__type">addressed</span></dt>
+<dd>The publish workflow changelog extractor now accepts release headings with an em dash, en dash, or ASCII hyphen between the version and date, avoiding the v0.5.0 GitHub Release note extraction failure.</dd>
+</div>
+
+<div>
+<dt>Release blocker state</dt>
+<dt><span className="craik-fields__type">none known</span></dt>
+<dd>The v0.6.0 milestone has no open implementation goals other than this readiness issue. No critical release blocker is known before release-prep validation.</dd>
+</div>
+
+<div>
+<dt>Release actions</dt>
+<dt><span className="craik-fields__type">pending release prep</span></dt>
+<dd>Release prep must bump version declarations to <code>0.6.0</code>, regenerate generated docs artifacts if required, promote the changelog heading to <code>0.6.0 — 2026-05-21</code>, run the full release validation suite, create the signed tag, publish to PyPI, verify the docs site, and verify GitHub Release creation.</dd>
+</div>
 
 </div>
 
