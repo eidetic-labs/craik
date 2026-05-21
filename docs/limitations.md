@@ -141,6 +141,12 @@ Scheduled milestones with explicit version targets.
 </div>
 
 <div>
+<dt>Quality, continuity, and recovery</dt>
+<dt><span className="craik-fields__type">v0.5.0</span></dt>
+<dd>Recovery sessions, quality scores, critic/red-team findings, freshness probes, context debt, scratchpad entries, unknowns, and exit checks are durable runtime state and operator-visible signals. They do not prove truth, replace policy approval, or perform live remote refresh by themselves; callers must still refresh external state and review findings before promotion or release decisions.</dd>
+</div>
+
+<div>
 <dt>Operator UI / TUI</dt>
 <dt><span className="craik-fields__type">v0.7.0</span></dt>
 <dd>Operator surfaces ship as view contracts in MVP.</dd>

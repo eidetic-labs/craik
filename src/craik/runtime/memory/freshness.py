@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from craik.contracts.models import (
     FreshnessProbeStatus,
     KnowledgeFreshnessProbe,
     ToolResultAttestation,
 )
+
+EvidenceExpirationStatus = Literal[
+    "unexpired",
+    "expired",
+    "overridden",
+    "missing_expiration",
+    "missing",
+]
+
+
+@dataclass(frozen=True)
+class EvidenceExpirationEvaluation:
+    """Deterministic evaluation of whether observed evidence may be reused."""
+
+    evidence_id: str
+    status: EvidenceExpirationStatus
+    warning: str | None = None
+    override_reason: str | None = None
 
 
 def attestation_is_fresh(
@@ -22,6 +42,43 @@ def attestation_is_fresh(
     if attestation.expires_at is None:
         return True
     return attestation.expires_at > (now or datetime.now(UTC))
+
+
+def evaluate_attestation_expiration(
+    attestation: ToolResultAttestation | None,
+    *,
+    evidence_id: str,
+    now: datetime | None = None,
+    override_reason: str | None = None,
+) -> EvidenceExpirationEvaluation:
+    """Evaluate attested evidence reuse without silently trusting stale output."""
+    if attestation is None:
+        return EvidenceExpirationEvaluation(
+            evidence_id=evidence_id,
+            status="missing",
+            warning=f"Evidence {evidence_id} has no tool result attestation.",
+        )
+    if attestation.expires_at is None:
+        return EvidenceExpirationEvaluation(
+            evidence_id=evidence_id,
+            status="missing_expiration",
+            warning=f"Evidence {evidence_id} has no expiration metadata.",
+        )
+    current = now or datetime.now(UTC)
+    if attestation.expires_at <= current:
+        if override_reason:
+            return EvidenceExpirationEvaluation(
+                evidence_id=evidence_id,
+                status="overridden",
+                warning=f"Evidence {evidence_id} is expired but was explicitly overridden.",
+                override_reason=override_reason,
+            )
+        return EvidenceExpirationEvaluation(
+            evidence_id=evidence_id,
+            status="expired",
+            warning=f"Evidence {evidence_id} expired at {attestation.expires_at.isoformat()}.",
+        )
+    return EvidenceExpirationEvaluation(evidence_id=evidence_id, status="unexpired")
 
 
 def classify_probe(

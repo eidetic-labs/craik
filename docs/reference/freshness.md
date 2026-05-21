@@ -58,6 +58,44 @@ warnings.
 
 </div>
 
+## Expiration evaluation
+
+Attested evidence is evaluated before reuse:
+
+<div className="craik-fields">
+
+<div>
+<dt>Status</dt>
+<dt><span className="craik-fields__type">Meaning</span></dt>
+<dd>Operator action</dd>
+</div>
+
+<div>
+<dt><code>unexpired</code></dt>
+<dt><span className="craik-fields__type">reusable</span></dt>
+<dd>The attestation has an expiry and it is still in the future.</dd>
+</div>
+
+<div>
+<dt><code>expired</code></dt>
+<dt><span className="craik-fields__type">blocked</span></dt>
+<dd>Refresh the source or provide an explicit override rationale.</dd>
+</div>
+
+<div>
+<dt><code>overridden</code></dt>
+<dt><span className="craik-fields__type">explicit</span></dt>
+<dd>The evidence is expired but the caller recorded why reuse is acceptable.</dd>
+</div>
+
+<div>
+<dt><code>missing_expiration</code></dt>
+<dt><span className="craik-fields__type">warning</span></dt>
+<dd>The evidence may be usable, but it cannot silently carry recency authority.</dd>
+</div>
+
+</div>
+
 ## What's next
 
 <div className="craik-next">

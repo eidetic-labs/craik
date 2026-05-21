@@ -10,6 +10,42 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.5.0 quality and continuity contracts for recovery sessions, run
+  deltas, runtime critic findings, red-team findings, handoff quality
+  scores, evidence coverage scores, context debt, tool-result
+  attestations, knowledge freshness probes, known traps, negative
+  knowledge, scratchpad records, unknowns, context requests, and agent
+  exit-discipline checks.
+- Recovery and delta operator paths through `craik run recover` and
+  `craik run delta`, backed by durable local-store records.
+- Operator view formatting for quality gates, known traps and negative
+  knowledge, run deltas, recovery sessions, scratchpad/unknown state,
+  context requests, and exit-discipline status.
+- v0.5.0 release-readiness documentation with goal issue status,
+  validation commands, security notes, and pre-release blocker state.
+
+### Changed
+
+- Case-file and handoff continuity flows now surface known traps,
+  unresolved unknowns, context debt, freshness warnings, and recovery
+  state as structured runtime records rather than prose-only notes.
+- The goal workflow now requires pushed PRs, green required checks,
+  agent-owned merge of clean PRs, and stale branch pruning before moving
+  to the next goal.
+
+### Security
+
+- Runtime critic and red-team findings remain non-authoritative until a
+  reviewer acts on them, preventing review output from becoming hidden
+  policy or privileged instruction text.
+- Tool-result attestations and freshness probes distinguish observed
+  outputs from stale, missing, or unverified summaries before reuse.
+- Scratchpad notes require expiry, and negative knowledge requires
+  evidence and explicit scope so temporary or absence-based claims do
+  not silently become durable project truth.
+
 ## 0.4.0 — 2026-05-21
 
 ### Added
