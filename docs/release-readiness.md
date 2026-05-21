@@ -31,23 +31,84 @@ docs, and requirement validation before the milestone closes.
 <dd>Goal issue</dd>
 </div>
 
-<div><dt>Recovery mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/636">#636</a></dd></div>
-<div><dt>Runtime critic</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/637">#637</a></dd></div>
-<div><dt>Red team mode</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/638">#638</a></dd></div>
-<div><dt>Evidence coverage score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/639">#639</a></dd></div>
-<div><dt>Handoff quality score</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/640">#640</a></dd></div>
-<div><dt>Context debt tracking</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/641">#641</a></dd></div>
-<div><dt>Evidence expiration rules</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/642">#642</a></dd></div>
-<div><dt>Tool result attestation</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/643">#643</a></dd></div>
-<div><dt>Knowledge freshness probes</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/644">#644</a></dd></div>
-<div><dt>Scratchpad with expiry</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/645">#645</a></dd></div>
-<div><dt>Known traps</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/646">#646</a></dd></div>
-<div><dt>Negative knowledge</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/647">#647</a></dd></div>
-<div><dt>First-class unknowns</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/648">#648</a></dd></div>
-<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/649">#649</a></dd></div>
-<div><dt>Structured context requests</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/650">#650</a></dd></div>
-<div><dt>Agent exit discipline</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/651">#651</a></dd></div>
-<div><dt>What changed since last time deltas</dt><dt><span className="craik-fields__type">open</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/652">#652</a></dd></div>
+<div><dt>Recovery mode</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/636">#636</a> · <code>craik run recover</code> · <code>craik.recovery_session</code></dd></div>
+<div><dt>Runtime critic</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/637">#637</a> · <code>craik.runtime_critic_finding</code></dd></div>
+<div><dt>Red team mode</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/638">#638</a> · <code>craik.red_team_finding</code></dd></div>
+<div><dt>Evidence coverage score</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/639">#639</a> · <code>craik.evidence_coverage_score</code></dd></div>
+<div><dt>Handoff quality score</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/640">#640</a> · <code>craik.handoff_quality_score</code></dd></div>
+<div><dt>Context debt tracking</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/641">#641</a> · <code>craik.context_debt_record</code></dd></div>
+<div><dt>Evidence expiration rules</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/642">#642</a> · attestation and freshness expiry checks</dd></div>
+<div><dt>Tool result attestation</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/643">#643</a> · <code>craik.tool_result_attestation</code></dd></div>
+<div><dt>Knowledge freshness probes</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/644">#644</a> · <code>craik.knowledge_freshness_probe</code></dd></div>
+<div><dt>Scratchpad with expiry</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/645">#645</a> · <code>craik.scratchpad_record</code></dd></div>
+<div><dt>Known traps</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/646">#646</a> · <code>craik.known_trap</code></dd></div>
+<div><dt>Negative knowledge</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/647">#647</a> · <code>craik.negative_knowledge</code></dd></div>
+<div><dt>First-class unknowns</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/648">#648</a> · <code>craik.unknown_record</code></dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/649">#649</a> · this release record</dd></div>
+<div><dt>Structured context requests</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/650">#650</a> · <code>craik.context_request</code></dd></div>
+<div><dt>Agent exit discipline</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/651">#651</a> · <code>craik.exit_discipline_check</code></dd></div>
+<div><dt>What changed since last time deltas</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/652">#652</a> · <code>craik.run_delta</code></dd></div>
+
+</div>
+
+## v0.5.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Ready for pre-release checks.**
+
+The v0.5.0 quality, continuity, and recovery surface is implemented in
+typed contracts, local-store persistence, runtime helpers, operator
+views, CLI recovery/delta surfaces, and reference documentation. The
+remaining work before tagging is release prep: version bump, changelog
+date finalization, full CI, package verification, PyPI publish, docs
+deployment verification, and GitHub release verification.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Validation</dd>
+</div>
+
+<div>
+<dt>Runtime contracts</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>recovery_session</code> · <code>run_delta</code> · <code>runtime_critic_finding</code> · <code>red_team_finding</code> · <code>handoff_quality_score</code> · <code>evidence_coverage_score</code> · <code>context_debt_record</code> · <code>tool_result_attestation</code> · <code>knowledge_freshness_probe</code> · <code>scratchpad_record</code> · <code>known_trap</code> · <code>negative_knowledge</code> · <code>unknown_record</code> · <code>context_request</code> · <code>exit_discipline_check</code>.</dd>
+</div>
+
+<div>
+<dt>Operator surfaces</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Quality gate, known traps, run delta, recovery, scratchpad, unknowns, context requests, and exit-discipline states are formatted for inspection without granting policy authority.</dd>
+</div>
+
+<div>
+<dt>CLI exercise path</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>craik run recover</code> and <code>craik run delta</code> expose recovery and changed-since-last-time summaries from local durable state.</dd>
+</div>
+
+<div>
+<dt>Validation commands</dt>
+<dt><span className="craik-fields__type">passed</span></dt>
+<dd><code>uv run pytest tests/test_recovery.py tests/test_critics.py tests/test_quality_scores.py tests/test_context_debt.py tests/test_freshness.py tests/test_known_traps.py tests/test_scratchpad.py tests/test_exit_discipline.py tests/test_operator_views.py tests/test_store.py</code>.</dd>
+</div>
+
+<div>
+<dt>Security notes</dt>
+<dt><span className="craik-fields__type">reviewed</span></dt>
+<dd>Critic and red-team findings are non-authoritative by default; freshness and evidence-expiry checks warn or block silent reliance but do not prove truth; scratchpad content expires instead of becoming project memory; negative knowledge requires evidence and scope.</dd>
+</div>
+
+<div>
+<dt>Release blocker state</dt>
+<dt><span className="craik-fields__type">none known</span></dt>
+<dd>No critical v0.5.0 implementation blocker is known after the goal validation slice. Full pre-release checks still run before tagging.</dd>
+</div>
 
 </div>
 

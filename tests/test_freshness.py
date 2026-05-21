@@ -7,6 +7,7 @@ from craik.contracts.models import KnowledgeFreshnessProbe, ToolResultAttestatio
 from craik.runtime.memory.freshness import (
     attestation_is_fresh,
     classify_probe,
+    evaluate_attestation_expiration,
     missing_attestation_warning,
     stale_risk_warnings,
 )
@@ -58,6 +59,14 @@ def test_fresh_attestation_and_probe() -> None:
 
     assert attestation_is_fresh(attestation, now=NOW) is True
     assert classify_probe(probe, now=NOW) == "fresh"
+    assert (
+        evaluate_attestation_expiration(
+            attestation,
+            evidence_id="evidence_gh_issue",
+            now=NOW,
+        ).status
+        == "unexpired"
+    )
 
 
 def test_expiring_and_expired_probes_emit_stale_risk_warnings() -> None:
@@ -81,6 +90,41 @@ def test_expiring_and_expired_probes_emit_stale_risk_warnings() -> None:
         "GitHub issue state is expired.",
         "GitHub issue state expires soon.",
     ]
+
+
+def test_expired_attestation_can_be_overridden_explicitly() -> None:
+    expired = _attestation(
+        captured_at=NOW - timedelta(hours=3),
+        expires_at=NOW - timedelta(hours=1),
+    )
+
+    blocked = evaluate_attestation_expiration(
+        expired,
+        evidence_id="evidence_gh_issue",
+        now=NOW,
+    )
+    overridden = evaluate_attestation_expiration(
+        expired,
+        evidence_id="evidence_gh_issue",
+        now=NOW,
+        override_reason="Operator refreshed adjacent release state.",
+    )
+
+    assert blocked.status == "expired"
+    assert blocked.warning == "Evidence evidence_gh_issue expired at 2026-05-16T08:20:00+00:00."
+    assert overridden.status == "overridden"
+    assert overridden.override_reason == "Operator refreshed adjacent release state."
+
+
+def test_missing_expiration_is_visible_before_reuse() -> None:
+    evaluation = evaluate_attestation_expiration(
+        _attestation(expires_at=None),
+        evidence_id="evidence_gh_issue",
+        now=NOW,
+    )
+
+    assert evaluation.status == "missing_expiration"
+    assert evaluation.warning == "Evidence evidence_gh_issue has no expiration metadata."
 
 
 def test_missing_attestation_and_probe() -> None:
