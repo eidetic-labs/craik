@@ -7,9 +7,134 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current release
-gate is `0.3.0`; historical sign-offs remain below for audit continuity.
+gate is `0.4.0`; historical sign-offs remain below for audit continuity.
 
 </div>
+
+## v0.4.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Runtime instruction distillation gate.**
+
+`0.4.0` lands the declared-instruction pipeline that turns project
+instruction files into typed, provenance-linked, reviewable
+constraints. Sources are registered explicitly, snapshots drive stale
+invalidation, extracted statements carry line/range provenance,
+categories and contradiction reports keep review queues explainable,
+approval receipts are required before a constraint becomes governing,
+and active constraints flow into case files and compiled prompts.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Release notes</dd>
+</div>
+
+<div>
+<dt>Package version</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>The implementation and documentation are ready for the release-prep commit that bumps <code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, <code>docs/package.json</code>, and <code>docs/package-lock.json</code> to <code>0.4.0</code>.</dd>
+</div>
+
+<div>
+<dt>Instruction source registry</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Projects can register declared instruction sources with typed source metadata, canonical paths, owner identity, path confinement, registry receipts, and project-scoped active source lists.</dd>
+</div>
+
+<div>
+<dt>Source ingestion</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Markdown, Cursor rules, Codex, Copilot, and policy document sources parse into candidate statements without treating arbitrary repository Markdown as authority.</dd>
+</div>
+
+<div>
+<dt>Source snapshots and stale invalidation</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Registered sources are hashed with normalized newlines and tracked as <code>new</code>, <code>unchanged</code>, <code>changed</code>, or <code>missing</code>; changed, missing, newly observed, or omitted sources defer derived proposals.</dd>
+</div>
+
+<div>
+<dt>Line/range provenance</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Extracted statements persist deterministic provenance records with source ID, snapshot ID, path, line and column ranges, summaries, and excerpt hashes.</dd>
+</div>
+
+<div>
+<dt>Instruction categorization</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Provenanced statements become reviewable proposals with deterministic category traceability across policy, security, boundary, command, instruction, handoff, memory, preference, and stale-risk classes.</dd>
+</div>
+
+<div>
+<dt>Inter-source contradictions</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Normalized policy, boundary, command, instruction, and security-rule proposals open contradiction reports for cross-source conflicts while skipping same-source and stale deferred items.</dd>
+</div>
+
+<div>
+<dt>Approval flow and receipts</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Proposals become governing only through explicit operator approval receipts; re-approval is idempotent, rejections are receipted, and stale or contradicted approvals require override rationale.</dd>
+</div>
+
+<div>
+<dt>Case-file and prompt-compilation integration</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd>Case files include deterministic governing distillation evidence, and compiled prompts render exactly one <code>Active instruction constraints</code> section with ordered items, provenance annotations, empty-state behavior, and stale-exclusion warnings.</dd>
+</div>
+
+<div>
+<dt>Distillation CLI</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>craik instructions register</code>, <code>list</code>, <code>approve</code>, <code>reject</code>, and <code>show</code> expose source registration, proposal review, approval decisions, rejection decisions, and provenance-aware item inspection through the active operator session.</dd>
+</div>
+
+<div>
+<dt>Reference documentation</dt>
+<dt><span className="craik-fields__type">ready</span></dt>
+<dd><code>docs/reference/instruction-sources.md</code>, <code>docs/reference/distilled-instructions.md</code>, <code>docs/reference/instruction-approval.md</code>, and <code>docs/guides/managing-instructions.md</code> document the shipped v0.4.0 operator surface and link through the sidebars.</dd>
+</div>
+
+<div>
+<dt>Release actions</dt>
+<dt><span className="craik-fields__type">pending</span></dt>
+<dd>Rename <code>CHANGELOG.md</code> <code>Unreleased</code> to <code>0.4.0 - YYYY-MM-DD</code>, bump package and docs versions, create immutable tag <code>v0.4.0</code>, run the protected publish workflow, then verify PyPI and docs after publication.</dd>
+</div>
+
+</div>
+
+### v0.4.0 Verification Commands
+
+Run these before release prep and again before tagging:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run pytest tests/test_instruction_sources.py tests/test_instruction_ingestion.py tests/test_instruction_provenance.py tests/test_instruction_distillation.py tests/test_instruction_invalidation.py tests/test_instruction_contradictions.py tests/test_instruction_promotion.py tests/test_instruction_runtime_context.py tests/test_instruction_workflow_docs.py tests/test_case_files.py tests/test_prompts.py tests/test_contracts.py -q
+```
+
+### v0.4.0 Security Notes
+
+- Instruction sources must be registered explicitly and remain confined
+  to the registered project root before ingestion.
+- Raw source files and distilled proposals are evidence, not authority;
+  only governing constraints backed by approval receipts enter case
+  files and compiled prompts.
+- Stale or contradicted approvals require an explicit override and
+  rationale, and review receipts record whether stale or contradiction
+  guards were bypassed.
+- Stale governing items are excluded from compiled prompt context and
+  surfaced as distillation warnings instead of silent authority.
+- Contradiction detection opens reviewable reports for cross-source
+  policy, boundary, command, instruction, and security-rule conflicts.
 
 ## v0.3.0 Release Readiness
 
