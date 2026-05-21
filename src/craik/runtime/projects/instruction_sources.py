@@ -222,6 +222,8 @@ def review_instruction_promotion(
     receipt_ids: list[str] | None = None,
     memory_proposal_ids: list[str] | None = None,
     handoff_ids: list[str] | None = None,
+    override: bool = False,
+    override_reason: str | None = None,
 ) -> InstructionPromotionReview:
     """Persist a promotion review and update the proposal/constraint state."""
     proposal = store.get_distilled_instruction_proposal(proposal_id)
@@ -229,8 +231,18 @@ def review_instruction_promotion(
         raise InstructionPromotionError(f"unknown distilled instruction proposal: {proposal_id}")
     now = proposal.created_at
     normalized_decision = cast(InstructionPromotionDecision, decision)
-    constraint_id = f"constraint_{proposal.id}" if normalized_decision == "approved" else None
-    if normalized_decision == "approved":
+    approved = normalized_decision == "approved"
+    constraint_id = f"constraint_{proposal.id}" if approved else None
+    if approved:
+        stale = proposal.promotion_status == "deferred"
+        contradicted = bool(proposal.contradiction_ids)
+        if stale or contradicted:
+            if not override:
+                raise InstructionPromotionError(
+                    "stale or contradicted promotions require override and rationale"
+                )
+            if not (override_reason or "").strip():
+                raise InstructionPromotionError("override promotions require rationale")
         if proposal.snapshot_id is None:
             raise InstructionPromotionError("approved promotions require source snapshot")
         active_constraint_id = f"constraint_{proposal.id}"
@@ -263,6 +275,9 @@ def review_instruction_promotion(
         receipt_ids=receipt_ids or [],
         memory_proposal_ids=memory_proposal_ids or [],
         handoff_ids=handoff_ids or [],
+        override_stale=approved and proposal.promotion_status == "deferred" and override,
+        override_contradiction=approved and bool(proposal.contradiction_ids) and override,
+        override_rationale=override_reason if override else None,
         created_at=now,
     )
     store.put_instruction_promotion_review(review)

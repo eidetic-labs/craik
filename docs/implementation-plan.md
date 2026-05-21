@@ -436,6 +436,7 @@ docs/
 <div><h4>Distillation proposal store</h4><p>Categorizes provenanced statements with deterministic rules and writes reviewable proposals while surfacing unclassified candidates.</p></div>
 <div><h4>Inter-source contradictions</h4><p>Normalizes proposal triples across sources and opens contradiction reports for diverging policy, boundary, command, instruction, and security-rule guidance.</p></div>
 <div><h4>Operator approval flow</h4><p>Requires explicit operator approval or denial receipts before proposals become governing runtime constraints.</p></div>
+<div><h4>Override review hardening</h4><p>Requires explicit override rationale when stale or contradicted proposals are approved through either promotion path.</p></div>
 <div><h4>Case-file distillation evidence</h4><p>Loads governing distillations into case files with category, source, provenance ranges, and approval receipt snapshots.</p></div>
 <div><h4>Prompt distillation section</h4><p>Renders governing distillations in compiled prompts as a separate ordered authoritative section with stale-exclusion warnings.</p></div>
 <div><h4>Instruction distillation CLI</h4><p>Exposes source registration, filtered proposal listing, approve/reject decisions, and provenance-aware item inspection.</p></div>
@@ -461,6 +462,7 @@ docs/
 <li>Categorized distillation proposals are deterministic and report unclassified candidates.</li>
 <li>Inter-source conflicts surface as contradiction reports and defer conflicted proposals.</li>
 <li>Only explicitly approved governing instructions are visible to runtime consumers.</li>
+<li>Stale or contradicted approvals require recorded override rationale.</li>
 <li>Case files carry governing distillations as first-class evidence with provenance.</li>
 <li>Compiled prompts include governing distillations as a separate authoritative section.</li>
 <li>Operators can drive the distillation lifecycle through <code>craik instructions</code>.</li>
