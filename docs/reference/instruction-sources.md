@@ -239,6 +239,21 @@ until a later operator review path handles them.
 deferred promotion decisions. Reviews link policy envelopes, receipts,
 memory proposals, and handoffs.
 
+The runtime approval API requires an explicit operator identity. Fresh
+ingestion leaves proposals in `proposed`; `approve_instruction` moves
+the item to `governing`, writes the approval review, and creates an
+active promoted constraint. `reject_instruction` writes a denial review
+and leaves no active constraint. Re-approving an already governing item
+returns the existing review and constraint instead of duplicating
+receipts.
+
+Stale or contradicted proposals cannot become governing unless the
+operator sets an override and records override rationale. The approval
+review records whether stale or contradiction guards were bypassed.
+`list_governing` returns only active constraints backed by governing,
+non-contradicted proposals; downstream case files and prompt
+compilation must consume that list rather than raw proposal rows.
+
 Approved reviews create `craik.promoted_instruction_constraint`
 records. Active constraints retain proposal ID · source ID · source
 snapshot ID · provenance IDs · evidence IDs · review links.

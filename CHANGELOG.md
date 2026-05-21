@@ -30,6 +30,9 @@ within the `0.x.0` stability expectations described in
 - Inter-source instruction contradiction detection for v0.4.0: normalized
   policy, boundary, command, instruction, and security-rule proposals now open
   contradiction reports while skipping same-source and deferred stale items.
+- Operator approval workflow for v0.4.0 instruction distillations: proposed
+  items become governing only through explicit approval receipts, stale or
+  contradicted approvals require recorded overrides, and denials are receipted.
 
 ## 0.3.0 - 2026-05-20
 

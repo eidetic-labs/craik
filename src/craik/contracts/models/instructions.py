@@ -258,9 +258,9 @@ class DistilledInstructionProposal(CraikModel):
     @model_validator(mode="after")
     def validate_promotion_review(self) -> DistilledInstructionProposal:
         """Keep distilled instructions reviewable until a decision is recorded."""
-        if self.promotion_status == "approved" and not self.promoted_constraint_id:
-            raise ValueError("approved distilled instructions require promoted_constraint_id")
-        if self.promotion_status in {"approved", "rejected", "deferred"}:
+        if self.promotion_status in {"approved", "governing"} and not self.promoted_constraint_id:
+            raise ValueError("governing distilled instructions require promoted_constraint_id")
+        if self.promotion_status in {"approved", "governing", "rejected", "deferred", "superseded"}:
             if not self.decided_by or self.decided_at is None:
                 raise ValueError(
                     "decided distilled instructions require reviewer and decision time"
@@ -376,6 +376,9 @@ class InstructionPromotionReview(CraikModel):
     receipt_ids: list[str] = Field(default_factory=list)
     memory_proposal_ids: list[str] = Field(default_factory=list)
     handoff_ids: list[str] = Field(default_factory=list)
+    override_stale: bool = False
+    override_contradiction: bool = False
+    override_rationale: str | None = None
     created_at: datetime
 
     @model_validator(mode="after")

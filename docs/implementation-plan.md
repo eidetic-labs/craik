@@ -435,6 +435,7 @@ docs/
 <div><h4>Line/range provenance</h4><p>Persists one deterministic provenance record per parsed statement with source snapshot, line and column range, summary, and excerpt hash.</p></div>
 <div><h4>Distillation proposal store</h4><p>Categorizes provenanced statements with deterministic rules and writes reviewable proposals while surfacing unclassified candidates.</p></div>
 <div><h4>Inter-source contradictions</h4><p>Normalizes proposal triples across sources and opens contradiction reports for diverging policy, boundary, command, instruction, and security-rule guidance.</p></div>
+<div><h4>Operator approval flow</h4><p>Requires explicit operator approval or denial receipts before proposals become governing runtime constraints.</p></div>
 <div><h4>Task intent lock</h4></div>
 <div><h4>Expiring scratchpad</h4></div>
 <div><h4>Scope-change proposal model</h4></div>
@@ -456,6 +457,7 @@ docs/
 <li>Every extracted statement has stable provenance linked to the source snapshot.</li>
 <li>Categorized distillation proposals are deterministic and report unclassified candidates.</li>
 <li>Inter-source conflicts surface as contradiction reports and defer conflicted proposals.</li>
+<li>Only explicitly approved governing instructions are visible to runtime consumers.</li>
 <li>Source-hash changes invalidate stale distillations.</li>
 <li>Extracted instruction facts remain proposals until approved.</li>
 <li>Intent lock is included in case files and handoffs.</li>

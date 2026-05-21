@@ -1,6 +1,14 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from craik.contracts.models import DistilledInstructionProposal
+from craik.runtime.instruction_approval import (
+    InstructionApprovalError,
+    approve_instruction,
+    list_governing,
+    reject_instruction,
+)
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.instruction_sources import (
     InstructionPromotionError,
@@ -61,6 +69,182 @@ def test_approved_promotion_creates_active_constraint_and_audit_links(tmp_path) 
         assert constraint.receipt_ids == ["receipt_review"]
         assert store.list_instruction_promotion_reviews() == [review]
         assert store.list_promoted_instruction_constraints() == [constraint]
+    finally:
+        store.close()
+
+
+def test_approval_requires_operator_and_makes_instruction_governing(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+
+        with pytest.raises(InstructionApprovalError, match="operator identity"):
+            approve_instruction(
+                store,
+                proposal_id=proposal.id,
+                operator_identity="",
+                rationale="Missing operator.",
+            )
+
+        result = approve_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Instruction is valid.",
+        )
+
+        assert result.proposal.promotion_status == "governing"
+        assert result.review.decision == "approved"
+        assert result.review.decided_by == "user:maintainer"
+        assert result.constraint is not None
+        assert list_governing(store) == [result.constraint]
+    finally:
+        store.close()
+
+
+def test_reapproval_of_governing_instruction_is_noop(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+        first = approve_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Instruction is valid.",
+        )
+        second = approve_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Still valid.",
+        )
+
+        assert second.review == first.review
+        assert store.list_instruction_promotion_reviews() == [first.review]
+        assert store.list_promoted_instruction_constraints() == [first.constraint]
+    finally:
+        store.close()
+
+
+def test_stale_or_contradicted_approval_requires_override(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        stale = _proposal().model_copy(
+            update={
+                "promotion_status": "deferred",
+                "decided_by": "agent:instruction-distillation",
+                "decided_at": datetime(2026, 5, 15, 22, 31, tzinfo=UTC),
+            }
+        )
+        stale = DistilledInstructionProposal.model_validate(
+            stale.model_dump(mode="json", by_alias=True)
+        )
+        store.put_distilled_instruction_proposal(stale)
+
+        with pytest.raises(InstructionApprovalError, match="--override"):
+            approve_instruction(
+                store,
+                proposal_id=stale.id,
+                operator_identity="user:maintainer",
+                rationale="Approve despite stale state.",
+            )
+
+        result = approve_instruction(
+            store,
+            proposal_id=stale.id,
+            operator_identity="user:maintainer",
+            rationale="Approve despite stale state.",
+            override=True,
+            override_rationale="Source change reviewed manually.",
+        )
+
+        assert result.proposal.promotion_status == "governing"
+        assert result.review.override_stale is True
+        assert result.review.override_rationale == "Source change reviewed manually."
+    finally:
+        store.close()
+
+
+def test_contradicted_approval_records_override(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        proposal = proposal.model_copy(update={"contradiction_ids": ["contradiction_docs"]})
+        proposal = DistilledInstructionProposal.model_validate(
+            proposal.model_dump(mode="json", by_alias=True)
+        )
+        store.put_distilled_instruction_proposal(proposal)
+
+        result = approve_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Reviewed contradiction.",
+            override=True,
+            override_rationale="Contradiction resolved offline.",
+        )
+
+        assert result.review.override_contradiction is True
+    finally:
+        store.close()
+
+
+def test_reject_instruction_persists_denial_receipt(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        proposal = _proposal()
+        store.put_distilled_instruction_proposal(proposal)
+
+        result = reject_instruction(
+            store,
+            proposal_id=proposal.id,
+            operator_identity="user:maintainer",
+            rationale="Not valid for this project.",
+        )
+
+        assert result.proposal.promotion_status == "rejected"
+        assert result.review.decision == "rejected"
+        assert result.review.promoted_constraint_id is None
+        assert list_governing(store) == []
+    finally:
+        store.close()
+
+
+def test_new_approval_supersedes_previous_governing_instruction(tmp_path) -> None:
+    store = _store(tmp_path)
+    try:
+        first = _proposal()
+        second = _proposal().model_copy(
+            update={
+                "id": "distilled_instruction_agents_rule_v2",
+                "statement": "Run tests and docs before merge.",
+            }
+        )
+        second = DistilledInstructionProposal.model_validate(
+            second.model_dump(mode="json", by_alias=True)
+        )
+        store.put_distilled_instruction_proposal(first)
+        store.put_distilled_instruction_proposal(second)
+
+        first_result = approve_instruction(
+            store,
+            proposal_id=first.id,
+            operator_identity="user:maintainer",
+            rationale="Initial rule.",
+        )
+        second_result = approve_instruction(
+            store,
+            proposal_id=second.id,
+            operator_identity="user:maintainer",
+            rationale="Updated rule.",
+        )
+
+        updated_first = store.get_distilled_instruction_proposal(first.id)
+        assert updated_first.promotion_status == "superseded"
+        assert store.get_promoted_instruction_constraint(first_result.constraint.id).active is False
+        assert list_governing(store) == [second_result.constraint]
     finally:
         store.close()
 

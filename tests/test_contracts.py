@@ -147,6 +147,41 @@ def test_instruction_registration_contracts_round_trip(
     assert receipt_payload["capability"] == "instructions.register"
 
 
+def test_instruction_approval_contract_fields_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    proposal_payload = dict(fixtures["craik.distilled_instruction_proposal"])
+    proposal_payload.update(
+        {
+            "promotion_status": "governing",
+            "promoted_constraint_id": "constraint_distilled_instruction_agents_boundary",
+            "decided_by": "user:maintainer",
+            "decided_at": "2026-05-15T22:31:00Z",
+        }
+    )
+    review_payload = dict(fixtures["craik.instruction_promotion_review"])
+    review_payload.update(
+        {
+            "override_stale": True,
+            "override_contradiction": True,
+            "override_rationale": "Operator reviewed stale conflict manually.",
+        }
+    )
+
+    proposal = CONTRACT_REGISTRY["craik.distilled_instruction_proposal"].model_validate(
+        proposal_payload
+    )
+    review = CONTRACT_REGISTRY["craik.instruction_promotion_review"].model_validate(
+        review_payload
+    )
+
+    assert proposal.promotion_status == "governing"
+    dumped_review = review.model_dump(mode="json", by_alias=True)
+    assert dumped_review["override_stale"] is True
+    assert dumped_review["override_contradiction"] is True
+    assert dumped_review["override_rationale"] == "Operator reviewed stale conflict manually."
+
+
 def test_task_request_auth_context_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
