@@ -18,6 +18,8 @@ approval state.
 
 A plugin that only needs read access receives only <code>read</code>,
 even if the underlying policy profile could allow broader authority.
+Grants must name explicit operations and a scoped target; broad
+operations such as <code>*</code> or <code>all</code> are rejected.
 
 </div>
 
@@ -72,6 +74,12 @@ even if the underlying policy profile could allow broader authority.
 </div>
 
 </div>
+
+Runtime callers can use `permits_operation(operation, at=...)` to
+check whether a grant currently authorizes one operation. The helper
+returns `false` for denied, expired, and approval-required grants, for
+operations outside the grant, and for allowed grants past their
+expiry.
 
 ## What's next
 

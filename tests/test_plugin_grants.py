@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
@@ -92,6 +94,28 @@ def test_plugin_capability_grants_are_least_privilege() -> None:
     with pytest.raises(ValidationError):
         _grant(operations=[])
 
+    with pytest.raises(ValidationError, match="explicit operations"):
+        _grant(operations=["*"])
+
+    with pytest.raises(ValidationError, match="scoped target"):
+        _grant(target={"repo": None, "paths": [], "exclude": [], "metadata": {}})
+
     grant = _grant(operations=["read"])
 
     assert grant.operations == ["read"]
+
+
+def test_plugin_capability_grant_permits_only_current_allowed_operations() -> None:
+    grant = _grant()
+
+    assert grant.permits_operation("write", at=datetime(2026, 5, 17, tzinfo=UTC)) is True
+    assert grant.permits_operation("delete", at=datetime(2026, 5, 17, tzinfo=UTC)) is False
+
+    denied = _grant(status="denied", approval_required=False, approved_by=None)
+    pending = _grant(status="approval_required", approved_by=None, expires_at=None)
+    expired = _grant(status="expired")
+    after_expiry = datetime(2026, 6, 17, tzinfo=UTC)
+
+    assert denied.permits_operation("write", at=datetime(2026, 5, 17, tzinfo=UTC)) is False
+    assert pending.permits_operation("write", at=datetime(2026, 5, 17, tzinfo=UTC)) is False
+    assert expired.permits_operation("write", at=after_expiry) is False
