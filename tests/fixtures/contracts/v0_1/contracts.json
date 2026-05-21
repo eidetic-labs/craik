@@ -434,6 +434,8 @@
     "expected_output_schemas": ["craik.runner_adapter_result", "craik.handoff"],
     "context_omissions": ["Memory facts were not loaded into the case file."],
     "stop_conditions": ["Stop if requested work exceeds the intent lock or policy envelope."],
+    "distillations": [],
+    "distillation_warnings": [],
     "sections": [
       {
         "title": "Task",

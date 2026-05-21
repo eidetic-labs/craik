@@ -36,6 +36,9 @@ within the `0.x.0` stability expectations described in
 - Case-file integration for v0.4.0 governing distillations: case files now carry
   a deterministic `distillations` section with category, source, provenance
   ranges, and approval receipt snapshots.
+- Prompt compilation for v0.4.0 governing distillations: compiled prompts now
+  include a separate authoritative `Distillations` section with deterministic
+  ordering, provenance annotations, and stale-exclusion warnings.
 
 ## 0.3.0 - 2026-05-20
 

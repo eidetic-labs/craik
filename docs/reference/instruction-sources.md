@@ -272,7 +272,7 @@ remain visible for review but inactive.
 <div className="craik-grid">
 
 <div><h4>Case files</h4><p>Include active constraints in <code>context_budget.active_instruction_constraints</code> and first-class governing distillation entries in <code>distillations</code>.</p></div>
-<div><h4>Prompts</h4><p>Compilation renders constraints in the context section.</p></div>
+<div><h4>Prompts</h4><p>Compilation renders governing distillations in a separate authoritative section with provenance annotations.</p></div>
 <div><h4>Onboarding</h4><p>Reports include active instruction summaries in the project model.</p></div>
 <div><h4>Handoffs</h4><p>Carry active constraint IDs forward as context debt.</p></div>
 

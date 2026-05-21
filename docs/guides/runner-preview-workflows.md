@@ -78,6 +78,7 @@ The compiler persists a `craik.compiled_prompt` and includes:
 <div><h4>Runner trust profile</h4></div>
 <div><h4>Unsupported / prompt-handoff capabilities</h4></div>
 <div><h4>Context omissions</h4></div>
+<div><h4>Governing distillations</h4><p>Rendered as their own authoritative section with provenance annotations.</p></div>
 <div><h4>Expected output schemas</h4></div>
 <div><h4>Stop conditions</h4></div>
 

@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from craik.contracts.models import CapabilityGrant, CapabilityTarget
+from craik.contracts.models import (
+    CapabilityGrant,
+    CapabilityTarget,
+    CompiledPrompt,
+    DistilledInstructionProposal,
+    InstructionProvenance,
+)
+from craik.runtime.instruction_approval import approve_instruction
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.projects.prompts import (
@@ -67,7 +74,10 @@ def test_prompt_compiler_is_deterministic_and_persisted(
     assert first.runner_id == "codex"
     assert first.runner_mode == "live"
     assert first.capability_grant_ids == ["grant_docs_write"]
+    assert first.distillations == []
+    assert first.distillation_warnings == []
     assert "Policy id: policy_task_review_docs" in first.prompt
+    assert "## Distillations\nItems:\n- none\nWarnings:\n- none" in first.prompt
     assert "grant_docs_write: repo.write.docs" in first.prompt
     assert "Document excluded from discovery" in first.prompt
     assert "Memory facts were not loaded into the case file." in first.context_omissions
@@ -96,6 +106,117 @@ def test_prompt_compiler_surfaces_runner_policy_boundaries(
     assert "Trust level: low" in compiled.prompt
     assert "memory.write: unsupported" in compiled.prompt
     assert "Do not treat assumptions, stale risks, or omitted context as facts." in compiled.prompt
+
+
+def test_prompt_compiler_renders_governing_distillations_in_category_order(
+    tmp_path: Path,
+    store: LocalStore,
+) -> None:
+    repo = _repo(tmp_path)
+    project = ProjectRegistry(store).add_project(repo, name="Example")
+    task = create_task(
+        store,
+        title="Apply instructions",
+        objective="Use approved distillations.",
+        project_id=project.id,
+        mode="implement",
+    )
+    _put_distillation(
+        store,
+        project_id=project.id,
+        proposal_id="distilled_instruction_z_boundary",
+        category="boundary",
+        statement="Stay inside the repository boundary.",
+        start_line=8,
+    )
+    _put_distillation(
+        store,
+        project_id=project.id,
+        proposal_id="distilled_instruction_a_policy",
+        category="policy",
+        statement="Follow the release approval policy.",
+        start_line=3,
+    )
+    approve_instruction(
+        store,
+        proposal_id="distilled_instruction_z_boundary",
+        operator_identity="user:maintainer",
+        rationale="Boundary applies.",
+    )
+    approve_instruction(
+        store,
+        proposal_id="distilled_instruction_a_policy",
+        operator_identity="user:maintainer",
+        rationale="Policy applies.",
+    )
+    CaseFileAssembler(store).build(task.id)
+    compiler = PromptCompiler(store)
+
+    first = compiler.compile(task.id, runner_id="codex")
+    second = compiler.compile(task.id, runner_id="codex")
+    section = _section_body(first, "Distillations")
+
+    assert [item["category"] for item in first.distillations] == ["policy", "boundary"]
+    assert first.distillations == second.distillations
+    assert section == _section_body(second, "Distillations")
+    assert "(policy) Follow the release approval policy." in section
+    assert "(boundary) Stay inside the repository boundary." in section
+    assert section.index("(policy)") < section.index("(boundary)")
+    assert "[instruction_source_agents_md @ AGENTS.md:3]" in section
+    assert "[instruction_source_agents_md @ AGENTS.md:8]" in section
+
+
+def test_prompt_compiler_excludes_stale_governing_distillation_with_warning(
+    tmp_path: Path,
+    store: LocalStore,
+) -> None:
+    repo = _repo(tmp_path)
+    project = ProjectRegistry(store).add_project(repo, name="Example")
+    task = create_task(
+        store,
+        title="Warn stale",
+        objective="Exclude stale distillations.",
+        project_id=project.id,
+    )
+    proposal = _put_distillation(
+        store,
+        project_id=project.id,
+        proposal_id="distilled_instruction_stale_policy",
+        category="policy",
+        statement="Follow the stale policy.",
+        start_line=5,
+    )
+    approved = approve_instruction(
+        store,
+        proposal_id=proposal.id,
+        operator_identity="user:maintainer",
+        rationale="Initially valid.",
+    )
+    deferred = approved.proposal.model_copy(
+        update={
+            "promotion_status": "deferred",
+            "decided_by": "agent:instruction-distillation",
+            "decided_at": datetime(2026, 5, 17, tzinfo=UTC),
+        }
+    )
+    store.put_distilled_instruction_proposal(
+        DistilledInstructionProposal.model_validate(
+            deferred.model_dump(mode="json", by_alias=True)
+        )
+    )
+    CaseFileAssembler(store).build(task.id)
+
+    compiled = PromptCompiler(store).compile(task.id, runner_id="codex")
+
+    assert compiled.distillations == []
+    assert compiled.distillation_warnings == [
+        "Stale governing distillation excluded: "
+        "distilled_instruction_stale_policy from instruction_source_agents_md"
+    ]
+    assert "Stale governing distillation excluded" in _section_body(
+        compiled,
+        "Distillations",
+    )
 
 
 def test_prompt_compiler_requires_task_and_case_file(
@@ -129,6 +250,54 @@ def _repo(tmp_path: Path) -> Path:
     _run_git(repo, "add", "README.md", "docs")
     _run_git(repo, "commit", "-m", "initial")
     return repo
+
+
+def _put_distillation(
+    store: LocalStore,
+    *,
+    project_id: str,
+    proposal_id: str,
+    category: str,
+    statement: str,
+    start_line: int,
+) -> DistilledInstructionProposal:
+    provenance_id = f"provenance_{proposal_id}"
+    proposal = DistilledInstructionProposal(
+        id=proposal_id,
+        project_id=project_id,
+        source_id="instruction_source_agents_md",
+        snapshot_id="snapshot_agents",
+        category=category,
+        statement=statement,
+        rationale="Extracted from AGENTS.md.",
+        confidence=0.9,
+        provenance_ids=[provenance_id],
+        evidence_ids=[f"evidence_{proposal_id}"],
+        promotion_status="proposed",
+        created_at=datetime(2026, 5, 15, 22, 30, tzinfo=UTC),
+    )
+    store.put_distilled_instruction_proposal(proposal)
+    store.put_instruction_provenance(
+        InstructionProvenance(
+            id=provenance_id,
+            project_id=project_id,
+            source_id=proposal.source_id,
+            snapshot_id=proposal.snapshot_id,
+            path="AGENTS.md",
+            start_line=start_line,
+            end_line=start_line,
+            summary=statement,
+            captured_at=proposal.created_at,
+        )
+    )
+    return proposal
+
+
+def _section_body(compiled: CompiledPrompt, title: str) -> str:
+    for section in compiled.sections:
+        if section.title == title:
+            return section.body
+    raise AssertionError(f"missing prompt section: {title}")
 
 
 def _run_git(repo: Path, *args: str) -> None:

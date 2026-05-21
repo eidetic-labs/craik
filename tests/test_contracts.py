@@ -218,6 +218,39 @@ def test_case_file_distillation_section_round_trips(
     assert dumped["distillations"][0]["approval_receipt"]["decision"] == "approved"
 
 
+def test_compiled_prompt_distillation_section_round_trips(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.compiled_prompt"])
+    payload["distillations"] = [
+        {
+            "id": "distilled_instruction_agents_boundary",
+            "constraint_id": "constraint_distilled_instruction_agents_boundary",
+            "source_id": "instruction_source_agents_md",
+            "snapshot_id": "instruction_snapshot_agents_md",
+            "category": "boundary",
+            "statement": "Stay inside the repository boundary.",
+            "provenance": [
+                {
+                    "id": "provenance_agents_boundary",
+                    "path": "AGENTS.md",
+                    "start_line": 3,
+                    "end_line": 3,
+                }
+            ],
+        }
+    ]
+    payload["distillation_warnings"] = [
+        "Stale governing distillation excluded: old_policy from instruction_source_agents_md"
+    ]
+
+    parsed = CONTRACT_REGISTRY["craik.compiled_prompt"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["distillations"][0]["category"] == "boundary"
+    assert dumped["distillation_warnings"] == payload["distillation_warnings"]
+
+
 def test_task_request_auth_context_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
