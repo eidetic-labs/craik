@@ -21,6 +21,12 @@ what happened. Both must be redacted.
 
 </div>
 
+Runtime writers should create plugin receipts through Craik's receipt
+factory rather than constructing writable receipts directly. The factory
+redacts result summaries and metadata before persistence, and local
+stores attach an integrity HMAC that is verified whenever plugin receipts
+are read back.
+
 ## Linked records
 
 `craik.plugin_receipt` links a plugin action to:

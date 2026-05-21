@@ -107,3 +107,11 @@ def test_adapter_package_requires_capability_surfaces_docs_and_provenance() -> N
 
     with pytest.raises(ValidationError):
         _package(provenance_ids=[])
+
+
+def test_adapter_package_rejects_unsafe_ids_and_docs() -> None:
+    with pytest.raises(ValidationError, match="contract ids"):
+        _package(id="Adapter.Package")
+
+    with pytest.raises(ValidationError, match="docs references"):
+        _package(docs=["http://example.com/adapter"])

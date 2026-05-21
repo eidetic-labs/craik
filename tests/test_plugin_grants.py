@@ -119,3 +119,10 @@ def test_plugin_capability_grant_permits_only_current_allowed_operations() -> No
     assert denied.permits_operation("write", at=datetime(2026, 5, 17, tzinfo=UTC)) is False
     assert pending.permits_operation("write", at=datetime(2026, 5, 17, tzinfo=UTC)) is False
     assert expired.permits_operation("write", at=after_expiry) is False
+
+
+def test_plugin_capability_grant_expiry_boundary_is_strict() -> None:
+    grant = _grant()
+
+    assert grant.permits_operation("write", at=datetime(2026, 6, 16, 16, 29, 59, tzinfo=UTC))
+    assert not grant.permits_operation("write", at=datetime(2026, 6, 16, 16, 30, tzinfo=UTC))

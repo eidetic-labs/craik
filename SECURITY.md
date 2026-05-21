@@ -119,6 +119,31 @@ memory, or prove external truth by themselves.
   session before returning existing recovery state. Missing identifiers
   may still return a not-found error without revealing state.
 
+## v0.6.0 Skills and Plugin Trust Model
+
+Craik separates reusable skills from runtime plugins. Skill packages
+describe reusable context and entrypoints, but they do not carry runtime
+authority. Plugin descriptors declare capability needs, and runtime
+authority is granted only through live plugin capability grants.
+
+- Plugin operations must be authorized at execution time against the
+  current local store state. A cached grant decision is not authority.
+- Probation is a hard gate. A plugin with a latest probation record that
+  has not granted durable trust is denied even when a matching capability
+  grant exists.
+- Capability grants use strict expiry boundaries. A grant is invalid at
+  exactly `expires_at` and after it.
+- Plugin probation and plugin receipt records carry local HMAC integrity
+  metadata and are verified on read. Existing unsigned records remain
+  readable for compatibility, but newly written records are signed.
+- Plugin receipt creation should go through the runtime receipt factory,
+  which redacts result summaries and metadata before persistence.
+- Skill registry source paths are confined to relative paths and reject
+  absolute paths or parent-directory traversal.
+- Skill, plugin, adapter, and reference docs links allow safe relative
+  documentation paths, HTTPS URLs, and localhost HTTP for development.
+  Other URL schemes are rejected.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

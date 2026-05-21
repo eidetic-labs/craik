@@ -125,24 +125,36 @@ class ExtensionStoreMixin(LocalStoreCore):
         )
 
     def put_plugin_probation(self, probation: PluginProbation) -> None:
+        probation = _signed_plugin_probation(self, probation)
         self.put_contract(probation)
 
     def get_plugin_probation(self, probation_id: str) -> PluginProbation | None:
         contract = self.get_contract("craik.plugin_probation", probation_id)
-        return _cast_optional(PluginProbation, contract)
+        probation = _cast_optional(PluginProbation, contract)
+        _verify_plugin_probation_hmac(self, probation)
+        return probation
 
     def list_plugin_probations(self) -> list[PluginProbation]:
-        return _cast_list(PluginProbation, self.list_contracts("craik.plugin_probation"))
+        probations = _cast_list(PluginProbation, self.list_contracts("craik.plugin_probation"))
+        for probation in probations:
+            _verify_plugin_probation_hmac(self, probation)
+        return probations
 
     def put_plugin_receipt(self, receipt: PluginReceipt) -> None:
+        receipt = _signed_plugin_receipt(self, receipt)
         self.put_contract(receipt)
 
     def get_plugin_receipt(self, receipt_id: str) -> PluginReceipt | None:
         contract = self.get_contract("craik.plugin_receipt", receipt_id)
-        return _cast_optional(PluginReceipt, contract)
+        receipt = _cast_optional(PluginReceipt, contract)
+        _verify_plugin_receipt_hmac(self, receipt)
+        return receipt
 
     def list_plugin_receipts(self) -> list[PluginReceipt]:
-        return _cast_list(PluginReceipt, self.list_contracts("craik.plugin_receipt"))
+        receipts = _cast_list(PluginReceipt, self.list_contracts("craik.plugin_receipt"))
+        for receipt in receipts:
+            _verify_plugin_receipt_hmac(self, receipt)
+        return receipts
 
     def put_instruction_source(self, source: InstructionSource) -> None:
         self.put_contract(source)
@@ -373,6 +385,46 @@ def _signed_recovery_session(
     payload = session.model_dump(mode="json", by_alias=True)
     receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
     return session.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _signed_plugin_probation(
+    store: LocalStoreCore,
+    probation: PluginProbation,
+) -> PluginProbation:
+    payload = probation.model_dump(mode="json", by_alias=True)
+    receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
+    return probation.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _verify_plugin_probation_hmac(
+    store: LocalStoreCore,
+    probation: PluginProbation | None,
+) -> None:
+    if probation is None or probation.receipt_hmac is None:
+        return
+    payload = probation.model_dump(mode="json", by_alias=True)
+    if not verify_contract_hmac(payload, hmac_key_for_store(store)):
+        raise LocalStoreCorruptError(f"stored plugin probation has invalid HMAC: {probation.id}")
+
+
+def _signed_plugin_receipt(
+    store: LocalStoreCore,
+    receipt: PluginReceipt,
+) -> PluginReceipt:
+    payload = receipt.model_dump(mode="json", by_alias=True)
+    receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
+    return receipt.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _verify_plugin_receipt_hmac(
+    store: LocalStoreCore,
+    receipt: PluginReceipt | None,
+) -> None:
+    if receipt is None or receipt.receipt_hmac is None:
+        return
+    payload = receipt.model_dump(mode="json", by_alias=True)
+    if not verify_contract_hmac(payload, hmac_key_for_store(store)):
+        raise LocalStoreCorruptError(f"stored plugin receipt has invalid HMAC: {receipt.id}")
 
 
 def _verify_recovery_session_hmac(

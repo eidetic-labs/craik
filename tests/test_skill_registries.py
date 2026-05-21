@@ -97,6 +97,23 @@ def test_skill_registry_requires_scope_project_boundaries() -> None:
         )
 
 
+def test_skill_registry_source_paths_are_project_confined() -> None:
+    absolute = {
+        **_entry("skill_entry_project_docs", scope="project", precedence=0),
+        "source_path": "/tmp/skill/SKILL.md",
+    }
+    traversal = {
+        **_entry("skill_entry_project_docs", scope="project", precedence=0),
+        "source_path": "../skill/SKILL.md",
+    }
+
+    with pytest.raises(ValidationError, match="confined relative path"):
+        _registry(entries=[absolute], active_entry_ids=["skill_entry_project_docs"])
+
+    with pytest.raises(ValidationError, match="confined relative path"):
+        _registry(entries=[traversal], active_entry_ids=["skill_entry_project_docs"])
+
+
 def test_skill_registry_rejects_inactive_active_entry() -> None:
     inactive = _entry("skill_entry_inactive", scope="project", precedence=0, active=False)
 

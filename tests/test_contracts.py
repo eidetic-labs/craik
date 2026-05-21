@@ -810,3 +810,46 @@ def test_extra_fields_are_rejected(
 
     with pytest.raises(ValidationError):
         CONTRACT_REGISTRY[name].model_validate(payload)
+
+
+def test_v0_6_contract_hardening_rejects_unsafe_ids_docs_and_paths(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    skill = dict(fixtures["craik.skill_package"])
+    skill["id"] = "Skill.Package"
+    with pytest.raises(ValidationError, match="contract ids"):
+        CONTRACT_REGISTRY["craik.skill_package"].model_validate(skill)
+
+    plugin = dict(fixtures["craik.plugin_descriptor"])
+    plugin["docs"] = ["javascript:alert(1)"]
+    with pytest.raises(ValidationError, match="docs references"):
+        CONTRACT_REGISTRY["craik.plugin_descriptor"].model_validate(plugin)
+
+    registry = dict(fixtures["craik.skill_registry"])
+    registry["entries"] = [dict(registry["entries"][0], source_path="../SKILL.md")]
+    registry["active_entry_ids"] = [registry["entries"][0]["id"]]
+    registry["precedence_order"] = [registry["entries"][0]["id"]]
+    with pytest.raises(ValidationError, match="confined relative path"):
+        CONTRACT_REGISTRY["craik.skill_registry"].model_validate(registry)
+
+
+def test_v0_6_plugin_integrity_fields_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    probation = dict(fixtures["craik.plugin_probation"])
+    probation["receipt_hmac"] = "a" * 64
+    receipt = dict(fixtures["craik.plugin_receipt"])
+    receipt["receipt_hmac"] = "b" * 64
+
+    assert (
+        CONTRACT_REGISTRY["craik.plugin_probation"]
+        .model_validate(probation)
+        .receipt_hmac
+        == "a" * 64
+    )
+    assert (
+        CONTRACT_REGISTRY["craik.plugin_receipt"]
+        .model_validate(receipt)
+        .receipt_hmac
+        == "b" * 64
+    )

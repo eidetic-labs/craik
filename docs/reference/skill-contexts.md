@@ -71,6 +71,11 @@ Runtime callers can validate a `SkillInvocationContext` against its
 missing required inputs, and missing omission records for requirements
 that explicitly demand them.
 
+Skill registry entries must point at confined relative source paths.
+Absolute paths and `..` traversal are rejected before an entry can be
+persisted, keeping project-local and global skill discovery auditable
+without allowing registry records to escape their declared boundary.
+
 ## What's next
 
 <div className="craik-next">
