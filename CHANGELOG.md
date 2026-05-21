@@ -39,6 +39,9 @@ within the `0.x.0` stability expectations described in
 - Prompt compilation for v0.4.0 governing distillations: compiled prompts now
   include a separate authoritative `Distillations` section with deterministic
   ordering, provenance annotations, and stale-exclusion warnings.
+- Instruction distillation CLI for v0.4.0: `craik instructions` now supports
+  source registration, filtered proposal listing, approve/reject decisions, and
+  provenance-aware item inspection through the active operator session.
 
 ## 0.3.0 - 2026-05-20
 
