@@ -89,6 +89,14 @@ def test_plugin_descriptor_requires_versioned_identity() -> None:
         _descriptor(plugin_version="1.2")
 
 
+def test_plugin_descriptor_rejects_unsafe_ids_and_docs() -> None:
+    with pytest.raises(ValidationError, match="contract ids"):
+        _descriptor(id="Plugin.Descriptor")
+
+    with pytest.raises(ValidationError, match="docs references"):
+        _descriptor(docs=["data:text/plain,unsafe"])
+
+
 def test_plugin_descriptor_separates_authority_from_declarations() -> None:
     with pytest.raises(ValidationError):
         _descriptor(runtime_authority=True)

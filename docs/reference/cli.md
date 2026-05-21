@@ -778,6 +778,105 @@ Options:
 - `--trusted-local-fail-open`: Explicitly opt in to trusted-local fail-open semantics.; default `false`
 - `--max-recent-handoffs`: Recent handoffs to include.; default `5`
 
+## `craik plugins`
+
+Install and govern runtime plugins.
+
+```text
+craik plugins COMMAND [ARGS]...
+```
+
+## `craik plugins grant`
+
+Grant plugin capability authority.
+
+```text
+craik plugins grant [OPTIONS] PLUGIN_ID
+```
+
+Options:
+
+- `--operation`: Operation. May repeat.
+- `--target`: Target path. May repeat.
+- `--expiry`: ISO-8601 expiry.
+- `--task`: Task id.
+- `--policy`: Policy envelope id.
+- `--evidence`: Evidence id. May repeat.
+- `--capability`: Capability name.; default `plugin.operation`
+- `--id`: Grant id.
+- `--repo`: Repository target.
+- `--reason`: Grant reason.; default `Approved from CLI.`
+
+## `craik plugins grants`
+
+Inspect plugin grants.
+
+```text
+craik plugins grants COMMAND [ARGS]...
+```
+
+## `craik plugins grants list`
+
+List plugin capability grants.
+
+```text
+craik plugins grants list [OPTIONS]
+```
+
+Options:
+
+- `--plugin`: Plugin descriptor id.
+
+## `craik plugins install`
+
+Install a plugin descriptor manifest.
+
+```text
+craik plugins install [OPTIONS] PATH
+```
+
+## `craik plugins probation`
+
+Review plugin probation records.
+
+```text
+craik plugins probation COMMAND [ARGS]...
+```
+
+## `craik plugins probation review`
+
+Decide a plugin probation review.
+
+```text
+craik plugins probation review [OPTIONS] PROBATION_ID
+```
+
+Options:
+
+- `--evidence`: Evidence id. May repeat.
+- `--decide`: pass or fail.
+- `--rationale`: Review rationale.; default `Reviewed from CLI.`
+
+## `craik plugins receipts`
+
+Inspect plugin receipts.
+
+```text
+craik plugins receipts COMMAND [ARGS]...
+```
+
+## `craik plugins receipts list`
+
+List plugin receipts.
+
+```text
+craik plugins receipts list [OPTIONS]
+```
+
+Options:
+
+- `--plugin`: Plugin descriptor id.
+
 ## `craik policy`
 
 Inspect Craik policy profiles.
@@ -937,6 +1036,30 @@ Print one capability receipt by id as JSON.
 
 ```text
 craik receipts show [OPTIONS] RECEIPT_ID
+```
+
+## `craik references`
+
+Inspect and verify reference integrations.
+
+```text
+craik references COMMAND [ARGS]...
+```
+
+## `craik references list`
+
+List reference integrations.
+
+```text
+craik references list
+```
+
+## `craik references verify`
+
+Verify that a reference integration is present and valid.
+
+```text
+craik references verify [OPTIONS] INTEGRATION_ID
 ```
 
 ## `craik review`
@@ -1181,6 +1304,58 @@ Options:
 - `--gateway-bind-host`: Gateway bind host. Defaults to local only.; default `127.0.0.1`
 - `--gateway-port`: Gateway port.; default `8765`
 - `--policy-envelope-id`: Policy envelope for gateway authority.
+
+## `craik skills`
+
+Install and inspect governed skill packages.
+
+```text
+craik skills COMMAND [ARGS]...
+```
+
+## `craik skills disable`
+
+Disable a skill registry entry.
+
+```text
+craik skills disable [OPTIONS] ENTRY_ID
+```
+
+## `craik skills enable`
+
+Enable a skill registry entry.
+
+```text
+craik skills enable [OPTIONS] ENTRY_ID
+```
+
+## `craik skills install`
+
+Install a skill package manifest.
+
+```text
+craik skills install [OPTIONS] PATH
+```
+
+## `craik skills list`
+
+List installed skill packages.
+
+```text
+craik skills list [OPTIONS]
+```
+
+Options:
+
+- `--scope`: Optional registry scope: project or global.
+
+## `craik skills show`
+
+Show one installed skill package.
+
+```text
+craik skills show [OPTIONS] PACKAGE_ID
+```
 
 ## `craik task`
 

@@ -53,8 +53,11 @@ def test_plugin_probation_round_trips_in_store(tmp_path) -> None:
         probation = _probation()
         store.put_plugin_probation(probation)
 
-        assert store.get_plugin_probation(probation.id) == probation
-        assert store.list_plugin_probations() == [probation]
+        stored = store.get_plugin_probation(probation.id)
+        assert stored is not None
+        assert stored.receipt_hmac
+        assert stored.model_copy(update={"receipt_hmac": None}) == probation
+        assert store.list_plugin_probations() == [stored]
         assert probation.durable_trust_granted is False
     finally:
         store.close()

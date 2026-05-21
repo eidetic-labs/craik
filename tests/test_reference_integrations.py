@@ -92,3 +92,11 @@ def test_reference_integrations_require_reproducible_artifacts() -> None:
 
     with pytest.raises(ValidationError, match="safe and reproducible"):
         _integration(reproducible=False)
+
+
+def test_reference_integration_rejects_unsafe_ids_and_docs() -> None:
+    with pytest.raises(ValidationError, match="contract ids"):
+        _integration(id="Reference.Integration")
+
+    with pytest.raises(ValidationError, match="docs references"):
+        _integration(docs=["file:///tmp/reference.md"])

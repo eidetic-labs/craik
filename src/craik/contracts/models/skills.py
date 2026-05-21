@@ -5,7 +5,11 @@
 from __future__ import annotations
 
 import re
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
+
+from pydantic import field_validator
 
 from .base import *
 from .core import *
@@ -14,6 +18,35 @@ from .memory import *
 from .runtime import *
 
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+_CONTRACT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
+
+
+def _validate_contract_id(value: str) -> str:
+    if not _CONTRACT_ID_RE.fullmatch(value):
+        raise ValueError("contract ids must match ^[a-z0-9][a-z0-9_-]{0,127}$")
+    return value
+
+
+def _validate_docs_references(values: list[str]) -> list[str]:
+    for value in values:
+        parsed = urlparse(value)
+        if parsed.scheme:
+            if parsed.scheme == "https":
+                continue
+            if parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+                continue
+            raise ValueError("docs references must use https, localhost http, or safe relative paths")
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("docs references must not be absolute or traverse parent directories")
+    return values
+
+
+def _validate_relative_source_path(value: str) -> str:
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError("skill registry source_path must be a confined relative path")
+    return value
 
 
 class SkillEntrypoint(CraikModel):
@@ -60,6 +93,9 @@ class SkillPackage(CraikModel):
     plugin_descriptor_id: str | None = None
     runtime_authority: Literal[False] = False
     created_at: datetime
+
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_docs = field_validator("docs")(_validate_docs_references)
 
     @model_validator(mode="after")
     def validate_skill_package(self) -> SkillPackage:
@@ -193,6 +229,10 @@ class SkillRegistryEntry(CraikModel):
     declared_by: str
     created_at: datetime
 
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_package_id = field_validator("skill_package_id")(_validate_contract_id)
+    _valid_source_path = field_validator("source_path")(_validate_relative_source_path)
+
     @model_validator(mode="after")
     def validate_scope_project_link(self) -> SkillRegistryEntry:
         """Require project ids only for project-scoped skills."""
@@ -217,6 +257,8 @@ class SkillRegistry(CraikModel):
     active_entry_ids: list[str] = Field(default_factory=list)
     precedence_order: list[str] = Field(default_factory=list)
     created_at: datetime
+
+    _valid_id = field_validator("id")(_validate_contract_id)
 
     @model_validator(mode="after")
     def validate_skill_registry(self) -> SkillRegistry:
@@ -359,6 +401,9 @@ class PluginDescriptor(CraikModel):
     runtime_authority: Literal[False] = False
     created_at: datetime
 
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_docs = field_validator("docs")(_validate_docs_references)
+
     @model_validator(mode="after")
     def validate_plugin_descriptor(self) -> PluginDescriptor:
         """Require versioned descriptors and grant separation for risky capabilities."""
@@ -418,7 +463,11 @@ class PluginProbation(CraikModel):
     decision: PluginProbationDecision | None = None
     expires_at: datetime | None = None
     durable_trust_granted: bool = False
+    receipt_hmac: str | None = None
     created_at: datetime
+
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_plugin_descriptor_id = field_validator("plugin_descriptor_id")(_validate_contract_id)
 
     @model_validator(mode="after")
     def validate_plugin_probation(self) -> PluginProbation:
@@ -473,7 +522,11 @@ class PluginReceipt(CraikModel):
     evidence_ids: list[str] = Field(min_length=1)
     handoff_ids: list[str] = Field(min_length=1)
     redacted: bool = True
+    receipt_hmac: str | None = None
     created_at: datetime
+
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_plugin_descriptor_id = field_validator("plugin_descriptor_id")(_validate_contract_id)
 
     @model_validator(mode="after")
     def validate_plugin_receipt(self) -> PluginReceipt:
@@ -515,6 +568,9 @@ class PluginCapabilityGrant(CraikModel):
     receipt_ids: list[str] = Field(default_factory=list)
     created_at: datetime
 
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_plugin_descriptor_id = field_validator("plugin_descriptor_id")(_validate_contract_id)
+
     @model_validator(mode="after")
     def validate_plugin_capability_grant(self) -> PluginCapabilityGrant:
         """Validate plugin grant state and least-privilege approval boundaries."""
@@ -539,7 +595,7 @@ class PluginCapabilityGrant(CraikModel):
         return self
 
     def permits_operation(self, operation: str, *, at: datetime) -> bool:
-        """Return whether this grant currently authorizes one operation."""
+        """Return whether this grant authorizes one operation before its strict expiry boundary."""
         if self.status != "allowed":
             return False
         if operation not in self.operations:
@@ -607,6 +663,9 @@ class AdapterPackage(CraikModel):
     version_constraints: list[str] = Field(default_factory=list)
     created_at: datetime
 
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_docs = field_validator("docs")(_validate_docs_references)
+
     @model_validator(mode="after")
     def validate_adapter_package(self) -> AdapterPackage:
         """Require versioned adapter packages with entrypoints and compatibility."""
@@ -641,6 +700,9 @@ class ReferenceIntegration(CraikModel):
     reproducible: bool = True
     provenance_ids: list[str] = Field(min_length=1)
     created_at: datetime
+
+    _valid_id = field_validator("id")(_validate_contract_id)
+    _valid_docs = field_validator("docs")(_validate_docs_references)
 
     @model_validator(mode="after")
     def validate_reference_integration(self) -> ReferenceIntegration:

@@ -38,8 +38,11 @@ def test_plugin_receipt_round_trips_in_store(tmp_path) -> None:
         receipt = _receipt()
         store.put_plugin_receipt(receipt)
 
-        assert store.get_plugin_receipt(receipt.id) == receipt
-        assert store.list_plugin_receipts() == [receipt]
+        stored = store.get_plugin_receipt(receipt.id)
+        assert stored is not None
+        assert stored.receipt_hmac
+        assert stored.model_copy(update={"receipt_hmac": None}) == receipt
+        assert store.list_plugin_receipts() == [stored]
     finally:
         store.close()
 

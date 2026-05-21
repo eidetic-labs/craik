@@ -16,6 +16,7 @@ from craik.contracts.models import (
 from craik.runtime.instruction_approval import verify_review_hmac
 from craik.runtime.instruction_snapshots import refresh_project_snapshots
 from craik.runtime.policy.policy import generate_policy_envelope
+from craik.runtime.policy.text import sanitize_runtime_text
 from craik.runtime.projects.instruction_sources import invalidate_stale_distillations
 from craik.runtime.runners.runners import get_runner_capability_matrix
 from craik.runtime.store import LocalStore
@@ -304,7 +305,7 @@ def _distillation_block(
 
 def _render_distillation_item(item: dict[str, object]) -> str:
     category = str(item.get("category", "uncategorized"))
-    statement = _sanitize_distillation_statement(str(item.get("statement", "")))
+    statement = sanitize_runtime_text(str(item.get("statement", "")))
     source_id = str(item.get("source_id", "unknown_source"))
     provenance = item.get("provenance", [])
     locations = []
@@ -327,22 +328,6 @@ def _render_distillation_item(item: dict[str, object]) -> str:
         raise PromptCompilerError("unsafe instruction constraint rendering blocked")
     return rendered
 
-
-def _sanitize_distillation_statement(statement: str) -> str:
-    without_controls = "".join(
-        " " if _is_forbidden_control(char) else char for char in statement
-    )
-    single_line = " ".join(without_controls.replace("\r", "\n").splitlines())
-    normalized = " ".join(single_line.split())
-    escaped = normalized.replace("`", "\\`")
-    while "##" in escaped:
-        escaped = escaped.replace("##", "# #")
-    return escaped[:2000]
-
-
-def _is_forbidden_control(char: str) -> bool:
-    codepoint = ord(char)
-    return codepoint < 32 or codepoint == 127
 
 
 def _refresh_instruction_freshness(store: LocalStore, project_id: str) -> None:

@@ -76,6 +76,12 @@ knowledge_app = typer.Typer(help="Capture v0.5 runtime knowledge records.")
 app.add_typer(knowledge_app, name="knowledge")
 review_app = typer.Typer(help="Capture reviewable critic and red-team findings.")
 app.add_typer(review_app, name="review")
+skills_app = typer.Typer(help="Install and inspect governed skill packages.")
+app.add_typer(skills_app, name="skills")
+plugins_app = typer.Typer(help="Install and govern runtime plugins.")
+app.add_typer(plugins_app, name="plugins")
+references_app = typer.Typer(help="Inspect and verify reference integrations.")
+app.add_typer(references_app, name="references")
 
 
 def package_version() -> str:
@@ -239,6 +245,9 @@ def _load_cli_extensions() -> None:
         "craik.cli_project",
         "craik.cli_review",
         "craik.cli_scope_changes",
+        "craik.cli_skills",
+        "craik.cli_plugins",
+        "craik.cli_references",
         "craik.cli_tasks",
     ):
         import_module(module_name)

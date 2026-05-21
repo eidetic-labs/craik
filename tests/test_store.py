@@ -419,8 +419,14 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.get_skill_invocation_context(skill_context.id) == skill_context
     assert store.get_plugin_capability_grant(plugin_grant.id) == plugin_grant
     assert store.get_plugin_descriptor(plugin_descriptor.id) == plugin_descriptor
-    assert store.get_plugin_probation(plugin_probation.id) == plugin_probation
-    assert store.get_plugin_receipt(plugin_receipt.id) == plugin_receipt
+    stored_plugin_probation = store.get_plugin_probation(plugin_probation.id)
+    assert stored_plugin_probation is not None
+    assert stored_plugin_probation.receipt_hmac
+    assert stored_plugin_probation.model_copy(update={"receipt_hmac": None}) == plugin_probation
+    stored_plugin_receipt = store.get_plugin_receipt(plugin_receipt.id)
+    assert stored_plugin_receipt is not None
+    assert stored_plugin_receipt.receipt_hmac
+    assert stored_plugin_receipt.model_copy(update={"receipt_hmac": None}) == plugin_receipt
     assert store.get_instruction_source(instruction_source.id) == instruction_source
     assert store.get_instruction_source_registry(instruction_registry.id) == instruction_registry
     assert store.get_instruction_source_snapshot(instruction_snapshot.id) == instruction_snapshot
@@ -480,8 +486,8 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.list_skill_invocation_contexts() == [skill_context]
     assert store.list_plugin_capability_grants() == [plugin_grant]
     assert store.list_plugin_descriptors() == [plugin_descriptor]
-    assert store.list_plugin_probations() == [plugin_probation]
-    assert store.list_plugin_receipts() == [plugin_receipt]
+    assert store.list_plugin_probations() == [stored_plugin_probation]
+    assert store.list_plugin_receipts() == [stored_plugin_receipt]
     assert store.list_instruction_sources() == [instruction_source]
     assert store.list_instruction_source_registries() == [instruction_registry]
     assert store.list_instruction_source_snapshots() == [instruction_snapshot]

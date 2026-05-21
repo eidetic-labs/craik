@@ -78,6 +78,17 @@ def test_skill_package_requires_version_and_docs() -> None:
         _package(docs=[])
 
 
+def test_skill_package_rejects_unsafe_ids_and_docs() -> None:
+    with pytest.raises(ValidationError, match="contract ids"):
+        _package(id="Skill.Package")
+
+    with pytest.raises(ValidationError, match="docs references"):
+        _package(docs=["javascript:alert(1)"])
+
+    with pytest.raises(ValidationError, match="docs references"):
+        _package(docs=["../SKILL.md"])
+
+
 def test_skill_package_accepts_semantic_version_suffixes() -> None:
     prerelease = _package(id="skill_docs_reconcile_beta", package_version="1.2.3-beta.1")
     build = _package(id="skill_docs_reconcile_build", package_version="1.2.3+build.7")

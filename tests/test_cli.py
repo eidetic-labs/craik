@@ -60,7 +60,10 @@ def test_receipts_app_is_mounted_from_extracted_module() -> None:
         (["connect", "--help"], "stigmem"),
         (["demo", "--help"], "stigmem-docs"),
         (["handoff", "--help"], "create"),
+        (["plugins", "--help"], "grant"),
+        (["references", "--help"], "verify"),
         (["scope-change", "--help"], "decide"),
+        (["skills", "--help"], "install"),
     ],
 )
 def test_cli_extension_modules_register_commands(

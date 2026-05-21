@@ -50,6 +50,8 @@ def main() -> int:
     if changelog.exists() and f"## {version}" not in changelog.read_text(encoding="utf-8"):
         failures.append(f"CHANGELOG.md: missing section for current version {version}")
 
+    failures.extend(_extension_writer_call_failures())
+
     if failures:
         print("Release readiness checks failed:", file=sys.stderr)
         for failure in failures:
@@ -63,6 +65,32 @@ def main() -> int:
 def _project_version() -> str:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     return str(pyproject["project"]["version"])
+
+
+def _extension_writer_call_failures() -> list[str]:
+    extension_path = ROOT / "src/craik/runtime/store/extensions.py"
+    if not extension_path.exists():
+        return []
+    writer_names = sorted(
+        {
+            line.strip().split("(", 1)[0].removeprefix("def ")
+            for line in extension_path.read_text(encoding="utf-8").splitlines()
+            if line.strip().startswith("def put_")
+        }
+    )
+    production_files = [
+        path
+        for path in (ROOT / "src").rglob("*.py")
+        if path != extension_path and "__pycache__" not in path.parts
+    ]
+    failures: list[str] = []
+    for writer_name in writer_names:
+        needle = f".{writer_name}("
+        if not any(needle in path.read_text(encoding="utf-8") for path in production_files):
+            failures.append(
+                f"src/craik/runtime/store/extensions.py: {writer_name} has no production caller"
+            )
+    return failures
 
 
 if __name__ == "__main__":
