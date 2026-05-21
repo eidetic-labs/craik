@@ -432,6 +432,7 @@ docs/
 <div><h4>Runtime instruction source registry</h4><p>Receipted registration records declared sources before ingestion or promotion.</p></div>
 <div><h4>Markdown instruction distiller</h4><p>Parses registered instruction files into deterministic statement candidates without store writes.</p></div>
 <div><h4>Source hash tracking</h4><p>Refreshes active registered sources from real repo files, stores newline-normalized SHA-256 snapshots, and marks changed or missing sources for stale invalidation.</p></div>
+<div><h4>Line/range provenance</h4><p>Persists one deterministic provenance record per parsed statement with source snapshot, line and column range, summary, and excerpt hash.</p></div>
 <div><h4>Distillation proposal store</h4></div>
 <div><h4>Task intent lock</h4></div>
 <div><h4>Expiring scratchpad</h4></div>
@@ -451,6 +452,7 @@ docs/
 
 <ol className="craik-steps">
 <li>Instruction distillation uses declared sources only.</li>
+<li>Every extracted statement has stable provenance linked to the source snapshot.</li>
 <li>Source-hash changes invalidate stale distillations.</li>
 <li>Extracted instruction facts remain proposals until approved.</li>
 <li>Intent lock is included in case files and handoffs.</li>

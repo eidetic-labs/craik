@@ -21,6 +21,9 @@ within the `0.x.0` stability expectations described in
 - Instruction source snapshot refresh for v0.4.0: registered sources now hash
   real project files with normalized newlines, persist `new` / `unchanged` /
   `changed` / `missing` state, and feed stale distillation invalidation.
+- Instruction provenance extraction for v0.4.0: parsed statement candidates now
+  persist deterministic line/column provenance records with snapshot links,
+  summaries, and excerpt hashes.
 
 ## 0.3.0 - 2026-05-20
 
