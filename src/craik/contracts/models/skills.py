@@ -295,6 +295,16 @@ class PluginCapabilityDeclaration(CraikModel):
     operations: list[str] = Field(default_factory=list)
     targets: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def validate_plugin_capability_declaration(self) -> PluginCapabilityDeclaration:
+        """Require grant-scoped capability declarations to name operations and targets."""
+        if self.grant_required:
+            if not self.operations:
+                raise ValueError("grant-required plugin capabilities require operations")
+            if not self.targets:
+                raise ValueError("grant-required plugin capabilities require targets")
+        return self
+
 
 class PluginCompatibility(CraikModel):
     """Runtime and platform compatibility metadata for a plugin descriptor."""
@@ -304,6 +314,25 @@ class PluginCompatibility(CraikModel):
     platforms: list[str] = Field(default_factory=list)
     status: PluginCompatibilityStatus
     notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_plugin_compatibility(self) -> PluginCompatibility:
+        """Require explicit supported runtime compatibility boundaries."""
+        invalid_craik_versions = [
+            version for version in self.craik_versions if not _SEMVER_RE.fullmatch(version)
+        ]
+        if invalid_craik_versions:
+            raise ValueError(
+                f"plugin compatibility craik_versions must be semantic-version-like: {invalid_craik_versions}"
+            )
+        if self.status == "supported":
+            if not self.python_versions:
+                raise ValueError("supported plugin compatibility requires python_versions")
+            if not self.platforms:
+                raise ValueError("supported plugin compatibility requires platforms")
+        if self.status == "unsupported" and not self.notes:
+            raise ValueError("unsupported plugin compatibility requires notes")
+        return self
 
 
 class PluginDescriptor(CraikModel):
@@ -319,6 +348,7 @@ class PluginDescriptor(CraikModel):
     plugin_version: str
     description: str
     publisher: str
+    trust_boundary: InstructionTrustBoundary
     entrypoints: list[PluginEntrypoint] = Field(min_length=1)
     capabilities: list[PluginCapabilityDeclaration] = Field(min_length=1)
     docs: list[str] = Field(min_length=1)
@@ -332,7 +362,7 @@ class PluginDescriptor(CraikModel):
     @model_validator(mode="after")
     def validate_plugin_descriptor(self) -> PluginDescriptor:
         """Require versioned descriptors and grant separation for risky capabilities."""
-        if "." not in self.plugin_version:
+        if not _SEMVER_RE.fullmatch(self.plugin_version):
             raise ValueError("plugin plugin_version must be semantic-version-like")
         for capability in self.capabilities:
             if capability.risk in {"high", "critical"} and not capability.grant_required:
