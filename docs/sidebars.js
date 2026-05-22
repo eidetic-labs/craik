@@ -179,6 +179,7 @@ const sidebars = {
       items: [
         'reference/cli',
         'guides/terminal-ui',
+        'guides/dashboard',
         'reference/config',
         'reference/readiness-states',
         'reference/slash-commands',
@@ -281,6 +282,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'guides/terminal-ui',
+        'guides/dashboard',
         'reference/operator-surface',
         'reference/work-graph-explorer',
         'reference/handoff-viewer',
@@ -424,6 +426,7 @@ const sidebars = {
       collapsed: true,
       items: [
         'security/secrets',
+        'security/dashboard-security',
         'reference/redaction',
         'reference/secret-migration-policy',
         'security/release-process',

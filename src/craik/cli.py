@@ -18,6 +18,12 @@ from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.dashboard import (
+    DashboardConfig,
+    DashboardConfigError,
+    dashboard_preview_payload,
+    run_dashboard_server,
+)
 from craik.runtime.doctor import run_doctor
 from craik.runtime.gateway import (
     GatewayDaemonError,
@@ -283,6 +289,46 @@ def update_command() -> None:
     """Print safe update guidance without modifying the installation."""
     payload = update_guidance_payload(installed_version=package_version())
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@app.command("dashboard")
+def dashboard_command(
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Dashboard bind host. Defaults to local only."),
+    ] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", min=1, max=65535)] = 8787,
+    auth_token: Annotated[
+        str | None,
+        typer.Option("--auth-token", help="Dashboard bearer token; defaults to operator session."),
+    ] = None,
+    allow_unsafe_dashboard_bind: Annotated[
+        bool,
+        typer.Option(
+            "--allow-unsafe-dashboard-bind",
+            help="Allow binding the dashboard outside localhost.",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print dashboard launch metadata without serving."),
+    ] = False,
+) -> None:
+    """Run the authenticated local dashboard."""
+    config = DashboardConfig(
+        host=host,
+        port=port,
+        auth_token=auth_token or os.environ.get("CRAIK_DASHBOARD_TOKEN"),
+        allow_unsafe_bind=allow_unsafe_dashboard_bind,
+    )
+    try:
+        if dry_run:
+            typer.echo(json.dumps(dashboard_preview_payload(config), indent=2, sort_keys=True))
+            return
+        typer.echo(json.dumps(dashboard_preview_payload(config), indent=2, sort_keys=True))
+        run_dashboard_server(config)
+    except DashboardConfigError as error:
+        raise typer.BadParameter(str(error)) from None
 
 
 @gateway_app.command("start")

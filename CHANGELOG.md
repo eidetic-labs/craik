@@ -16,6 +16,11 @@ within the `0.x.0` stability expectations described in
   `craik tui`, with shared slash-command dispatch, multiline composer
   support, status/model/session/approval/artifact/gateway/skill panels,
   autocomplete metadata, and redacted approval modal fixtures.
+- v0.11.0 authenticated local dashboard entrypoint through
+  `craik dashboard`, with local-only default binding, token or active
+  operator-session authorization, status/provider/session/run/handoff/
+  receipt/approval/gateway/skill/model pages, shared slash-command
+  action dispatch, redacted rendering, route tests, and security docs.
 
 ### Changed
 

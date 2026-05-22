@@ -428,6 +428,22 @@ Show one local contradiction report and linked evidence.
 craik contradictions show [OPTIONS] REPORT_ID
 ```
 
+## `craik dashboard`
+
+Run the authenticated local dashboard.
+
+```text
+craik dashboard [OPTIONS]
+```
+
+Options:
+
+- `--host`: Dashboard bind host. Defaults to local only.; default `127.0.0.1`
+- `--port`: default `8787`
+- `--auth-token`: Dashboard bearer token; defaults to operator session.
+- `--allow-unsafe-dashboard-bind`: Allow binding the dashboard outside localhost.; default `false`
+- `--dry-run`: Print dashboard launch metadata without serving.; default `false`
+
 ## `craik delegation`
 
 Pause and resolve human delegation points.
