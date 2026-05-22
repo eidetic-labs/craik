@@ -10,6 +10,44 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.10.0 — 2026-05-22
+
+### Added
+
+- v0.10.0 interactive agent shell that can launch with `craik` or
+  `craik chat` before provider or operator authentication is configured.
+- Progressive setup readiness states covering unconfigured, fixture,
+  local-model, operator-only, provider-only, fully-ready, and
+  restricted/offline runtime postures.
+- Runtime slash-command registry for setup, auth, provider, model,
+  status, doctor, session, and approval guidance.
+- Browser-assisted provider login for OpenAI, Anthropic, Gemini, and
+  local model profiles, with secure copy/paste fallback and credential
+  storage posture reporting.
+- Model, session, profile, usage, and insight CLI surfaces for
+  operator-facing runtime control.
+- Learning-loop skill commands for telemetry, proposals, evaluation,
+  promotion, rollback, and history inspection.
+- Agent-shell, model/session/profile UX, readiness-state, and
+  slash-command documentation.
+
+### Changed
+
+- The root `craik` command now opens the operator-facing shell by
+  default instead of only exposing a nested command list.
+- CLI reference generation now escapes MDX-sensitive angle-bracket
+  placeholders in command help and option text.
+- Stateful CLI release-readiness scanning now supports the split CLI
+  module layout without widening bootstrap exemptions.
+
+### Security
+
+- Browser-assisted provider setup records no secret values in CLI
+  output and reports credential-storage posture as redacted metadata.
+- Skill improvement controls remain proposal and approval oriented;
+  agents can surface changes, but promotion and rollback stay governed
+  by reviewable operator actions.
+
 ## 0.9.0 — 2026-05-22
 
 ### Added

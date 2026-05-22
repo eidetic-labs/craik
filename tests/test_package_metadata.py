@@ -32,6 +32,7 @@ def test_docs_package_version_matches_project_metadata() -> None:
     package_lock = json.loads((ROOT / "docs" / "package-lock.json").read_text(encoding="utf-8"))
 
     assert package["version"] == pyproject["project"]["version"]
+    assert package_lock["version"] == pyproject["project"]["version"]
     assert package_lock["packages"][""]["version"] == pyproject["project"]["version"]
 
 
