@@ -92,6 +92,24 @@ def test_provider_local_presets_prints_no_secret_diagnostics() -> None:
     assert {"openai-compatible", "ollama", "lm-studio", "vllm"} <= set(presets)
     assert presets["ollama"]["provider"]["secret_ref_names"] == []
     assert presets["ollama"]["provider"]["metadata"]["allow_local_base_url"] is True
+    assert any(
+        "WARNING: Local model endpoint uses plaintext HTTP" in item
+        for item in presets["ollama"]["provider"]["metadata"]["warnings"]
+    )
+
+
+def test_provider_local_health_warns_for_plaintext_loopback() -> None:
+    result = runner.invoke(
+        app,
+        ["provider", "local-health", "ollama", "--base-url", "http://127.0.0.1:11434/v1"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert any(
+        "WARNING: Local model endpoint uses plaintext HTTP" in item
+        for item in payload["warnings"]
+    )
 
 
 def test_provider_local_health_rejects_unknown_preset() -> None:

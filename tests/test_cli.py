@@ -1403,6 +1403,33 @@ def test_demo_stigmem_docs_command_surfaces_provider_findings(tmp_path: Path) ->
     assert "MissingBridge" in payload["findings"]["docs_code_mismatches"][0]
 
 
+def test_demo_stigmem_docs_live_provider_requires_operator_session(tmp_path: Path) -> None:
+    repo = tmp_path / "stigmem"
+    (repo / "docs" / "adr").mkdir(parents=True)
+    (repo / "README.md").write_text("# Stigmem\n")
+    (repo / "docs" / "adr" / "0001-record.md").write_text("# ADR\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "README.md", "docs")
+    _run_git(repo, "commit", "-m", "initial")
+
+    result = runner.invoke(
+        app,
+        [
+            "demo",
+            "stigmem-docs",
+            "--repo-path",
+            str(repo),
+            "--no-github",
+            "--provider",
+            "provider_openai_chat",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_LIVE": "1"},
+    )
+
+    assert result.exit_code == 2
+    assert "active operator session required; run craik auth login" in result.output
+
+
 def test_demo_persistent_agent_command_runs_fixture_path(tmp_path: Path) -> None:
     repo = tmp_path / "agent-demo"
     repo.mkdir()

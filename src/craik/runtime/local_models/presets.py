@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from urllib import error, request
+from urllib.parse import urlparse
 
 from pydantic import Field
 
@@ -42,6 +43,7 @@ class LocalModelHealth(CraikModel):
     base_url: str
     status: str
     detail: str
+    warnings: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -128,6 +130,7 @@ def provider_for_local_model_preset(
         assert_safe_provider_url(resolved_base_url, allow_local=True)
     except ProviderURLSafetyError as exc:
         raise ValueError(str(exc)) from exc
+    warnings = local_model_base_url_warnings(resolved_base_url)
     return ModelProvider.model_validate(
         {
             "id": preset.provider_id,
@@ -147,6 +150,7 @@ def provider_for_local_model_preset(
                 "default_model": model or preset.default_model,
                 "local_model_preset": preset.id,
                 "docs_verified": "2026-05-22",
+                "warnings": warnings,
             },
             "docs": [
                 "docs/guides/local-model-setup.md",
@@ -169,6 +173,7 @@ def check_local_model_health(
     preset = require_local_model_preset(preset_id)
     provider = provider_for_local_model_preset(preset_id, base_url=base_url)
     resolved_base_url = str(provider.metadata["base_url"])
+    warnings = local_model_base_url_warnings(resolved_base_url)
     health_url = f"{resolved_base_url.rstrip('/')}{preset.health_path}"
     fetch = opener or _fetch_json
     try:
@@ -180,6 +185,7 @@ def check_local_model_health(
             base_url=resolved_base_url,
             status="rejected",
             detail=f"local model endpoint health check failed: {exc}",
+            warnings=warnings,
         )
     models = _model_ids(payload)
     return LocalModelHealth(
@@ -190,8 +196,19 @@ def check_local_model_health(
         detail="local model endpoint is reachable"
         if models
         else "local model endpoint responded without model ids",
+        warnings=warnings,
         models=models,
     )
+
+
+def local_model_base_url_warnings(base_url: str) -> list[str]:
+    """Return operator warnings for accepted local model base URLs."""
+    if urlparse(base_url).scheme != "http":
+        return []
+    return [
+        "WARNING: Local model endpoint uses plaintext HTTP. Acceptable only for "
+        "loopback (127.0.0.1/::1). Do NOT bind Ollama to a non-loopback interface."
+    ]
 
 
 def _fetch_json(url: str, timeout_seconds: float) -> dict[str, Any]:
@@ -259,6 +276,7 @@ __all__ = [
     "LocalModelPreset",
     "check_local_model_health",
     "list_local_model_presets",
+    "local_model_base_url_warnings",
     "provider_for_local_model_preset",
     "require_local_model_preset",
 ]

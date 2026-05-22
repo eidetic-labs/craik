@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import demo_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.agents.demo import DemoConfigError, PersistentAgentLaunchDemo
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.projects.demos import StigmemDocsDemo
@@ -83,6 +84,8 @@ def demo_stigmem_docs(
         if provider and provider_id:
             raise typer.BadParameter("use either --provider or --provider-id, not both")
         if provider:
+            if _env_flag("CRAIK_LIVE"):
+                operator_identity_or_fail()
             result = ProviderBackedStigmemDocsDemo(
                 store,
                 github_adapter=github_adapter,
