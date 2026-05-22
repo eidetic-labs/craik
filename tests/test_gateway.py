@@ -1,24 +1,34 @@
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from craik.cli import app
 from craik.contracts.models import GatewayConfig, GatewayRuntimeState
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.gateway import (
     DEFAULT_GATEWAY_CONFIG_ID,
     DEFAULT_GATEWAY_STATE_ID,
     default_gateway_config,
     gateway_configured_state,
     gateway_failed_state,
+    gateway_logs_payload,
     gateway_running_state,
+    gateway_status_payload,
     gateway_stopped_state,
+    install_gateway_service,
+    request_gateway_stop,
     run_gateway_daemon,
+    uninstall_gateway_service,
 )
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
 
 NOW = datetime(2026, 5, 16, 18, 10, tzinfo=UTC)
+runner = CliRunner()
 
 
 def test_default_gateway_config_is_local_daemon_disabled_by_default() -> None:
@@ -184,3 +194,120 @@ def test_gateway_state_requires_running_start_time() -> None:
             pid=1234,
             updated_at=NOW,
         )
+
+
+def test_gateway_service_install_generates_launchd_and_systemd_units(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(
+            default_gateway_config(project_id="project_gateway", created_at=NOW)
+        )
+    finally:
+        store.close()
+
+    launchd = install_gateway_service(paths, target_platform="Darwin")
+    systemd = install_gateway_service(paths, target_platform="Linux")
+
+    assert launchd.backend == "launchd"
+    assert launchd.path.name.endswith(".plist")
+    assert "CRAIK_HOME" in launchd.content
+    assert "craik</string><string>gateway</string><string>start" in launchd.content
+    assert systemd.backend == "systemd"
+    assert "ExecStart=craik gateway start" in systemd.content
+    assert uninstall_gateway_service(paths)["installed"] is False
+
+
+def test_gateway_status_reports_stale_pid_and_logs(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+        state = gateway_running_state(config, pid=999999, started_at=NOW)
+        store.put_gateway_config(config)
+        store.put_gateway_runtime_state(state)
+        (paths.logs / "gateway.log").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    finally:
+        store.close()
+
+    status = gateway_status_payload(paths)
+    logs = gateway_logs_payload(paths, tail=2)
+
+    assert status["status"] == "running"
+    assert status["stale_pid"] is True
+    assert logs["lines"] == ["two", "three"]
+
+
+def test_gateway_stop_recovers_stale_pid_file(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+        state = gateway_running_state(config, pid=999999, started_at=NOW)
+        store.put_gateway_config(config)
+        store.put_gateway_runtime_state(state)
+        (paths.state / "gateway.pid").write_text("999999\n", encoding="utf-8")
+    finally:
+        store.close()
+
+    stopped = request_gateway_stop(paths)
+
+    assert stopped.status == "stopped"
+    assert not (paths.state / "gateway.pid").exists()
+
+
+def test_gateway_lifecycle_cli_commands(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_operator_session(home)
+    paths = ensure_craik_home(env)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+        store.put_gateway_config(config)
+        store.put_gateway_runtime_state(gateway_configured_state(config, configured_at=NOW))
+        (paths.logs / "gateway.log").write_text("gateway ready\n", encoding="utf-8")
+    finally:
+        store.close()
+
+    status = runner.invoke(app, ["gateway", "status"], env=env)
+    logs = runner.invoke(app, ["gateway", "logs", "--tail", "1"], env=env)
+    install = runner.invoke(app, ["gateway", "install"], env=env)
+    stop = runner.invoke(app, ["gateway", "stop"], env=env)
+    restart = runner.invoke(app, ["gateway", "restart"], env=env)
+    doctor = runner.invoke(app, ["gateway", "doctor"], env=env)
+
+    assert status.exit_code == 0
+    assert _json_payload(status)["configured"] is True
+    assert logs.exit_code == 0
+    assert _json_payload(logs)["lines"] == ["gateway ready"]
+    assert install.exit_code == 0
+    assert _json_payload(install)["installed"] is True
+    assert stop.exit_code == 0
+    assert _json_payload(stop)["status"] == "stopped"
+    assert restart.exit_code == 0
+    assert _json_payload(restart)["status"] == "restart_requested"
+    assert doctor.exit_code == 0
+    assert any(check["name"] == "gateway_config" for check in _json_payload(doctor)["gateway"])
+
+
+def _json_payload(result) -> dict[str, object]:
+    import json
+
+    return json.loads(result.stdout)
+
+
+def _put_operator_session(home: Path) -> None:
+    store = OperatorSessionStore(home)
+    store.put(
+        OperatorSession(
+            subject="operator:test",
+            issuer="https://issuer.example.invalid",
+            id_token_jti="jti-gateway",
+            expires_at=NOW,
+        )
+    )

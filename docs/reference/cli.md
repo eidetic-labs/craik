@@ -589,12 +589,76 @@ Run and inspect the local gateway daemon.
 craik gateway COMMAND [ARGS]...
 ```
 
+## `craik gateway doctor`
+
+Run gateway-focused diagnostics.
+
+```text
+craik gateway doctor
+```
+
+## `craik gateway install`
+
+Generate a user-service definition for the local gateway.
+
+```text
+craik gateway install
+```
+
+## `craik gateway logs`
+
+Show recent gateway log lines.
+
+```text
+craik gateway logs [OPTIONS]
+```
+
+Options:
+
+- `--tail`: default `50`
+
+## `craik gateway restart`
+
+Request a gateway restart by stopping the current lifecycle state.
+
+```text
+craik gateway restart
+```
+
 ## `craik gateway start`
 
 Run the foreground gateway daemon until interrupted.
 
 ```text
 craik gateway start
+```
+
+## `craik gateway status`
+
+Show gateway config, runtime state, pid, bind, and stale-pid status.
+
+```text
+craik gateway status
+```
+
+## `craik gateway stop`
+
+Request gateway stop and recover stale pid state.
+
+```text
+craik gateway stop [OPTIONS]
+```
+
+Options:
+
+- `--signal-process`: Send SIGTERM to the recorded pid before marking the gateway stopped.; default `false`
+
+## `craik gateway uninstall`
+
+Remove generated gateway service definitions.
+
+```text
+craik gateway uninstall
 ```
 
 ## `craik graph`
