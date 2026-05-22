@@ -167,6 +167,43 @@ class GatewayRuntimeState(CraikModel):
         return self
 
 
+class GatewaySchedule(CraikModel):
+    """Cron-like schedule definition for gateway-created tasks."""
+
+    schema_: Literal["craik.gateway_schedule"] = Field(
+        default="craik.gateway_schedule",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    project_id: str
+    title: str
+    objective: str
+    cron: str
+    requested_by: str = "gateway:scheduler"
+    priority: Priority = "normal"
+    mode: TaskMode = "implement"
+    policy_envelope_id: str | None = None
+    channel: str | None = None
+    receipt_ids: list[str] = Field(default_factory=list)
+
+
+class ScheduledAutomation(CraikModel):
+    """Gateway automation definition backed by a cron-like schedule."""
+
+    schema_: Literal["craik.scheduled_automation"] = Field(
+        default="craik.scheduled_automation",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    schedule: GatewaySchedule
+    enabled: bool = False
+    policy_envelope_id: str
+    required_capability: str = "gateway.schedule.execute"
+    receipt_ids: list[str] = Field(default_factory=list)
+
+
 class ChannelAdapterIdentity(CraikModel):
     """Stable identity for one external operator channel adapter."""
 

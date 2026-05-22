@@ -109,6 +109,14 @@ receipts. Receipt capabilities must be declared by the adapter
 contract, so inbound and outbound channel activity stays auditable
 under the same policy model as runner and tool actions.
 
+## Local store
+
+The v0.8.0 gateway artifacts are durable store contracts. The local
+store exposes typed helpers for channel adapter contracts, identity
+pairings, allowlists, channel policy envelopes, gateway schedules,
+scheduled automations, and gateway receipts so an accepted ingress or
+scheduling decision can be inspected after restart.
+
 ## Trust boundaries
 
 <div className="craik-grid">

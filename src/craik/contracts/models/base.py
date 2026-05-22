@@ -199,6 +199,7 @@ ChannelKind = Literal["messaging", "webhook", "scheduler", "voice", "custom"]
 ChannelCapabilityDirection = Literal["inbound", "outbound", "bidirectional"]
 ChannelPairingStatus = Literal["unpaired", "paired", "revoked"]
 ChannelAllowlistAction = Literal["allow", "deny"]
+ScheduledAutomationStatus = Literal["created", "disabled", "duplicate", "policy_denied"]
 ModelProviderMode = Literal["chat", "completion", "embedding", "tool", "runner"]
 ModelProviderTrustBoundary = Literal["local", "self-hosted", "hosted", "third-party"]
 SandboxBackendKind = Literal["local_process", "container", "remote_shell", "browser_tool"]
@@ -326,6 +327,7 @@ __all__ = [
     "ChannelCapabilityDirection",
     "ChannelPairingStatus",
     "ChannelAllowlistAction",
+    "ScheduledAutomationStatus",
     "ModelProviderMode",
     "ModelProviderTrustBoundary",
     "SandboxBackendKind",

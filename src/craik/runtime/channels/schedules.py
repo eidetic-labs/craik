@@ -5,27 +5,9 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from pydantic import Field
-
-from craik.contracts.models import CraikModel, Priority, TaskMode, TaskRequest
+from craik.contracts.models import CraikModel, GatewaySchedule, TaskRequest
 
 MINIMUM_SCHEDULE_INTERVAL_MINUTES = 5
-
-
-class GatewaySchedule(CraikModel):
-    """Cron-like schedule definition for gateway-created tasks."""
-
-    id: str
-    project_id: str
-    title: str
-    objective: str
-    cron: str
-    requested_by: str = "gateway:scheduler"
-    priority: Priority = "normal"
-    mode: TaskMode = "implement"
-    policy_envelope_id: str | None = None
-    channel: str | None = None
-    receipt_ids: list[str] = Field(default_factory=list)
 
 
 class ScheduledTaskCreation(CraikModel):

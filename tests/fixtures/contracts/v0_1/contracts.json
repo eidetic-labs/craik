@@ -545,6 +545,21 @@
     "receipt_ids": ["receipt_gateway_start"],
     "supervision_notes": ["Gateway process is marked running by the supervisor."]
   },
+  "craik.gateway_schedule": {
+    "schema": "craik.gateway_schedule",
+    "version": "0.1.0",
+    "id": "schedule_daily_status",
+    "project_id": "project_stigmem",
+    "title": "Daily gateway status",
+    "objective": "Summarize gateway health and open risks.",
+    "cron": "0 9 * * *",
+    "requested_by": "gateway:scheduler",
+    "priority": "normal",
+    "mode": "implement",
+    "policy_envelope_id": "policy_gateway",
+    "channel": "scheduler",
+    "receipt_ids": ["receipt_gateway_schedule"]
+  },
   "craik.handoff": {
     "schema": "craik.handoff",
     "version": "0.1.0",
@@ -2009,6 +2024,30 @@
     "review_status": "reviewable",
     "adjudication_id": null,
     "created_at": "2026-05-16T06:46:00Z"
+  },
+  "craik.scheduled_automation": {
+    "schema": "craik.scheduled_automation",
+    "version": "0.1.0",
+    "id": "automation_daily_status",
+    "schedule": {
+      "schema": "craik.gateway_schedule",
+      "version": "0.1.0",
+      "id": "schedule_daily_status",
+      "project_id": "project_stigmem",
+      "title": "Daily gateway status",
+      "objective": "Summarize gateway health and open risks.",
+      "cron": "0 9 * * *",
+      "requested_by": "gateway:scheduler",
+      "priority": "normal",
+      "mode": "implement",
+      "policy_envelope_id": "policy_gateway",
+      "channel": "scheduler",
+      "receipt_ids": ["receipt_gateway_schedule"]
+    },
+    "enabled": false,
+    "policy_envelope_id": "policy_gateway",
+    "required_capability": "gateway.schedule.execute",
+    "receipt_ids": ["receipt_gateway_schedule"]
   },
   "craik.red_team_finding": {
     "schema": "craik.red_team_finding",
