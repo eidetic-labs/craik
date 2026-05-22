@@ -203,6 +203,10 @@ def _join_or_none(items: list[str]) -> str:
 
 
 def _receipt_hmac_status(receipt: CapabilityReceipt | PluginReceipt) -> str:
+    # This view reflects the store-layer read decision: signed receipt getters
+    # verify HMACs before returning rows, so a present HMAC here means the
+    # persisted receipt was accepted by the trust boundary. Do not treat this
+    # formatter as a second cryptographic verifier.
     return "verified" if getattr(receipt, "receipt_hmac", None) else "unverified"
 
 
