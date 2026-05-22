@@ -200,6 +200,7 @@ class AgentSessionState(CraikModel):
     recovery_metadata: dict[str, Any] = Field(default_factory=dict)
     supervision_notes: list[str] = Field(default_factory=list)
     redacted: bool = True
+    receipt_hmac: str | None = None
 
     @model_validator(mode="after")
     def validate_agent_session_state(self) -> AgentSessionState:
@@ -253,6 +254,7 @@ class AgentSessionEvent(CraikModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     redacted: bool = True
+    receipt_hmac: str | None = None
 
 
 class GatewaySchedule(CraikModel):

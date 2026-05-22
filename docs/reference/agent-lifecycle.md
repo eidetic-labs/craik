@@ -20,12 +20,17 @@ operator gating, and the relationship to one-shot task runs.
 | `craik agent launch` | Create a persistent agent session. | `craik.agent_session_state`. |
 | `craik agent prompt` | Send one prompt through the session provider. | Task, run, outputs, receipts, handoff, session links, and `craik.agent_session_event`. |
 | `craik agent recover` | Mark a recoverable failure or perform reconnect/resume. | Updates session status and redacted recovery metadata. |
-| `craik agent status` | Inspect one persistent session. | May mark stale pid sessions failed. |
+| `craik agent status` | Inspect one persistent session. | Reports session HMAC status and may mark stale pid sessions failed. |
 | `craik agent stop` | Stop an active persistent session. | Clears pid and records `stopped_at`. |
 | `craik agent restart` | Restart a stopped or failed session. | Clears `stopped_at` and records a new start time. |
 | `craik agent list` | List persisted sessions. | Read-only. |
 
 ## Status values
+
+`craik agent status` includes `hmac_status` for the persisted session
+record. `verified` means the stored bytes match the local receipt HMAC,
+`tampered` means a signed row failed verification, and `unverified`
+marks legacy rows written before session HMACs.
 
 | Status | Meaning |
 | --- | --- |

@@ -124,8 +124,21 @@ def agent_status(session_id: Annotated[str, typer.Argument(help="Agent session i
     store = LocalStore.from_env()
     try:
         store.initialize()
-        state = get_agent_session_status(store, session_id)
-        payload = {"session": _session_payload(state)}
+        read_result = store.get_agent_session_state_with_verification(session_id)
+        if read_result is None:
+            raise AgentSessionLifecycleError(f"unknown agent session: {session_id}")
+        if read_result.hmac_status == "tampered":
+            state = read_result.state
+            hmac_status = "tampered"
+        else:
+            state = get_agent_session_status(store, session_id)
+            refreshed = store.get_agent_session_state_with_verification(session_id)
+            hmac_status = (
+                refreshed.hmac_status
+                if refreshed is not None
+                else read_result.hmac_status
+            )
+        payload = {"session": _session_payload(state), "hmac_status": hmac_status}
     except AgentSessionLifecycleError as error:
         raise typer.BadParameter(str(error)) from None
     finally:

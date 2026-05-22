@@ -51,7 +51,8 @@ def test_start_agent_session_persists_redacted_provider_state(tmp_path) -> None:
 
         stored = store.get_agent_session_state(state.id)
         assert stored is not None
-        assert stored == state
+        assert stored.receipt_hmac
+        assert stored.model_copy(update={"receipt_hmac": None}) == state
         assert stored.status == "running"
         assert stored.redacted is True
         assert stored.auth_identity_hash == "auth-hash"
@@ -86,7 +87,10 @@ def test_update_agent_session_status_clears_pid_when_stopped(tmp_path) -> None:
         assert stopped.pid is None
         assert stopped.stopped_at == stopped_at
         assert stopped.supervision_notes[-1] == "Operator stopped the session."
-        assert store.get_agent_session_state(state.id) == stopped
+        stored = store.get_agent_session_state(state.id)
+        assert stored is not None
+        assert stored.receipt_hmac
+        assert stored.model_copy(update={"receipt_hmac": None}) == stopped
     finally:
         store.close()
 

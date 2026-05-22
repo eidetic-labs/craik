@@ -918,3 +918,25 @@ def test_v0_6_plugin_integrity_fields_round_trip(
         .receipt_hmac
         == "b" * 64
     )
+
+
+def test_v0_9_agent_session_integrity_fields_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    state = dict(fixtures["craik.agent_session_state"])
+    state["receipt_hmac"] = "c" * 64
+    event = dict(fixtures["craik.agent_session_event"])
+    event["receipt_hmac"] = "d" * 64
+
+    assert (
+        CONTRACT_REGISTRY["craik.agent_session_state"]
+        .model_validate(state)
+        .receipt_hmac
+        == "c" * 64
+    )
+    assert (
+        CONTRACT_REGISTRY["craik.agent_session_event"]
+        .model_validate(event)
+        .receipt_hmac
+        == "d" * 64
+    )

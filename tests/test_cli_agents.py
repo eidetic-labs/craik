@@ -12,7 +12,7 @@ from craik.cli import app
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.project_registry import ProjectRegistry
-from craik.runtime.store import LocalStore
+from craik.runtime.store import CONTRACT_KINDS, LocalStore
 
 runner = CliRunner()
 
@@ -62,6 +62,7 @@ def test_agent_lifecycle_cli_launch_status_stop_restart(tmp_path: Path) -> None:
     restarted_payload = json.loads(restarted.stdout)
     assert launch_payload["launched"] is True
     assert launch_payload["boundary"]["one_shot_run"].endswith(" run execute")
+    assert status_payload["hmac_status"] == "verified"
     assert status_payload["session"]["id"] == "agent_docs"
     assert status_payload["session"]["operator_subject"] == "operator-123"
     assert stopped_payload["session"]["status"] == "stopped"
@@ -101,6 +102,26 @@ def test_agent_cli_requires_active_operator_session(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "active operator session required; run craik auth login" in result.output
+
+
+def test_agent_status_surfaces_tampered_session_hmac(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_session(home)
+    launched = runner.invoke(
+        app,
+        ["agent", "launch", "--session-id", "agent_docs"],
+        env=env,
+    )
+    assert launched.exit_code == 0, launched.output
+    _tamper_agent_session(home, "agent_docs")
+
+    status = runner.invoke(app, ["agent", "status", "agent_docs"], env=env)
+
+    assert status.exit_code == 0, status.output
+    payload = json.loads(status.stdout)
+    assert payload["hmac_status"] == "tampered"
+    assert payload["session"]["provider_id"] == "provider_tampered"
 
 
 def test_agent_cli_prompt_runs_provider_backed_session(tmp_path: Path) -> None:
@@ -210,6 +231,28 @@ def _seed_project(home: Path, tmp_path: Path) -> str:
     store.initialize()
     try:
         return ProjectRegistry(store).add_project(repo, name="Example").id
+    finally:
+        store.close()
+
+
+def _tamper_agent_session(home: Path, session_id: str) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        kind = CONTRACT_KINDS["craik.agent_session_state"]
+        row = store._connection.execute(
+            "SELECT payload_json FROM records WHERE kind = ? AND id = ?",
+            (kind, session_id),
+        ).fetchone()
+        assert row is not None
+        payload = json.loads(str(row["payload_json"]))
+        payload["provider_id"] = "provider_tampered"
+        store._connection.execute(
+            "UPDATE records SET payload_json = ? WHERE kind = ? AND id = ?",
+            (json.dumps(payload, sort_keys=True, separators=(",", ":")), kind, session_id),
+        )
+        store._connection.commit()
     finally:
         store.close()
 
