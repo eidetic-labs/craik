@@ -158,6 +158,12 @@ Browser/tool results are redacted before receipt metadata is persisted.
 <dd>Returns provider metadata · budget &amp; quota refs · policy envelope id · receipt ids. Does NOT call a provider, load credentials, or grant execution authority.</dd>
 </div>
 
+<div>
+<dt><code>craik demo persistent-agent --repo-path .</code></dt>
+<dt><span className="craik-fields__type">fixture e2e</span></dt>
+<dd>Launches persistent sessions, runs provider prompts, records receipts and handoffs, and inspects final session state without live model calls.</dd>
+</div>
+
 </div>
 
 ## Validation

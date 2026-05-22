@@ -12,6 +12,39 @@ audit continuity.
 
 </div>
 
+## v0.9.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Persistent agent runtime gate is in progress.**
+
+`0.9.0` adds provider-backed persistent sessions, guided provider
+setup, Gemini and local model routes, provider certification, explicit
+failure recovery, and a deterministic persistent-agent launch demo.
+Each goal must land through a green PR tied to the v0.9.0 milestone
+before release prep begins.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Provider setup</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/737">#737</a> · guided setup for OpenAI, Anthropic, Gemini, and local models</dd></div>
+<div><dt>Gemini runtime</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/738">#738</a> · Gemini generateContent adapter, docs, and runner matrix coverage</dd></div>
+<div><dt>Local model presets</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/740">#740</a> · Ollama, LM Studio, vLLM, and generic OpenAI-compatible presets</dd></div>
+<div><dt>Persistent prompt loop</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/741">#741</a> · persistent session prompt execution with events, receipts, and handoff links</dd></div>
+<div><dt>Provider certification matrix</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/742">#742</a> · generated matrix for hosted, local, and fixture provider routes</dd></div>
+<div><dt>Failure recovery</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/743">#743</a> · stale pid/endpoint, auth, provider, sandbox, reconnect, and resume states</dd></div>
+<div><dt>Persistent launch demo</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/744">#744</a> · deterministic launch, prompt, receipts, handoff, and status demo</dd></div>
+<div><dt>Security and sandbox boundaries</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/745">#745</a> · persistent-agent boundary enforcement remains before release prep</dd></div>
+
+</div>
+
 ## v0.8.0 Goal Workflow
 
 <div className="craik-keypoint">
