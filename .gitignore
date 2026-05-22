@@ -12,3 +12,9 @@ htmlcov/
 .coverage
 reports/
 site/.claude/
+
+# Local release signing-key exports. Public release keys are uploaded
+# as GitHub Release assets, not committed from an operator workspace.
+craik-release-signing-key.asc
+*private*signing*key*.asc
+*secret*signing*key*.asc

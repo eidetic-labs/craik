@@ -116,6 +116,10 @@ craik desktop notify-approval approval_123 model.chat "provider request"
 The payload includes a local dashboard deep link to `/approvals` and
 redacts secret-like target text before it reaches notification logs or
 crash reports.
+Future desktop URL-scheme handlers such as `craik://` must be
+review-only entrypoints. They may open local dashboard or approval
+detail views, but they must not approve, deny, submit credentials, or
+trigger mutating runtime actions directly from a URL.
 
 ## Current Posture
 
