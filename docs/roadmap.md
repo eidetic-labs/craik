@@ -450,22 +450,40 @@ DM behavior · mobile companion surfaces.
 
 </div>
 
-### v0.9.0 · Execution environments, sandboxes, and provider routing
+### v0.9.0 · Persistent agent runtime, providers, and sandboxes
 
 <div className="craik-lead">
 
-**Required outcome.** Craik can choose model/provider/runtime
-execution paths and enforce environment boundaries explicitly across
-multiple sandbox backends.
+**Required outcome.** A user can launch a persistent Craik agent with
+`craik` or `craik run`, authenticate it against OpenAI, Anthropic,
+Gemini, or local models, and have Craik choose model/provider/runtime
+execution paths while enforcing environment boundaries explicitly
+across multiple sandbox backends.
 
 </div>
 
 <div className="craik-grid">
 
+<div><h4>Persistent Craik agent runtime</h4></div>
+<div><h4><code>craik</code> / <code>craik run</code> launch UX</h4></div>
+<div><h4>Agent lifecycle commands</h4><p>Start · status · stop · restart.</p></div>
+<div><h4>Agent session state contract</h4></div>
+<div><h4>Provider authentication flow</h4><p>OpenAI · Anthropic · Gemini · local models.</p></div>
+<div><h4>Guided provider setup UX</h4></div>
+<div><h4>Provider-backed agent sessions</h4></div>
+<div><h4>Interactive prompt loop</h4></div>
+<div><h4>Run / agent boundary decision</h4></div>
 <div><h4>Model provider registry</h4></div>
 <div><h4>Provider switching UX</h4></div>
 <div><h4>Provider failover policy</h4></div>
 <div><h4>Provider budget &amp; quota links</h4></div>
+<div><h4>Local model routing</h4></div>
+<div><h4>Local model presets</h4><p>OpenAI-compatible · Ollama-style endpoints.</p></div>
+<div><h4>Gemini provider/runtime path</h4></div>
+<div><h4>Provider certification matrix</h4></div>
+<div><h4>Failure recovery</h4><p>Reconnect · resume · auth expiry · sandbox failure.</p></div>
+<div><h4>Persistent-agent security model</h4></div>
+<div><h4>End-to-end launch demo</h4></div>
 <div><h4>MCP client integration</h4></div>
 <div><h4>MCP server / export decision</h4></div>
 <div><h4>Local process backend</h4></div>
@@ -799,13 +817,13 @@ Documentation requirements are part of the definition of done.
 
 **Docs:** gateway guide · setup guide · diagnostics guide · channel adapter reference · webhook reference · scheduler guide · gateway security guide.
 
-### 21 · Execution environments, sandboxes, provider routing
+### 21 · Persistent agent runtime, providers, and sandboxes
 
-**Scope:** model provider registry · provider switching UX · provider failover policy · provider budget and quota links · MCP client integration · MCP server/export decision · sandbox backend contract · local process backend · Docker sandbox backend · SSH or remote shell backend · browser/tool execution boundary · environment capability receipts.
+**Scope:** persistent Craik agent runtime · `craik` / `craik run` launch UX · agent lifecycle commands · agent session state contract · provider authentication flow for OpenAI, Anthropic, Gemini, and local models · guided provider setup UX · provider-backed agent sessions · interactive prompt loop · run / agent boundary decision · model provider registry · provider switching UX · provider failover policy · provider budget and quota links · Gemini provider/runtime path · local model routing · local model presets · provider certification matrix · failure recovery · persistent-agent security model · end-to-end launch demo · MCP client integration · MCP server/export decision · sandbox backend contract · local process backend · Docker sandbox backend · SSH or remote shell backend · browser/tool execution boundary · environment capability receipts.
 
-**Validation:** provider registry tests · provider failover tests · MCP compatibility fixture tests · sandbox policy tests · backend isolation tests · environment receipt tests · budget linkage tests.
+**Validation:** agent launch tests · lifecycle command tests · provider authentication tests · provider session persistence tests · OpenAI/Anthropic/Gemini/local model routing tests · guided setup tests · local model preset tests · interactive prompt loop tests · failure recovery tests · provider certification matrix checks · provider registry tests · provider failover tests · MCP compatibility fixture tests · sandbox policy tests · backend isolation tests · environment receipt tests · budget linkage tests · end-to-end launch demo test.
 
-**Docs:** provider routing guide · provider config reference · MCP integration guide · sandbox backend reference · execution environment security guide.
+**Docs:** persistent agent runtime guide · agent lifecycle reference · provider authentication guide · local model setup guide · provider certification matrix · provider routing guide · provider config reference · MCP integration guide · sandbox backend reference · persistent-agent security guide · execution environment security guide.
 
 ### 22 · Self-improving skills and learning loops
 
