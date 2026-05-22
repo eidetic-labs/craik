@@ -851,6 +851,18 @@ Options:
 
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator instructions`
+
+Print the read-only instruction distillation view.
+
+```text
+craik operator instructions [OPTIONS]
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator overview`
 
 Print the read-only operator surface overview.

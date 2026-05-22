@@ -1,6 +1,6 @@
 # Instruction distillation view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -9,7 +9,7 @@
 The read-only operator display for declared instruction sources,
 source snapshots, provenance records, distilled proposals, and
 promotion reviews. The view exposes the audit trail behind every
-runtime instruction.
+runtime instruction through `craik operator instructions`.
 
 </div>
 
@@ -21,6 +21,18 @@ Distilled proposals never become runtime authority on their own. Only
 promoted constraints participate in compiled prompts.
 
 </div>
+
+## Commands
+
+```bash
+craik operator instructions
+craik operator instructions --json
+```
+
+`craik operator instructions` prints the human-readable review view.
+`--json` emits the same snapshot for tooling, with `sources`,
+`snapshots`, `provenance`, `proposals`, and `reviews` arrays. Both
+forms are read-only and do not promote, reject, or mutate proposals.
 
 ## What it formats
 

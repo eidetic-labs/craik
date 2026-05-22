@@ -473,6 +473,19 @@ def test_operator_budget_cli_renders_missing_data_boundary(tmp_path: Path) -> No
     assert "Missing data is displayed explicitly" in result.output
 
 
+def test_operator_instructions_cli_renders_empty_distillation_view(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "instructions"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Instruction Distillation" in result.output
+    assert "Sources" in result.output
+    assert "Distilled Proposals" in result.output
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 
