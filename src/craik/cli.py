@@ -33,6 +33,7 @@ from craik.runtime.paths import (
 )
 from craik.runtime.projects.update_guidance import update_guidance_payload
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
+from craik.runtime.shell.tui import run_tui
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 PACKAGE_NAME = "craik"
@@ -148,6 +149,13 @@ def root(
             ),
         ),
     ] = False,
+    tui_requested: Annotated[
+        bool,
+        typer.Option(
+            "--tui",
+            help="Launch the keyboard-first terminal UI.",
+        ),
+    ] = False,
 ) -> None:
     """Run Craik."""
     if version_requested:
@@ -155,6 +163,8 @@ def root(
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None:
+        if tui_requested:
+            raise typer.Exit(run_tui())
         if one_shot is not None:
             prompt = resolve_cli_prompt(one_shot, allow_argv=allow_argv_prompt)
             typer.echo(one_shot_response(prompt))
@@ -166,6 +176,12 @@ def root(
 def version_command() -> None:
     """Print the installed Craik version."""
     typer.echo(package_version())
+
+
+@app.command("tui")
+def tui_command() -> None:
+    """Launch the keyboard-first terminal UI."""
+    raise typer.Exit(run_tui())
 
 
 @app.command("setup")

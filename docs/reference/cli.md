@@ -19,6 +19,7 @@ Options:
 - `--version`: Print the installed Craik version and exit.; default `false`
 - `-z, --one-shot`: Run one quiet one-shot prompt and exit. Pass '-' to read the prompt from stdin.
 - `--allow-argv-prompt`: Acknowledge that argv prompts are visible in local process listings and shell history.; default `false`
+- `--tui`: Launch the keyboard-first terminal UI.; default `false`
 
 ## `craik agent`
 
@@ -2154,6 +2155,14 @@ Options:
 - `--max-iterations`: Maximum run iterations.; default `5`
 - `--allow-identity-continuation`: Explicitly allow the consumer to reuse the producer identity.; default `false`
 - `--identity-continuation-rationale`: Required rationale when explicitly reusing producer identity.
+
+## `craik tui`
+
+Launch the keyboard-first terminal UI.
+
+```text
+craik tui
+```
 
 ## `craik update`
 
