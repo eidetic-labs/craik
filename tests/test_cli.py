@@ -549,6 +549,32 @@ def test_operator_memory_impact_cli_rejects_unknown_preview(tmp_path: Path) -> N
     assert "unknown memory impact preview: preview_missing" in result.output
 
 
+def test_operator_traps_cli_renders_empty_traps_view(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "traps"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Known Traps" in result.output
+    assert "Negative Knowledge" in result.output
+
+
+def test_operator_traps_cli_json_renders_timestamped_snapshot(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "traps", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["known_traps"] == []
+    assert payload["negative_knowledge"] == []
+    assert payload["now"]
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 

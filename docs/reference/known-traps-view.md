@@ -1,14 +1,15 @@
 # Known traps view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The read-only operator display for `craik.known_trap` and
-`craik.negative_knowledge` records — what the v0.7.0 TUI formats, how
-state boundaries are preserved, and the review boundary.
+`craik.negative_knowledge` records through `craik operator traps`:
+what the v0.7.0 operator surface formats, how state boundaries are
+preserved, and the review boundary.
 
 </div>
 
@@ -21,6 +22,19 @@ mistakes. They do not override policy, resolve contradictions, or
 prove absence without the cited evidence.
 
 </div>
+
+## Commands
+
+```bash
+craik operator traps
+craik operator traps --project PROJECT_ID
+craik operator traps --task-id TASK_ID
+craik operator traps --json
+```
+
+`craik operator traps` prints the current known traps and negative
+knowledge review view. The JSON form emits the same timestamped
+snapshot for tooling, with optional project and task filters applied.
 
 ## What it formats
 

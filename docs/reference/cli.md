@@ -913,6 +913,20 @@ Options:
 
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator traps`
+
+Print the read-only known traps and negative knowledge view.
+
+```text
+craik operator traps [OPTIONS]
+```
+
+Options:
+
+- `--project`: Only include records in this project scope.
+- `--task-id`: Only include records for this task.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator work-graph`
 
 Print the read-only work graph explorer.
