@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from craik.cli import app
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
+
+runner = CliRunner()
+
+
+def test_agent_lifecycle_cli_launch_status_stop_restart(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_session(home)
+
+    launched = runner.invoke(
+        app,
+        [
+            "agent",
+            "launch",
+            "--session-id",
+            "agent_docs",
+            "--project-id",
+            "project_docs",
+            "--provider-id",
+            "provider_openai",
+            "--model-id",
+            "gpt-5.2",
+            "--auth-profile-id",
+            "openai:work",
+        ],
+        env=env,
+    )
+    status = runner.invoke(app, ["agent", "status", "agent_docs"], env=env)
+    stopped = runner.invoke(
+        app,
+        ["agent", "stop", "agent_docs", "--reason", "operator stop"],
+        env=env,
+    )
+    restarted = runner.invoke(
+        app,
+        ["agent", "restart", "agent_docs", "--reason", "operator restart"],
+        env=env,
+    )
+
+    assert launched.exit_code == 0, launched.output
+    assert status.exit_code == 0, status.output
+    assert stopped.exit_code == 0, stopped.output
+    assert restarted.exit_code == 0, restarted.output
+    launch_payload = json.loads(launched.stdout)
+    status_payload = json.loads(status.stdout)
+    stopped_payload = json.loads(stopped.stdout)
+    restarted_payload = json.loads(restarted.stdout)
+    assert launch_payload["launched"] is True
+    assert launch_payload["boundary"]["one_shot_run"].endswith(" run execute")
+    assert status_payload["session"]["id"] == "agent_docs"
+    assert status_payload["session"]["operator_subject"] == "operator-123"
+    assert stopped_payload["session"]["status"] == "stopped"
+    assert stopped_payload["session"]["pid"] is None
+    assert restarted_payload["session"]["status"] == "running"
+    assert restarted_payload["session"]["stopped_at"] is None
+
+
+def test_agent_cli_rejects_invalid_lifecycle_transitions(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_session(home)
+    first = runner.invoke(
+        app,
+        ["agent", "launch", "--session-id", "agent_docs"],
+        env=env,
+    )
+    duplicate = runner.invoke(
+        app,
+        ["agent", "launch", "--session-id", "agent_docs"],
+        env=env,
+    )
+    invalid_restart = runner.invoke(app, ["agent", "restart", "agent_docs"], env=env)
+
+    assert first.exit_code == 0, first.output
+    assert duplicate.exit_code == 2
+    assert "agent session already exists" in duplicate.output
+    assert invalid_restart.exit_code == 2
+    assert "active sessions cannot" in invalid_restart.output
+    assert "be restarted" in invalid_restart.output
+
+
+def test_agent_cli_requires_active_operator_session(tmp_path: Path) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+
+    result = runner.invoke(app, ["agent", "launch", "--session-id", "agent_docs"], env=env)
+
+    assert result.exit_code == 2
+    assert "active operator session required; run craik auth login" in result.output
+
+
+def _put_session(home: Path) -> None:
+    session = OperatorSession(
+        subject="operator-123",
+        email="operator@example.test",
+        display_name="Operator",
+        groups=["platform"],
+        issuer="https://issuer.example.test",
+        id_token_jti="token-1",
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        refresh_token_ref="operator-session.refresh_token",
+    )
+    OperatorSessionStore(home).put(session, refresh_token="refresh-token")

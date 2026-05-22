@@ -2,10 +2,59 @@
 
 from __future__ import annotations
 
+import os
+import re
 from datetime import UTC, datetime
 
-from craik.contracts.models import AgentSessionState, AgentSessionStatus
+from craik.contracts.models import AgentSessionMode, AgentSessionState, AgentSessionStatus
 from craik.runtime.store import LocalStore
+
+ACTIVE_AGENT_SESSION_STATUSES = {"starting", "running", "idle", "stopping"}
+RECOVERABLE_AGENT_SESSION_STATUSES = {
+    "stopped",
+    "failed",
+    "auth_expired",
+    "provider_unavailable",
+    "sandbox_failed",
+}
+
+
+class AgentSessionLifecycleError(RuntimeError):
+    """Raised when an agent session lifecycle transition is invalid."""
+
+
+def agent_session_id(
+    *,
+    project_id: str | None,
+    provider_id: str,
+    now: datetime | None = None,
+) -> str:
+    """Return a stable, readable default id for a newly launched agent session."""
+    timestamp = (now or datetime.now(UTC)).strftime("%Y%m%d%H%M%S")
+    scope = _slug(project_id or "default")
+    provider = _slug(provider_id)
+    return f"agent_{scope}_{provider}_{timestamp}"
+
+
+def get_agent_session_status(
+    store: LocalStore,
+    session_id: str,
+    *,
+    now: datetime | None = None,
+) -> AgentSessionState:
+    """Return one persisted session, marking stale pid-backed sessions failed."""
+    state = store.get_agent_session_state(session_id)
+    if state is None:
+        raise AgentSessionLifecycleError(f"unknown agent session: {session_id}")
+    if state.status in ACTIVE_AGENT_SESSION_STATUSES and _pid_is_stale(state.pid):
+        return update_agent_session_status(
+            store,
+            state,
+            status="failed",
+            supervision_note="Persistent agent pid is no longer running.",
+            now=now,
+        )
+    return state
 
 
 def start_agent_session(
@@ -22,11 +71,19 @@ def start_agent_session(
     policy_envelope_id: str | None = None,
     active_task_id: str | None = None,
     active_run_id: str | None = None,
+    mode: AgentSessionMode = "foreground",
+    status: AgentSessionStatus = "running",
     pid: int | None = None,
     endpoint_url: str | None = None,
     now: datetime | None = None,
+    replace_stopped: bool = False,
 ) -> AgentSessionState:
     """Create and persist the initial state for a launched persistent agent."""
+    existing = store.get_agent_session_state(session_id)
+    if existing is not None and (
+        existing.status in ACTIVE_AGENT_SESSION_STATUSES or not replace_stopped
+    ):
+        raise AgentSessionLifecycleError(f"agent session already exists: {session_id}")
     timestamp = now or datetime.now(UTC)
     state = AgentSessionState(
         id=session_id,
@@ -38,8 +95,8 @@ def start_agent_session(
         auth_profile_id=auth_profile_id,
         auth_identity_hash=auth_identity_hash,
         policy_envelope_id=policy_envelope_id,
-        mode="interactive",
-        status="running",
+        mode=mode,
+        status=status,
         pid=pid,
         endpoint_url=endpoint_url,
         active_task_id=active_task_id,
@@ -51,6 +108,66 @@ def start_agent_session(
     )
     store.put_agent_session_state(state)
     return state
+
+
+def stop_agent_session(
+    store: LocalStore,
+    session_id: str,
+    *,
+    supervision_note: str,
+    now: datetime | None = None,
+) -> AgentSessionState:
+    """Stop an active persistent agent session."""
+    state = get_agent_session_status(store, session_id, now=now)
+    if state.status not in ACTIVE_AGENT_SESSION_STATUSES:
+        raise AgentSessionLifecycleError(
+            f"agent session {session_id} is {state.status}; only active sessions can be stopped"
+        )
+    return update_agent_session_status(
+        store,
+        state,
+        status="stopped",
+        supervision_note=supervision_note,
+        now=now,
+    )
+
+
+def restart_agent_session(
+    store: LocalStore,
+    session_id: str,
+    *,
+    supervision_note: str,
+    pid: int | None = None,
+    endpoint_url: str | None = None,
+    now: datetime | None = None,
+) -> AgentSessionState:
+    """Restart a stopped or failed persistent agent session."""
+    state = get_agent_session_status(store, session_id, now=now)
+    if state.status in ACTIVE_AGENT_SESSION_STATUSES:
+        raise AgentSessionLifecycleError(
+            f"agent session {session_id} is {state.status}; active sessions cannot be restarted"
+        )
+    if state.status not in RECOVERABLE_AGENT_SESSION_STATUSES:
+        raise AgentSessionLifecycleError(
+            f"agent session {session_id} is {state.status}; restart is not supported"
+        )
+    timestamp = now or datetime.now(UTC)
+    notes = [*state.supervision_notes, supervision_note]
+    updated = AgentSessionState.model_validate(
+        {
+            **state.model_dump(mode="json", by_alias=True),
+            "status": "running",
+            "pid": pid,
+            "endpoint_url": endpoint_url if endpoint_url is not None else state.endpoint_url,
+            "started_at": timestamp,
+            "last_activity_at": timestamp,
+            "stopped_at": None,
+            "updated_at": timestamp,
+            "supervision_notes": notes,
+        }
+    )
+    store.put_agent_session_state(updated)
+    return updated
 
 
 def update_agent_session_status(
@@ -85,4 +202,32 @@ def update_agent_session_status(
     return updated
 
 
-__all__ = ["start_agent_session", "update_agent_session_status"]
+def _pid_is_stale(pid: int | None) -> bool:
+    if pid is None:
+        return False
+    if pid <= 0:
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+    return False
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
+    return slug or "default"
+
+
+__all__ = [
+    "ACTIVE_AGENT_SESSION_STATUSES",
+    "AgentSessionLifecycleError",
+    "agent_session_id",
+    "get_agent_session_status",
+    "restart_agent_session",
+    "start_agent_session",
+    "stop_agent_session",
+    "update_agent_session_status",
+]

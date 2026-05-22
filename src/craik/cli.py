@@ -12,6 +12,7 @@ import typer
 from pydantic import ValidationError
 
 from craik import __version__
+from craik.cli_agents import agent_app
 from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
@@ -61,6 +62,7 @@ scope_change_app = typer.Typer(help="Decide pending scope-change protocol reques
 app.add_typer(scope_change_app, name="scope-change")
 agent_message_app = typer.Typer(help="Send and receive agent mailbox messages.")
 app.add_typer(agent_message_app, name="agent-message")
+app.add_typer(agent_app, name="agent")
 auth_app = typer.Typer(help="Manage provider credential profiles.")
 app.add_typer(auth_app, name="auth")
 contradictions_app = typer.Typer(help="Manage local contradiction reports.")
