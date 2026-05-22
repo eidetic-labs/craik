@@ -189,6 +189,7 @@ const sidebars = {
         'reference/side-effect-wrappers',
         'reference/failure-modes',
         'reference/recovery',
+        'security/persistent-agent-security',
         'reference/public-boundary-provenance',
         'reference/self-audit',
         'reference/post-mvp-scope',

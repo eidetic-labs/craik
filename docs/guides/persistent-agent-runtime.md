@@ -88,6 +88,28 @@ stores a pid, status checks whether that pid still exists. Missing
 processes are marked `failed` with an operator-visible supervision
 note, which gives recovery code a precise state to act on.
 
+Background sessions with an endpoint URL but no pid are also treated as
+stale endpoint state. Craik records redacted recovery metadata before
+returning the updated session.
+
+## Recover a session
+
+```sh
+craik agent recover agent_docs --reason auth_expired
+craik agent recover agent_docs --reason provider_unavailable
+craik agent recover agent_docs --reason sandbox_failed
+craik agent recover agent_docs --action reconnect
+craik agent recover agent_docs --action resume
+```
+
+Recovery reasons move the session into an explicit recoverable state:
+`auth_expired`, `provider_unavailable`, `sandbox_failed`, or `failed`
+for stale pid and endpoint state. Recovery metadata stores the reason,
+detected timestamp, recommended action, provider/model/project links,
+and redacted operator detail. `reconnect` moves the session back to
+`running`; `resume` moves it to `idle` while preserving prior task, run,
+receipt, handoff, and recovery references.
+
 ## Stop and restart
 
 ```sh
@@ -126,10 +148,11 @@ correlation without adding operator text to logs.
 uv run --extra dev pytest tests/test_cli_agents.py tests/test_agent_sessions.py
 ```
 
-Expected output: launch, prompt, status, stop, restart,
+Expected output: launch, prompt, status, recover, stop, restart,
 operator-session gates, invalid transitions, prompt events, receipt and
 handoff links, interruption recovery metadata, explicit exit behavior,
-and stale-pid recovery tests pass.
+stale pid/endpoint detection, auth/provider/sandbox recovery, and
+redaction tests pass.
 
 ## What's next
 

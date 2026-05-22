@@ -47,11 +47,23 @@ def get_agent_session_status(
     if state is None:
         raise AgentSessionLifecycleError(f"unknown agent session: {session_id}")
     if state.status in ACTIVE_AGENT_SESSION_STATUSES and _pid_is_stale(state.pid):
-        return update_agent_session_status(
+        from craik.runtime.agents.failure_recovery import mark_agent_session_failure
+
+        return mark_agent_session_failure(
             store,
             state,
-            status="failed",
-            supervision_note="Persistent agent pid is no longer running.",
+            reason="stale_pid",
+            source="status",
+            now=now,
+        )
+    if state.status in ACTIVE_AGENT_SESSION_STATUSES and _endpoint_state_is_stale(state):
+        from craik.runtime.agents.failure_recovery import mark_agent_session_failure
+
+        return mark_agent_session_failure(
+            store,
+            state,
+            reason="stale_endpoint",
+            source="status",
             now=now,
         )
     return state
@@ -214,6 +226,10 @@ def _pid_is_stale(pid: int | None) -> bool:
     except PermissionError:
         return False
     return False
+
+
+def _endpoint_state_is_stale(state: AgentSessionState) -> bool:
+    return state.mode == "background" and bool(state.endpoint_url) and state.pid is None
 
 
 def _slug(value: str) -> str:

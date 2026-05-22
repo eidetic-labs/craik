@@ -2,10 +2,16 @@ import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from craik.runtime.agents import sessions
+from craik.runtime.agents.failure_recovery import (
+    AgentSessionFailureReason,
+    mark_agent_session_failure,
+    recover_agent_session,
+)
 from craik.runtime.agents.prompt_loop import execute_agent_prompt
 from craik.runtime.agents.sessions import (
     AgentSessionLifecycleError,
@@ -154,7 +160,119 @@ def test_status_marks_stale_pid_session_failed(tmp_path, monkeypatch: pytest.Mon
 
         assert failed.status == "failed"
         assert failed.pid is None
-        assert failed.supervision_notes[-1] == "Persistent agent pid is no longer running."
+        assert failed.recovery_metadata["recovery_reason"] == "stale_pid"
+        assert failed.recovery_metadata["recommended_action"] == (
+            "reconnect session process, then resume"
+        )
+        assert failed.supervision_notes[-1] == "Persistent agent recovery required: stale pid."
+    finally:
+        store.close()
+
+
+def test_status_marks_stale_background_endpoint_failed(tmp_path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+            mode="background",
+            endpoint_url="http://127.0.0.1:8766",
+        )
+
+        failed = get_agent_session_status(store, "agent_session_docs")
+
+        assert failed.status == "failed"
+        assert failed.recovery_metadata["recovery_reason"] == "stale_endpoint"
+        assert failed.recovery_metadata["recovery_status"] == "failed"
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize(
+    ("reason", "status", "recommended"),
+    [
+        ("auth_expired", "auth_expired", "reauthenticate provider credentials, then resume"),
+        (
+            "provider_unavailable",
+            "provider_unavailable",
+            "retry provider route or switch provider, then resume",
+        ),
+        ("sandbox_failed", "sandbox_failed", "inspect sandbox policy/backend, then resume"),
+    ],
+)
+def test_agent_recovery_marks_explicit_failure_states(
+    tmp_path,
+    reason: str,
+    status: str,
+    recommended: str,
+) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+
+    try:
+        state = start_agent_session(
+            store,
+            session_id=f"agent_session_{reason}",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+        )
+
+        failed = mark_agent_session_failure(
+            store,
+            state,
+            reason=cast(AgentSessionFailureReason, reason),
+            detail="provider returned token=secret-token",
+            metadata={"api_key": "sk-example-secret", "attempt": 1},
+        )
+
+        assert failed.status == status
+        assert failed.recovery_metadata["recovery_reason"] == reason
+        assert failed.recovery_metadata["recommended_action"] == recommended
+        assert failed.recovery_metadata["recovery_detail"] == "provider returned token=[REDACTED]"
+        assert failed.recovery_metadata["recovery_context"]["api_key"] == "[REDACTED]"
+        assert "secret-token" not in str(failed.recovery_metadata)
+        assert "sk-example-secret" not in str(failed.recovery_metadata)
+    finally:
+        store.close()
+
+
+def test_agent_recovery_records_reconnect_and_resume_actions(tmp_path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+
+    try:
+        state = start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+        )
+        failed = mark_agent_session_failure(store, state, reason="provider_unavailable")
+        reconnected = recover_agent_session(
+            store,
+            failed,
+            action="reconnect",
+            supervision_note="operator reconnect",
+            endpoint_url="http://127.0.0.1:8766",
+        )
+        failed_again = mark_agent_session_failure(store, reconnected, reason="sandbox_failed")
+        resumed = recover_agent_session(
+            store,
+            failed_again,
+            action="resume",
+            supervision_note="operator resume",
+        )
+
+        assert reconnected.status == "running"
+        assert reconnected.recovery_metadata["recovery_action"] == "reconnect"
+        assert reconnected.recovery_metadata["recovered_from_status"] == "provider_unavailable"
+        assert resumed.status == "idle"
+        assert resumed.recovery_metadata["recovery_action"] == "resume"
+        assert resumed.recovery_metadata["recovered_from_status"] == "sandbox_failed"
     finally:
         store.close()
 
