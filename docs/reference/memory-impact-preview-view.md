@@ -1,6 +1,6 @@
 # Memory impact preview view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -8,7 +8,8 @@
 
 The read-only operator display for proposed memory writes before
 promotion or direct write attempts — preview risks, evidence gaps,
-and the boundary that keeps proposals visually separate from facts.
+and the boundary that keeps proposals visually separate from facts
+through `craik operator memory-impact`.
 
 </div>
 
@@ -21,6 +22,18 @@ and <code>facts_to_invalidate</code> so operators can see the
 proposed change without treating it as durable memory.
 
 </div>
+
+## Commands
+
+```bash
+craik operator memory-impact PREVIEW_ID
+craik operator memory-impact PREVIEW_ID --json
+```
+
+`craik operator memory-impact` prints one persisted memory impact
+preview by ID. The JSON form emits the same read-only snapshot with
+the preview, task-scoped proposals, optional policy envelope ID, and
+receipt IDs for downstream tooling.
 
 ## What it formats
 

@@ -863,6 +863,18 @@ Options:
 
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator memory-impact`
+
+Print the read-only memory impact preview view.
+
+```text
+craik operator memory-impact [OPTIONS] PREVIEW_ID
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator overview`
 
 Print the read-only operator surface overview.
