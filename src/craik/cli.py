@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from craik import __version__
 from craik.cli_agents import agent_app
+from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
@@ -128,8 +129,25 @@ def root(
     ] = False,
     one_shot: Annotated[
         str | None,
-        typer.Option("-z", "--one-shot", help="Run one quiet one-shot prompt and exit."),
+        typer.Option(
+            "-z",
+            "--one-shot",
+            help=(
+                "Run one quiet one-shot prompt and exit. Pass '-' to read "
+                "the prompt from stdin."
+            ),
+        ),
     ] = None,
+    allow_argv_prompt: Annotated[
+        bool,
+        typer.Option(
+            "--allow-argv-prompt",
+            help=(
+                "Acknowledge that argv prompts are visible in local process "
+                "listings and shell history."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run Craik."""
     if version_requested:
@@ -138,7 +156,8 @@ def root(
 
     if ctx.invoked_subcommand is None:
         if one_shot is not None:
-            typer.echo(one_shot_response(one_shot))
+            prompt = resolve_cli_prompt(one_shot, allow_argv=allow_argv_prompt)
+            typer.echo(one_shot_response(prompt))
             raise typer.Exit()
         raise typer.Exit(run_shell())
 

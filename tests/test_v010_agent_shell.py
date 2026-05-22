@@ -1,13 +1,17 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.contracts.models import AgentSessionState
+from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
+from craik.runtime.auth.redaction import masked_metadata
 from craik.runtime.paths import ensure_craik_home
+from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command, list_slash_commands
 from craik.runtime.store import LocalStore
@@ -27,13 +31,57 @@ def test_default_craik_launches_shell_status_before_auth(tmp_path: Path) -> None
 def test_one_shot_is_quiet_and_reports_missing_readiness(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
+        ["-z", "Summarize readiness", "--allow-argv-prompt"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "WARNING: prompt was supplied via argv" in result.output
+    assert "Craik is not fully ready" in result.output
+    assert "Craik Agent Shell" not in result.output
+
+
+def test_one_shot_rejects_argv_prompt_without_acknowledgment(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
         ["-z", "Summarize readiness"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 2
+    assert "argv-supplied prompts are visible" in result.output
+    assert "Craik is not fully ready" not in result.stdout
+
+
+def test_one_shot_reads_prompt_from_stdin_without_warning(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["-z", "-"],
+        input="Summarize readiness\n",
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
     assert result.exit_code == 0
     assert result.output.startswith("Craik is not fully ready")
-    assert "Craik Agent Shell" not in result.output
+    assert "argv-supplied prompts" not in result.output
+    assert "WARNING: prompt was supplied via argv" not in result.output
+
+
+def test_chat_prompt_uses_same_argv_safety_gate(tmp_path: Path) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+
+    rejected = runner.invoke(app, ["chat", "-q", "hello"], env=env)
+    accepted = runner.invoke(
+        app,
+        ["chat", "-q", "-", "--allow-argv-prompt"],
+        input="hello\n",
+        env=env,
+    )
+
+    assert rejected.exit_code == 2
+    assert "argv-supplied prompts are visible" in rejected.output
+    assert accepted.exit_code == 0
+    assert "WARNING: prompt was supplied via argv" not in accepted.output
 
 
 def test_status_command_and_slash_status_share_readiness(tmp_path: Path) -> None:
@@ -68,6 +116,34 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(tmp_path: Path)
     assert login_write.exit_code == 0
     assert model_set.exit_code == 0
     assert resolve_readiness(env).state == "fully-ready"
+
+
+def test_readiness_filters_profiles_by_active_operator(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_operator_session(home, subject="operator:a", groups=["team-a"])
+    profile_store = AuthProfileStore.from_env(env)
+    profile_store.put(_auth_profile("openai:operator-a", authorized_operators=["operator:a"]))
+    profile_store.put(_auth_profile("openai:operator-b", authorized_operators=["operator:b"]))
+    profile_store.put(_auth_profile("anthropic:legacy"))
+
+    report = resolve_readiness(env)
+    model_list = runner.invoke(app, ["model", "list"], env=env)
+    auth_list = runner.invoke(app, ["auth", "list"], env=env)
+    auth_status = runner.invoke(app, ["auth", "status"], env=env)
+    configured_ids = {
+        profile["id"] for profile in json.loads(model_list.stdout)["configured_profiles"]
+    }
+    auth_list_ids = {profile["id"] for profile in json.loads(auth_list.stdout)}
+    auth_status_ids = {profile["id"] for profile in json.loads(auth_status.stdout)}
+
+    assert report.state == "fully-ready"
+    assert model_list.exit_code == 0
+    assert configured_ids == {"anthropic:legacy", "openai:operator-a"}
+    assert auth_list.exit_code == 0
+    assert auth_status.exit_code == 0
+    assert auth_list_ids == configured_ids
+    assert auth_status_ids == configured_ids
 
 
 def test_slash_help_and_unknown_suggestion(tmp_path: Path) -> None:
@@ -140,15 +216,50 @@ def test_auth_storage_status_is_redacted(tmp_path: Path) -> None:
     assert set(payload) == {"backend", "secure", "status", "warning"}
 
 
-def _put_operator_session(home: Path) -> None:
+def test_auth_metadata_unknown_keys_default_to_masked() -> None:
+    result = masked_metadata(
+        {
+            "env_var": "CRAIK_OPENAI_API_KEY",
+            "surprise_field": "should-not-leak",
+        }
+    )
+
+    assert result["env_var"] == "CRAIK_OPENAI_API_KEY"
+    assert result["surprise_field"] == "***"
+
+
+def _put_operator_session(
+    home: Path,
+    *,
+    subject: str = "operator:test",
+    groups: list[str] | None = None,
+) -> None:
     ensure_craik_home({"CRAIK_HOME": str(home)})
     OperatorSessionStore(home).put(
         OperatorSession(
-            subject="operator:test",
+            subject=subject,
             email="operator@example.test",
-            groups=["platform"],
+            groups=groups or ["platform"],
             issuer="https://issuer.example.test",
             id_token_jti="session-token",
             expires_at=datetime(2026, 5, 22, 13, 0, tzinfo=UTC),
         )
+    )
+
+
+def _auth_profile(
+    profile_id: str,
+    *,
+    authorized_operators: list[str] | None = None,
+    authorized_operator_groups: list[str] | None = None,
+) -> AuthProfile:
+    family = profile_id.split(":", 1)[0]
+    return AuthProfile(
+        id=profile_id,
+        kind=CredentialKind.API_KEY,
+        provider_family=cast(ProviderFamily, family),
+        metadata={"env_var": f"{family.upper()}_API_KEY"},
+        created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
+        authorized_operators=authorized_operators,
+        authorized_operator_groups=authorized_operator_groups,
     )

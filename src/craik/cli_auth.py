@@ -36,7 +36,9 @@ from craik.runtime.auth.operator import (
     OperatorSessionStore,
 )
 from craik.runtime.auth.pool import CredentialPool
+from craik.runtime.auth.redaction import masked_metadata
 from craik.runtime.auth.sources import source_for_auth_profile
+from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
@@ -49,7 +51,10 @@ def auth_list() -> None:
     """List configured auth profiles."""
     operator_identity_or_fail()
     store = AuthProfileStore.from_env()
-    payload = [_profile_payload(profile) for profile in store.list()]
+    payload = [
+        _profile_payload(profile)
+        for profile in visible_auth_profiles(store.list(), active_operator_session_from_env())
+    ]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
@@ -340,7 +345,7 @@ def auth_status() -> None:
             else None,
             "last_status": profile.last_status,
         }
-        for profile in store.list()
+        for profile in visible_auth_profiles(store.list(), active_operator_session_from_env())
     ]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
@@ -461,7 +466,7 @@ def _profile_payload(profile: AuthProfile) -> dict[str, Any]:
         "id": profile.id,
         "kind": profile.kind,
         "provider_family": profile.provider_family,
-        "metadata": _masked_metadata(profile.metadata),
+        "metadata": masked_metadata(profile.metadata),
         "created_at": profile.created_at.isoformat(),
         "last_used_at": profile.last_used_at.isoformat()
         if profile.last_used_at is not None
@@ -471,16 +476,6 @@ def _profile_payload(profile: AuthProfile) -> dict[str, Any]:
         "authorized_operator_groups": profile.authorized_operator_groups,
         "authorization_receipt_ids": [receipt.id for receipt in profile.authorization_provenance],
     }
-
-def _masked_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
-    masked: dict[str, Any] = {}
-    for key, value in metadata.items():
-        key_lower = key.lower()
-        if any(token in key_lower for token in ("token", "secret", "password")):
-            masked[key] = "***"
-        else:
-            masked[key] = value
-    return masked
 
 def _operator_session_payload(session: Any) -> dict[str, Any]:
     return {
