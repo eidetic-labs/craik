@@ -60,6 +60,16 @@ def test_schedule_validates_cron_like_expression() -> None:
     validate_cron_expression("*/15 9-17 * * 1,2,3,4,5")
 
 
+@pytest.mark.parametrize("expression", ["* * * * *", "*/4 * * * *", "0,1 * * * *"])
+def test_schedule_rejects_too_frequent_cron_expression(expression: str) -> None:
+    with pytest.raises(ValueError, match="more often than every 5 minutes"):
+        validate_cron_expression(expression)
+
+
+def test_schedule_accepts_minimum_interval_boundary() -> None:
+    validate_cron_expression("0,5,10 * * * *")
+
+
 def test_schedule_rejects_unsupported_cron_shape() -> None:
     with pytest.raises(ValueError, match="five fields"):
         validate_cron_expression("0 9 * *")

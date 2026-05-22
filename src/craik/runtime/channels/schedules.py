@@ -9,6 +9,8 @@ from pydantic import Field
 
 from craik.contracts.models import CraikModel, Priority, TaskMode, TaskRequest
 
+MINIMUM_SCHEDULE_INTERVAL_MINUTES = 5
+
 
 class GatewaySchedule(CraikModel):
     """Cron-like schedule definition for gateway-created tasks."""
@@ -92,6 +94,58 @@ def validate_cron_expression(expression: str) -> None:
     for field in fields:
         if not re.fullmatch(r"[\d*/,\-]+", field):
             raise ValueError(f"unsupported cron field: {field}")
+    minute_values = _expand_minute_field(fields[0])
+    gaps = [
+        (right - left) % 60 or 60
+        for left, right in zip(
+            minute_values,
+            minute_values[1:] + minute_values[:1],
+            strict=True,
+        )
+    ]
+    if min(gaps) < MINIMUM_SCHEDULE_INTERVAL_MINUTES:
+        raise ValueError(
+            "cron-like schedule must not run more often than every "
+            f"{MINIMUM_SCHEDULE_INTERVAL_MINUTES} minutes"
+        )
+
+
+def _expand_minute_field(field: str) -> list[int]:
+    values: set[int] = set()
+    for part in field.split(","):
+        base, step = _split_step(part)
+        if step <= 0:
+            raise ValueError("cron minute step must be greater than zero")
+        if base == "*":
+            start, end = 0, 59
+        elif "-" in base:
+            start_text, end_text = base.split("-", 1)
+            start = _parse_minute(start_text)
+            end = _parse_minute(end_text)
+            if start > end:
+                raise ValueError("cron minute range start must not exceed range end")
+        else:
+            start = end = _parse_minute(base)
+        values.update(range(start, end + 1, step))
+    if not values:
+        raise ValueError("cron minute field must select at least one minute")
+    return sorted(values)
+
+
+def _split_step(part: str) -> tuple[str, int]:
+    if "/" not in part:
+        return part, 1
+    base, step_text = part.split("/", 1)
+    if not base or not step_text:
+        raise ValueError("cron minute step requires base and step")
+    return base, int(step_text)
+
+
+def _parse_minute(value: str) -> int:
+    minute = int(value)
+    if minute < 0 or minute > 59:
+        raise ValueError("cron minute value must be between 0 and 59")
+    return minute
 
 
 def _slug(value: str) -> str:
