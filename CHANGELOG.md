@@ -38,6 +38,9 @@ within the `0.x.0` stability expectations described in
 - Read-only quality gate view through `craik operator quality`,
   summarizing handoff scores, evidence scores, critic findings, and
   red-team findings with text and JSON output.
+- Read-only memory impact preview view through `craik operator
+  memory-impact`, preserving the boundary between proposals, facts to
+  add, facts to invalidate, evidence gaps, and contradiction risks.
 
 ## 0.6.0 — 2026-05-21
 

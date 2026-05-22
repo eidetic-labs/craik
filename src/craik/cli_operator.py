@@ -13,6 +13,7 @@ from craik.contracts.models import ContradictionStatus
 from craik.runtime.companions.operator_views import (
     BudgetQuotaSnapshot,
     InstructionDistillationSnapshot,
+    MemoryImpactPreviewSnapshot,
     OperatorSurfaceSnapshot,
     QualityGateSnapshot,
     build_operator_surface_snapshot,
@@ -22,6 +23,7 @@ from craik.runtime.companions.operator_views import (
     format_evidence_assumption_view,
     format_handoff_viewer,
     format_instruction_distillation_view,
+    format_memory_impact_preview_view,
     format_operator_surface_overview,
     format_quality_gate_view,
     format_receipt_viewer,
@@ -334,6 +336,41 @@ def operator_quality(
         typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_quality_gate_view(snapshot)))
+
+
+@operator_app.command("memory-impact")
+def operator_memory_impact(
+    preview_id: Annotated[
+        str,
+        typer.Argument(help="Memory impact preview id to inspect."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only memory impact preview view."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        preview = store.get_memory_impact_preview(preview_id)
+        if preview is None:
+            raise typer.BadParameter(f"unknown memory impact preview: {preview_id}")
+        snapshot = MemoryImpactPreviewSnapshot(
+            preview=preview,
+            proposals=[
+                proposal
+                for proposal in store.list_proposals()
+                if proposal.task_id == preview.task_id
+            ],
+        )
+    finally:
+        store.close()
+
+    if json_output:
+        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_memory_impact_preview_view(snapshot)))
 
 
 def _require_section(

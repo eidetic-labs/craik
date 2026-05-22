@@ -20,6 +20,7 @@ from craik.contracts.models import (
     HumanDelegationPoint,
     InstructionProvenance,
     IntentLock,
+    MemoryImpactPreview,
     ReceiptResult,
     RecoverySession,
     RunDelta,
@@ -509,6 +510,43 @@ def test_operator_quality_cli_json_renders_snapshot(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert '"handoff_scores": []' in result.output
     assert '"red_team_findings": []' in result.output
+
+
+def test_operator_memory_impact_cli_renders_preview(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    preview = MemoryImpactPreview(
+        id="preview_task_memory",
+        task_id="task_memory",
+        created_at=datetime(2026, 5, 21, tzinfo=UTC),
+    )
+    store = LocalStore.from_paths(ensure_craik_home({"CRAIK_HOME": str(home)}))
+    try:
+        store.initialize()
+        store.put_memory_impact_preview(preview)
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "memory-impact", "preview_task_memory"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Memory Impact Preview: preview_task_memory" in result.output
+    assert "Proposed Memory Writes" in result.output
+    assert "Contradiction Risks" in result.output
+
+
+def test_operator_memory_impact_cli_rejects_unknown_preview(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "memory-impact", "preview_missing"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    assert "unknown memory impact preview: preview_missing" in result.output
 
 
 def test_schema_list_includes_task_request() -> None:
