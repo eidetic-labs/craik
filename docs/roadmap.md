@@ -561,6 +561,20 @@ policy allows promotion. The agent shell is the public interaction
 surface for setup and learning controls; subsystem CLI commands remain
 available for automation.
 
+<div className="craik-keypoint">
+
+**Implementation status: ready for release prep.**
+
+The v0.10.0 goal workflow shipped through milestone issue
+<a href="https://github.com/eidetic-labs/craik/issues/779">#779</a>.
+Release prep is tracked in
+<a href="https://github.com/eidetic-labs/craik/issues/781">#781</a>
+and remains responsible for the final version bump, changelog, signed
+tag, package publication, docs publication, and post-release
+verification.
+
+</div>
+
 ### v0.11.0 · TUI, dashboard, desktop, gateway operations, and channels
 
 <div className="craik-lead">

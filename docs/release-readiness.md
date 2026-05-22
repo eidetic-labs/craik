@@ -7,10 +7,90 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.9.0`; historical sign-offs remain below for
+pre-release gate is `0.10.0`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.10.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Agent shell and setup UX gate is ready for release prep.**
+
+`0.10.0` turns the root CLI into a usable agent shell, adds progressive
+setup guidance before auth is configured, introduces browser-assisted
+provider login, and exposes model, session, profile, usage, and
+learning-loop controls through operator-facing commands. The
+implementation goal landed through a green PR tied to the v0.10.0
+milestone before release prep begins.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Agent shell and setup UX</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/779">#779</a> · root shell launch, <code>craik chat</code>, slash commands, readiness states, provider login, model/session/profile controls, and learning-loop command surfaces</dd></div>
+<div><dt>Release prep</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/781">#781</a> · version declarations, changelog, roadmap, release-readiness docs, generated references, and validation gate</dd></div>
+
+</div>
+
+## v0.10.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Status: ready for release checks after release-prep PR lands.**
+
+The v0.10.0 milestone contains the agent shell, progressive setup
+states, browser-assisted provider login, secure credential-storage
+posture reporting, model/session/profile UX, usage summaries, and
+learning-loop controls. Release prep owns the final version bump,
+changelog promotion, signed tag, package publication, docs
+publication, and post-release verification.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Gate</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Evidence</dd>
+</div>
+
+<div><dt>Implementation</dt><dt><span className="craik-fields__type">ready</span></dt><dd>The root <code>craik</code> shell can launch before auth, one-shot chat works through <code>craik chat</code> and <code>craik --one-shot</code>, readiness states explain setup gaps, and slash commands route users toward setup, auth, provider, model, session, approval, and doctor actions.</dd></div>
+<div><dt>Auth and credentials</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>craik auth login</code> provides browser-assisted provider setup for hosted providers and guided fallback for local models while keeping output redacted and surfacing credential-storage posture.</dd></div>
+<div><dt>Runtime UX</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Model aliases, fallbacks, status, probes, session list/show/resume/rename/export/prune/delete, local profiles, usage summaries, and insight summaries are exposed through command surfaces and generated CLI reference docs.</dd></div>
+<div><dt>Learning controls</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Skill telemetry, proposals, eval, promote, rollback, and history commands preserve the policy boundary: agents can propose improvement paths, but promotion remains an operator-governed action.</dd></div>
+<div><dt>Tests</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Focused v0.10 shell, readiness, slash-command, provider-login, model/session/profile, learning-loop, release-readiness guard, and runtime-layout tests landed with the implementation PR. Full local validation passed with loopback access enabled for HTTP-server tests.</dd></div>
+<div><dt>Docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Agent shell, model/session/profile UX, readiness states, slash commands, authentication, quickstart, learning-loop, roadmap, generated CLI reference, and release-readiness docs are updated.</dd></div>
+<div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.10.0 implementation blocker remains. Tagging is gated on release-prep validation and maintainer signing.</dd></div>
+
+</div>
+
+### v0.10.0 Validation Commands
+
+Run the full release gate from a clean checkout before tagging
+`0.10.0`:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run ruff check
+uv run mypy
+uv run python scripts/generate_cli_reference.py --check
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_max_file_lines.py
+uv run python scripts/quickstart_smoke.py
+uv run pytest
+```
 
 ## v0.9.0 Goal Workflow
 
