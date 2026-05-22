@@ -1,14 +1,14 @@
 # Delegation queue view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over `craik.human_delegation_point`
-records — what the v0.7.0 TUI surface formats, supported statuses, and
-the inspection-only boundary.
+The read-only `craik operator delegations` view over
+`craik.human_delegation_point` records, supported statuses, and the
+inspection-only boundary.
 
 </div>
 
@@ -53,6 +53,19 @@ shows auditable state so operators know where human input is needed or
 already recorded.
 
 </div>
+
+## Commands
+
+```bash
+craik operator delegations
+craik operator delegations --task-id task_docs
+craik operator delegations --status open
+craik operator delegations --json
+```
+
+The command lists delegation points with optional task and status
+filters. The text view is optimized for pending human-attention scans;
+`--json` returns the persisted delegation payloads for tooling.
 
 ## What's next
 

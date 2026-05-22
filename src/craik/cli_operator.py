@@ -14,6 +14,7 @@ from craik.runtime.companions.operator_views import (
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
     format_contradiction_inbox,
+    format_delegation_queue,
     format_evidence_assumption_view,
     format_handoff_viewer,
     format_operator_surface_overview,
@@ -218,6 +219,41 @@ def operator_evidence(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_evidence_assumption_view(evidence, assumptions)))
+
+
+@operator_app.command("delegations")
+def operator_delegations(
+    task_id: Annotated[
+        str | None,
+        typer.Option("--task-id", help="Only include delegation points for this task."),
+    ] = None,
+    status: Annotated[
+        str | None,
+        typer.Option("--status", help="Only include delegation points with this status."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only delegation queue."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        delegations = store.list_human_delegations()
+    finally:
+        store.close()
+
+    if task_id is not None:
+        delegations = [item for item in delegations if item.task_id == task_id]
+    if status is not None:
+        delegations = [item for item in delegations if item.status == status]
+
+    if json_output:
+        payload = [item.model_dump(mode="json", by_alias=True) for item in delegations]
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_delegation_queue(delegations)))
 
 
 def _require_section(

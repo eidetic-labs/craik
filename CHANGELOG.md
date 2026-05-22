@@ -28,6 +28,8 @@ within the `0.x.0` stability expectations described in
 - Read-only evidence and assumption view through `craik operator
   evidence`, keeping assumptions visually separate from evidence with
   task filtering and JSON output.
+- Read-only delegation queue through `craik operator delegations`,
+  with task and status filters for human delegation points.
 
 ## 0.6.0 — 2026-05-21
 
