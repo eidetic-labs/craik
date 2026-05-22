@@ -74,6 +74,17 @@ class AuthProfile(CraikModel):
                 raise ValueError("auth profile redaction pattern is invalid") from exc
         return patterns
 
+    @field_validator("authorized_operators", "authorized_operator_groups")
+    @classmethod
+    def validate_authorization_scope(
+        cls,
+        values: list[str] | None,
+    ) -> list[str] | None:
+        """Reject empty allowlists; use None for legacy unscoped visibility."""
+        if values == []:
+            raise ValueError("authorization scope must be None or a non-empty list")
+        return values
+
 
 class CredentialSource(Protocol):
     """Provider credential source that can produce request headers."""

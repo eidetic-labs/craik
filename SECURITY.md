@@ -270,7 +270,9 @@ operator-visible learning-loop controls. The trust boundary intent is:
   operator session exists. Auth profiles with
   `authorized_operators` or `authorized_operator_groups` are visible
   only to matching sessions; legacy profiles without authorization
-  metadata remain globally visible for compatibility.
+  metadata remain globally visible for compatibility. Empty authorization
+  lists are invalid: use `None` for unscoped legacy visibility, or a
+  non-empty list for scoped visibility.
 - Slash commands inherit the same readiness and operator-session
   boundaries as the underlying runtime. Commands with side effects route
   through the existing operator identity checks before touching local

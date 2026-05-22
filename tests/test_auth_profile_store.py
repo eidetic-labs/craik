@@ -3,9 +3,10 @@ import stat
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
+from pydantic import ValidationError
 
 from craik.runtime.auth import (
     AuthProfile,
@@ -97,6 +98,24 @@ def test_auth_profile_store_grant_authorization_records_receipt(tmp_path: Path) 
     assert updated.authorization_provenance[0].capability == "credential.authorize"
     assert updated.authorization_provenance[0].actor == "operator:admin"
     assert store.get("openai:work").authorization_provenance[0].target == "openai:work"
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["authorized_operators", "authorized_operator_groups"],
+)
+def test_auth_profile_rejects_empty_authorization_scopes(field: str) -> None:
+    kwargs: dict[str, Any] = {field: []}
+
+    with pytest.raises(ValidationError, match="authorization scope must be None"):
+        AuthProfile(
+            id="openai:work",
+            kind=CredentialKind.API_KEY,
+            provider_family=cast(ProviderFamily, "openai"),
+            metadata={"env_var": "OPENAI_API_KEY"},
+            created_at=datetime(2026, 5, 17, tzinfo=UTC),
+            **kwargs,
+        )
 
 
 def test_auth_profile_store_writes_owner_only_file_on_posix(tmp_path: Path) -> None:
