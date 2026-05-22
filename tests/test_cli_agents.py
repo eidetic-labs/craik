@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,6 +10,9 @@ from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
+from craik.runtime.paths import ensure_craik_home
+from craik.runtime.projects.project_registry import ProjectRegistry
+from craik.runtime.store import LocalStore
 
 runner = CliRunner()
 
@@ -98,6 +103,44 @@ def test_agent_cli_requires_active_operator_session(tmp_path: Path) -> None:
     assert "active operator session required; run craik auth login" in result.output
 
 
+def test_agent_cli_prompt_runs_provider_backed_session(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_session(home)
+    project_id = _seed_project(home, tmp_path)
+    launched = runner.invoke(
+        app,
+        [
+            "agent",
+            "launch",
+            "--session-id",
+            "agent_docs",
+            "--project-id",
+            project_id,
+            "--provider-id",
+            "provider_openai",
+        ],
+        env=env,
+    )
+    prompted = runner.invoke(
+        app,
+        ["agent", "prompt", "agent_docs", "Implement a provider-backed agent prompt."],
+        env=env,
+    )
+
+    assert launched.exit_code == 0, launched.output
+    assert prompted.exit_code == 0, prompted.output
+    payload = json.loads(prompted.stdout)
+    assert payload["schema"] == "craik.agent_prompt_execution"
+    assert payload["exit_behavior"] == "completed"
+    assert payload["session"]["status"] == "idle"
+    assert payload["run"]["status"] == "completed"
+    assert [event["event_type"] for event in payload["events"]] == [
+        "prompt_received",
+        "run_completed",
+    ]
+
+
 def _put_session(home: Path) -> None:
     session = OperatorSession(
         subject="operator-123",
@@ -110,3 +153,36 @@ def _put_session(home: Path) -> None:
         refresh_token_ref="operator-session.refresh_token",
     )
     OperatorSessionStore(home).put(session, refresh_token="refresh-token")
+
+
+def _seed_project(home: Path, tmp_path: Path) -> str:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "README.md")
+    _run_git(repo, "commit", "-m", "initial")
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        return ProjectRegistry(store).add_project(repo, name="Example").id
+    finally:
+        store.close()
+
+
+def _run_git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ("git", *args),
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_EMAIL": "test@example.invalid",
+            "GIT_AUTHOR_NAME": "Craik Test",
+            "GIT_COMMITTER_EMAIL": "test@example.invalid",
+            "GIT_COMMITTER_NAME": "Craik Test",
+        },
+    )

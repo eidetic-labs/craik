@@ -1,8 +1,12 @@
+import os
+import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from craik.runtime.agents import sessions
+from craik.runtime.agents.prompt_loop import execute_agent_prompt
 from craik.runtime.agents.sessions import (
     AgentSessionLifecycleError,
     get_agent_session_status,
@@ -11,6 +15,7 @@ from craik.runtime.agents.sessions import (
     stop_agent_session,
     update_agent_session_status,
 )
+from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.store import LocalStore
 
 
@@ -152,3 +157,171 @@ def test_status_marks_stale_pid_session_failed(tmp_path, monkeypatch: pytest.Mon
         assert failed.supervision_notes[-1] == "Persistent agent pid is no longer running."
     finally:
         store.close()
+
+
+def test_agent_prompt_persists_events_receipts_handoff_and_links(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    project_id = _seed_project(store, tmp_path)
+    started_at = datetime(2026, 5, 22, 6, 15, tzinfo=UTC)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            project_id=project_id,
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            provider_id="provider_openai",
+            model_id="gpt-5.2",
+            policy_envelope_id="policy_docs",
+            now=started_at,
+        )
+
+        result = execute_agent_prompt(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            prompt="Implement the next bounded provider task.",
+            now=started_at,
+        )
+
+        events = store.list_agent_session_events()
+        stored = store.get_agent_session_state("agent_session_docs")
+        assert result.exit_behavior == "completed"
+        assert stored is not None
+        assert stored.status == "idle"
+        assert stored.active_task_id == result.task_id
+        assert stored.active_run_id == result.run_result.run.id
+        assert result.run_result.handoff.id in stored.handoff_ids
+        assert set(result.run_result.run.receipt_ids).issubset(stored.receipt_ids)
+        assert [event.event_type for event in result.events] == [
+            "prompt_received",
+            "run_completed",
+        ]
+        assert {event.id for event in result.events}.issubset({event.id for event in events})
+        assert result.events[1].run_id == result.run_result.run.id
+        assert result.events[1].handoff_id == result.run_result.handoff.id
+    finally:
+        store.close()
+
+
+def test_agent_prompt_records_interruption_recovery_metadata(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    project_id = _seed_project(store, tmp_path)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            project_id=project_id,
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            provider_id="provider_openai",
+        )
+
+        result = execute_agent_prompt(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            prompt="Start work but interrupt quickly.",
+            max_iterations=1,
+        )
+
+        stored = store.get_agent_session_state("agent_session_docs")
+        assert result.exit_behavior == "interrupted"
+        assert stored is not None
+        assert stored.status == "idle"
+        assert stored.recovery_metadata["exit_behavior"] == "interrupted"
+        assert stored.recovery_metadata["interrupted_error"] == "max iterations 1 reached"
+        assert result.events[1].event_type == "run_interrupted"
+    finally:
+        store.close()
+
+
+def test_agent_prompt_exit_stops_session_without_run(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    project_id = _seed_project(store, tmp_path)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            project_id=project_id,
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            provider_id="provider_openai",
+        )
+
+        result = execute_agent_prompt(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            prompt="/exit",
+        )
+
+        assert result.exit_behavior == "operator_exit"
+        assert result.run_result is None
+        assert result.session.status == "stopped"
+        assert result.events[0].event_type == "exited"
+    finally:
+        store.close()
+
+
+def test_agent_prompt_rejects_operator_mismatch(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    project_id = _seed_project(store, tmp_path)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            project_id=project_id,
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            provider_id="provider_openai",
+        )
+
+        with pytest.raises(AgentSessionLifecycleError, match="operator does not match"):
+            execute_agent_prompt(
+                store,
+                session_id="agent_session_docs",
+                operator_subject="operator-456",
+                operator_issuer="https://issuer.example.test",
+                prompt="Try to drive another operator session.",
+            )
+    finally:
+        store.close()
+
+
+def _seed_project(store: LocalStore, tmp_path: Path) -> str:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "README.md")
+    _run_git(repo, "commit", "-m", "initial")
+    return ProjectRegistry(store).add_project(repo, name="Example").id
+
+
+def _run_git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        ("git", *args),
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_EMAIL": "test@example.invalid",
+            "GIT_AUTHOR_NAME": "Craik Test",
+            "GIT_COMMITTER_EMAIL": "test@example.invalid",
+            "GIT_COMMITTER_NAME": "Craik Test",
+        },
+    )

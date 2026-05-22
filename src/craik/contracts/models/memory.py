@@ -228,6 +228,33 @@ class AgentSessionState(CraikModel):
         return self
 
 
+class AgentSessionEvent(CraikModel):
+    """Durable event emitted by a persistent Craik agent session."""
+
+    schema_: Literal["craik.agent_session_event"] = Field(
+        default="craik.agent_session_event",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    session_id: str
+    event_type: str = Field(min_length=1)
+    operator_subject: str = Field(min_length=1)
+    operator_issuer: str | None = None
+    project_id: str | None = None
+    provider_id: str | None = None
+    model_id: str | None = None
+    policy_envelope_id: str | None = None
+    task_id: str | None = None
+    run_id: str | None = None
+    handoff_id: str | None = None
+    receipt_ids: list[str] = Field(default_factory=list)
+    recovery_metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    redacted: bool = True
+
+
 class GatewaySchedule(CraikModel):
     """Cron-like schedule definition for gateway-created tasks."""
 

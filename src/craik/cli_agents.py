@@ -7,10 +7,13 @@ from typing import Annotated, Any
 
 import typer
 
+from craik.cli_run_support import provider_run_payload
 from craik.contracts.models import AgentSessionState
 from craik.runtime.agents import (
+    AgentPromptResult,
     AgentSessionLifecycleError,
     agent_session_id,
+    execute_agent_prompt,
     get_agent_session_status,
     restart_agent_session,
     start_agent_session,
@@ -186,6 +189,49 @@ def agent_restart(
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
+@agent_app.command("prompt")
+def agent_prompt(
+    session_id: Annotated[str, typer.Argument(help="Agent session id.")],
+    prompt: Annotated[str, typer.Argument(help="Prompt text, or /exit to stop the loop.")],
+    max_iterations: Annotated[
+        int,
+        typer.Option("--max-iterations", min=1, help="Maximum provider loop iterations."),
+    ] = 5,
+    allow_fixture_action: Annotated[
+        bool,
+        typer.Option(
+            "--allow-fixture-action/--no-allow-fixture-action",
+            help="Grant the deterministic fixture shell action used by provider tests.",
+        ),
+    ] = True,
+    provider_token_budget: Annotated[
+        int | None,
+        typer.Option("--provider-token-budget", min=1, help="Optional provider token budget."),
+    ] = None,
+) -> None:
+    """Send one provider-backed prompt to an active persistent agent session."""
+    operator = _operator_session()
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        result = execute_agent_prompt(
+            store,
+            session_id=session_id,
+            operator_subject=operator.subject,
+            operator_issuer=operator.issuer,
+            prompt=prompt,
+            allow_fixture_action=allow_fixture_action,
+            max_iterations=max_iterations,
+            provider_token_budget=provider_token_budget,
+        )
+        payload = _agent_prompt_payload(result)
+    except AgentSessionLifecycleError as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
 def _operator_session() -> OperatorSession:
     try:
         return OperatorSessionStore.from_env().get()
@@ -201,6 +247,24 @@ def _session_payload(state: AgentSessionState) -> dict[str, Any]:
 
 def _boundary_payload() -> dict[str, str]:
     return {
-        "persistent_agent": "craik agent launch/status/stop/restart",
+        "persistent_agent": "craik agent launch/status/prompt/stop/restart",
         "one_shot_run": "craik run execute",
     }
+
+
+def _agent_prompt_payload(result: AgentPromptResult) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema": "craik.agent_prompt_execution",
+        "version": "0.1.0",
+        "exit_behavior": result.exit_behavior,
+        "session": _session_payload(result.session),
+        "events": [
+            event.model_dump(mode="json", by_alias=True)
+            for event in result.events
+        ],
+    }
+    if result.task_id is not None:
+        payload["task_id"] = result.task_id
+    if result.run_result is not None:
+        payload["run"] = provider_run_payload(result.run_result)
+    return payload
