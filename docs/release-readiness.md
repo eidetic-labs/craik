@@ -92,6 +92,26 @@ uv run python scripts/quickstart_smoke.py
 uv run pytest
 ```
 
+### Release Signing-Key Asset Gate
+
+Every release must be cut from a signed annotated tag and must publish
+the ASCII-armored public release signing key on the matching GitHub
+Release as `craik-release-signing-key.asc`. This asset is the public
+key operators can import or inspect; it is not a detached tag
+signature. The embedded Git tag signature remains the integrity check
+for the release commit.
+
+```bash
+git tag -v vX.Y.Z
+git ls-remote --tags origin vX.Y.Z
+gpg --show-keys --with-fingerprint craik-release-signing-key.asc
+gh release view vX.Y.Z --repo eidetic-labs/craik --json assets --jq '.assets[].name'
+```
+
+Release prep is not complete until the fingerprint shown for
+`craik-release-signing-key.asc` matches the key reported by
+`git tag -v vX.Y.Z`.
+
 ## v0.9.0 Goal Workflow
 
 <div className="craik-keypoint">

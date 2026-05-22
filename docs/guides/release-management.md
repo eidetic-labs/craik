@@ -54,15 +54,31 @@ quality, and changelog gates as a stable line.
 
 ## Tag Policy
 
-Release tags use `vMAJOR.MINOR.PATCH` — e.g. `v0.1.0`.
+Release tags use `vMAJOR.MINOR.PATCH` — e.g. `v0.1.0` — and must be
+signed annotated tags. The embedded tag signature is the release
+integrity source of truth; the GitHub Release also carries the public
+release signing key as an operator convenience for verification.
 
 <ol className="craik-steps">
 <li>Update <code>pyproject.toml</code>, <code>src/craik/__init__.py</code>, and <code>docs/package.json</code>.</li>
 <li>Move relevant <code>CHANGELOG.md</code> entries from <code>Unreleased</code> into the target version section.</li>
 <li>Run package, docs, quality, and version checks.</li>
 <li>Open a release PR that links the completed roadmap issue.</li>
-<li>Tag only the merge commit from the release PR.</li>
+<li>Tag only the merge commit from the release PR with <code>git tag -s vX.Y.Z -m "vX.Y.Z — Release name"</code>.</li>
+<li>Push the tag, confirm the GitHub Release is created, and upload the ASCII-armored public signing key as <code>craik-release-signing-key.asc</code>.</li>
 </ol>
+
+```sh
+git tag -v vX.Y.Z
+git push origin vX.Y.Z
+gpg --armor --export KEY_FINGERPRINT > craik-release-signing-key.asc
+gh release upload vX.Y.Z craik-release-signing-key.asc --repo eidetic-labs/craik --clobber
+gh release view vX.Y.Z --repo eidetic-labs/craik --json assets --jq '.assets[].name'
+```
+
+`craik-release-signing-key.asc` is a public key export, not a detached
+signature. Maintainers must verify that its fingerprint matches the key
+reported by `git tag -v vX.Y.Z` before treating the release as complete.
 
 ## Release Notes
 
@@ -73,6 +89,8 @@ tag push and creates the GitHub Release automatically — title
 `Craik X.Y.Z`, body verbatim from the CHANGELOG section, marked latest.
 The job fails fast if the CHANGELOG has no section for the tag version,
 so the CHANGELOG is the single source of truth for release notes.
+After the release entry appears, upload the public release signing key
+asset and verify the asset list before announcing the release.
 
 <div className="craik-grid">
 

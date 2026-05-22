@@ -10,6 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Changed
+
+- Release documentation now requires signed annotated tags plus a
+  `craik-release-signing-key.asc` public-key asset on each GitHub
+  Release, with fingerprint verification against the tag-signing key.
+
 ## 0.10.0 — 2026-05-22
 
 ### Added
