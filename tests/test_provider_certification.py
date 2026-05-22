@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,6 +8,11 @@ from craik.runtime.providers.provider_certification import (
     MVP_PROVIDER_REQUIREMENTS,
     ProviderCertification,
     provider_certification_decision,
+    provider_certification_matrix,
+)
+
+FIXTURE_PATH = (
+    Path(__file__).parent / "fixtures" / "providers" / "certification_expectations.json"
 )
 
 
@@ -76,6 +84,52 @@ def test_provider_certification_requires_policy_evidence_receipts_and_docs() -> 
 
     with pytest.raises(ValidationError, match="docs_ref"):
         _certification(docs_ref="")
+
+
+def test_provider_certification_matrix_matches_fixture_expectations() -> None:
+    fixture = json.loads(FIXTURE_PATH.read_text())
+    matrix = provider_certification_matrix()
+    rows = {row.provider_id: row for row in matrix.rows}
+
+    assert set(fixture["required_provider_ids"]).issubset(rows)
+    for provider_id in ("provider_openai", "provider_anthropic", "provider_gemini"):
+        row = rows[provider_id]
+        assert row.certification_status == "certified"
+        assert row.trust_boundary == "third-party"
+        for capability, expected in fixture["hosted_capabilities"].items():
+            assert getattr(row, capability) == expected
+        assert row.live_behavior == "live_opt_in"
+        assert "docker" in row.sandbox_compatibility
+    fixture_row = rows[fixture["fixture_provider"]["provider_id"]]
+    assert fixture_row.certification_status == fixture["fixture_provider"][
+        "certification_status"
+    ]
+    assert fixture_row.live_behavior == fixture["fixture_provider"]["live_behavior"]
+    assert fixture_row.sandbox_compatibility == fixture["fixture_provider"][
+        "sandbox_compatibility"
+    ]
+    for provider_id in (
+        "provider_local_openai_compatible",
+        "provider_local_ollama",
+        "provider_local_lm_studio",
+        "provider_local_vllm",
+    ):
+        row = rows[provider_id]
+        assert row.certification_status == fixture["local_provider"]["certification_status"]
+        assert row.trust_boundary == fixture["local_provider"]["trust_boundary"]
+        assert row.live_behavior == fixture["local_provider"]["live_behavior"]
+        assert row.sandbox_compatibility == fixture["local_provider"][
+            "sandbox_compatibility"
+        ]
+
+
+def test_provider_certification_matrix_marks_unsupported_and_fixture_behavior() -> None:
+    rows = {row.provider_id: row for row in provider_certification_matrix().rows}
+
+    assert rows["provider_fixture_local"].models == "unsupported"
+    assert rows["provider_fixture_local"].auth == "fixture_only"
+    assert rows["provider_local_ollama"].streaming == "unsupported"
+    assert rows["provider_local_openai_compatible"].streaming == "supported"
 
 
 def _certification(**overrides: object) -> ProviderCertification:

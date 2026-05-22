@@ -1288,6 +1288,18 @@ Inspect and select model providers.
 craik provider COMMAND [ARGS]...
 ```
 
+## `craik provider certification`
+
+Print the provider certification matrix as JSON.
+
+```text
+craik provider certification [OPTIONS]
+```
+
+Options:
+
+- `--provider-id`: Provider id to inspect. Prints all when omitted.
+
 ## `craik provider list`
 
 Print registered model providers as JSON.
