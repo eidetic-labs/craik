@@ -61,7 +61,8 @@ credentials in Craik config payloads.**
 | Symptom | Check | Resolution |
 | --- | --- | --- |
 | Request is invalid | Ingress reason says signature is missing or invalid | Recompute the `X-Craik-Signature` value over the raw body. |
-| Body is rejected | Ingress reason says body is not a JSON object | Send a JSON object with `event_id` and `event_type`. |
+| Body is rejected | Ingress reason says body is too large, too deep, or not a JSON object | Send a bounded JSON object with `event_id`, `event_type`, and `timestamp`. |
+| Timestamp is rejected | Ingress reason says timestamp is outside the allowed window | Resend with a fresh timestamp and verify sender clock skew. |
 | Event is duplicate | Ingress status is `duplicate` | Treat the event as already handled; don't dispatch twice. |
 | Event type is unauthorized | Ingress status is `unauthorized` | Add the event type to the configured allowlist only if intended. |
 

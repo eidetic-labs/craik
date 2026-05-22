@@ -7,8 +7,9 @@
 **What you'll find here**
 
 The validation boundary for one webhook request — signature checks,
-JSON parsing, event-id idempotency, event-type authorization, and
-redacted ingress receipts.
+payload-size checks, JSON parsing, timestamp freshness, event-id
+idempotency, event-type authorization, replay protection, and redacted
+ingress receipts.
 
 </div>
 
@@ -29,9 +30,12 @@ before any privileged gateway action.
 <div className="craik-grid">
 
 <div><h4>HMAC SHA-256 signature validation</h4></div>
+<div><h4>Payload size cap</h4><p>Oversized bodies are rejected before parsing.</p></div>
 <div><h4>JSON object parsing</h4></div>
+<div><h4>JSON nesting-depth limit</h4></div>
 <div><h4>Required <code>event_id</code> &amp; <code>event_type</code> extraction</h4></div>
-<div><h4>Idempotency checks</h4><p>Against known event ids.</p></div>
+<div><h4>Timestamp freshness</h4><p>Events outside the allowed window are rejected.</p></div>
+<div><h4>Idempotency checks</h4><p>Against known and persisted event ids.</p></div>
 <div><h4>Event-type authorization</h4></div>
 <div><h4>Redacted ingress receipts</h4></div>
 
@@ -39,7 +43,9 @@ before any privileged gateway action.
 
 ## Signature
 
-Requests use the `X-Craik-Signature` header.
+Requests use one `X-Craik-Signature` header. Header names are handled
+case-insensitively, and ambiguous duplicate signature headers fail
+closed.
 
 ```text
 sha256=<hex digest>
@@ -69,6 +75,12 @@ parsing.
 <dt><code>event_type</code></dt>
 <dt><span className="craik-fields__type">required</span></dt>
 <dd>Only configured event types are accepted.</dd>
+</div>
+
+<div>
+<dt><code>timestamp</code></dt>
+<dt><span className="craik-fields__type">required</span></dt>
+<dd>Must be inside the configured freshness window.</dd>
 </div>
 
 <div>
