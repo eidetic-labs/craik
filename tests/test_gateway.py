@@ -15,13 +15,15 @@ from craik.runtime.gateway import (
     default_gateway_config,
     gateway_configured_state,
     gateway_failed_state,
-    gateway_logs_payload,
     gateway_running_state,
-    gateway_status_payload,
     gateway_stopped_state,
+    run_gateway_daemon,
+)
+from craik.runtime.gateway_service import (
+    gateway_logs_payload,
+    gateway_status_payload,
     install_gateway_service,
     request_gateway_stop,
-    run_gateway_daemon,
     uninstall_gateway_service,
 )
 from craik.runtime.paths import ensure_craik_home
