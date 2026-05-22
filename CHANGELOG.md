@@ -15,6 +15,9 @@ within the `0.x.0` stability expectations described in
 - v0.7.0 read-only operator surface overview through `craik operator
   overview`, with project scoping, JSON output, section navigation,
   local-store counts, and CLI-first operator surface documentation.
+- Read-only work graph explorer through `craik operator work-graph`,
+  with terminal formatting for nodes and edges plus JSON output for
+  tooling.
 
 ## 0.6.0 — 2026-05-21
 

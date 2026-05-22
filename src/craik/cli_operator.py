@@ -13,8 +13,10 @@ from craik.runtime.companions.operator_views import (
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
     format_operator_surface_overview,
+    format_work_graph_explorer,
 )
 from craik.runtime.store import LocalStore
+from craik.runtime.work.graph import WorkGraphExporter, WorkGraphTaskNotFoundError
 
 
 @operator_app.command("overview")
@@ -47,6 +49,35 @@ def operator_overview(
         typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_operator_surface_overview(snapshot)))
+
+
+@operator_app.command("work-graph")
+def operator_work_graph(
+    task_id: Annotated[
+        str | None,
+        typer.Option("--task-id", help="Only include graph objects for this task."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only work graph explorer."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        export = WorkGraphExporter(store).export(task_id=task_id)
+    except WorkGraphTaskNotFoundError as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
+
+    if json_output:
+        typer.echo(
+            json.dumps(export.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
+        )
+    else:
+        typer.echo("\n".join(format_work_graph_explorer(export)))
 
 
 def _require_section(

@@ -221,6 +221,30 @@ def test_operator_overview_cli_renders_empty_read_only_surface(tmp_path: Path) -
     assert "Missing data is unavailable, not inferred." in result.output
 
 
+def test_operator_work_graph_cli_renders_empty_graph(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "work-graph"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Work Graph: graph_all" in result.output
+    assert "Nodes: 0" in result.output
+    assert "Edges: 0" in result.output
+
+
+def test_operator_work_graph_cli_rejects_unknown_task(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "work-graph", "--task-id", "task_missing"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    assert "unknown task: task_missing" in result.output
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 

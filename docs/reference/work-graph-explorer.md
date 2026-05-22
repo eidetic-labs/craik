@@ -1,14 +1,14 @@
 # Work graph explorer
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over `craik.work_graph_export` and
-`craik.work_graph_event` records — what it formats and the boundary
-that keeps it inspection-only.
+The read-only `craik operator work-graph` view over
+`craik.work_graph_export` and `craik.work_graph_event` records, what
+it formats, and the boundary that keeps it inspection-only.
 
 </div>
 
@@ -16,9 +16,10 @@ that keeps it inspection-only.
 
 **No graph mutation.**
 
-The explorer reads exported graph records and graph events from the
-local store and displays missing data as an empty graph or absent
-metadata.
+The explorer builds an in-memory export from the local store and
+displays missing data as an empty graph or absent metadata. It does
+not persist graph exports, record events, or mutate coordination
+state.
 
 </div>
 
@@ -36,6 +37,23 @@ metadata.
 The explorer should help operators scan dependencies, blockers,
 contradictions, supersession, implementation links, and verification
 links without reading raw logs.
+
+## Commands
+
+```bash
+craik operator work-graph
+craik operator work-graph --task-id task_review_docs
+craik operator work-graph --json
+```
+
+The default text view is optimized for terminal scanning: graph id,
+task scope, node count, edge count, node rows, and edge rows with
+sorted metadata. `--json` prints the underlying `work_graph_export`
+payload for tooling and exact graph inspection.
+
+Use `craik graph export` when another tool needs deterministic JSON as
+the primary output. Use `craik operator work-graph` when an operator
+wants a readable inspection surface.
 
 ## What's next
 
