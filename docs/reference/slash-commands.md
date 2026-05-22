@@ -6,8 +6,8 @@
 
 Craik's interactive shell uses a central slash-command registry. The
 registry gives every command a name, aliases, summary, usage, examples,
-and readiness requirement so shell, TUI, dashboard, and tests can share
-one command contract.
+readiness requirement, and mutation flag so shell, TUI, dashboard, and
+tests can share one command contract.
 
 </div>
 
@@ -65,3 +65,7 @@ craik auth login openai
 craik model set openai/gpt-5
 craik session list
 ```
+
+The dashboard action endpoint dispatches only read-only slash-command
+families. Mutating families such as `/auth`, `/provider`, `/model`, and
+`/resume` remain available through their direct CLI/runtime surfaces.

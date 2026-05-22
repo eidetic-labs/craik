@@ -23,7 +23,7 @@ from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.readiness import resolve_readiness
-from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.slash_commands import dispatch_slash_command, slash_command_is_mutating
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 LOCAL_DASHBOARD_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -128,6 +128,8 @@ def handle_dashboard_request(
             return _api_approvals(env)
         return _get(parsed.path, config=config, env=env)
     if method == "POST" and parsed.path == "/api/actions":
+        if not _origin_allowed(headers, config):
+            return _json_response(HTTPStatus.FORBIDDEN, {"error": "dashboard origin not allowed"})
         return _post_action(body, env=env)
     return _json_response(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -168,6 +170,11 @@ def _post_action(body: bytes, *, env: dict[str, str] | None) -> DashboardRespons
     command = payload.get("command")
     if not isinstance(command, str) or not command.startswith("/"):
         return _json_response(HTTPStatus.BAD_REQUEST, {"error": "command must be a slash command"})
+    if slash_command_is_mutating(command):
+        return _json_response(
+            HTTPStatus.FORBIDDEN,
+            {"error": "mutating slash commands are not allowed from the dashboard"},
+        )
     result = dispatch_slash_command(command, env=env)
     return _json_response(
         HTTPStatus.OK,
@@ -385,6 +392,25 @@ def _authorized(
     if config.auth_token and secrets.compare_digest(supplied or "", config.auth_token):
         return True
     return config.auth_token is None and _has_operator_session(env)
+
+
+def _origin_allowed(headers: Any, config: DashboardConfig) -> bool:
+    origin = headers.get("Origin")
+    if not origin:
+        return True
+    return origin.rstrip("/") in _allowed_origins(config)
+
+
+def _allowed_origins(config: DashboardConfig) -> set[str]:
+    origins = {
+        f"http://127.0.0.1:{config.port}",
+        f"http://localhost:{config.port}",
+    }
+    if config.host == "::1":
+        origins.add(f"http://[::1]:{config.port}")
+    else:
+        origins.add(f"http://{config.host}:{config.port}")
+    return origins
 
 
 def _has_operator_session(env: dict[str, str] | None) -> bool:

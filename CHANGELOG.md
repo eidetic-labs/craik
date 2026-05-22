@@ -62,6 +62,9 @@ within the `0.x.0` stability expectations described in
 - Release readiness now checks store-writer reachability through
   production wrappers, and webhook ingress receipts use the shared
   gateway channel persistence path.
+- Dashboard action POSTs now enforce local Origin checks when browser
+  Origin headers are present and reject mutating slash-command families
+  from the generic read-only action route.
 
 ## 0.10.0 — 2026-05-22
 
