@@ -17,6 +17,7 @@ from .base import (
     UnredactedSecretError,
 )
 from .extensions import ExtensionStoreMixin
+from .gateway import GatewayStoreMixin
 from .memory import MemoryStoreMixin
 from .profiles import ProfileStoreMixin
 from .work import WorkStoreMixin
@@ -26,6 +27,7 @@ class LocalStore(
     MemoryStoreMixin,
     WorkStoreMixin,
     ExtensionStoreMixin,
+    GatewayStoreMixin,
     ProfileStoreMixin,
 ):
     """SQLite persistence for v0.1 runtime state."""

@@ -63,6 +63,7 @@ craik schema show craik.task_request
 | `craik.exit_discipline_check` | Verifies validation, handoff, risks, next steps, and context links before exit. |
 | `craik.gateway_config` | Configures the always-on gateway process mode, bind, policy, and pid/log paths. |
 | `craik.gateway_runtime_state` | Records supervised gateway lifecycle state, process id, receipts, and notes. |
+| `craik.gateway_schedule` | Defines a cron-like gateway schedule that can create policy-linked tasks. |
 | `craik.handoff` | Summarizes durable run state for future agents. |
 | `craik.handoff_quality_score` | Scores handoff completeness, validation, evidence links, debt, and risks. |
 | `craik.human_delegation_point` | Records an open or resolved human approval, clarification, escalation, or ownership-transfer point. |
@@ -97,6 +98,7 @@ craik schema show craik.task_request
 | `craik.run_delta` | Records continuity-relevant changes since the previous usable handoff. |
 | `craik.run_output` | Stores redacted observed output captured from one runner step. |
 | `craik.runtime_critic_finding` | Captures reviewable non-authoritative quality findings from a critic pass. |
+| `craik.scheduled_automation` | Records an enabled or disabled gateway automation backed by a persisted schedule and policy envelope. |
 | `craik.scratchpad_record` | Stores expiring temporary working notes that must not become durable context by default. |
 | `craik.scope_change_request` | Requests a human decision to change accepted task scope. |
 | `craik.scope_change_result` | Records accepted or rejected human scope-change decisions. |

@@ -11,6 +11,9 @@ from craik.contracts.models import (
     Assumption,
     CapabilityReceipt,
     CaseFile,
+    ChannelAdapterContract,
+    ChannelAllowlist,
+    ChannelIdentityPairing,
     ContextDebtRecord,
     ContextRequest,
     ContradictionReport,
@@ -20,6 +23,7 @@ from craik.contracts.models import (
     EvidenceCoverageScore,
     EvidenceReference,
     ExitDisciplineCheck,
+    GatewaySchedule,
     Handoff,
     HandoffQualityScore,
     HumanDelegationPoint,
@@ -37,6 +41,7 @@ from craik.contracts.models import (
     PluginDescriptor,
     PluginProbation,
     PluginReceipt,
+    PolicyEnvelope,
     ProjectProfile,
     PromotedInstructionConstraint,
     RecoverySession,
@@ -47,6 +52,7 @@ from craik.contracts.models import (
     RunDelta,
     RunOutput,
     RuntimeCriticFinding,
+    ScheduledAutomation,
     ScopeChangeRequest,
     ScopeChangeResult,
     ScratchpadRecord,
@@ -225,6 +231,69 @@ def test_persists_project_profile(store: LocalStore, fixtures: dict[str, dict[st
 
     assert store.get_project(project.id) == project
     assert store.list_projects() == [project]
+
+
+def test_gateway_channel_store_helpers_round_trip(
+    store: LocalStore,
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    adapter = ChannelAdapterContract.model_validate(
+        fixtures["craik.channel_adapter_contract"]
+    )
+    pairing = ChannelIdentityPairing.model_validate(
+        fixtures["craik.channel_identity_pairing"]
+    )
+    allowlist = ChannelAllowlist.model_validate(fixtures["craik.channel_allowlist"])
+    schedule = GatewaySchedule.model_validate(fixtures["craik.gateway_schedule"])
+    automation = ScheduledAutomation.model_validate(
+        fixtures["craik.scheduled_automation"]
+    )
+    receipt = CapabilityReceipt.model_validate(fixtures["craik.capability_receipt"])
+    gateway_receipt = receipt.model_copy(
+        update={
+            "id": "receipt_gateway_channel_store",
+            "capability": "channel.message.receive",
+            "result": receipt.result.model_copy(
+                update={
+                    "metadata": {
+                        **receipt.result.metadata,
+                        "gateway_action": "inbound_event",
+                        "channel": "messaging",
+                    }
+                }
+            ),
+        }
+    )
+    policy = PolicyEnvelope.model_validate(fixtures["craik.policy_envelope"])
+    channel_policy = policy.model_copy(
+        update={
+            "id": "policy_channel_ingress",
+            "allowed_capabilities": ["channel.message.receive"],
+        }
+    )
+
+    store.put_channel_adapter_contract(adapter)
+    store.put_channel_identity_pairing(pairing)
+    store.put_channel_allowlist(allowlist)
+    stored_gateway_receipt = store.put_gateway_receipt(gateway_receipt)
+    store.put_gateway_schedule(schedule)
+    store.put_scheduled_automation(automation)
+    store.put_channel_policy_envelope(channel_policy)
+
+    assert store.get_channel_adapter_contract(adapter.id) == adapter
+    assert store.get_channel_identity_pairing(pairing.id) == pairing
+    assert store.get_channel_allowlist(allowlist.id) == allowlist
+    assert store.get_gateway_receipt(gateway_receipt.id) == stored_gateway_receipt
+    assert store.get_gateway_schedule(schedule.id) == schedule
+    assert store.get_scheduled_automation(automation.id) == automation
+    assert store.get_channel_policy_envelope(channel_policy.id) == channel_policy
+    assert store.list_channel_adapter_contracts() == [adapter]
+    assert store.list_channel_identity_pairings() == [pairing]
+    assert store.list_channel_allowlists() == [allowlist]
+    assert store.list_gateway_receipts(channel_id="messaging") == [stored_gateway_receipt]
+    assert store.list_gateway_schedules() == [schedule]
+    assert store.list_scheduled_automations() == [automation]
+    assert store.list_channel_policy_envelopes() == [channel_policy]
 
 
 def test_typed_store_helpers_round_trip_all_supported_contracts(

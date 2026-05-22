@@ -143,6 +143,21 @@ def test_channel_identity_pairing_requires_expiry(
         CONTRACT_REGISTRY["craik.channel_identity_pairing"].model_validate(payload)
 
 
+def test_gateway_schedule_and_automation_contracts_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    schedule = CONTRACT_REGISTRY["craik.gateway_schedule"].model_validate(
+        fixtures["craik.gateway_schedule"]
+    )
+    automation = CONTRACT_REGISTRY["craik.scheduled_automation"].model_validate(
+        fixtures["craik.scheduled_automation"]
+    )
+
+    assert schedule.model_dump(by_alias=True)["schema"] == "craik.gateway_schedule"
+    assert automation.model_dump(by_alias=True)["schema"] == "craik.scheduled_automation"
+    assert automation.model_dump()["schedule"]["id"] == schedule.model_dump()["id"]
+
+
 def test_instruction_registration_contracts_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

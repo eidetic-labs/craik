@@ -6,9 +6,9 @@
 
 **What you'll find here**
 
-`craik.runtime.scheduled_automations` — enabled gateway definitions
-backed by cron-like schedules, evaluated one tick at a time, with
-deduplication and redacted receipts.
+`craik.scheduled_automation` and `craik.gateway_schedule` — enabled
+gateway definitions backed by persisted cron-like schedules, evaluated
+one tick at a time, with deduplication and redacted receipts.
 
 </div>
 
@@ -35,6 +35,19 @@ creation, and later task execution under policy.
 <div><h4>Redacted automation receipts</h4></div>
 
 </div>
+
+## Persistence
+
+Gateway schedules and scheduled automations are first-class local-store
+contracts. Use the typed store helpers to round-trip them alongside
+channel adapter contracts, identity pairings, allowlists, policy
+envelopes, and gateway receipts:
+
+```python
+store.put_gateway_schedule(schedule)
+store.put_scheduled_automation(automation)
+store.put_gateway_receipt(receipt)
+```
 
 ## Execution boundary
 

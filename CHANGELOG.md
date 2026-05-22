@@ -10,6 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.8.0 gateway/channel persistence helpers for adapter contracts,
+  identity pairings, allowlists, gateway receipts, schedules,
+  scheduled automations, and channel policy envelopes.
+
 ## 0.7.0 — 2026-05-22
 
 ### Added

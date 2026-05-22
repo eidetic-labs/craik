@@ -3,29 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
 
-from pydantic import Field
-
-from craik.contracts.models import CapabilityReceipt, CraikModel, PolicyEnvelope, ReceiptResult
+from craik.contracts.models import (
+    CapabilityReceipt,
+    CraikModel,
+    PolicyEnvelope,
+    ReceiptResult,
+    ScheduledAutomation,
+    ScheduledAutomationStatus,
+)
 from craik.runtime.channels.schedules import (
-    GatewaySchedule,
     ScheduledTaskCreation,
     create_task_from_schedule_tick,
 )
-
-ScheduledAutomationStatus = Literal["created", "disabled", "duplicate", "policy_denied"]
-
-
-class ScheduledAutomation(CraikModel):
-    """Gateway automation definition backed by a cron-like schedule."""
-
-    id: str
-    schedule: GatewaySchedule
-    enabled: bool = False
-    policy_envelope_id: str
-    required_capability: str = "gateway.schedule.execute"
-    receipt_ids: list[str] = Field(default_factory=list)
 
 
 class ScheduledAutomationResult(CraikModel):
