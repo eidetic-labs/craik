@@ -141,6 +141,11 @@ def dashboard_preview_payload(
 ) -> dict[str, object]:
     """Return non-secret dashboard launch metadata for dry-run output."""
     warnings = validate_dashboard_config(config, env=env)
+    if config.auth_token is None:
+        warnings.append(
+            "Operator-session dashboard auth requires X-Craik-Operator-Session bound "
+            "to the active session."
+        )
     return {
         "url": dashboard_url(config),
         "host": config.host,
@@ -391,7 +396,17 @@ def _authorized(
         supplied = query["token"][0]
     if config.auth_token and secrets.compare_digest(supplied or "", config.auth_token):
         return True
-    return config.auth_token is None and _has_operator_session(env)
+    if config.auth_token is None:
+        return _operator_session_authorized(headers, env)
+    return False
+
+
+def _operator_session_authorized(headers: Any, env: dict[str, str] | None) -> bool:
+    session = _active_operator_session(env)
+    if session is None:
+        return False
+    supplied = headers.get("X-Craik-Operator-Session")
+    return secrets.compare_digest(supplied or "", session.id_token_jti)
 
 
 def _origin_allowed(headers: Any, config: DashboardConfig) -> bool:

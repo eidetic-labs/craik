@@ -65,6 +65,9 @@ within the `0.x.0` stability expectations described in
 - Dashboard action POSTs now enforce local Origin checks when browser
   Origin headers are present and reject mutating slash-command families
   from the generic read-only action route.
+- Dashboard operator-session mode now requires
+  `X-Craik-Operator-Session` to match the active session token instead
+  of accepting session-file presence alone.
 
 ## 0.10.0 — 2026-05-22
 

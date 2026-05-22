@@ -77,7 +77,14 @@ def test_dashboard_active_operator_session_authorizes_without_token(tmp_path: Pa
     _put_operator_session(home)
     config = DashboardConfig(auth_token=None)
 
-    response = handle_dashboard_request("GET", "/api/status", {}, b"", config, env=env)
+    response = handle_dashboard_request(
+        "GET",
+        "/api/status",
+        {"X-Craik-Operator-Session": "jti-dashboard"},
+        b"",
+        config,
+        env=env,
+    )
     payload = json.loads(response.body)
 
     assert response.status == 200
@@ -165,6 +172,7 @@ def test_dashboard_preview_uses_operator_session_when_no_token(tmp_path: Path) -
 
     assert payload["auth"] == "operator-session"
     assert payload["url"] == "http://127.0.0.1:8787/"
+    assert "X-Craik-Operator-Session" in payload["warnings"][0]
 
 
 def _put_operator_session(home: Path) -> None:

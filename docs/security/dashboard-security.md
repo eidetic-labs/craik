@@ -29,12 +29,14 @@ Every dashboard route requires one of two authentication postures:
 <div className="craik-grid">
 
 <div><h4>Dashboard bearer token</h4><p>Pass a token with <code>--auth-token</code> or <code>CRAIK_DASHBOARD_TOKEN</code>, then send it in <code>Authorization: Bearer ...</code> or <code>X-Craik-Dashboard-Token</code>.</p></div>
-<div><h4>Active operator session</h4><p>If no dashboard token is configured, the local active operator session authorizes the dashboard process.</p></div>
+<div><h4>Active operator session</h4><p>If no dashboard token is configured, requests must include <code>X-Craik-Operator-Session</code> matching the active local session token.</p></div>
 
 </div>
 
 Dry-run launch metadata reports the active auth posture but does not
-print the bearer token value.
+print the bearer token value. Operator-session mode includes a warning
+that callers must send the session-binding header; the presence of an
+operator-session file alone is not sufficient.
 
 ## Bind Safety
 
