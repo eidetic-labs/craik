@@ -45,6 +45,17 @@ STORE_WRITER_EXEMPTIONS = {
     },
 }
 
+STORE_WRITER_ENTRYPOINT_PREFIXES = (
+    "src/craik/runtime/channels/webhook_ingress.py",
+    "src/craik/runtime/dashboard/",
+    "src/craik/runtime/gateway.py",
+    "src/craik/runtime/memory/freshness.py",
+    "src/craik/runtime/reviewing/",
+    "src/craik/runtime/runners/",
+    "src/craik/runtime/shell/",
+    "src/craik/runtime/skills/",
+)
+
 AUTH_EXEMPT_CLI_COMMANDS = {
     ("src/craik/cli_auth.py", "login"): (
         "bootstrap command; it creates the operator session required by auth-gated commands"
@@ -122,6 +133,7 @@ def _extension_writer_call_failures() -> list[str]:
         for path in (ROOT / "src").rglob("*.py")
         if path not in store_paths and "__pycache__" not in path.parts
     ]
+    reachable_calls = _reachable_production_call_names(production_files)
     failures: list[str] = []
     for store_path in store_paths:
         relative_path = store_path.relative_to(ROOT).as_posix()
@@ -129,8 +141,7 @@ def _extension_writer_call_failures() -> list[str]:
         for writer_name in writer_names:
             if writer_name in STORE_WRITER_EXEMPTIONS.get(relative_path, {}):
                 continue
-            needle = f".{writer_name}("
-            if not any(needle in path.read_text(encoding="utf-8") for path in production_files):
+            if writer_name not in reachable_calls:
                 failures.append(f"{relative_path}: {writer_name} has no production caller")
     return failures
 
@@ -143,6 +154,55 @@ def _store_writer_names(path: Path) -> list[str]:
             if line.strip().startswith("def put_")
         }
     )
+
+
+def _reachable_production_call_names(paths: list[Path]) -> set[str]:
+    definitions: dict[str, set[str]] = {}
+    entries: set[str] = set()
+    for path in paths:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            continue
+        relative_path = path.relative_to(ROOT).as_posix()
+        for node in _function_defs(tree):
+            definitions.setdefault(node.name, set()).update(_called_names(node))
+            if _has_command_decorator(node) or _is_writer_entrypoint(relative_path):
+                entries.add(node.name)
+
+    reachable_functions = set(entries)
+    reachable_calls: set[str] = set()
+    pending = list(entries)
+    while pending:
+        name = pending.pop()
+        calls = definitions.get(name, set())
+        reachable_calls.update(calls)
+        for called in calls:
+            if called in definitions and called not in reachable_functions:
+                reachable_functions.add(called)
+                pending.append(called)
+    return reachable_calls
+
+
+def _function_defs(tree: ast.AST) -> list[ast.FunctionDef]:
+    return [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+
+
+def _called_names(node: ast.FunctionDef) -> set[str]:
+    names: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        function = child.func
+        if isinstance(function, ast.Name):
+            names.add(function.id)
+        elif isinstance(function, ast.Attribute):
+            names.add(function.attr)
+    return names
+
+
+def _is_writer_entrypoint(relative_path: str) -> bool:
+    return any(relative_path.startswith(prefix) for prefix in STORE_WRITER_ENTRYPOINT_PREFIXES)
 
 
 def _cli_auth_coverage_failures() -> list[str]:

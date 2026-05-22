@@ -23,10 +23,11 @@ receipts for both accepted and failed delivery paths.
 
 ## Token Handling
 
-`craik channels setup <service>` returns the expected secret reference
-for that service and a diagnostic status. It does not print the token
-value. Keep provider tokens in the platform keychain or an environment
-source managed outside the repository.
+`craik channels setup <service>` requires an active operator session,
+persists the adapter contract, bootstrap pairing, allowlist, and policy
+envelope, and returns the expected secret reference for that service. It
+does not print the token value. Keep provider tokens in the platform
+keychain or an environment source managed outside the repository.
 
 If diagnostics report a file-backed or unavailable credential backend,
 restrict token files to owner-only permissions and keep them out of
@@ -63,6 +64,8 @@ message content.
 ## Review Checklist
 
 - Confirm each enabled adapter has a resolving secret reference.
+- Confirm `craik channels setup <service>` has persisted the adapter
+  contract, identity pairing, allowlist, and policy envelope.
 - Confirm each sender is explicitly paired and scoped to a policy
   envelope.
 - Confirm each allowlist rule has a sender, workspace, thread, service,

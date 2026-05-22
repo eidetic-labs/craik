@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from craik.contracts.models import CapabilityReceipt, CraikModel, PolicyProfile, ReceiptResult
+from craik.runtime.channels.persistence import (
+    GatewayArtifactStore,
+    persist_gateway_channel_artifacts,
+)
 
 WebhookIngressStatus = Literal["accepted", "invalid", "duplicate", "unauthorized"]
 MAX_WEBHOOK_BODY_BYTES = 1024 * 1024
@@ -219,6 +223,29 @@ def webhook_ingress_receipt(
         redacted=True,
         created_at=now,
     )
+
+
+def persist_webhook_ingress_receipt(
+    store: GatewayArtifactStore,
+    *,
+    result: WebhookIngressResult,
+    task_id: str,
+    actor: str,
+    policy_profile: PolicyProfile,
+    policy_envelope_id: str,
+    created_at: datetime | None = None,
+) -> CapabilityReceipt:
+    """Build and persist the gateway receipt for one webhook ingress decision."""
+    receipt = webhook_ingress_receipt(
+        result=result,
+        task_id=task_id,
+        actor=actor,
+        policy_profile=policy_profile,
+        policy_envelope_id=policy_envelope_id,
+        created_at=created_at,
+    )
+    persist_gateway_channel_artifacts(store, receipt=receipt)
+    return receipt
 
 
 def webhook_signature(body: bytes, secret: str) -> str:

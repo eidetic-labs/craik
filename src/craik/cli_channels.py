@@ -9,6 +9,8 @@ from typing import Annotated, cast
 
 import typer
 
+from craik.cli_operator_auth import operator_identity_or_fail
+from craik.runtime.channels.persistence import persist_gateway_channel_artifacts
 from craik.runtime.channels.real_adapters import (
     RealChannelService,
     channel_outbound_response,
@@ -19,6 +21,8 @@ from craik.runtime.channels.real_adapters import (
     real_channel_adapter_contract,
     supported_real_channel_services,
 )
+from craik.runtime.channels.setup_artifacts import channel_setup_artifacts
+from craik.runtime.store import LocalStore
 
 channels_app = typer.Typer(help="Configure and inspect real channel adapters.")
 
@@ -44,16 +48,65 @@ def channel_list_command() -> None:
 
 @channels_app.command("setup")
 def channel_setup_command(service: ChannelService) -> None:
-    """Show a redacted setup plan for a channel adapter."""
-    plan = channel_setup_plan(_service_value(service), env=dict(os.environ))
-    typer.echo(json.dumps(plan.as_dict(), indent=2, sort_keys=True))
+    """Persist channel adapter setup artifacts and show a redacted setup plan."""
+    operator_subject = operator_identity_or_fail()
+    channel_service = _service_value(service)
+    plan = channel_setup_plan(channel_service, env=dict(os.environ))
+    adapter, pairing, allowlist, policy = channel_setup_artifacts(
+        channel_service,
+        operator_subject=operator_subject,
+    )
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        persist_gateway_channel_artifacts(
+            store,
+            adapter_contract=adapter,
+            identity_pairing=pairing,
+            allowlist=allowlist,
+            policy=policy,
+        )
+    finally:
+        store.close()
+    payload = plan.as_dict()
+    payload["persisted"] = {
+        "adapter_contract_id": adapter.id,
+        "identity_pairing_id": pairing.id,
+        "allowlist_id": allowlist.id,
+        "policy_envelope_id": policy.id,
+    }
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
 @channels_app.command("doctor")
 def channel_doctor_command(service: ChannelService) -> None:
     """Show redacted channel adapter diagnostics."""
-    diagnostic = diagnose_channel_adapter(_service_value(service), env=dict(os.environ))
-    typer.echo(json.dumps(diagnostic.as_dict(), indent=2, sort_keys=True))
+    operator_identity_or_fail()
+    channel_service = _service_value(service)
+    diagnostic = diagnose_channel_adapter(channel_service, env=dict(os.environ))
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        persisted = {
+            "adapter_contract": store.get_channel_adapter_contract(
+                f"channel_adapter_{channel_service}"
+            )
+            is not None,
+            "identity_pairing": store.get_channel_identity_pairing(
+                f"channel_pairing_{channel_service}"
+            )
+            is not None,
+            "allowlist": store.get_channel_allowlist(f"allowlist_{channel_service}") is not None,
+            "policy_envelope": store.get_channel_policy_envelope(
+                f"policy_channel_{channel_service}"
+            )
+            is not None,
+        }
+    finally:
+        store.close()
+    payload = diagnostic.as_dict()
+    payload["persisted"] = persisted
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
 @channels_app.command("normalize-fixture")
