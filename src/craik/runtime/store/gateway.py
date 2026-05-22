@@ -80,7 +80,7 @@ class GatewayStoreMixin(LocalStoreCore):
         receipts = [
             receipt
             for receipt in cast(_WorkStoreSurface, self).list_receipts()
-            if str(receipt.capability).startswith(("gateway.", "channel."))
+            if str(receipt.capability).startswith(("gateway.", "channel.", "webhook."))
             or str(receipt.result.metadata.get("gateway_action", "")).strip()
         ]
         if channel_id is None:

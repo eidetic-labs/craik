@@ -17,6 +17,9 @@ within the `0.x.0` stability expectations described in
   scheduled automations, and channel policy envelopes.
 - v0.8.0 foreground gateway daemon command with pid-file locking,
   `/health` serving, and persisted runtime-state transitions.
+- v0.8.0 gateway pipeline coverage that validates webhook ingress,
+  channel admission, policy selection, receipts, scheduling, and
+  persisted gateway artifacts together.
 
 ## 0.7.0 — 2026-05-22
 
