@@ -1,6 +1,6 @@
 # Roadmap
 
-<p className="craik-meta"><span>20 min read</span><span>For maintainers &amp; integrators</span><span>Updated 2026-05-21</span></p>
+<p className="craik-meta"><span>20 min read</span><span>For maintainers &amp; integrators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -494,6 +494,25 @@ across multiple sandbox backends.
 <div><h4>Environment capability receipts</h4></div>
 <div><h4>Sandbox policy tests</h4></div>
 <div><h4>Provider routing docs</h4></div>
+
+</div>
+
+<div className="craik-keypoint">
+
+**Implementation status: ready for release prep.**
+
+The v0.9.0 goal workflow shipped through milestone issues
+<a href="https://github.com/eidetic-labs/craik/issues/737">#737</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/738">#738</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/740">#740</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/741">#741</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/742">#742</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/743">#743</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/744">#744</a>,
+and <a href="https://github.com/eidetic-labs/craik/issues/745">#745</a>.
+Release prep remains responsible for the final version bump, changelog,
+signed tag, package publication, docs publication, and post-release
+verification.
 
 </div>
 

@@ -7,7 +7,7 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.8.0`; historical sign-offs remain below for
+pre-release gate is `0.9.0`; historical sign-offs remain below for
 audit continuity.
 
 </div>
@@ -16,13 +16,13 @@ audit continuity.
 
 <div className="craik-keypoint">
 
-**Persistent agent runtime gate is in progress.**
+**Persistent agent runtime gate is ready for release prep.**
 
 `0.9.0` adds provider-backed persistent sessions, guided provider
 setup, Gemini and local model routes, provider certification, explicit
 failure recovery, and a deterministic persistent-agent launch demo.
-Each goal must land through a green PR tied to the v0.9.0 milestone
-before release prep begins.
+All implementation goals landed through green PRs tied to the v0.9.0
+milestone before release prep begins.
 
 </div>
 
@@ -40,10 +40,60 @@ before release prep begins.
 <div><dt>Persistent prompt loop</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/741">#741</a> · persistent session prompt execution with events, receipts, and handoff links</dd></div>
 <div><dt>Provider certification matrix</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/742">#742</a> · generated matrix for hosted, local, and fixture provider routes</dd></div>
 <div><dt>Failure recovery</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/743">#743</a> · stale pid/endpoint, auth, provider, sandbox, reconnect, and resume states</dd></div>
-<div><dt>Persistent launch demo</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/744">#744</a> · deterministic launch, prompt, receipts, handoff, and status demo</dd></div>
-<div><dt>Security and sandbox boundaries</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/745">#745</a> · persistent-agent boundary enforcement remains before release prep</dd></div>
+<div><dt>Persistent launch demo</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/744">#744</a> · deterministic launch, prompt, receipts, handoff, and status demo</dd></div>
+<div><dt>Security and sandbox boundaries</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/745">#745</a> · persistent-agent state boundaries, redacted inspection surfaces, environment receipt links, and denied side-effect receipts</dd></div>
+<div><dt>Readiness docs reconciliation</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/756">#756</a> · roadmap and release-readiness docs reflect the closed v0.9.0 goal workflow</dd></div>
 
 </div>
+
+## v0.9.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Status: ready for pre-release checks after docs reconciliation lands.**
+
+The v0.9.0 milestone now contains provider setup, Gemini runtime
+support, local model presets, provider-backed persistent sessions,
+provider certification, explicit failure recovery, a launch demo, and
+persistent-agent security boundaries. Release prep remains responsible
+for the version bump, final changelog section, signed tag, publish, and
+post-publish verification.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Gate</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Evidence</dd>
+</div>
+
+<div><dt>Implementation</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Persistent sessions can launch, prompt providers, persist events, carry receipt and handoff links, recover from stale process, auth, provider, and sandbox states, and route through OpenAI, Anthropic, Gemini, local, and fixture providers.</dd></div>
+<div><dt>Tests</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Focused coverage exists for provider setup, Gemini transport, local presets, persistent prompt execution, provider certification, recovery, launch demo behavior, environment receipt linkage, and denied side-effect receipts.</dd></div>
+<div><dt>Docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Persistent-agent runtime, authentication, local model setup, provider routing, provider certification, persistent-agent security, execution-environment security, and environment receipt docs are updated.</dd></div>
+<div><dt>Security</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Session inspection uses redacted views, persistent agents retain references instead of secrets, environment receipts link provider and sandbox boundaries to sessions, and missing side-effect grants produce denial receipts.</dd></div>
+<div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.9.0 implementation blocker remains. Tagging is gated on release-prep validation.</dd></div>
+
+</div>
+
+### v0.9.0 Validation Commands
+
+Run the full release gate from a clean checkout before promoting
+`0.9.0` into release prep:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run ruff check
+uv run mypy
+uv run python scripts/generate_cli_reference.py --check
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_changed_file_strictness.py
+uv run pytest tests/test_provider_setup.py tests/test_provider_gemini.py tests/test_local_model_presets.py tests/test_agent_sessions.py tests/test_provider_certification.py tests/test_cli_agents.py tests/test_agent_demo.py tests/test_environment_receipts.py tests/test_sandbox_policy_boundaries.py -q
+uv run pytest
+```
 
 ## v0.8.0 Goal Workflow
 
