@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -49,7 +50,10 @@ def test_project_scoped_operator_commands_require_project_on_multi_project_home(
     result = runner.invoke(app, args, env={"CRAIK_HOME": str(home)})
 
     assert result.exit_code != 0
-    assert "--project required when multiple projects are registered" in result.output
+    assert (
+        "--project required when multiple projects are registered"
+        in click.unstyle(result.output)
+    )
 
 
 @pytest.mark.parametrize(

@@ -20,7 +20,9 @@ configured, what's broken, and what to fix first.
 `craik doctor` inspects existing local state and environment variables.
 It does **not** create `CRAIK_HOME`, initialize a database, contact
 Stigmem, start a gateway, or write receipts. Run it any time without
-worrying about side effects.
+worrying about side effects. Because those diagnostics read local
+operator state, the CLI requires an active operator session before it
+prints the report.
 
 </div>
 

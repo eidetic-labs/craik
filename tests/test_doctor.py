@@ -1,10 +1,12 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.doctor import run_doctor
 from craik.runtime.gateway import default_gateway_config
 from craik.runtime.paths import ensure_craik_home, resolve_craik_paths
@@ -114,6 +116,7 @@ def test_doctor_warns_for_rejected_auth_profile(tmp_path) -> None:
 def test_doctor_cli_outputs_json(tmp_path) -> None:
     home = tmp_path / "home"
     setup = runner.invoke(app, ["setup"], env={"CRAIK_HOME": str(home)})
+    _put_operator_session(home)
 
     result = runner.invoke(app, ["doctor"], env={"CRAIK_HOME": str(home)})
 
@@ -123,3 +126,28 @@ def test_doctor_cli_outputs_json(tmp_path) -> None:
     assert payload["status"] == "warning"
     assert any(item["name"] == "memory_backend" for item in payload["checks"])
     assert "auth_profiles" in payload
+
+
+def test_doctor_cli_requires_operator_session_before_state_read(tmp_path) -> None:
+    home = tmp_path / "home"
+    setup = runner.invoke(app, ["setup"], env={"CRAIK_HOME": str(home)})
+
+    result = runner.invoke(app, ["doctor"], env={"CRAIK_HOME": str(home)})
+
+    assert setup.exit_code == 0
+    assert result.exit_code != 0
+    assert "active operator session required; run craik auth login" in result.output
+
+
+def _put_operator_session(home: Path) -> None:
+    ensure_craik_home({"CRAIK_HOME": str(home)})
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator-123",
+            email="operator@example.test",
+            groups=["platform"],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
