@@ -391,19 +391,19 @@ reading raw logs.
 
 <div className="craik-grid">
 
-<div><h4>Dashboard / TUI decision</h4><p>Ready in PR · CLI-first <code>craik operator overview</code> selected for v0.7.0.</p></div>
-<div><h4>Work graph explorer</h4><p>Ready in PR · <code>craik operator work-graph</code> renders terminal and JSON graph inspection.</p></div>
-<div><h4>Handoff viewer</h4><p>Ready in PR · <code>craik operator handoff</code> renders durable handoff summaries.</p></div>
-<div><h4>Receipt viewer</h4><p>Ready in PR · <code>craik operator receipt</code> renders capability and plugin receipts.</p></div>
-<div><h4>Contradiction inbox</h4><p>Ready in PR · <code>craik operator contradictions</code> lists review-only contradiction state.</p></div>
-<div><h4>Evidence &amp; assumption views</h4><p>Ready in PR · <code>craik operator evidence</code> keeps assumptions separate from evidence.</p></div>
-<div><h4>Delegation queue</h4><p>Ready in PR · <code>craik operator delegations</code> lists human delegation points.</p></div>
-<div><h4>Budget / quota view</h4><p>Ready in PR · <code>craik operator budget</code> displays missing budget data explicitly.</p></div>
-<div><h4>Instruction distillation view</h4><p>Ready in PR · <code>craik operator instructions</code> renders sources, snapshots, provenance, proposals, and reviews.</p></div>
-<div><h4>Quality gate view</h4><p>Ready in PR · <code>craik operator quality</code> summarizes handoff, evidence, critic, and red-team signals.</p></div>
-<div><h4>Memory impact preview</h4><p>Ready in PR · <code>craik operator memory-impact</code> inspects previewed durable-memory effects.</p></div>
-<div><h4>Known traps view</h4><p>Ready in PR · <code>craik operator traps</code> renders known traps and negative knowledge with project and task filters.</p></div>
-<div><h4>Run delta view</h4><p>Ready in PR · <code>craik operator run-delta</code> inspects persisted recovery and continuity deltas.</p></div>
+<div><h4>Dashboard / TUI decision</h4><p>Ready · CLI-first <code>craik operator overview</code> selected for v0.7.0.</p></div>
+<div><h4>Work graph explorer</h4><p>Ready · <code>craik operator work-graph</code> renders terminal and JSON graph inspection.</p></div>
+<div><h4>Handoff viewer</h4><p>Ready · <code>craik operator handoff</code> renders durable handoff summaries.</p></div>
+<div><h4>Receipt viewer</h4><p>Ready · <code>craik operator receipt</code> renders capability and plugin receipts.</p></div>
+<div><h4>Contradiction inbox</h4><p>Ready · <code>craik operator contradictions</code> lists review-only contradiction state.</p></div>
+<div><h4>Evidence &amp; assumption views</h4><p>Ready · <code>craik operator evidence</code> keeps assumptions separate from evidence.</p></div>
+<div><h4>Delegation queue</h4><p>Ready · <code>craik operator delegations</code> lists human delegation points.</p></div>
+<div><h4>Budget / quota view</h4><p>Ready · <code>craik operator budget</code> displays missing budget data explicitly.</p></div>
+<div><h4>Instruction distillation view</h4><p>Ready · <code>craik operator instructions</code> renders sources, snapshots, provenance, proposals, and reviews.</p></div>
+<div><h4>Quality gate view</h4><p>Ready · <code>craik operator quality</code> summarizes handoff, evidence, critic, and red-team signals.</p></div>
+<div><h4>Memory impact preview</h4><p>Ready · <code>craik operator memory-impact</code> inspects previewed durable-memory effects.</p></div>
+<div><h4>Known traps view</h4><p>Ready · <code>craik operator traps</code> renders known traps and negative knowledge with project and task filters.</p></div>
+<div><h4>Run delta view</h4><p>Ready · <code>craik operator run-delta</code> inspects persisted recovery and continuity deltas.</p></div>
 
 </div>
 

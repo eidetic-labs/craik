@@ -45,8 +45,35 @@ closure, and branch pruning before the next goal begins.
 <div><dt>Quality gate view</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/694">#694</a> · <code>craik operator quality</code> · handoff, evidence, critic, and red-team signals</dd></div>
 <div><dt>Memory impact preview</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/695">#695</a> · <code>craik operator memory-impact</code> · previewed durable-memory effects</dd></div>
 <div><dt>Known traps view</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/696">#696</a> · <code>craik operator traps</code> · known traps and negative knowledge</dd></div>
-<div><dt>Run delta view</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/697">#697</a> · <code>craik operator run-delta</code> · recovery and continuity deltas</dd></div>
-<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/698">#698</a> · final 0.7.0 readiness record, changelog, and docs assessment</dd></div>
+<div><dt>Run delta view</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/697">#697</a> · <code>craik operator run-delta</code> · recovery and continuity deltas</dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/698">#698</a> · final 0.7.0 readiness record, changelog, and docs assessment</dd></div>
+
+</div>
+
+## v0.7.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Status: ready for release prep.**
+
+All v0.7.0 operator-experience goals have shipped implementation,
+tests, docs, validation, a green PR, merge, issue closure, and branch
+pruning. No known release blockers remain as of 2026-05-21.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Gate</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Evidence</dd>
+</div>
+
+<div><dt>Implementation</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Read-only <code>craik operator</code> commands cover overview, work graph, handoffs, receipts, contradictions, evidence, delegations, budget, instructions, quality, memory impact, traps, and run deltas.</dd></div>
+<div><dt>Tests</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Focused CLI and formatter coverage exists for each operator surface view, with full-suite validation required before release prep.</dd></div>
+<div><dt>Docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Reference docs, generated CLI docs, roadmap, changelog, and this readiness record are updated to current docs quality.</dd></div>
+<div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.7.0 blocker is recorded after the goal workflow assessment.</dd></div>
 
 </div>
 

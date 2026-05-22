@@ -47,6 +47,8 @@ within the `0.x.0` stability expectations described in
 - Read-only run delta view through `craik operator run-delta` and
   `craik operator run-deltas`, resolving delta, run, or task IDs and
   showing linked recovery sessions.
+- v0.7.0 release-readiness and documentation assessment, recording
+  completed operator-experience goals and no known release blockers.
 
 ## 0.6.0 — 2026-05-21
 
