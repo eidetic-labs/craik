@@ -1,6 +1,16 @@
 from datetime import UTC, datetime
 
-from craik.runtime.agents.sessions import start_agent_session, update_agent_session_status
+import pytest
+
+from craik.runtime.agents import sessions
+from craik.runtime.agents.sessions import (
+    AgentSessionLifecycleError,
+    get_agent_session_status,
+    restart_agent_session,
+    start_agent_session,
+    stop_agent_session,
+    update_agent_session_status,
+)
 from craik.runtime.store import LocalStore
 
 
@@ -66,5 +76,79 @@ def test_update_agent_session_status_clears_pid_when_stopped(tmp_path) -> None:
         assert stopped.stopped_at == stopped_at
         assert stopped.supervision_notes[-1] == "Operator stopped the session."
         assert store.get_agent_session_state(state.id) == stopped
+    finally:
+        store.close()
+
+
+def test_stop_and_restart_agent_session_enforce_lifecycle(tmp_path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    started_at = datetime(2026, 5, 22, 6, 15, tzinfo=UTC)
+    stopped_at = datetime(2026, 5, 22, 6, 20, tzinfo=UTC)
+    restarted_at = datetime(2026, 5, 22, 6, 25, tzinfo=UTC)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+            now=started_at,
+        )
+
+        stopped = stop_agent_session(
+            store,
+            "agent_session_docs",
+            supervision_note="Operator stopped the session.",
+            now=stopped_at,
+        )
+        restarted = restart_agent_session(
+            store,
+            "agent_session_docs",
+            supervision_note="Operator restarted the session.",
+            now=restarted_at,
+        )
+
+        assert stopped.status == "stopped"
+        assert restarted.status == "running"
+        assert restarted.stopped_at is None
+        assert restarted.started_at == restarted_at
+        assert restarted.supervision_notes[-1] == "Operator restarted the session."
+        with pytest.raises(AgentSessionLifecycleError, match="active sessions cannot be restarted"):
+            restart_agent_session(
+                store,
+                "agent_session_docs",
+                supervision_note="Invalid restart.",
+                now=restarted_at,
+            )
+    finally:
+        store.close()
+
+
+def test_status_marks_stale_pid_session_failed(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    started_at = datetime(2026, 5, 22, 6, 15, tzinfo=UTC)
+    checked_at = datetime(2026, 5, 22, 6, 16, tzinfo=UTC)
+
+    def missing_process(pid: int, signal: int) -> None:
+        raise ProcessLookupError
+
+    monkeypatch.setattr(sessions.os, "kill", missing_process)
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+            pid=4321,
+            now=started_at,
+        )
+
+        failed = get_agent_session_status(store, "agent_session_docs", now=checked_at)
+
+        assert failed.status == "failed"
+        assert failed.pid is None
+        assert failed.supervision_notes[-1] == "Persistent agent pid is no longer running."
     finally:
         store.close()

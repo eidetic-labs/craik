@@ -18,6 +18,73 @@ Options:
 
 - `--version`: Print the installed Craik version and exit.; default `false`
 
+## `craik agent`
+
+Launch and manage persistent Craik agent sessions.
+
+```text
+craik agent COMMAND [ARGS]...
+```
+
+## `craik agent launch`
+
+Launch a foreground persistent agent session control record.
+
+```text
+craik agent launch [OPTIONS]
+```
+
+Options:
+
+- `--session-id`: Explicit persistent agent session id.
+- `--project-id`: Project scope for the persistent agent.
+- `--provider-id`: Provider runtime id for the session.; default `provider_openai`
+- `--model-id`: Provider model id requested for the session.
+- `--auth-profile-id`: Credential profile id used by the session.
+- `--policy-envelope-id`: Policy envelope governing the session.
+- `--endpoint-url`: Local endpoint URL when a foreground loop exposes one.
+
+## `craik agent list`
+
+List persisted persistent agent sessions.
+
+```text
+craik agent list
+```
+
+## `craik agent restart`
+
+Restart a stopped or failed persistent agent session.
+
+```text
+craik agent restart [OPTIONS] SESSION_ID
+```
+
+Options:
+
+- `--reason`: Operator-visible lifecycle reason.; default `restarted by operator`
+- `--endpoint-url`: Replacement endpoint URL when one is exposed.
+
+## `craik agent status`
+
+Inspect one persistent agent session.
+
+```text
+craik agent status [OPTIONS] SESSION_ID
+```
+
+## `craik agent stop`
+
+Stop an active persistent agent session.
+
+```text
+craik agent stop [OPTIONS] SESSION_ID
+```
+
+Options:
+
+- `--reason`: Operator-visible lifecycle reason.; default `stopped by operator`
+
 ## `craik agent-message`
 
 Send and receive agent mailbox messages.
