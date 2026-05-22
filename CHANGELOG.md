@@ -49,6 +49,25 @@ within the `0.x.0` stability expectations described in
   showing linked recovery sessions.
 - v0.7.0 release-readiness and documentation assessment, recording
   completed operator-experience goals and no known release blockers.
+- v0.7.0 remediation guards for operator session coverage, scoped
+  operator list views, receipt HMAC status, and sanitized operator JSON
+  exports.
+
+### Changed
+
+- Multi-project operator list commands now require an explicit
+  `--project` scope instead of silently aggregating records across
+  projects.
+- Contradiction and delegation operator queues now default to the active
+  operator plus unassigned records; `--all` is required to include other
+  operators' records.
+
+### Security
+
+- Every read-only `craik operator` command now requires an active
+  operator session before returning local-store state.
+- Operator text and JSON renderers now sanitize runtime text and redact
+  sensitive values before display.
 
 ## 0.6.0 — 2026-05-21
 

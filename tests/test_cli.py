@@ -215,10 +215,12 @@ def test_root_help_describes_governed_runtime_substrate() -> None:
 
 
 def test_operator_overview_cli_renders_empty_read_only_surface(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "overview"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -228,10 +230,12 @@ def test_operator_overview_cli_renders_empty_read_only_surface(tmp_path: Path) -
 
 
 def test_operator_work_graph_cli_renders_empty_graph(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "work-graph"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -241,10 +245,12 @@ def test_operator_work_graph_cli_renders_empty_graph(tmp_path: Path) -> None:
 
 
 def test_operator_work_graph_cli_rejects_unknown_task(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "work-graph", "--task-id", "task_missing"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -253,6 +259,7 @@ def test_operator_work_graph_cli_rejects_unknown_task(tmp_path: Path) -> None:
 
 def test_operator_handoff_cli_renders_view(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -302,6 +309,7 @@ def test_operator_handoff_cli_renders_view(tmp_path: Path) -> None:
 
 def test_operator_receipt_cli_renders_capability_receipt(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -343,6 +351,7 @@ def test_operator_receipt_cli_renders_capability_receipt(tmp_path: Path) -> None
 
 def test_operator_contradictions_cli_renders_inbox(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -380,6 +389,7 @@ def test_operator_contradictions_cli_renders_inbox(tmp_path: Path) -> None:
 
 def test_operator_evidence_cli_keeps_assumptions_separate(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -426,6 +436,7 @@ def test_operator_evidence_cli_keeps_assumptions_separate(tmp_path: Path) -> Non
 
 def test_operator_delegations_cli_renders_queue(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -462,10 +473,12 @@ def test_operator_delegations_cli_renders_queue(tmp_path: Path) -> None:
 
 
 def test_operator_budget_cli_renders_missing_data_boundary(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "budget"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -475,10 +488,12 @@ def test_operator_budget_cli_renders_missing_data_boundary(tmp_path: Path) -> No
 
 
 def test_operator_instructions_cli_renders_empty_distillation_view(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "instructions"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -488,10 +503,12 @@ def test_operator_instructions_cli_renders_empty_distillation_view(tmp_path: Pat
 
 
 def test_operator_quality_cli_renders_empty_quality_gate(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "quality"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -501,10 +518,12 @@ def test_operator_quality_cli_renders_empty_quality_gate(tmp_path: Path) -> None
 
 
 def test_operator_quality_cli_json_renders_snapshot(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "quality", "--json"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -514,6 +533,7 @@ def test_operator_quality_cli_json_renders_snapshot(tmp_path: Path) -> None:
 
 def test_operator_memory_impact_cli_renders_preview(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     preview = MemoryImpactPreview(
         id="preview_task_memory",
         task_id="task_memory",
@@ -539,10 +559,12 @@ def test_operator_memory_impact_cli_renders_preview(tmp_path: Path) -> None:
 
 
 def test_operator_memory_impact_cli_rejects_unknown_preview(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "memory-impact", "preview_missing"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -550,10 +572,12 @@ def test_operator_memory_impact_cli_rejects_unknown_preview(tmp_path: Path) -> N
 
 
 def test_operator_traps_cli_renders_empty_traps_view(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "traps"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -562,10 +586,12 @@ def test_operator_traps_cli_renders_empty_traps_view(tmp_path: Path) -> None:
 
 
 def test_operator_traps_cli_json_renders_timestamped_snapshot(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["operator", "traps", "--json"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -577,6 +603,7 @@ def test_operator_traps_cli_json_renders_timestamped_snapshot(tmp_path: Path) ->
 
 def test_operator_run_delta_cli_renders_persisted_delta(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     _seed_run_state(home, status="interrupted")
     _seed_run_delta_state(home)
 
@@ -594,6 +621,7 @@ def test_operator_run_delta_cli_renders_persisted_delta(tmp_path: Path) -> None:
 
 def test_operator_run_delta_cli_json_resolves_by_task(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     _seed_run_state(home, status="interrupted")
     _seed_run_delta_state(home)
 

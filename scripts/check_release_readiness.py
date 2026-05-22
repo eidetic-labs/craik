@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import sys
 import tomllib
 from pathlib import Path
@@ -51,6 +52,7 @@ def main() -> int:
         failures.append(f"CHANGELOG.md: missing section for current version {version}")
 
     failures.extend(_extension_writer_call_failures())
+    failures.extend(_cli_auth_coverage_failures())
 
     if failures:
         print("Release readiness checks failed:", file=sys.stderr)
@@ -91,6 +93,67 @@ def _extension_writer_call_failures() -> list[str]:
                 f"src/craik/runtime/store/extensions.py: {writer_name} has no production caller"
             )
     return failures
+
+
+def _cli_auth_coverage_failures() -> list[str]:
+    """Fail when an operator CLI command reads local state without auth."""
+    failures: list[str] = []
+    for path in sorted((ROOT / "src/craik").glob("cli_operator*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in (item for item in tree.body if isinstance(item, ast.FunctionDef)):
+            if not _has_command_decorator(node):
+                continue
+            if not _touches_local_store(node):
+                continue
+            if not _calls_operator_auth(node):
+                failures.append(
+                    f"{path.relative_to(ROOT)}: command `{node.name}` touches LocalStore "
+                    "without operator_identity_or_fail()"
+                )
+    return failures
+
+
+def _has_command_decorator(node: ast.FunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        call = decorator if isinstance(decorator, ast.Call) else None
+        if call is None:
+            continue
+        function = call.func
+        if isinstance(function, ast.Attribute) and function.attr == "command":
+            return True
+    return False
+
+
+def _touches_local_store(node: ast.FunctionDef) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Name) and child.id == "LocalStore":
+            return True
+        if isinstance(child, ast.Attribute) and child.attr in {
+            "from_env",
+            "from_paths",
+            "initialize",
+            "list_projects",
+            "get_contract",
+        }:
+            return True
+    return False
+
+
+def _calls_operator_auth(node: ast.FunctionDef) -> bool:
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call):
+            function = child.func
+            if isinstance(function, ast.Name) and function.id in {
+                "operator_identity_or_fail",
+                "_operator_identity",
+            }:
+                return True
+            if isinstance(function, ast.Attribute) and function.attr in {
+                "operator_identity_or_fail",
+                "_operator_identity",
+            }:
+                return True
+    return False
 
 
 if __name__ == "__main__":

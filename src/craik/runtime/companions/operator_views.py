@@ -28,6 +28,8 @@ from craik.runtime.companions import operator_artifact_views as _operator_artifa
 from craik.runtime.companions import operator_knowledge_views as _operator_knowledge_views
 from craik.runtime.companions import operator_surface as _operator_surface
 from craik.runtime.memory import operator_memory_views as _operator_memory_views
+from craik.runtime.policy.redaction import redact
+from craik.runtime.policy.text import sanitize_runtime_text
 
 format_contradiction_inbox = _operator_artifact_views.format_contradiction_inbox
 format_evidence_assumption_view = _operator_artifact_views.format_evidence_assumption_view
@@ -147,7 +149,7 @@ def format_quality_gate_view(snapshot: QualityGateSnapshot) -> list[str]:
                     f"  Affected Artifacts: {_join_or_none(finding.affected_artifacts)}",
                     f"  Evidence: {_join_or_none(finding.evidence_ids)}",
                     f"  Proposed Actions: {_join_or_none(finding.proposed_actions)}",
-                    f"  Summary: {finding.summary}",
+                    f"  Summary: {_safe(finding.summary)}",
                 ]
             )
 
@@ -172,7 +174,7 @@ def format_quality_gate_view(snapshot: QualityGateSnapshot) -> list[str]:
                     f"  Evidence: {_join_or_none(red_team_finding.evidence_ids)}",
                     "  Proposed Actions: "
                     f"{_join_or_none(red_team_finding.proposed_actions)}",
-                    f"  Summary: {red_team_finding.summary}",
+                    f"  Summary: {_safe(red_team_finding.summary)}",
                 ]
             )
 
@@ -188,7 +190,7 @@ def format_run_delta_view(snapshot: RunDeltaSnapshot) -> list[str]:
         f"Task: {delta.task_id or 'all'}",
         f"Previous Handoff: {delta.previous_handoff_id or 'none'}",
         f"Current Handoff: {delta.current_handoff_id or 'none'}",
-        f"Summary: {delta.summary}",
+        f"Summary: {_safe(delta.summary)}",
         "",
         "Case Files",
         *_format_items(delta.case_file_ids),
@@ -224,7 +226,7 @@ def format_run_delta_view(snapshot: RunDeltaSnapshot) -> list[str]:
                 [
                     f"- {session.id} [{session.status}] delta={session.run_delta_id}",
                     f"  Task: {session.task_id or 'all'}",
-                    f"  Summary: {session.resume_summary}",
+                    f"  Summary: {_safe(session.resume_summary)}",
                     f"  Required Actions: {_join_or_none(session.required_actions)}",
                     f"  Stale Risks: {_join_or_none(session.stale_risks)}",
                     f"  Handoffs: {_join_or_none(session.handoff_ids)}",
@@ -249,8 +251,8 @@ def format_known_traps_view(snapshot: KnownTrapsSnapshot) -> list[str]:
                     f"- {trap.id} [{_known_trap_state(trap, snapshot.now)}/{trap.kind}]",
                     f"  Project: {trap.project_id or 'none'}",
                     f"  Task: {trap.task_id or 'none'}",
-                    f"  Statement: {trap.statement}",
-                    f"  Avoidance: {trap.avoidance}",
+                    f"  Statement: {_safe(trap.statement)}",
+                    f"  Avoidance: {_safe(trap.avoidance)}",
                     f"  Evidence: {_join_or_none(trap.evidence_ids)}",
                     f"  Handoffs: {_join_or_none(trap.handoff_ids)}",
                     f"  Contradictions: {_join_or_none(trap.contradiction_ids)}",
@@ -272,7 +274,7 @@ def format_known_traps_view(snapshot: KnownTrapsSnapshot) -> list[str]:
                     f"scope={knowledge.scope} trust={knowledge.trust_class}",
                     f"  Project: {knowledge.project_id or 'none'}",
                     f"  Task: {knowledge.task_id or 'none'}",
-                    f"  Statement: {knowledge.statement}",
+                    f"  Statement: {_safe(knowledge.statement)}",
                     f"  Evidence: {_join_or_none(knowledge.evidence_ids)}",
                     f"  Handoffs: {_join_or_none(knowledge.handoff_ids)}",
                     f"  Contradictions: {_join_or_none(knowledge.contradiction_ids)}",
@@ -321,7 +323,7 @@ def format_instruction_distillation_view(
             lines.append(
                 f"- {provenance.id} source={provenance.source_id} "
                 f"snapshot={provenance.snapshot_id or 'none'} "
-                f"range={_format_line_range(provenance)}: {provenance.summary}"
+                f"range={_format_line_range(provenance)}: {_safe(provenance.summary)}"
             )
 
     lines.extend(["", "Distilled Proposals"])
@@ -341,7 +343,7 @@ def format_instruction_distillation_view(
                     f"  Provenance: {_join_or_none(proposal.provenance_ids)}",
                     f"  Evidence: {_join_or_none(proposal.evidence_ids)}",
                     f"  Contradictions: {_join_or_none(proposal.contradiction_ids)}",
-                    f"  Statement: {proposal.statement}",
+                    f"  Statement: {_safe(proposal.statement)}",
                 ]
             )
 
@@ -358,7 +360,7 @@ def format_instruction_distillation_view(
                     f"  Policy: {review.policy_envelope_id or 'none'}",
                     f"  Receipts: {_join_or_none(review.receipt_ids)}",
                     f"  Handoffs: {_join_or_none(review.handoff_ids)}",
-                    f"  Rationale: {review.rationale}",
+                    f"  Rationale: {_safe(review.rationale)}",
                 ]
             )
 
@@ -399,11 +401,12 @@ def format_delegation_queue(delegations: list[HumanDelegationPoint]) -> list[str
                 f"  Task: {delegation.task_id}",
                 f"  Owner: {delegation.owner or 'unassigned'}",
                 f"  Requested By: {delegation.requested_by}",
-                f"  Decision: {delegation.requested_decision}",
-                f"  Summary: {delegation.summary}",
+                f"  Decision: {_safe(delegation.requested_decision)}",
+                f"  Summary: {_safe(delegation.summary)}",
                 f"  Policy: {delegation.policy_envelope_id or 'none'}",
                 f"  Receipts: {_join_or_none(delegation.receipt_ids)}",
-                f"  Resolution: {delegation.resolution or 'none'}",
+                "  Resolution: "
+                f"{_safe(delegation.resolution) if delegation.resolution else 'none'}",
             ]
         )
     return lines
@@ -412,13 +415,13 @@ def format_delegation_queue(delegations: list[HumanDelegationPoint]) -> list[str
 def _format_items(items: list[str]) -> list[str]:
     if not items:
         return ["- none"]
-    return [f"- {item}" for item in items]
+    return [f"- {_safe(item)}" for item in items]
 
 
 def _format_mapping(items: Mapping[Any, float | int | str]) -> list[str]:
     if not items:
         return ["- none"]
-    return [f"- {key}: {items[key]}" for key in sorted(items, key=str)]
+    return [f"- {_safe(str(key))}: {_safe(str(items[key]))}" for key in sorted(items, key=str)]
 
 
 def _format_run_delta_change(change: RunDeltaItem) -> str:
@@ -427,7 +430,7 @@ def _format_run_delta_change(change: RunDeltaItem) -> str:
     return (
         f"- {change.entity_type}:{change.entity_id} "
         f"prev={previous or 'none'} current={current or 'none'} "
-        f"evidence={_join_or_none(change.evidence_ids)}: {change.summary}"
+        f"evidence={_join_or_none(change.evidence_ids)}: {_safe(change.summary)}"
     )
 
 
@@ -489,4 +492,8 @@ def _format_score_components(score: HandoffQualityScore) -> str:
 def _join_or_none(items: list[str]) -> str:
     if not items:
         return "none"
-    return ", ".join(items)
+    return ", ".join(_safe(item) for item in items)
+
+
+def _safe(value: str) -> str:
+    return sanitize_runtime_text(str(redact(value).value))

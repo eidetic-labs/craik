@@ -407,6 +407,12 @@ reading raw logs.
 
 </div>
 
+The operator surface is session-bound and scoped before release prep:
+read-only commands require an active operator session, multi-project
+list views require explicit project scope, and operator text/JSON output
+uses the same sanitization and redaction boundary as runtime memory and
+receipt paths.
+
 ### v0.8.0 · Operator integrations and always-on gateway
 
 <div className="craik-lead">

@@ -808,8 +808,10 @@ craik operator contradictions [OPTIONS]
 
 Options:
 
+- `--project`: Only include reports in this project scope.
 - `--task-id`: Only include reports for this task.
 - `--status`: Only include reports with status open, resolved, or ignored.
+- `--all`: Include reports owned by other operators.; default `false`
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
 ## `craik operator delegations`
@@ -822,8 +824,10 @@ craik operator delegations [OPTIONS]
 
 Options:
 
+- `--project`: Only include records in this project scope.
 - `--task-id`: Only include delegation points for this task.
 - `--status`: Only include delegation points with this status.
+- `--all`: Include delegation points owned by other operators.; default `false`
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
 ## `craik operator evidence`
@@ -836,6 +840,7 @@ craik operator evidence [OPTIONS]
 
 Options:
 
+- `--project`: Only include records in this project scope.
 - `--task-id`: Only include assumptions and scoped evidence for this task.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
@@ -861,6 +866,7 @@ craik operator instructions [OPTIONS]
 
 Options:
 
+- `--project`: Only include records in this project scope.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
 ## `craik operator memory-impact`
@@ -899,6 +905,7 @@ craik operator quality [OPTIONS]
 
 Options:
 
+- `--project`: Only include records in this project scope.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
 ## `craik operator receipt`

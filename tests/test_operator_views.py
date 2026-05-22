@@ -355,7 +355,7 @@ def test_receipt_viewer_formats_capability_receipt_statuses() -> None:
 
         lines = format_receipt_viewer(receipt)
 
-        assert f"Capability Receipt: receipt_{status}" in lines
+        assert f"Capability Receipt: receipt_{status} [unverified]" in lines
         assert f"Status: {status}" in lines
         assert "Redacted: True" in lines
 
@@ -384,13 +384,48 @@ def test_receipt_viewer_formats_plugin_receipt_links() -> None:
 
     lines = format_receipt_viewer(receipt)
 
-    assert "Plugin Receipt: plugin_receipt_docs_reconcile" in lines
+    assert "Plugin Receipt: plugin_receipt_docs_reconcile [unverified]" in lines
     assert "Plugin: plugin_docs_reconcile" in lines
     assert "Probation: None" in lines
     assert "Status: denied" in lines
     assert "- plugin_grant_docs_reconcile" in lines
     assert "- evidence_readme_status" in lines
     assert "- handoff_docs_reconcile" in lines
+
+
+def test_receipt_viewer_surfaces_hmac_verification_statuses() -> None:
+    receipt = PluginReceipt.model_validate(
+        {
+            "id": "plugin_receipt_verified",
+            "task_id": "task_docs_reconcile",
+            "actor": "agent:codex",
+            "plugin_descriptor_id": "plugin_docs_reconcile",
+            "action": "docs.reconcile",
+            "capability_grant_ids": ["plugin_grant_docs_reconcile"],
+            "trust_boundary": "project",
+            "result": {
+                "status": "passed",
+                "summary": "Plugin action completed.",
+                "metadata": {"redacted": True},
+            },
+            "evidence_ids": ["evidence_readme_status"],
+            "handoff_ids": ["handoff_docs_reconcile"],
+            "redacted": True,
+            "receipt_hmac": "a" * 64,
+            "created_at": "2026-05-16T17:00:00Z",
+        }
+    )
+
+    assert "Plugin Receipt: plugin_receipt_verified [verified]" in format_receipt_viewer(
+        receipt
+    )
+    assert "Plugin Receipt: plugin_receipt_verified [tampered]" in format_receipt_viewer(
+        receipt,
+        hmac_status="tampered",
+    )
+    assert "Plugin Receipt: plugin_receipt_verified [unverified]" in format_receipt_viewer(
+        receipt.model_copy(update={"receipt_hmac": None})
+    )
 
 
 def test_contradiction_inbox_formats_statuses_and_review_links() -> None:

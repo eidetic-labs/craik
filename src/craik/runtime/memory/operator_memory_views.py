@@ -12,6 +12,8 @@ from craik.contracts.models import (
     MemoryImpactPreview,
     MemoryProposal,
 )
+from craik.runtime.policy.redaction import redact
+from craik.runtime.policy.text import sanitize_runtime_text
 
 
 @dataclass(frozen=True)
@@ -65,10 +67,11 @@ def format_memory_impact_preview_view(snapshot: MemoryImpactPreviewSnapshot) -> 
         ):
             lines.extend(
                 [
-                    f"- {contradiction.entity} {contradiction.relation}",
-                    f"  Existing: {contradiction.existing_value}",
-                    f"  Proposed: {contradiction.proposed_value}",
-                    f"  Reason: {contradiction.reason}",
+                    f"- {_safe_redacted(contradiction.entity)} "
+                    f"{_safe_redacted(contradiction.relation)}",
+                    f"  Existing: {_safe_redacted(contradiction.existing_value)}",
+                    f"  Proposed: {_safe_redacted(contradiction.proposed_value)}",
+                    f"  Reason: {_safe(contradiction.reason)}",
                 ]
             )
     lines.extend(["", "Scope Summary", *_format_mapping(preview.scope_summary)])
@@ -78,19 +81,19 @@ def format_memory_impact_preview_view(snapshot: MemoryImpactPreviewSnapshot) -> 
 def _join_or_none(items: Sequence[str]) -> str:
     if not items:
         return "none"
-    return ", ".join(items)
+    return ", ".join(_safe(item) for item in items)
 
 
 def _format_items(items: list[str]) -> list[str]:
     if not items:
         return ["- none"]
-    return [f"- {item}" for item in items]
+    return [f"- {_safe(item)}" for item in items]
 
 
 def _format_mapping(items: Mapping[Any, float | int | str]) -> list[str]:
     if not items:
         return ["- none"]
-    return [f"- {key}: {items[key]}" for key in sorted(items, key=str)]
+    return [f"- {_safe(str(key))}: {_safe(str(items[key]))}" for key in sorted(items, key=str)]
 
 
 def _format_memory_fact_references(
@@ -103,6 +106,15 @@ def _format_memory_fact_references(
 
 def _format_fact_reference(fact: FactValue | MemoryFactReference) -> str:
     return (
-        f"{fact.entity} {fact.relation}={fact.value!r} "
-        f"source={fact.source} scope={fact.scope} trust={fact.trust_class}"
+        f"{_safe_redacted(fact.entity)} {_safe_redacted(fact.relation)}="
+        f"{_safe_redacted(str(fact.value))!r} source={_safe_redacted(fact.source)} "
+        f"scope={fact.scope} trust={fact.trust_class}"
     )
+
+
+def _safe_redacted(value: str) -> str:
+    return _safe(str(redact(value).value))
+
+
+def _safe(value: str) -> str:
+    return sanitize_runtime_text(value)

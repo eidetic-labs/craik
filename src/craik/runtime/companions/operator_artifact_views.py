@@ -13,6 +13,8 @@ from craik.contracts.models import (
     WorkGraphExport,
     WorkGraphNode,
 )
+from craik.runtime.policy.redaction import redact
+from craik.runtime.policy.text import sanitize_runtime_text
 
 
 def format_evidence_assumption_view(
@@ -44,8 +46,9 @@ def format_contradiction_inbox(reports: list[ContradictionReport]) -> list[str]:
                 f"- {report.id} [{report.status}]",
                 f"  Task: {report.task_id}",
                 f"  Owner: {report.owner or 'unassigned'}",
-                f"  Summary: {report.summary}",
-                f"  Proposed Resolution: {report.proposed_resolution}",
+                f"  Summary: {_safe(report.summary)}",
+                "  Proposed Resolution: "
+                f"{_safe(report.proposed_resolution) if report.proposed_resolution else 'none'}",
                 f"  Affected Artifacts: {_join_or_none(report.affected_artifacts)}",
                 f"  Evidence: {_join_or_none(report.evidence_ids)}",
             ]
@@ -53,11 +56,16 @@ def format_contradiction_inbox(reports: list[ContradictionReport]) -> list[str]:
     return lines
 
 
-def format_receipt_viewer(receipt: CapabilityReceipt | PluginReceipt) -> list[str]:
+def format_receipt_viewer(
+    receipt: CapabilityReceipt | PluginReceipt,
+    *,
+    hmac_status: str | None = None,
+) -> list[str]:
     """Format a redacted capability or plugin receipt."""
+    status = hmac_status or _receipt_hmac_status(receipt)
     if isinstance(receipt, PluginReceipt):
         lines = [
-            f"Plugin Receipt: {receipt.id}",
+            f"Plugin Receipt: {receipt.id} [{status}]",
             f"Task: {receipt.task_id}",
             f"Actor: {receipt.actor}",
             f"Plugin: {receipt.plugin_descriptor_id}",
@@ -65,7 +73,7 @@ def format_receipt_viewer(receipt: CapabilityReceipt | PluginReceipt) -> list[st
             f"Action: {receipt.action}",
             f"Trust Boundary: {receipt.trust_boundary}",
             f"Status: {receipt.result.status}",
-            f"Summary: {receipt.result.summary}",
+            f"Summary: {_safe(receipt.result.summary)}",
             f"Redacted: {receipt.redacted}",
             "",
             "Capability Grants",
@@ -79,15 +87,15 @@ def format_receipt_viewer(receipt: CapabilityReceipt | PluginReceipt) -> list[st
         ]
         return lines
     return [
-        f"Capability Receipt: {receipt.id}",
+        f"Capability Receipt: {receipt.id} [{status}]",
         f"Task: {receipt.task_id}",
         f"Actor: {receipt.actor}",
         f"Capability: {receipt.capability}",
-        f"Target: {receipt.target}",
+        f"Target: {_safe(receipt.target)}",
         f"Policy: {receipt.policy_profile}",
         f"Status: {receipt.result.status}",
-        f"Reason: {receipt.reason}",
-        f"Summary: {receipt.result.summary}",
+        f"Reason: {_safe(receipt.reason)}",
+        f"Summary: {_safe(receipt.result.summary)}",
         f"Redacted: {receipt.redacted}",
     ]
 
@@ -100,7 +108,7 @@ def format_handoff_viewer(handoff: Handoff) -> list[str]:
         f"Project: {handoff.project_id}",
         f"Status: {handoff.status}",
         f"Agent: {handoff.agent}",
-        f"Summary: {handoff.summary}",
+        f"Summary: {_safe(handoff.summary)}",
         "",
         "Completed Actions",
         *_format_items(handoff.completed_actions),
@@ -149,7 +157,7 @@ def format_work_graph_explorer(export: WorkGraphExport) -> list[str]:
 
 def _format_node(node: WorkGraphNode) -> str:
     task = f" task={node.task_id}" if node.task_id else ""
-    return f"- {node.id} [{node.type}]{task}: {node.label}"
+    return f"- {node.id} [{node.type}]{task}: {_safe(node.label)}"
 
 
 def _format_edge(edge: WorkGraphEdge) -> str:
@@ -161,21 +169,21 @@ def _format_edge(edge: WorkGraphEdge) -> str:
 def _format_metadata(metadata: dict[str, object]) -> str:
     if not metadata:
         return ""
-    parts = [f"{key}={metadata[key]}" for key in sorted(metadata)]
+    parts = [f"{key}={_safe(str(metadata[key]))}" for key in sorted(metadata)]
     return "(" + ", ".join(parts) + ")"
 
 
 def _format_items(items: list[str]) -> list[str]:
     if not items:
         return ["- none"]
-    return [f"- {item}" for item in items]
+    return [f"- {_safe(item)}" for item in items]
 
 
 def _format_evidence(evidence: EvidenceReference) -> str:
     captured = evidence.captured_at.isoformat() if evidence.captured_at else "unknown"
     return (
         f"- {evidence.id} [{evidence.kind}] source={evidence.source} "
-        f"locator={evidence.locator} captured={captured}: {evidence.summary}"
+        f"locator={_safe(evidence.locator)} captured={captured}: {_safe(evidence.summary)}"
     )
 
 
@@ -184,11 +192,19 @@ def _format_assumption(assumption: Assumption) -> str:
     return (
         f"- {assumption.id} [{assumption.status}] task={assumption.task_id} "
         f"confidence={assumption.confidence:.2f} evidence={evidence}: "
-        f"{assumption.statement}"
+        f"{_safe(assumption.statement)}"
     )
 
 
 def _join_or_none(items: list[str]) -> str:
     if not items:
         return "none"
-    return ", ".join(items)
+    return ", ".join(_safe(item) for item in items)
+
+
+def _receipt_hmac_status(receipt: CapabilityReceipt | PluginReceipt) -> str:
+    return "verified" if getattr(receipt, "receipt_hmac", None) else "unverified"
+
+
+def _safe(value: str) -> str:
+    return sanitize_runtime_text(str(redact(value).value))

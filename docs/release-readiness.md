@@ -46,7 +46,7 @@ closure, and branch pruning before the next goal begins.
 <div><dt>Memory impact preview</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/695">#695</a> · <code>craik operator memory-impact</code> · previewed durable-memory effects</dd></div>
 <div><dt>Known traps view</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/696">#696</a> · <code>craik operator traps</code> · known traps and negative knowledge</dd></div>
 <div><dt>Run delta view</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/697">#697</a> · <code>craik operator run-delta</code> · recovery and continuity deltas</dd></div>
-<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/698">#698</a> · final 0.7.0 readiness record, changelog, and docs assessment</dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/698">#698</a> · final 0.7.0 readiness record, changelog, and docs assessment</dd></div>
 
 </div>
 
@@ -76,6 +76,24 @@ pruning. No known release blockers remain as of 2026-05-21.
 <div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.7.0 blocker is recorded after the goal workflow assessment.</dd></div>
 
 </div>
+
+### v0.7.0 Validation Commands
+
+Run the full release gate from a clean checkout before promoting
+`0.7.0` into release prep:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run ruff check
+uv run mypy src
+uv run python scripts/generate_cli_reference.py --check
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_release_readiness.py
+find src -name '*.py' -print0 | xargs -0 uv run python scripts/check_max_file_lines.py
+uv run pytest tests/test_cli_operator_auth.py tests/test_cli_operator_scoping.py tests/test_operator_view_sanitization.py tests/test_release_readiness_guards.py -q
+uv run pytest
+```
 
 ## v0.6.0 Goal Workflow
 

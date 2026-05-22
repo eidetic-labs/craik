@@ -144,6 +144,34 @@ authority is granted only through live plugin capability grants.
   documentation paths, HTTPS URLs, and localhost HTTP for development.
   Other URL schemes are rejected.
 
+## v0.7.0 Operator Experience Trust Model
+
+Craik treats the operator surface as a read-only inspection layer over
+local project state, not as a bypass around runtime authority or
+operator identity. Operator commands must prove the caller is bound to
+an active local operator session before reading persisted state.
+
+- Every `craik operator` command that reads local-store state requires
+  an active operator session. Missing sessions fail before project,
+  task, receipt, delegation, contradiction, quality, or continuity
+  records are returned.
+- Multi-project homes require an explicit `--project` scope for
+  unscoped list views. Single-project homes auto-scope to that project,
+  and empty homes preserve the existing empty-view behavior.
+- Contradiction and delegation queues default to records owned by the
+  active operator or unassigned records. `--all` is explicit operator
+  intent to inspect records owned by other operators.
+- Operator text and JSON views sanitize runtime text and apply the same
+  redaction boundary used by memory and receipt write paths before
+  rendering terminal output or machine-readable exports.
+- Receipt views surface local HMAC verification state. Verified plugin
+  receipts render as verified, unsigned legacy receipts render as
+  unverified, and locally tampered plugin receipts render as tampered
+  when raw inspection is possible.
+- The local store, session files, and receipt HMAC secrets remain local
+  trust anchors. Anyone with write access to Craik home can compromise
+  audit integrity, so OS account isolation remains required.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

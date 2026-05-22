@@ -9,7 +9,13 @@ from typing import Annotated
 import typer
 
 from craik.cli import operator_app
-from craik.cli_operator import _json_ready
+from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_operator_support import (
+    json_ready,
+    project_scope,
+    record_in_project,
+    task_ids_for_project,
+)
 from craik.contracts.models import RunDelta
 from craik.runtime.companions.operator_views import (
     KnownTrapsSnapshot,
@@ -36,18 +42,27 @@ def operator_traps(
     ] = False,
 ) -> None:
     """Print the read-only known traps and negative knowledge view."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
+        resolved_project_id = project_scope(store, project_id)
+        task_ids = task_ids_for_project(store, resolved_project_id)
         known_traps = store.list_known_traps()
         negative_knowledge = store.list_negative_knowledge()
     finally:
         store.close()
 
-    if project_id is not None:
-        known_traps = [item for item in known_traps if item.project_id == project_id]
+    if resolved_project_id is not None:
+        known_traps = [
+            item
+            for item in known_traps
+            if record_in_project(item, resolved_project_id, task_ids)
+        ]
         negative_knowledge = [
-            item for item in negative_knowledge if item.project_id == project_id
+            item
+            for item in negative_knowledge
+            if record_in_project(item, resolved_project_id, task_ids)
         ]
     if task_id is not None:
         known_traps = [item for item in known_traps if item.task_id == task_id]
@@ -60,7 +75,7 @@ def operator_traps(
     )
 
     if json_output:
-        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
+        typer.echo(json.dumps(json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_known_traps_view(snapshot)))
 
@@ -78,6 +93,7 @@ def operator_run_delta(
     ] = False,
 ) -> None:
     """Print the read-only run delta and recovery view."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -99,7 +115,7 @@ def operator_run_delta(
         store.close()
 
     if json_output:
-        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
+        typer.echo(json.dumps(json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_run_delta_view(snapshot)))
 

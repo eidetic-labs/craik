@@ -10,6 +10,8 @@ from craik.contracts.models import (
     ContextRequest,
     UnknownRecord,
 )
+from craik.runtime.policy.redaction import redact
+from craik.runtime.policy.text import sanitize_runtime_text
 
 
 @dataclass(frozen=True)
@@ -33,8 +35,8 @@ def format_knowledge_resolution_view(snapshot: KnowledgeResolutionSnapshot) -> l
             lines.extend(
                 [
                     f"- {debt.id} [{debt.status}/{debt.kind}] task={debt.task_id}",
-                    f"  Summary: {debt.summary}",
-                    f"  Next Action: {debt.next_action or 'none'}",
+                    f"  Summary: {_safe(debt.summary)}",
+                    f"  Next Action: {_safe(debt.next_action) if debt.next_action else 'none'}",
                     "  Resolution Receipt: "
                     f"{_format_resolution_receipt(debt.resolved_by_receipt_id, receipt_ids)}",
                 ]
@@ -48,9 +50,10 @@ def format_knowledge_resolution_view(snapshot: KnowledgeResolutionSnapshot) -> l
             lines.extend(
                 [
                     f"- {unknown.id} [{unknown.status}] task={unknown.task_id}",
-                    f"  Question: {unknown.question}",
-                    f"  Next Action: {unknown.next_action}",
-                    f"  Answer: {unknown.resolved_answer or 'none'}",
+                    f"  Question: {_safe(unknown.question)}",
+                    f"  Next Action: {_safe(unknown.next_action)}",
+                    "  Answer: "
+                    f"{_safe(unknown.resolved_answer) if unknown.resolved_answer else 'none'}",
                     "  Resolution Receipt: "
                     f"{_format_resolution_receipt(unknown.resolved_by_receipt_id, receipt_ids)}",
                 ]
@@ -64,8 +67,8 @@ def format_knowledge_resolution_view(snapshot: KnowledgeResolutionSnapshot) -> l
             lines.extend(
                 [
                     f"- {request.id} [{request.status}/{request.kind}] task={request.task_id}",
-                    f"  Question: {request.question}",
-                    f"  Needed For: {request.needed_for}",
+                    f"  Question: {_safe(request.question)}",
+                    f"  Needed For: {_safe(request.needed_for)}",
                     f"  Fulfilled By: {request.fulfilled_by or 'none'}",
                     "  Fulfillment Receipt: "
                     f"{_format_resolution_receipt(request.fulfilled_by_receipt_id, receipt_ids)}",
@@ -80,3 +83,7 @@ def _format_resolution_receipt(receipt_id: str | None, receipt_ids: set[str]) ->
     if receipt_id in receipt_ids:
         return f"{receipt_id} (verified)"
     return f"{receipt_id} (missing or tampered)"
+
+
+def _safe(value: str) -> str:
+    return sanitize_runtime_text(str(redact(value).value))
