@@ -68,6 +68,8 @@ within the `0.x.0` stability expectations described in
 - Dashboard operator-session mode now requires
   `X-Craik-Operator-Session` to match the active session token instead
   of accepting session-file presence alone.
+- Gateway service generation now writes an absolute `craik` executable
+  path into launchd, systemd, and Windows service-plan output.
 
 ## 0.10.0 — 2026-05-22
 
