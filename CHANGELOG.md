@@ -30,6 +30,11 @@ within the `0.x.0` stability expectations described in
   status, logs, doctor, stop, and restart, including launchd/systemd
   unit generation, Windows service-plan documentation, stale pid
   recovery, and log tailing.
+- v0.11.0 real channel adapter boundaries for WebChat, Telegram,
+  Discord, and Slack, including `craik channels` setup/doctor/fixture
+  commands, secret-reference plans, pairing and allowlist policy gates,
+  provider-specific inbound normalization, redacted outbound delivery
+  receipts, and channel security docs.
 
 ### Changed
 

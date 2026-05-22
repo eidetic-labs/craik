@@ -345,6 +345,58 @@ Show one persisted case file by case id or task id.
 craik case show [OPTIONS] CASE_OR_TASK_ID
 ```
 
+## `craik channels`
+
+Configure and inspect real channel adapters.
+
+```text
+craik channels COMMAND [ARGS]...
+```
+
+## `craik channels doctor`
+
+Show redacted channel adapter diagnostics.
+
+```text
+craik channels doctor [OPTIONS] SERVICE
+```
+
+## `craik channels list`
+
+List supported real channel adapters.
+
+```text
+craik channels list
+```
+
+## `craik channels normalize-fixture`
+
+Normalize a provider event fixture without contacting the provider.
+
+```text
+craik channels normalize-fixture [OPTIONS] SERVICE RAW_JSON
+```
+
+## `craik channels respond-fixture`
+
+Build a redacted outbound response fixture and delivery receipt.
+
+```text
+craik channels respond-fixture [OPTIONS] SERVICE EVENT_ID RESPONSE_ID SUMMARY
+```
+
+Options:
+
+- `--delivered, --failed`: default `true`
+
+## `craik channels setup`
+
+Show a redacted setup plan for a channel adapter.
+
+```text
+craik channels setup [OPTIONS] SERVICE
+```
+
 ## `craik chat`
 
 Launch the Craik agent shell or run one conversational prompt.

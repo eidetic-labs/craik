@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from craik import __version__
 from craik.cli_agents import agent_app
+from craik.cli_channels import channels_app
 from craik.cli_gateway import gateway_app
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
@@ -69,6 +70,7 @@ case_app = typer.Typer(help="Build and inspect Craik case files.")
 app.add_typer(case_app, name="case")
 connect_app = typer.Typer(help="Connect to external services.")
 app.add_typer(connect_app, name="connect")
+app.add_typer(channels_app, name="channels")
 demo_app = typer.Typer(help="Run built-in Craik demos.")
 app.add_typer(demo_app, name="demo")
 delegation_app = typer.Typer(help="Pause and resolve human delegation points.")
