@@ -30,6 +30,8 @@ within the `0.x.0` stability expectations described in
   task filtering and JSON output.
 - Read-only delegation queue through `craik operator delegations`,
   with task and status filters for human delegation points.
+- Read-only budget/quota view through `craik operator budget`, making
+  missing persisted cost, token, request, and quota data explicit.
 
 ## 0.6.0 — 2026-05-21
 

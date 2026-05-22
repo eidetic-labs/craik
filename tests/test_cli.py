@@ -460,6 +460,19 @@ def test_operator_delegations_cli_renders_queue(tmp_path: Path) -> None:
     assert "Owner: unassigned" in result.output
 
 
+def test_operator_budget_cli_renders_missing_data_boundary(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "budget"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Budget And Quota" in result.output
+    assert "- cost" in result.output
+    assert "Missing data is displayed explicitly" in result.output
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 

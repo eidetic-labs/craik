@@ -1,13 +1,13 @@
 # Budget and quota view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator display for configured limits, observed usage,
-missing data, exceeded limits, and notes.
+The read-only `craik operator budget` display for configured limits,
+observed usage, missing data, exceeded limits, and notes.
 
 </div>
 
@@ -43,6 +43,18 @@ can display that a limit was exceeded, but it does not enforce limits
 or mutate policy.
 
 </div>
+
+## Commands
+
+```bash
+craik operator budget
+craik operator budget --json
+```
+
+The v0.7.0 command exposes the formatter and makes missing persisted
+budget data explicit. It does not infer cost, token, request, or quota
+state from raw logs. `--json` returns the same snapshot shape used by
+the text view.
 
 ## What's next
 
