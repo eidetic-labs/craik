@@ -90,11 +90,14 @@ helpers — not an operational always-on service. See
 
 <div className="craik-keypoint">
 
-**Public binds require a policy envelope.**
+**Public binds require policy and explicit TLS acknowledgement.**
 
 Daemon mode requires a pid file. Public binds such as `0.0.0.0`
 require a policy envelope so externally reachable gateway behavior is
-never implicit.
+never implicit. The setup CLI also requires
+`--allow-insecure-public-gateway` for public binds because Craik does
+not terminate TLS itself; production deployments should place the
+gateway behind TLS termination or keep it on a private network.
 
 </div>
 

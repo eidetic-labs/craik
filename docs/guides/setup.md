@@ -87,13 +87,17 @@ setup or any time after:
 craik setup --enable-gateway --policy-envelope-id policy_gateway
 ```
 
-For a public bind, the gateway requires an explicit policy envelope —
-Craik refuses to expose itself to a non-loopback host without one:
+For a public bind, the gateway requires an explicit policy envelope and
+an explicit insecure-public override. Craik refuses to expose itself to a
+non-loopback host without a policy envelope, and it fails closed unless
+the operator acknowledges that TLS termination is being handled outside
+Craik:
 
 ```bash title="Public bind with explicit policy"
 craik setup \
   --gateway-bind-host 0.0.0.0 \
-  --policy-envelope-id policy_gateway
+  --policy-envelope-id policy_gateway \
+  --allow-insecure-public-gateway
 ```
 
 The setup output prints:

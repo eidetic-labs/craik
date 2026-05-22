@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -827,6 +828,45 @@ def test_setup_wizard_rejects_public_gateway_bind_without_policy(tmp_path) -> No
 
     assert result.exit_code != 0
     assert "public gateway bind requires policy_envelope_id" in result.output
+
+
+def test_setup_wizard_rejects_public_gateway_bind_without_tls_override(tmp_path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "setup",
+            "--gateway-bind-host",
+            "0.0.0.0",
+            "--policy-envelope-id",
+            "policy_gateway",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    output = click.unstyle(result.output)
+    assert "public gateway bind without TLS requires" in output
+    assert "--allow-insecure-public-gateway" in output
+
+
+def test_setup_wizard_public_gateway_override_outputs_warning(tmp_path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "setup",
+            "--gateway-bind-host",
+            "0.0.0.0",
+            "--policy-envelope-id",
+            "policy_gateway",
+            "--allow-insecure-public-gateway",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["gateway_config"]["bind_host"] == "0.0.0.0"
+    assert "without TLS termination" in payload["warnings"][0]
 
 
 def test_project_commands_round_trip_registered_repo(tmp_path) -> None:

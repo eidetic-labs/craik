@@ -1497,6 +1497,7 @@ Options:
 - `--gateway-bind-host`: Gateway bind host. Defaults to local only.; default `127.0.0.1`
 - `--gateway-port`: Gateway port.; default `8765`
 - `--policy-envelope-id`: Policy envelope for gateway authority.
+- `--allow-insecure-public-gateway`: Explicitly allow a public gateway bind without TLS termination.; default `false`
 
 ## `craik skills`
 
