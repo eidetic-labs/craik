@@ -321,6 +321,19 @@ def test_agent_prompt_persists_events_receipts_handoff_and_links(tmp_path: Path)
         assert {event.id for event in result.events}.issubset({event.id for event in events})
         assert result.events[1].run_id == result.run_result.run.id
         assert result.events[1].handoff_id == result.run_result.handoff.id
+        environment_receipts = [
+            receipt
+            for receipt in store.list_receipts()
+            if receipt.result.metadata.get("agent_session_id") == "agent_session_docs"
+        ]
+        environment_actions = {
+            receipt.result.metadata["environment_action"] for receipt in environment_receipts
+        }
+        assert environment_actions == {
+            "provider_action",
+            "sandbox_action",
+        }
+        assert all(receipt.id in stored.receipt_ids for receipt in environment_receipts)
     finally:
         store.close()
 
@@ -387,6 +400,45 @@ def test_agent_prompt_exit_stops_session_without_run(tmp_path: Path) -> None:
         assert result.run_result is None
         assert result.session.status == "stopped"
         assert result.events[0].event_type == "exited"
+    finally:
+        store.close()
+
+
+def test_agent_prompt_denies_side_effect_without_fixture_grant(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+    project_id = _seed_project(store, tmp_path)
+
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            project_id=project_id,
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            provider_id="provider_openai",
+        )
+
+        result = execute_agent_prompt(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            operator_issuer="https://issuer.example.test",
+            prompt="Run without a fixture side-effect grant.",
+            allow_fixture_action=False,
+        )
+        denied = [
+            receipt
+            for receipt in store.list_receipts()
+            if receipt.result.metadata.get("agent_session_id") == "agent_session_docs"
+            and receipt.result.metadata.get("environment_action") == "denial"
+        ]
+
+        assert result.run_result.run.status == "blocked"
+        assert denied
+        assert denied[0].result.status == "denied"
+        assert denied[0].capability == "shell.execute"
+        assert denied[0].id in result.session.receipt_ids
     finally:
         store.close()
 
