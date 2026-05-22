@@ -1,6 +1,6 @@
 # Run delta view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -24,6 +24,19 @@ inspect the working tree, refresh GitHub, query Stigmem, or decide
 whether a run can continue.
 
 </div>
+
+## Commands
+
+```bash
+craik operator run-delta DELTA_ID_OR_RUN_ID_OR_TASK_ID
+craik operator run-deltas DELTA_ID_OR_RUN_ID_OR_TASK_ID
+craik operator run-delta DELTA_ID_OR_RUN_ID_OR_TASK_ID --json
+```
+
+`craik operator run-delta` and `craik operator run-deltas` are
+read-only operator-surface aliases. They resolve a persisted run delta
+by delta ID first, then run ID, then task ID, and include linked
+recovery sessions in both terminal and JSON output.
 
 ## What it formats
 

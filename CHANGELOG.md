@@ -44,6 +44,9 @@ within the `0.x.0` stability expectations described in
 - Read-only known traps view through `craik operator traps`, exposing
   known traps and negative knowledge with project/task filters and
   timestamped JSON output.
+- Read-only run delta view through `craik operator run-delta` and
+  `craik operator run-deltas`, resolving delta, run, or task IDs and
+  showing linked recovery sessions.
 
 ## 0.6.0 — 2026-05-21
 

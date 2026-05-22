@@ -403,7 +403,7 @@ reading raw logs.
 <div><h4>Quality gate view</h4><p>Ready in PR · <code>craik operator quality</code> summarizes handoff, evidence, critic, and red-team signals.</p></div>
 <div><h4>Memory impact preview</h4><p>Ready in PR · <code>craik operator memory-impact</code> inspects previewed durable-memory effects.</p></div>
 <div><h4>Known traps view</h4><p>Ready in PR · <code>craik operator traps</code> renders known traps and negative knowledge with project and task filters.</p></div>
-<div><h4>Run delta view</h4></div>
+<div><h4>Run delta view</h4><p>Ready in PR · <code>craik operator run-delta</code> inspects persisted recovery and continuity deltas.</p></div>
 
 </div>
 
