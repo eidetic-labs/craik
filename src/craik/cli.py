@@ -251,6 +251,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_plugins",
         "craik.cli_references",
         "craik.cli_operator",
+        "craik.cli_operator_continuity",
         "craik.cli_tasks",
     ):
         import_module(module_name)

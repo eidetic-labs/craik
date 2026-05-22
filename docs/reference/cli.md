@@ -913,6 +913,30 @@ Options:
 
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator run-delta`
+
+Print the read-only run delta and recovery view.
+
+```text
+craik operator run-delta [OPTIONS] DELTA_ID_OR_RUN_ID_OR_TASK_ID
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
+## `craik operator run-deltas`
+
+Print the read-only run delta and recovery view.
+
+```text
+craik operator run-deltas [OPTIONS] DELTA_ID_OR_RUN_ID_OR_TASK_ID
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator traps`
 
 Print the read-only known traps and negative knowledge view.

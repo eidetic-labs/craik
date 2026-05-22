@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields, is_dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any, cast
 
 import typer
@@ -14,7 +14,6 @@ from craik.contracts.models import ContradictionStatus
 from craik.runtime.companions.operator_views import (
     BudgetQuotaSnapshot,
     InstructionDistillationSnapshot,
-    KnownTrapsSnapshot,
     MemoryImpactPreviewSnapshot,
     OperatorSurfaceSnapshot,
     QualityGateSnapshot,
@@ -25,7 +24,6 @@ from craik.runtime.companions.operator_views import (
     format_evidence_assumption_view,
     format_handoff_viewer,
     format_instruction_distillation_view,
-    format_known_traps_view,
     format_memory_impact_preview_view,
     format_operator_surface_overview,
     format_quality_gate_view,
@@ -374,51 +372,6 @@ def operator_memory_impact(
         typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_memory_impact_preview_view(snapshot)))
-
-
-@operator_app.command("traps")
-def operator_traps(
-    project_id: Annotated[
-        str | None,
-        typer.Option("--project", help="Only include records in this project scope."),
-    ] = None,
-    task_id: Annotated[
-        str | None,
-        typer.Option("--task-id", help="Only include records for this task."),
-    ] = None,
-    json_output: Annotated[
-        bool,
-        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
-    ] = False,
-) -> None:
-    """Print the read-only known traps and negative knowledge view."""
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        known_traps = store.list_known_traps()
-        negative_knowledge = store.list_negative_knowledge()
-    finally:
-        store.close()
-
-    if project_id is not None:
-        known_traps = [item for item in known_traps if item.project_id == project_id]
-        negative_knowledge = [
-            item for item in negative_knowledge if item.project_id == project_id
-        ]
-    if task_id is not None:
-        known_traps = [item for item in known_traps if item.task_id == task_id]
-        negative_knowledge = [item for item in negative_knowledge if item.task_id == task_id]
-
-    snapshot = KnownTrapsSnapshot(
-        known_traps=known_traps,
-        negative_knowledge=negative_knowledge,
-        now=datetime.now(UTC),
-    )
-
-    if json_output:
-        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
-    else:
-        typer.echo("\n".join(format_known_traps_view(snapshot)))
 
 
 def _require_section(
