@@ -86,8 +86,8 @@ fixtures — useful, but **not yet operational workflows**.
 
 <div>
 <dt>Gateway / channels</dt>
-<dt><span className="craik-fields__type">contracts only</span></dt>
-<dd>Gateway, webhook, messaging, channel, and scheduled-automation surfaces ship contracts and helpers. No production daemon or dispatch loop yet.</dd>
+<dt><span className="craik-fields__type">local-first</span></dt>
+<dd>v0.8.0 ships a foreground gateway daemon with a local health endpoint, persisted runtime state, webhook validation, messaging fixtures, channel policy contracts, scheduled automations, and gateway receipts. Hosted deployment, broad third-party adapters, scheduler supervision, and production dispatch loops remain future work.</dd>
 </div>
 
 <div>
@@ -155,7 +155,7 @@ Scheduled milestones with explicit version targets.
 <div>
 <dt>Always-on gateway daemon</dt>
 <dt><span className="craik-fields__type">v0.8.0</span></dt>
-<dd>Channels and webhook contracts ship in MVP; live daemon waits.</dd>
+<dd>The foreground daemon, health check, pid-file lock, setup, diagnostics, webhook validation, and persisted gateway artifacts ship in v0.8.0. Hosted public operation, broad channel adapters, and production dispatch loops wait.</dd>
 </div>
 
 <div>

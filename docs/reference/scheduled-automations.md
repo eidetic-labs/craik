@@ -91,7 +91,7 @@ Receipts use `gateway.schedule.execute` and stay redacted.
 <a href="../gateway-daemon/">
 <strong>Reference</strong>
 <span>Gateway daemon</span>
-<small>The (post-MVP) daemon that would drive automations.</small>
+<small>The foreground local daemon and its current dispatch boundary.</small>
 </a>
 
 <a href="../gateway-receipts/">

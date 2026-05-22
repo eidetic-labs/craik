@@ -1057,9 +1057,8 @@ as complete.
 <h4 className="craik-adr-card__title">Post-MVP scope</h4>
 <p className="craik-adr-card__decision">
 The 0.x MVP is not a 1.0 compatibility promise. Scope explicitly
-excludes gateway daemon, operator dashboards, additional live runners,
-multi-agent orchestration, marketplace workflows, and visual companion
-surfaces.
+excludes hosted gateway dispatch, operator dashboards, additional live
+runners, marketplace workflows, and visual companion surfaces.
 </p>
 <span className="craik-adr-card__cta">Reference</span>
 </a>

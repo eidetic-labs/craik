@@ -1,16 +1,99 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-21</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.7.0`; historical sign-offs remain below for
+pre-release gate is `0.8.0`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.8.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Operator integrations and always-on gateway gate.**
+
+`0.8.0` ships a foreground gateway daemon, setup/diagnostics/update
+operator commands, channel contracts, messaging fixture ingress,
+identity pairing, allowlists, channel policy envelopes, webhook
+validation, scheduled automations, and gateway receipts. Each
+remediation issue shipped implementation, tests, docs, validation, a
+green PR, merge, issue closure, and branch pruning before release prep.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Runnable gateway daemon and runtime state</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/713">#713</a> · <code>craik gateway start</code>, pid-file lock, <code>/health</code>, and persisted lifecycle transitions</dd></div>
+<div><dt>Gateway/channel contract persistence</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/723">#723</a> · typed local-store helpers for adapter contracts, pairings, allowlists, schedules, automations, policies, and gateway receipts</dd></div>
+<div><dt>Webhook hardening</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/715">#715</a> · body cap, JSON depth cap, timestamp freshness, normalized signature headers, and persistent replay detection</dd></div>
+<div><dt>Operator auth for diagnostics/reconfiguration</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/719">#719</a> · active operator session required before reading local diagnostics or reconfiguring an existing setup</dd></div>
+<div><dt>Schedule throttle</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/718">#718</a> · cron-like schedules reject runs more frequent than every five minutes</dd></div>
+<div><dt>Pairing token expiry</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/721">#721</a> · channel identity pairings require and enforce expiry</dd></div>
+<div><dt>Public-bind TLS warning and override</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/722">#722</a> · public gateway binds require policy plus explicit insecure-public acknowledgement</dd></div>
+<div><dt>Release-readiness structural guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/720">#720</a> · writer and operator-auth guard coverage widened for v0.8.0 surfaces</dd></div>
+<div><dt>End-to-end gateway pipeline test</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/717">#717</a> · integrated daemon, webhook, channel policy, receipt, schedule, and store coverage</dd></div>
+<div><dt>Readiness, security, and changelog reconciliation</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/714">#714</a> · docs now reflect shipped behavior and residual limitations</dd></div>
+<div><dt>Release prep</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/716">#716</a> · version bump, final changelog section, tag, publish, and verification remain the final gate</dd></div>
+
+</div>
+
+## v0.8.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Status: ready for release prep after docs reconciliation lands.**
+
+All implementation remediation goals are closed. The shipped daemon is
+a foreground local service with health checks and persisted lifecycle
+state; hosted public operation, production dispatch loops, and broad
+third-party channel adapters remain future surfaces.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Gate</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Evidence</dd>
+</div>
+
+<div><dt>Implementation</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Gateway setup, diagnostics, foreground daemon, webhook validation, messaging fixture ingress, identity pairing, allowlists, policy envelopes, schedules, automations, and gateway receipts are implemented and persisted.</dd></div>
+<div><dt>Tests</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Focused unit coverage exists for each surface plus <code>tests/test_v0_8_0_gateway_pipeline_e2e.py</code> for the integrated flow.</dd></div>
+<div><dt>Security</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Webhook payload limits, timestamp/replay checks, operator session gates, pairing expiry, schedule throttling, and public-bind policy/TLS acknowledgement are covered.</dd></div>
+<div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.8.0 implementation blocker remains. Tagging is gated on #716 release-prep validation.</dd></div>
+
+</div>
+
+### v0.8.0 Validation Commands
+
+Run the full release gate from a clean checkout before promoting
+`0.8.0` into release prep:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run ruff check
+uv run mypy
+uv run python scripts/generate_cli_reference.py --check
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_changed_file_strictness.py
+uv run pytest tests/test_v0_8_0_gateway_pipeline_e2e.py tests/test_gateway.py tests/test_webhook_ingress.py tests/test_channel_identity.py tests/test_channel_allowlist.py tests/test_channel_policy.py tests/test_scheduled_automations.py tests/test_schedules.py tests/test_gateway_receipts.py tests/test_store.py -q
+uv run pytest
+```
 
 ## v0.7.0 Goal Workflow
 

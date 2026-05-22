@@ -79,9 +79,10 @@ exchange, approval-gated first use — lives in
 
 ## Enable the gateway
 
-Craik ships a gateway daemon mode for serving Slack, webhook, scheduled,
-and webhook-style ingress under one governed boundary. Wire it in during
-setup or any time after:
+Craik ships a foreground gateway daemon mode for local health checks,
+webhook validation, scheduled automation helpers, and fixture messaging
+ingress under one governed boundary. Wire it in during setup or any
+time after:
 
 ```bash title="Persist the gateway config with a policy envelope"
 craik setup --enable-gateway --policy-envelope-id policy_gateway
