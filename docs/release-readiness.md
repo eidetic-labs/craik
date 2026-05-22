@@ -16,13 +16,14 @@ audit continuity.
 
 <div className="craik-keypoint">
 
-**Product surfaces and channel operations are in progress.**
+**Product surfaces and channel operations are ready for release prep.**
 
 `0.11.0` moves Craik beyond command-only operation with a terminal UI,
 authenticated dashboard, desktop companion, service-managed gateway,
 real channel adapters, approval UX, diagnostics/update workflows, and
 multimodal companion contracts. Each goal lands through its own issue
-and PR before release prep.
+and PR before release prep; all v0.11.0 implementation goal issues are
+closed.
 
 </div>
 
@@ -35,14 +36,14 @@ and PR before release prep.
 </div>
 
 <div><dt>Release signing-key asset rules</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/787">#787</a> · signed annotated tag rules, GitHub Release public signing-key asset, and fingerprint verification gate</dd></div>
-<div><dt>Terminal UI</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/788">#788</a> · <code>craik --tui</code>, <code>craik tui</code>, shared slash commands, multiline composer, status/model/session/approval/artifact/gateway/skill panels, autocomplete metadata, redacted approval modal fixture, tests, and guide docs</dd></div>
-<div><dt>Authenticated local dashboard</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/789">#789</a> · <code>craik dashboard</code>, local-only default bind, token or active operator-session auth, status/provider/session/run/handoff/receipt/approval/gateway/skill/model pages, shared slash-command action route, route tests, and security docs</dd></div>
-<div><dt>Desktop companion MVP</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/790">#790</a> · <code>craik desktop</code> status, menu, action, approval notification, and update-check surfaces for local dashboard launch, gateway command actions, provider/auth health, doctor, and redacted notification deep links</dd></div>
-<div><dt>Gateway service lifecycle</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/791">#791</a> · <code>craik gateway install</code>, <code>uninstall</code>, <code>status</code>, <code>logs</code>, <code>doctor</code>, <code>stop</code>, and <code>restart</code> with launchd/systemd generation, Windows plan, stale pid recovery, and log discovery</dd></div>
-<div><dt>Real channel adapters</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/792">#792</a> · WebChat, Telegram, Discord, and Slack adapter contracts, setup and doctor commands, secret-reference plans, inbound normalization, pairing/allowlist policy gates, redacted outbound delivery receipts, and channel security docs</dd></div>
-<div><dt>Approval UX</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/793">#793</a> · <code>/approvals</code>, <code>craik approvals list</code>, <code>show</code>, <code>approve</code>, and <code>deny</code>, dashboard queue payloads, TUI approval modal/counts, desktop notifications, decision receipts, retry-path linkage, and lifecycle tests</dd></div>
-<div><dt>Doctor, fix, and update</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/794">#794</a> · <code>craik doctor</code>, <code>craik doctor --fix</code>, <code>craik update --check</code>, expanded operator/provider/model/gateway/channel/security diagnostics, explicit dry-run fix plans, unsafe fix confirmation, JSON output, and fixture tests</dd></div>
-<div><dt>Multimodal and companion contracts</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/795">#795</a> · voice posture, speech-to-text and text-to-speech adapter contracts, multimodal artifact references, mobile/desktop/visual companion decisions, work-graph visual bridge, accessibility requirements, transcript/media metadata redaction, and fixture tests</dd></div>
+<div><dt>Terminal UI</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/788">#788</a> · <code>craik --tui</code>, <code>craik tui</code>, shared slash commands, multiline composer, status/model/session/approval/artifact/gateway/skill panels, autocomplete metadata, redacted approval modal fixture, tests, and guide docs</dd></div>
+<div><dt>Authenticated local dashboard</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/789">#789</a> · <code>craik dashboard</code>, local-only default bind, token or active operator-session auth, status/provider/session/run/handoff/receipt/approval/gateway/skill/model pages, shared slash-command action route, route tests, and security docs</dd></div>
+<div><dt>Desktop companion MVP</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/790">#790</a> · <code>craik desktop</code> status, menu, action, approval notification, and update-check surfaces for local dashboard launch, gateway command actions, provider/auth health, doctor, and redacted notification deep links</dd></div>
+<div><dt>Gateway service lifecycle</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/791">#791</a> · <code>craik gateway install</code>, <code>uninstall</code>, <code>status</code>, <code>logs</code>, <code>doctor</code>, <code>stop</code>, and <code>restart</code> with launchd/systemd generation, Windows plan, stale pid recovery, and log discovery</dd></div>
+<div><dt>Real channel adapters</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/792">#792</a> · WebChat, Telegram, Discord, and Slack adapter contracts, setup and doctor commands, secret-reference plans, inbound normalization, pairing/allowlist policy gates, redacted outbound delivery receipts, and channel security docs</dd></div>
+<div><dt>Approval UX</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/793">#793</a> · <code>/approvals</code>, <code>craik approvals list</code>, <code>show</code>, <code>approve</code>, and <code>deny</code>, dashboard queue payloads, TUI approval modal/counts, desktop notifications, decision receipts, retry-path linkage, and lifecycle tests</dd></div>
+<div><dt>Doctor, fix, and update</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/794">#794</a> · <code>craik doctor</code>, <code>craik doctor --fix</code>, <code>craik update --check</code>, expanded operator/provider/model/gateway/channel/security diagnostics, explicit dry-run fix plans, unsafe fix confirmation, JSON output, and fixture tests</dd></div>
+<div><dt>Multimodal and companion contracts</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/795">#795</a> · voice posture, speech-to-text and text-to-speech adapter contracts, multimodal artifact references, mobile/desktop/visual companion decisions, work-graph visual bridge, accessibility requirements, transcript/media metadata redaction, and fixture tests</dd></div>
 
 </div>
 
