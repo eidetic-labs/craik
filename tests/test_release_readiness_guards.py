@@ -134,7 +134,8 @@ def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> N
             "from real agent commands"
         ),
         ("src/craik/cli_demos.py", "demo_stigmem_docs"): (
-            "onboarding demo uses fixture-local state before an operator session exists"
+            "onboarding demo uses fixture-local state before an operator session exists; "
+            "CRAIK_LIVE=1 provider transport is separately operator-session gated"
         ),
         ("src/craik/cli_onboarding.py", "onboard"): (
             "first-run bootstrap command that may execute before operator login is configured"

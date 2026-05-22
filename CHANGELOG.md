@@ -10,6 +10,49 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.9.0 — 2026-05-22
+
+### Added
+
+- v0.9.0 persistent agent session contracts, lifecycle CLI, and
+  provider-backed prompt execution for foreground Craik agent runs.
+- Guided provider authentication setup for OpenAI, Anthropic, Gemini,
+  and local model providers.
+- Gemini runtime transport support and provider metadata coverage.
+- Local model routing presets for Ollama, LM Studio, vLLM, and generic
+  OpenAI-compatible endpoints.
+- Provider certification matrix for hosted, local, and fixture-backed
+  runtime routes.
+- Persistent agent failure recovery for stale process state, auth
+  expiry, provider errors, sandbox denials, reconnects, and resumes.
+- Deterministic persistent-agent launch demo covering launch, prompt,
+  receipts, handoff links, and status inspection.
+- Persistent-agent security, execution-environment security, provider
+  routing, local model setup, and lifecycle documentation.
+
+### Changed
+
+- Expanded the v0.9.0 roadmap scope to include persistent agent launch
+  UX, OpenAI/Anthropic/Gemini/local provider authentication, runtime
+  routing, MCP direction, sandbox backends, browser/tool boundaries,
+  and environment capability receipts.
+- Release-readiness validation now records the v0.9.0 goal workflow,
+  milestone provenance, and auth coverage remediation before release
+  prep.
+
+### Security
+
+- Persistent agent session state now carries HMAC integrity protection,
+  with legacy unsigned rows preserved as explicit `unverified` records.
+- Stateful CLI auth coverage checks now scan all `cli_*.py` modules and
+  pin documented exemptions for bootstrap, demo, and CI policy-test
+  flows.
+- Persistent agent demos and live documentation-demo paths now require
+  an operator session before using live provider transports.
+- Local model provider configuration now reports plaintext HTTP
+  endpoint warnings at provider write and health-check paths, not only
+  during guided setup.
+
 ## 0.8.0 — 2026-05-22
 
 ### Added

@@ -95,7 +95,7 @@ uv run python scripts/check_doc_links.py
 uv run python scripts/check_public_docs_hygiene.py
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_changed_file_strictness.py
-uv run pytest tests/test_provider_setup.py tests/test_provider_gemini.py tests/test_local_model_presets.py tests/test_agent_sessions.py tests/test_provider_certification.py tests/test_cli_agents.py tests/test_cli_operator_auth.py tests/test_release_readiness_guards.py tests/test_agent_demo.py tests/test_environment_receipts.py tests/test_sandbox_policy_boundaries.py -q
+uv run pytest tests/test_provider_cli.py tests/test_provider_runtime.py tests/test_local_model_presets.py tests/test_agent_sessions.py tests/test_agent_session_integrity.py tests/test_provider_certification.py tests/test_cli_agents.py tests/test_cli_operator_auth.py tests/test_release_readiness_guards.py tests/test_demos.py tests/test_environment_receipts.py tests/test_sandbox_policy_boundaries.py -q
 uv run pytest
 ```
 
