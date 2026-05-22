@@ -743,6 +743,23 @@ def test_runners_matrix_filters_one_runner() -> None:
     assert payload["trust"]["default_grant_posture"] == "prompt-for-approval"
 
 
+def test_provider_certification_command_filters_provider_matrix() -> None:
+    result = runner.invoke(
+        app,
+        ["provider", "certification", "--provider-id", "provider_gemini"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "craik.provider_certification_matrix"
+    assert [row["provider_id"] for row in payload["rows"]] == ["provider_gemini"]
+    row = payload["rows"][0]
+    assert row["certification_status"] == "certified"
+    assert row["auth"] == "supported"
+    assert row["structured_output"] == "supported"
+    assert row["receipts"] == "supported"
+
+
 def test_home_show_does_not_create_home(tmp_path) -> None:
     home = tmp_path / "craik-home"
 

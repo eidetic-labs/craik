@@ -1,0 +1,32 @@
+{
+  "required_provider_ids": [
+    "provider_openai",
+    "provider_anthropic",
+    "provider_gemini",
+    "provider_local_openai_compatible",
+    "provider_local_ollama",
+    "provider_local_lm_studio",
+    "provider_local_vllm"
+  ],
+  "hosted_capabilities": {
+    "auth": "supported",
+    "streaming": "supported",
+    "tools": "supported",
+    "structured_output": "supported",
+    "receipts": "supported",
+    "budgets": "supported",
+    "retry_behavior": "supported"
+  },
+  "fixture_provider": {
+    "provider_id": "provider_fixture_local",
+    "certification_status": "fixture_only",
+    "live_behavior": "fixture_by_default",
+    "sandbox_compatibility": ["fixture"]
+  },
+  "local_provider": {
+    "certification_status": "certified",
+    "trust_boundary": "local",
+    "live_behavior": "operator_local_endpoint_required",
+    "sandbox_compatibility": ["local_process"]
+  }
+}

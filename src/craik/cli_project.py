@@ -52,6 +52,7 @@ for _module_name in (
     "craik.cli_connect",
     "craik.cli_demos",
     "craik.cli_onboarding",
+    "craik.cli_provider_certification",
     "craik.cli_provider_local",
 ):
     import_module(_module_name)

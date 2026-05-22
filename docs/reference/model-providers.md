@@ -93,6 +93,15 @@ execution authority by itself.
 
 </div>
 
+Use the provider commands to inspect configuration and certification
+without exposing secret values:
+
+```sh
+craik provider list
+craik provider show provider_openai
+craik provider certification --provider-id provider_openai
+```
+
 Built-in providers:
 
 <div className="craik-fields">
@@ -141,6 +150,46 @@ and runtime adapter paths under
 `craik.runtime.providers.provider_runtime`. Default model metadata is
 non-secret and may be overridden by named configuration references
 before live use.
+
+## Provider config reference
+
+Provider configuration is reference-only. The registry names the values
+an operator or deployment must provide, but it does not store those
+values:
+
+<div className="craik-fields">
+
+<div>
+<dt>Config surface</dt>
+<dt><span className="craik-fields__type">Examples</span></dt>
+<dd>Use</dd>
+</div>
+
+<div>
+<dt>Hosted model</dt>
+<dt><span className="craik-fields__type"><code>CRAIK_OPENAI_MODEL</code> · <code>CRAIK_ANTHROPIC_MODEL</code> · <code>CRAIK_GEMINI_MODEL</code></span></dt>
+<dd>Override the non-secret default model metadata before live use.</dd>
+</div>
+
+<div>
+<dt>Hosted base URL</dt>
+<dt><span className="craik-fields__type"><code>CRAIK_OPENAI_BASE_URL</code> · <code>CRAIK_ANTHROPIC_BASE_URL</code> · <code>CRAIK_GEMINI_BASE_URL</code></span></dt>
+<dd>Override provider API endpoints. Unsafe local URLs are rejected unless the provider explicitly allows local endpoints.</dd>
+</div>
+
+<div>
+<dt>Secret reference</dt>
+<dt><span className="craik-fields__type"><code>CRAIK_OPENAI_API_KEY</code> · <code>CRAIK_ANTHROPIC_API_KEY</code> · <code>CRAIK_GEMINI_API_KEY</code></span></dt>
+<dd>Names an external secret handle. The provider record never stores the raw key.</dd>
+</div>
+
+<div>
+<dt>Local endpoint</dt>
+<dt><span className="craik-fields__type"><code>LOCAL_OPENAI_COMPATIBLE_BASE_URL</code></span></dt>
+<dd>Loopback OpenAI-compatible endpoint for local presets such as Ollama, LM Studio, and vLLM.</dd>
+</div>
+
+</div>
 
 ## Provider runtime
 
