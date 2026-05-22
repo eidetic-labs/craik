@@ -53,10 +53,18 @@ def test_speech_to_text_result_redacts_audio_payloads_and_private_metadata() -> 
             }
         ),
         transcript=_transcript(
+            text="operator said token=redactionfixture123",
             metadata={
                 "private_transcript_metadata": {"speaker": "private"},
                 "confidence_model": "fixture",
-            }
+            },
+            segments=[
+                SpeechToTextTranscriptSegment(
+                    text="segment token=redactionfixture123",
+                    start_ms=0,
+                    end_ms=1200,
+                )
+            ],
         ),
         policy_envelope_id="policy_voice",
         evidence_ids=["evidence_audio_reference"],
@@ -68,6 +76,8 @@ def test_speech_to_text_result_redacts_audio_payloads_and_private_metadata() -> 
     assert result.input.metadata["api_token"] == "[REDACTED]"
     assert result.input.metadata["source"] == "operator upload"
     assert result.transcript is not None
+    assert result.transcript.text == "operator said token=[REDACTED]"
+    assert result.transcript.segments[0].text == "segment token=[REDACTED]"
     assert result.transcript.metadata["private_transcript_metadata"] == "[REDACTED]"
     assert result.transcript.metadata["confidence_model"] == "fixture"
     assert result.redacted_paths

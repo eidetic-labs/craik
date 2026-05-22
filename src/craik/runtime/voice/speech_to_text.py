@@ -112,7 +112,11 @@ def speech_to_text_result(
     safe_transcript = None
     if transcript is not None:
         safe_transcript = transcript.model_copy(
-            update={"metadata": _safe_metadata(transcript.metadata, redacted_paths)}
+            update={
+                "text": str(_safe_value(transcript.text, redacted_paths)),
+                "segments": _safe_segments(transcript.segments, redacted_paths),
+                "metadata": _safe_metadata(transcript.metadata, redacted_paths),
+            }
         )
     safe_errors = [str(_safe_value(error, redacted_paths)) for error in errors or []]
 
@@ -137,6 +141,16 @@ def _safe_metadata(metadata: dict[str, Any], redacted_paths: list[str]) -> dict[
     if isinstance(safe, dict):
         return safe
     return {}
+
+
+def _safe_segments(
+    segments: list[SpeechToTextTranscriptSegment],
+    redacted_paths: list[str],
+) -> list[SpeechToTextTranscriptSegment]:
+    return [
+        segment.model_copy(update={"text": str(_safe_value(segment.text, redacted_paths))})
+        for segment in segments
+    ]
 
 
 def _safe_value(value: Any, redacted_paths: list[str]) -> Any:

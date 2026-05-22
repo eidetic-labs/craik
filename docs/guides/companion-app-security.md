@@ -1,6 +1,6 @@
 # Companion app security
 
-<p className="craik-meta"><span>4 min read</span><span>For integrators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For integrators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 

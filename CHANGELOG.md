@@ -43,6 +43,10 @@ within the `0.x.0` stability expectations described in
   `craik doctor --fix`, explicit safe/unsafe fix planning, expanded
   operator/provider/model/gateway/channel/security posture checks,
   and `craik update --check` automation output.
+- v0.11.0 multimodal and companion contracts for voice posture,
+  speech-to-text, text-to-speech, multimodal artifact references,
+  mobile/desktop/visual companion decisions, accessibility evidence,
+  and transcript/media metadata redaction.
 
 ### Changed
 
