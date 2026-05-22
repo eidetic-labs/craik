@@ -32,6 +32,19 @@ STATIC_REQUIRED_TERMS = {
     ],
 }
 
+STORE_WRITER_EXEMPTIONS = {
+    "src/craik/runtime/store/memory.py": {
+        "put_assumption": (
+            "legacy direct-store API; assumptions are persisted through fixtures/tests"
+        ),
+    },
+    "src/craik/runtime/store/work.py": {
+        "put_capability_grant": (
+            "legacy direct-store API; grant orchestration is still runtime-facing"
+        ),
+    },
+}
+
 
 def main() -> int:
     version = _project_version()
@@ -70,35 +83,46 @@ def _project_version() -> str:
 
 
 def _extension_writer_call_failures() -> list[str]:
-    extension_path = ROOT / "src/craik/runtime/store/extensions.py"
-    if not extension_path.exists():
+    store_dir = ROOT / "src/craik/runtime/store"
+    if not store_dir.exists():
         return []
-    writer_names = sorted(
-        {
-            line.strip().split("(", 1)[0].removeprefix("def ")
-            for line in extension_path.read_text(encoding="utf-8").splitlines()
-            if line.strip().startswith("def put_")
-        }
+    store_paths = sorted(
+        path
+        for path in store_dir.glob("*.py")
+        if path.name not in {"__init__.py", "base.py"}
     )
     production_files = [
         path
         for path in (ROOT / "src").rglob("*.py")
-        if path != extension_path and "__pycache__" not in path.parts
+        if path not in store_paths and "__pycache__" not in path.parts
     ]
     failures: list[str] = []
-    for writer_name in writer_names:
-        needle = f".{writer_name}("
-        if not any(needle in path.read_text(encoding="utf-8") for path in production_files):
-            failures.append(
-                f"src/craik/runtime/store/extensions.py: {writer_name} has no production caller"
-            )
+    for store_path in store_paths:
+        relative_path = store_path.relative_to(ROOT).as_posix()
+        writer_names = _store_writer_names(store_path)
+        for writer_name in writer_names:
+            if writer_name in STORE_WRITER_EXEMPTIONS.get(relative_path, {}):
+                continue
+            needle = f".{writer_name}("
+            if not any(needle in path.read_text(encoding="utf-8") for path in production_files):
+                failures.append(f"{relative_path}: {writer_name} has no production caller")
     return failures
+
+
+def _store_writer_names(path: Path) -> list[str]:
+    return sorted(
+        {
+            line.strip().split("(", 1)[0].removeprefix("def ")
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip().startswith("def put_")
+        }
+    )
 
 
 def _cli_auth_coverage_failures() -> list[str]:
     """Fail when an operator CLI command reads local state without auth."""
     failures: list[str] = []
-    for path in sorted((ROOT / "src/craik").glob("cli_operator*.py")):
+    for path in _cli_command_paths():
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in (item for item in tree.body if isinstance(item, ast.FunctionDef)):
             if not _has_command_decorator(node):
@@ -111,6 +135,16 @@ def _cli_auth_coverage_failures() -> list[str]:
                     "without operator_identity_or_fail()"
                 )
     return failures
+
+
+def _cli_command_paths() -> list[Path]:
+    return sorted(
+        {
+            path
+            for pattern in ("cli.py", "cli_operator*.py")
+            for path in (ROOT / "src/craik").glob(pattern)
+        }
+    )
 
 
 def _has_command_decorator(node: ast.FunctionDef) -> bool:

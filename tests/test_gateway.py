@@ -8,6 +8,7 @@ from craik.runtime.gateway import (
     DEFAULT_GATEWAY_CONFIG_ID,
     DEFAULT_GATEWAY_STATE_ID,
     default_gateway_config,
+    gateway_configured_state,
     gateway_failed_state,
     gateway_running_state,
     gateway_stopped_state,
@@ -60,6 +61,18 @@ def test_gateway_lifecycle_states_preserve_policy_and_receipts() -> None:
     assert failed.status == "failed"
     assert failed.pid is None
     assert "health check failed" in failed.supervision_notes
+
+
+def test_gateway_configured_state_records_stopped_lifecycle() -> None:
+    config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+
+    state = gateway_configured_state(config, configured_at=NOW)
+
+    assert state.id == DEFAULT_GATEWAY_STATE_ID
+    assert state.config_id == DEFAULT_GATEWAY_CONFIG_ID
+    assert state.status == "stopped"
+    assert state.stopped_at == NOW
+    assert "configured" in state.supervision_notes[0]
 
 
 def test_gateway_contracts_round_trip_through_local_store(tmp_path) -> None:
