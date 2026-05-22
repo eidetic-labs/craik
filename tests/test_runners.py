@@ -76,7 +76,10 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
         "provider_anthropic",
         "provider_anthropic_messages",
         "provider_gemini",
+        "provider_local_lm_studio",
+        "provider_local_ollama",
         "provider_local_openai_compatible",
+        "provider_local_vllm",
         "provider_openai",
         "provider_openai_chat",
         "provider_openai_responses",
@@ -91,6 +94,9 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
     assert (
         matrices["provider_local_openai_compatible"].runner.metadata["provider_family"]
         == "chat_completions"
+    )
+    assert matrices["provider_local_ollama"].runner.metadata["provider_family"] == (
+        "chat_completions"
     )
 
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from craik.contracts.models import ModelProvider
+from craik.runtime.local_models import provider_for_local_model_preset
 from craik.runtime.providers.provider_runtime import (
     ANTHROPIC_OFFICIAL_DOCS,
     GEMINI_OFFICIAL_DOCS,
@@ -308,6 +309,9 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                     "created_at": datetime.now(UTC),
                 }
             ),
+            provider_for_local_model_preset("ollama"),
+            provider_for_local_model_preset("lm-studio"),
+            provider_for_local_model_preset("vllm"),
         ]
     )
 

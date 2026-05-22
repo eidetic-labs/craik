@@ -1282,6 +1282,27 @@ Print registered model providers as JSON.
 craik provider list
 ```
 
+## `craik provider local-health`
+
+Check a local OpenAI-compatible endpoint without loading provider credentials.
+
+```text
+craik provider local-health [OPTIONS] PRESET_ID
+```
+
+Options:
+
+- `--base-url`: Override the preset base URL for this check.
+- `--timeout-seconds`: Local endpoint health check timeout.; default `2.0`
+
+## `craik provider local-presets`
+
+Print local model routing presets as JSON.
+
+```text
+craik provider local-presets
+```
+
 ## `craik provider select`
 
 Print a redacted provider selection payload.

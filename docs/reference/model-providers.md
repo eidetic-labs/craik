@@ -128,9 +128,9 @@ Built-in providers:
 </div>
 
 <div>
-<dt><code>provider_local_openai_compatible</code></dt>
+<dt><code>provider_local_openai_compatible</code> · <code>provider_local_ollama</code> · <code>provider_local_lm_studio</code> · <code>provider_local_vllm</code></dt>
 <dt><span className="craik-fields__type">local</span></dt>
-<dd>Local OpenAI-compatible chat completions execution.</dd>
+<dd>Local OpenAI-compatible chat completions execution through no-secret presets.</dd>
 </div>
 
 </div>

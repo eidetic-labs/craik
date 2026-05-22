@@ -30,6 +30,7 @@ def store(tmp_path: Path) -> LocalStore:
         ("provider_openai", "openai"),
         ("provider_anthropic", "anthropic"),
         ("provider_gemini", "gemini"),
+        ("provider_local_ollama", "chat_completions"),
     ],
 )
 def test_provider_backed_runner_completes_full_mvp_path(

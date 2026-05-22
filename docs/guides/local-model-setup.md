@@ -8,7 +8,8 @@
 
 Configure an OpenAI-compatible local model endpoint for Craik without
 putting local secrets or private host details in public docs, receipts,
-or fixtures.
+or fixtures. v0.9.0 includes presets for generic OpenAI-compatible
+servers, Ollama, LM Studio, and vLLM.
 
 </div>
 
@@ -41,6 +42,73 @@ Use dry-run mode to inspect the redacted output first:
 ```sh
 craik auth setup local --dry-run
 ```
+
+## Presets
+
+List the no-secret local routing presets:
+
+```sh
+craik provider local-presets
+```
+
+Built-in presets:
+
+<div className="craik-fields">
+
+<div>
+<dt>Preset</dt>
+<dt><span className="craik-fields__type">Default URL</span></dt>
+<dd>Use for</dd>
+</div>
+
+<div>
+<dt><code>openai-compatible</code></dt>
+<dt><span className="craik-fields__type"><code>http://localhost:11434/v1</code></span></dt>
+<dd>Any local server with an OpenAI-compatible chat completions API.</dd>
+</div>
+
+<div>
+<dt><code>ollama</code></dt>
+<dt><span className="craik-fields__type"><code>http://localhost:11434/v1</code></span></dt>
+<dd>Ollama's OpenAI-compatible endpoint.</dd>
+</div>
+
+<div>
+<dt><code>lm-studio</code></dt>
+<dt><span className="craik-fields__type"><code>http://localhost:1234/v1</code></span></dt>
+<dd>LM Studio local server.</dd>
+</div>
+
+<div>
+<dt><code>vllm</code></dt>
+<dt><span className="craik-fields__type"><code>http://localhost:8000/v1</code></span></dt>
+<dd>vLLM's OpenAI-compatible server.</dd>
+</div>
+
+</div>
+
+All presets resolve to `chat_completions` providers with local trust
+boundaries, loopback-only HTTP allowance, budget/quota reference
+names, and no secret references by default.
+
+## Health checks
+
+Check that the local server responds on the OpenAI-compatible model
+listing endpoint:
+
+```sh
+craik provider local-health ollama
+```
+
+Override the URL when the server listens on another loopback port:
+
+```sh
+craik provider local-health lm-studio --base-url http://127.0.0.1:1234/v1
+```
+
+The health output reports the preset id, provider id, base URL,
+status, diagnostic detail, and model ids returned by `/v1/models`.
+It does not load or print third-party credentials.
 
 ## Base URL safety
 
@@ -76,3 +144,11 @@ uv run --extra dev pytest tests/test_auth_setup_cli.py
 Expected output: guided local setup accepts loopback URLs, rejects
 unsafe third-party loopback configuration, and keeps secret material
 out of CLI output.
+
+```sh
+uv run --extra dev pytest tests/test_local_model_presets.py tests/test_provider_cli.py
+```
+
+Expected output: local presets resolve to no-secret provider metadata,
+unsafe non-loopback HTTP URLs are rejected, health diagnostics are
+clear, and CLI preset output stays redacted.

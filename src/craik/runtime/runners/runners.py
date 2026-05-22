@@ -83,6 +83,21 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
             provider_family="chat_completions",
         ),
         _provider_matrix(
+            runner_id="provider_local_ollama",
+            name="Ollama Local Provider Runner",
+            provider_family="chat_completions",
+        ),
+        _provider_matrix(
+            runner_id="provider_local_lm_studio",
+            name="LM Studio Local Provider Runner",
+            provider_family="chat_completions",
+        ),
+        _provider_matrix(
+            runner_id="provider_local_vllm",
+            name="vLLM Local Provider Runner",
+            provider_family="chat_completions",
+        ),
+        _provider_matrix(
             runner_id="provider_anthropic",
             name="Anthropic Provider Runner",
             provider_family="anthropic",
