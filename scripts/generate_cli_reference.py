@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import html
 import sys
 from pathlib import Path
 
@@ -63,7 +64,7 @@ def generate_reference() -> str:
         heading = " ".join(("craik", *path))
         lines.extend([f"## `{heading}`", ""])
         if command.help:
-            lines.extend([command.help.strip(), ""])
+            lines.extend([_mdx_text(command.help.strip()), ""])
         usage = _usage(path, command)
         if usage:
             lines.extend(["```text", usage, "```", ""])
@@ -105,7 +106,7 @@ def _options(command: click.Command) -> list[str]:
         if not isinstance(param, click.Option):
             continue
         names = ", ".join(param.opts + param.secondary_opts)
-        help_text = (param.help or "").strip()
+        help_text = _mdx_text((param.help or "").strip())
         default = _default_text(param)
         detail = "; ".join(part for part in (help_text, default) if part)
         if detail:
@@ -120,7 +121,11 @@ def _default_text(param: click.Option) -> str:
         return ""
     if isinstance(param.default, bool):
         return f"default `{str(param.default).lower()}`"
-    return f"default `{param.default}`"
+    return f"default `{_mdx_text(str(param.default))}`"
+
+
+def _mdx_text(value: str) -> str:
+    return html.escape(value, quote=False)
 
 
 if __name__ == "__main__":

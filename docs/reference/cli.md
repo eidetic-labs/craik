@@ -1028,7 +1028,7 @@ craik model probe
 
 ## `craik model set`
 
-Set the active model as <provider>/<model>.
+Set the active model as &lt;provider&gt;/&lt;model&gt;.
 
 ```text
 craik model set [OPTIONS] MODEL
