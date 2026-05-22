@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Literal
 
 from craik.runtime.auth import AuthProfileStore, AuthProfileStoreError
-from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.auth.operator import (
+    OperatorSession,
+    OperatorSessionNotFoundError,
+    OperatorSessionStore,
+)
+from craik.runtime.auth.visibility import visible_auth_profiles
 from craik.runtime.paths import CraikPaths, resolve_craik_paths
 from craik.runtime.store import DATABASE_NAME
 
@@ -61,8 +66,9 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
     values = dict(os.environ) if env is None else env
     paths = resolve_craik_paths(values)
     initialized = _home_initialized(paths)
-    operator_authenticated = _operator_authenticated(values)
-    auth_profiles = _auth_profile_ids(values)
+    operator_session = _operator_session(values)
+    operator_authenticated = operator_session is not None
+    auth_profiles = _auth_profile_ids(values, operator_session=operator_session)
     provider_configured = bool(auth_profiles)
     local_model_configured = any(_is_local_profile(profile_id) for profile_id in auth_profiles)
     active_profile = values.get("CRAIK_PROFILE", "default")
@@ -134,19 +140,23 @@ def _home_initialized(paths: CraikPaths) -> bool:
     return paths.home.exists() and (paths.state / DATABASE_NAME).exists()
 
 
-def _operator_authenticated(env: dict[str, str]) -> bool:
+def _operator_session(env: dict[str, str]) -> OperatorSession | None:
     try:
-        OperatorSessionStore.from_env(env).get()
+        return OperatorSessionStore.from_env(env).get()
     except OperatorSessionNotFoundError:
-        return False
-    return True
+        return None
 
 
-def _auth_profile_ids(env: dict[str, str]) -> list[str]:
+def _auth_profile_ids(
+    env: dict[str, str],
+    *,
+    operator_session: OperatorSession | None = None,
+) -> list[str]:
     try:
-        return [profile.id for profile in AuthProfileStore.from_env(env).list()]
+        profiles = AuthProfileStore.from_env(env).list()
     except AuthProfileStoreError:
         return []
+    return [profile.id for profile in visible_auth_profiles(profiles, operator_session)]
 
 
 def _is_local_profile(profile_id: str) -> bool:

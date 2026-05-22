@@ -17,7 +17,8 @@ craik [OPTIONS] COMMAND [ARGS]...
 Options:
 
 - `--version`: Print the installed Craik version and exit.; default `false`
-- `-z, --one-shot`: Run one quiet one-shot prompt and exit.
+- `-z, --one-shot`: Run one quiet one-shot prompt and exit. Pass '-' to read the prompt from stdin.
+- `--allow-argv-prompt`: Acknowledge that argv prompts are visible in local process listings and shell history.; default `false`
 
 ## `craik agent`
 
@@ -353,7 +354,8 @@ craik chat [OPTIONS]
 
 Options:
 
-- `-q, --prompt`: Run one conversational prompt and exit.
+- `-q, --prompt`: Run one prompt; pass '-' to read stdin.
+- `--allow-argv-prompt`: Acknowledge argv prompt exposure in process listings and shell history.; default `false`
 
 ## `craik connect`
 

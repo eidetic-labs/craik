@@ -241,6 +241,52 @@ handoffs, recovery state, and redacted lifecycle metadata.
   `--keep-artifacts` are explicit operator acknowledgements for live
   provider calls or post-demo inspection.
 
+## v0.10.0 Interactive Shell and Credential Storage Trust Model
+
+Craik v0.10.0 introduces an interactive agent shell (`craik`,
+`craik chat`), browser-assisted provider login, credential storage
+backends, profile/persona isolation, slash commands, and
+operator-visible learning-loop controls. The trust boundary intent is:
+
+- Shell launches before authentication is configured. The default shell
+  reports the active readiness state without reading or mutating
+  durable store state.
+- `craik auth login <provider>` opens a browser to the provider's
+  API-key console where applicable. Craik stores credential references,
+  not credential values: an `AuthProfile` records an `env_var` name or a
+  `secret_ref` path owned by the operator. Copy/paste fallback via
+  `--no-browser` is supported.
+- Credential storage backends are detected locally. OS-native secret
+  stores are preferred when available. File fallback paths use
+  owner-only POSIX mode, but the file content is plaintext at rest.
+  Treat file fallback secrets like private keys: keep them out of
+  unencrypted backups and prefer OS-native backends when available.
+- One-shot prompts require explicit operator acknowledgment when
+  supplied through argv. Prompts in argv are visible to local process
+  listings and shell history. Use `craik -z -` or `craik chat -q -` to
+  read from stdin; `--allow-argv-prompt` opts into argv exposure with a
+  stderr warning.
+- Readiness state and model listing are operator-scoped when an active
+  operator session exists. Auth profiles with
+  `authorized_operators` or `authorized_operator_groups` are visible
+  only to matching sessions; legacy profiles without authorization
+  metadata remain globally visible for compatibility.
+- Slash commands inherit the same readiness and operator-session
+  boundaries as the underlying runtime. Commands with side effects route
+  through the existing operator identity checks before touching local
+  store state.
+- Profile export omits secrets by default. Profile import does not grant
+  cross-profile access to credential material.
+- Learning-loop authority remains operator-gated. Agents can propose
+  skill improvements, but promotion rejects `agent:` approvers and
+  requires an explicit operator identity plus evidence-bearing approval
+  records. Rollback remains an operator action.
+
+The standing publication policy remains unchanged: Critical and High
+vulnerabilities are handled through GHSA when applicable; Medium and
+Low findings are documented in this file unless a documented carve-out
+applies.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

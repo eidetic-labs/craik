@@ -10,7 +10,9 @@ from typing import Annotated, Any
 import typer
 
 from craik.cli import app, model_app, profile_app, session_app
+from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.runtime.auth import AuthProfileStore
+from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
 from craik.runtime.shell.model_settings import ModelSettings, ModelSettingsStore
 from craik.runtime.shell.profile_settings import (
@@ -27,12 +29,19 @@ from craik.runtime.store import LocalStore
 def chat_command(
     prompt: Annotated[
         str | None,
-        typer.Option("-q", "--prompt", help="Run one conversational prompt and exit."),
+        typer.Option("-q", "--prompt", help="Run one prompt; pass '-' to read stdin."),
     ] = None,
+    allow_argv_prompt: Annotated[
+        bool,
+        typer.Option(
+            "--allow-argv-prompt",
+            help="Acknowledge argv prompt exposure in process listings and shell history.",
+        ),
+    ] = False,
 ) -> None:
     """Launch the Craik agent shell or run one conversational prompt."""
     if prompt is not None:
-        typer.echo(one_shot_response(prompt))
+        typer.echo(one_shot_response(resolve_cli_prompt(prompt, allow_argv=allow_argv_prompt)))
         raise typer.Exit()
     raise typer.Exit(run_shell())
 
@@ -62,7 +71,9 @@ def model_list() -> None:
                 "provider_family": profile.provider_family,
                 "last_status": profile.last_status,
             }
-            for profile in AuthProfileStore.from_env().list()
+            for profile in visible_auth_profiles(
+                AuthProfileStore.from_env().list(), active_operator_session_from_env()
+            )
         ]
     except Exception:
         auth_profiles = []

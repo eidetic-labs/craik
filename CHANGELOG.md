@@ -44,6 +44,18 @@ within the `0.x.0` stability expectations described in
 
 - Browser-assisted provider setup records no secret values in CLI
   output and reports credential-storage posture as redacted metadata.
+- One-shot prompts now require stdin input (`-z -` / `chat -q -`) or
+  explicit `--allow-argv-prompt` acknowledgment before accepting prompts
+  visible through process listings and shell history.
+- Readiness and model-listing profile enumeration now respect
+  `AuthProfile.authorized_operators` and
+  `authorized_operator_groups` for active operator sessions, while
+  preserving legacy unscoped profile visibility.
+- Auth profile metadata redaction now fails closed by exposing only
+  reviewed non-secret metadata keys and masking unknown keys.
+- SECURITY.md documents the v0.10.0 interactive shell and credential
+  storage trust model, including the file fallback plaintext-at-rest
+  caveat for secret references.
 - Skill improvement controls remain proposal and approval oriented;
   agents can surface changes, but promotion and rollback stay governed
   by reviewable operator actions.
