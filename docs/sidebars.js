@@ -152,6 +152,7 @@ const sidebars = {
         'reference/provider-certification',
         'reference/provider-budgets',
         'guides/authentication',
+        'guides/local-model-setup',
         'reference/prompt-compiler',
         'guides/managing-instructions',
       ],
@@ -405,6 +406,7 @@ const sidebars = {
       collapsed: true,
       items: [
         'guides/authentication',
+        'guides/local-model-setup',
         'adr/credential-and-identity-architecture',
       ],
     },
