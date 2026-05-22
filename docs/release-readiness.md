@@ -55,10 +55,12 @@ milestone before release prep begins.
 
 The v0.9.0 milestone now contains provider setup, Gemini runtime
 support, local model presets, provider-backed persistent sessions,
-provider certification, explicit failure recovery, a launch demo, and
-persistent-agent security boundaries. Release prep remains responsible
-for the version bump, final changelog section, signed tag, publish, and
-post-publish verification.
+provider certification, explicit failure recovery, a launch demo,
+persistent-agent security boundaries, MCP routing decisions, sandbox
+backend tracking, browser/tool boundary tracking, sandbox policy
+validation, and environment capability receipts. Release prep remains
+responsible for the version bump, final changelog section, signed tag,
+publish, and post-publish verification.
 
 </div>
 
@@ -74,6 +76,7 @@ post-publish verification.
 <div><dt>Tests</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Focused coverage exists for provider setup, Gemini transport, local presets, persistent prompt execution, provider certification, recovery, launch demo behavior, environment receipt linkage, and denied side-effect receipts.</dd></div>
 <div><dt>Docs</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Persistent-agent runtime, authentication, local model setup, provider routing, provider certification, persistent-agent security, execution-environment security, and environment receipt docs are updated.</dd></div>
 <div><dt>Security</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Session inspection uses redacted views, persistent agents retain references instead of secrets, environment receipts link provider and sandbox boundaries to sessions, and missing side-effect grants produce denial receipts.</dd></div>
+<div><dt>Milestone provenance</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Backfill issues <a href="https://github.com/eidetic-labs/craik/issues/765">#765</a> through <a href="https://github.com/eidetic-labs/craik/issues/773">#773</a> link MCP, sandbox, browser boundary, sandbox policy, and environment receipt tiles to implementation evidence.</dd></div>
 <div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No unresolved v0.9.0 implementation blocker remains. Tagging is gated on release-prep validation.</dd></div>
 
 </div>
