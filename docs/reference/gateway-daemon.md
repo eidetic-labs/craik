@@ -14,12 +14,15 @@ current boundary between the health service and channel dispatch.
 
 <div className="craik-keypoint">
 
-**Gateway daemon mode is foreground and local-first.**
+**Gateway daemon mode is foreground and local-first, with service-management helpers.**
 
-`craik gateway start` runs a foreground HTTP service with a `/health`
-endpoint, takes a pid-file lock, and persists lifecycle transitions.
-Channel dispatch remains policy-bound contract work; do not expose the
-daemon publicly without TLS termination and explicit policy.
+`craik gateway start` still runs the foreground HTTP service with a
+`/health` endpoint, pid-file lock, and persisted lifecycle transitions.
+`craik gateway install` now generates launchd/systemd user-service
+definitions, while status, logs, stop, restart, and doctor commands
+make lifecycle inspection explicit. Channel dispatch remains
+policy-bound contract work; do not expose the daemon publicly without
+TLS termination and explicit policy.
 
 </div>
 
@@ -89,19 +92,42 @@ daemon publicly without TLS termination and explicit policy.
 
 </div>
 
-## Start command
+## Commands
 
 Run setup first, then start the foreground daemon:
 
 ```bash
 craik setup --enable-gateway --policy-envelope-id policy_gateway
+craik gateway install
+craik gateway status
 craik gateway start
+craik gateway logs
+craik gateway stop
+craik gateway restart
+craik gateway doctor
 ```
 
 The command requires an active operator session, loads
 `gateway_default`, writes `starting`, writes `running` after the HTTP
 server binds, and writes `stopped` on graceful shutdown. If the pid
 file already exists, startup fails instead of running a second daemon.
+
+`craik gateway install` writes a generated service definition under
+Craik config:
+
+<div className="craik-grid">
+
+<div><h4>macOS</h4><p><code>launchd</code> plist for a user LaunchAgent.</p></div>
+<div><h4>Linux</h4><p><code>systemd --user</code> service unit.</p></div>
+<div><h4>Windows</h4><p>Manual service plan for this release.</p></div>
+
+</div>
+
+`craik gateway stop` records a stop request and recovers stale pid
+files. It does not silently kill a process unless the operator passes
+`--signal-process`. `craik gateway restart` records the stopped state
+and returns the next step for the installed service or foreground
+start.
 
 <div className="craik-keypoint">
 

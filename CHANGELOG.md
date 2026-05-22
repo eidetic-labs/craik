@@ -26,6 +26,10 @@ within the `0.x.0` stability expectations described in
   gateway command actions, provider/auth health, approval notification
   deep links, doctor/update actions, redaction tests, and companion
   security docs.
+- v0.11.0 gateway service lifecycle commands for install, uninstall,
+  status, logs, doctor, stop, and restart, including launchd/systemd
+  unit generation, Windows service-plan documentation, stale pid
+  recovery, and log tailing.
 
 ### Changed
 
