@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.7.0 — 2026-05-22
+
 ### Added
 
 - v0.7.0 read-only operator surface overview through `craik operator
