@@ -22,6 +22,7 @@ class EnvironmentReceiptContext(CraikModel):
     """Context links preserved for environment capability receipts."""
 
     task_id: str
+    agent_session_id: str | None = None
     policy_envelope_id: str | None = None
     provider_id: str | None = None
     backend_id: str | None = None
@@ -84,6 +85,7 @@ def _target(action: EnvironmentReceiptAction, context: EnvironmentReceiptContext
 def _context_metadata(context: EnvironmentReceiptContext) -> dict[str, Any]:
     return {
         "policy_envelope_id": context.policy_envelope_id,
+        "agent_session_id": context.agent_session_id,
         "provider_id": context.provider_id,
         "backend_id": context.backend_id,
         "route_id": context.route_id,

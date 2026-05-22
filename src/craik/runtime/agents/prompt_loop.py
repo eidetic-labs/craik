@@ -17,6 +17,10 @@ from craik.runtime.agents.sessions import (
     ACTIVE_AGENT_SESSION_STATUSES,
     AgentSessionLifecycleError,
 )
+from craik.runtime.environment_receipts import (
+    EnvironmentReceiptContext,
+    environment_receipt,
+)
 from craik.runtime.providers.provider_runner import (
     ProviderBackedRunExecutor,
     ProviderBackedRunResult,
@@ -124,6 +128,14 @@ def execute_agent_prompt(
         started_at=timestamp,
     )
     receipt_ids = _receipt_ids(result)
+    environment_receipt_ids = _record_environment_receipts(
+        store,
+        running,
+        result,
+        receipt_ids=receipt_ids,
+        allow_fixture_action=allow_fixture_action,
+    )
+    receipt_ids = sorted({*receipt_ids, *environment_receipt_ids})
     exit_behavior = "interrupted" if result.interrupted_error else result.run.status
     metadata: dict[str, Any] = {"run_status": result.run.status}
     recovery_metadata: dict[str, Any] = {
@@ -280,6 +292,60 @@ def _receipt_ids(result: ProviderBackedRunResult) -> list[str]:
         for receipt_id in output.output.receipt_ids
     }
     return sorted(output_receipts | set(result.run.receipt_ids) | set(result.handoff.receipt_ids))
+
+
+def _record_environment_receipts(
+    store: LocalStore,
+    state: AgentSessionState,
+    result: ProviderBackedRunResult,
+    *,
+    receipt_ids: list[str],
+    allow_fixture_action: bool,
+) -> list[str]:
+    context = EnvironmentReceiptContext(
+        task_id=result.run.task_id,
+        agent_session_id=state.id,
+        policy_envelope_id=result.compiled_prompt.policy_envelope_id,
+        provider_id=state.provider_id,
+        backend_id="sandbox_fixture_action",
+        command_ref="fixture-action",
+        receipt_ids=receipt_ids,
+    )
+    provider_receipt = environment_receipt(
+        receipt_id=f"receipt_{result.run.id}_agent_provider_environment",
+        action="provider_action",
+        context=context,
+        actor=f"agent:{state.id}",
+        capability="model.chat",
+        policy_profile="strict",
+        status="passed" if result.provider_results else "denied",
+        reason="Persistent agent provider route executed.",
+        summary="Persistent agent provider action recorded.",
+        metadata={
+            "run_id": result.run.id,
+            "handoff_id": result.handoff.id,
+            "provider_result_count": len(result.provider_results),
+        },
+    )
+    sandbox_receipt = environment_receipt(
+        receipt_id=f"receipt_{result.run.id}_agent_sandbox_environment",
+        action="sandbox_action" if allow_fixture_action else "denial",
+        context=context,
+        actor=f"agent:{state.id}",
+        capability="shell.execute",
+        policy_profile="strict",
+        status="passed" if allow_fixture_action else "denied",
+        reason=(
+            "Persistent agent fixture action grant was present."
+            if allow_fixture_action
+            else "Persistent agent fixture action grant was not present."
+        ),
+        summary="Persistent agent sandbox boundary recorded.",
+        metadata={"run_id": result.run.id, "handoff_id": result.handoff.id},
+    )
+    store.put_receipt(provider_receipt)
+    store.put_receipt(sandbox_receipt)
+    return [provider_receipt.id, sandbox_receipt.id]
 
 
 def _prompt_task_title(state: AgentSessionState, prompt: str, timestamp: datetime) -> str:

@@ -62,7 +62,8 @@ craik agent prompt agent_docs "Implement the next bounded provider task."
 the session provider, and returns the same run, provider receipt,
 handoff, and output shape used by provider-backed one-shot runs. The
 session moves back to `idle` when the run finishes and stores the active
-task id, run id, receipt ids, handoff ids, and recovery metadata.
+task id, run id, receipt ids, environment receipt ids, handoff ids, and
+recovery metadata.
 
 Use `/exit`, `exit`, `/quit`, or `quit` as the prompt text to stop the
 session without starting a provider run:
@@ -73,8 +74,10 @@ craik agent prompt agent_docs /exit
 
 For deterministic fixture-backed validation, the command grants the
 fixture action by default. Use `--no-allow-fixture-action` to exercise
-the blocked approval path, `--max-iterations` to test interruption, and
-`--provider-token-budget` to test token-budget interruption.
+the blocked approval path. That path records a denied sandbox
+environment receipt and leaves the run blocked. Use `--max-iterations`
+to test interruption, and `--provider-token-budget` to test token-budget
+interruption.
 
 ## Inspect and list sessions
 
@@ -150,7 +153,7 @@ material:
 <div><h4>Operator</h4><p>Subject and issuer from the active session.</p></div>
 <div><h4>Provider</h4><p>Provider id, model id, and optional auth profile id.</p></div>
 <div><h4>Lifecycle</h4><p>Mode, status, timestamps, pid, endpoint URL, and supervision notes.</p></div>
-<div><h4>Links</h4><p>Project, task, run, policy envelope, receipt, handoff, and recovery ids.</p></div>
+<div><h4>Links</h4><p>Project, task, run, policy envelope, receipt, environment receipt, handoff, and recovery ids.</p></div>
 <div><h4>Events</h4><p>Prompt, run completion, interruption, and exit events.</p></div>
 
 </div>
@@ -160,6 +163,11 @@ Events carry stable ids for the session, task, run, handoff, receipts,
 provider, model, policy envelope, and recovery metadata. The raw prompt
 is not stored in the event; Craik stores a short prompt hash for
 correlation without adding operator text to logs.
+
+Prompt execution also records environment receipts for provider and
+sandbox boundaries. These receipts carry `agent_session_id` and are
+linked back into the session `receipt_ids`, which lets operator views
+audit side-effect denials without storing raw commands or credentials.
 
 ## Validation
 

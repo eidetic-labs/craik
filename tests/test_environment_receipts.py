@@ -11,6 +11,7 @@ NOW = datetime(2026, 5, 16, 20, 30, tzinfo=UTC)
 def _context() -> EnvironmentReceiptContext:
     return EnvironmentReceiptContext(
         task_id="task_environment",
+        agent_session_id="agent_session_environment",
         policy_envelope_id="policy_environment",
         provider_id="provider_fixture_local",
         backend_id="sandbox_backend_local_fixture",
@@ -39,6 +40,7 @@ def test_environment_receipt_records_success_context() -> None:
     assert receipt.result.status == "passed"
     assert receipt.target == "sandbox_action:check_ruff"
     assert receipt.result.metadata["policy_envelope_id"] == "policy_environment"
+    assert receipt.result.metadata["agent_session_id"] == "agent_session_environment"
     assert receipt.result.metadata["provider_id"] == "provider_fixture_local"
     assert receipt.result.metadata["backend_id"] == "sandbox_backend_local_fixture"
     assert receipt.result.metadata["route_id"] == "mcp_route_provider_fixture"

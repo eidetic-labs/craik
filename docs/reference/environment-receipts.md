@@ -1,6 +1,6 @@
 # Environment receipts
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -31,6 +31,7 @@ decisions.
 <div className="craik-grid">
 
 <div><h4>Task id</h4></div>
+<div><h4>Agent session id</h4></div>
 <div><h4>Policy envelope id</h4></div>
 <div><h4>Provider id</h4></div>
 <div><h4>Sandbox backend id</h4></div>
@@ -41,6 +42,12 @@ decisions.
 
 </div>
 
+`agent_session_id` is optional for one-shot runs and populated by the
+persistent-agent prompt loop. Operator views use it to correlate
+provider actions, sandbox decisions, denials, handoffs, and recovery
+state without duplicating raw prompt, command, or credential material in
+the session record.
+
 ## Actions
 
 <div className="craik-fields">
@@ -50,6 +57,9 @@ decisions.
 <dt><span className="craik-fields__type">Receipt status</span></dt>
 <dd>Notes</dd>
 </div>
+
+For persistent agents, a missing side-effect grant records `denial`
+rather than upgrading the sandbox action to `passed`.
 
 <div>
 <dt><code>environment_decision</code></dt>
