@@ -29,8 +29,10 @@ def test_package_version_matches_project_metadata() -> None:
 def test_docs_package_version_matches_project_metadata() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     package = json.loads((ROOT / "docs" / "package.json").read_text(encoding="utf-8"))
+    package_lock = json.loads((ROOT / "docs" / "package-lock.json").read_text(encoding="utf-8"))
 
     assert package["version"] == pyproject["project"]["version"]
+    assert package_lock["packages"][""]["version"] == pyproject["project"]["version"]
 
 
 def test_package_uses_pydantic_with_python_314_wheel_support() -> None:
