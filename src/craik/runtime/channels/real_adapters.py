@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from craik.contracts.models import (
     CapabilityReceipt,
@@ -87,38 +87,57 @@ class ChannelDiagnostic:
         }
 
 
+def _adapter_spec(payload: dict[str, str]) -> RealChannelAdapterSpec:
+    return RealChannelAdapterSpec(
+        service=cast(RealChannelService, payload["service"]),
+        adapter_id=payload["adapter_id"],
+        name=payload["name"],
+        secret_env_var=payload["secret_env_var"],
+        default_workspace=payload["default_workspace"],
+        setup_hint=payload["setup_hint"],
+    )
+
+
 REAL_CHANNEL_ADAPTERS: dict[RealChannelService, RealChannelAdapterSpec] = {
-    "webchat": RealChannelAdapterSpec(
-        service="webchat",
-        adapter_id="webchat_adapter",
-        name="WebChat Local Browser Adapter",
-        secret_env_var="CRAIK_WEBCHAT_TOKEN",
-        default_workspace="local-browser",
-        setup_hint="Use the local dashboard WebChat surface with a generated bearer token.",
+    "webchat": _adapter_spec(
+        {
+            "service": "webchat",
+            "adapter_id": "webchat_adapter",
+            "name": "WebChat Local Browser Adapter",
+            "secret_env_var": "CRAIK_WEBCHAT_TOKEN",
+            "default_workspace": "local-browser",
+            "setup_hint": "Use local dashboard WebChat with a generated bearer token.",
+        }
     ),
-    "telegram": RealChannelAdapterSpec(
-        service="telegram",
-        adapter_id="telegram_adapter",
-        name="Telegram Bot Adapter",
-        secret_env_var="CRAIK_TELEGRAM_BOT_TOKEN",
-        default_workspace="telegram",
-        setup_hint="Create a Telegram bot token and expose it through CRAIK_TELEGRAM_BOT_TOKEN.",
+    "telegram": _adapter_spec(
+        {
+            "service": "telegram",
+            "adapter_id": "telegram_adapter",
+            "name": "Telegram Bot Adapter",
+            "secret_env_var": "CRAIK_TELEGRAM_BOT_TOKEN",
+            "default_workspace": "telegram",
+            "setup_hint": "Create a Telegram bot token and expose its secret reference.",
+        }
     ),
-    "discord": RealChannelAdapterSpec(
-        service="discord",
-        adapter_id="discord_adapter",
-        name="Discord Bot Adapter",
-        secret_env_var="CRAIK_DISCORD_BOT_TOKEN",
-        default_workspace="discord",
-        setup_hint="Create a Discord bot token and expose it through CRAIK_DISCORD_BOT_TOKEN.",
+    "discord": _adapter_spec(
+        {
+            "service": "discord",
+            "adapter_id": "discord_adapter",
+            "name": "Discord Bot Adapter",
+            "secret_env_var": "CRAIK_DISCORD_BOT_TOKEN",
+            "default_workspace": "discord",
+            "setup_hint": "Create a Discord bot token and expose its secret reference.",
+        }
     ),
-    "slack": RealChannelAdapterSpec(
-        service="slack",
-        adapter_id="slack_adapter",
-        name="Slack App Adapter",
-        secret_env_var="CRAIK_SLACK_BOT_TOKEN",
-        default_workspace="slack",
-        setup_hint="Create a Slack bot token and expose it through CRAIK_SLACK_BOT_TOKEN.",
+    "slack": _adapter_spec(
+        {
+            "service": "slack",
+            "adapter_id": "slack_adapter",
+            "name": "Slack App Adapter",
+            "secret_env_var": "CRAIK_SLACK_BOT_TOKEN",
+            "default_workspace": "slack",
+            "setup_hint": "Create a Slack bot token and expose its secret reference.",
+        }
     ),
 }
 
