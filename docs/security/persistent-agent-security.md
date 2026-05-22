@@ -102,3 +102,10 @@ provider, or sandbox failures surfaced by direct runtime callers. Use
 `--action reconnect` when a process or endpoint must be reattached; use
 `--action resume` after credentials, provider routing, or sandbox policy
 have been corrected.
+
+Agent session state and event records are signed with the local store
+receipt HMAC on write. Default reads reject tampered signed records;
+legacy unsigned rows remain readable and are reported as `unverified`.
+`craik agent status` surfaces the session HMAC state as `verified`,
+`tampered`, or `unverified` so operators can distinguish stale runtime
+state from storage integrity failures.

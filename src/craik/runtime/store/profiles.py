@@ -4,6 +4,13 @@
 
 from __future__ import annotations
 
+from craik.runtime.store.integrity import contract_hmac, hmac_key_for_store
+from craik.runtime.store.receipt_integrity import (
+    AgentSessionEventReadResult,
+    AgentSessionStateReadResult,
+    contract_receipt_hmac_status,
+)
+
 from .base import *
 
 
@@ -39,35 +46,75 @@ class ProfileStoreMixin(LocalStoreCore):
 
     def put_agent_session_state(self, state: AgentSessionState) -> None:
         """Persist persistent agent session state."""
+        state = _signed_agent_session_state(self, state)
         self.put_contract(state)
 
     def get_agent_session_state(self, state_id: str) -> AgentSessionState | None:
         """Load persistent agent session state by id."""
         contract = self.get_contract("craik.agent_session_state", state_id)
-        return _cast_optional(AgentSessionState, contract)
+        state = _cast_optional(AgentSessionState, contract)
+        _verify_agent_session_state_hmac(self, state)
+        return state
+
+    def get_agent_session_state_with_verification(
+        self,
+        state_id: str,
+    ) -> AgentSessionStateReadResult | None:
+        """Load persistent agent session state with explicit HMAC status."""
+        contract = self.get_contract("craik.agent_session_state", state_id)
+        state = _cast_optional(AgentSessionState, contract)
+        if state is None:
+            return None
+        return AgentSessionStateReadResult(
+            state=state,
+            hmac_status=contract_receipt_hmac_status(self, state),
+        )
 
     def list_agent_session_states(self) -> list[AgentSessionState]:
         """List persistent agent session states."""
-        return _cast_list(
+        states = _cast_list(
             AgentSessionState,
             self.list_contracts("craik.agent_session_state"),
         )
+        for state in states:
+            _verify_agent_session_state_hmac(self, state)
+        return states
 
     def put_agent_session_event(self, event: AgentSessionEvent) -> None:
         """Persist a persistent agent session event."""
+        event = _signed_agent_session_event(self, event)
         self.put_contract(event)
 
     def get_agent_session_event(self, event_id: str) -> AgentSessionEvent | None:
         """Load a persistent agent session event by id."""
         contract = self.get_contract("craik.agent_session_event", event_id)
-        return _cast_optional(AgentSessionEvent, contract)
+        event = _cast_optional(AgentSessionEvent, contract)
+        _verify_agent_session_event_hmac(self, event)
+        return event
+
+    def get_agent_session_event_with_verification(
+        self,
+        event_id: str,
+    ) -> AgentSessionEventReadResult | None:
+        """Load persistent agent session event with explicit HMAC status."""
+        contract = self.get_contract("craik.agent_session_event", event_id)
+        event = _cast_optional(AgentSessionEvent, contract)
+        if event is None:
+            return None
+        return AgentSessionEventReadResult(
+            event=event,
+            hmac_status=contract_receipt_hmac_status(self, event),
+        )
 
     def list_agent_session_events(self) -> list[AgentSessionEvent]:
         """List persistent agent session events."""
-        return _cast_list(
+        events = _cast_list(
             AgentSessionEvent,
             self.list_contracts("craik.agent_session_event"),
         )
+        for event in events:
+            _verify_agent_session_event_hmac(self, event)
+        return events
 
     def put_project(self, project: ProjectProfile) -> None:
         self.put_contract(project)
@@ -151,3 +198,41 @@ class ProfileStoreMixin(LocalStoreCore):
             AdjudicationOutcome,
             self.list_contracts("craik.adjudication_outcome"),
         )
+
+
+def _signed_agent_session_state(
+    store: LocalStoreCore,
+    state: AgentSessionState,
+) -> AgentSessionState:
+    payload = state.model_dump(mode="json", by_alias=True)
+    receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
+    return state.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _signed_agent_session_event(
+    store: LocalStoreCore,
+    event: AgentSessionEvent,
+) -> AgentSessionEvent:
+    payload = event.model_dump(mode="json", by_alias=True)
+    receipt_hmac = contract_hmac(payload, hmac_key_for_store(store))
+    return event.model_copy(update={"receipt_hmac": receipt_hmac})
+
+
+def _verify_agent_session_state_hmac(
+    store: LocalStoreCore,
+    state: AgentSessionState | None,
+) -> None:
+    if state is None:
+        return
+    if contract_receipt_hmac_status(store, state) == "tampered":
+        raise LocalStoreCorruptError(f"stored agent session state has invalid HMAC: {state.id}")
+
+
+def _verify_agent_session_event_hmac(
+    store: LocalStoreCore,
+    event: AgentSessionEvent | None,
+) -> None:
+    if event is None:
+        return
+    if contract_receipt_hmac_status(store, event) == "tampered":
+        raise LocalStoreCorruptError(f"stored agent session event has invalid HMAC: {event.id}")

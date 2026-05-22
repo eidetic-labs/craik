@@ -525,7 +525,14 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert stored_recovery_session is not None
     assert stored_recovery_session.receipt_hmac
     assert stored_recovery_session.model_copy(update={"receipt_hmac": None}) == recovery_session
-    assert store.get_agent_session_state(agent_session.id) == agent_session
+    stored_agent_session = store.get_agent_session_state(agent_session.id)
+    assert stored_agent_session is not None
+    assert stored_agent_session.receipt_hmac
+    assert stored_agent_session.model_copy(update={"receipt_hmac": None}) == agent_session
+    agent_session_read = store.get_agent_session_state_with_verification(agent_session.id)
+    assert agent_session_read is not None
+    assert agent_session_read.state == stored_agent_session
+    assert agent_session_read.hmac_status == "verified"
     assert store.get_runtime_critic_finding(critic_finding.id) == critic_finding
     assert store.get_red_team_finding(red_team_finding.id) == red_team_finding
     assert store.get_scratchpad_record(scratchpad.id) == scratchpad
@@ -575,7 +582,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.list_reference_integrations() == [reference_integration]
     assert store.list_run_deltas() == [run_delta]
     assert store.list_recovery_sessions() == [stored_recovery_session]
-    assert store.list_agent_session_states() == [agent_session]
+    assert store.list_agent_session_states() == [stored_agent_session]
     assert store.list_runtime_critic_findings() == [critic_finding]
     assert store.list_red_team_findings() == [red_team_finding]
     assert store.list_scratchpad_records() == [scratchpad]
