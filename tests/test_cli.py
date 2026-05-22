@@ -722,6 +722,7 @@ def test_runners_matrix_lists_built_in_trust_profiles() -> None:
         "fixture",
         "provider_anthropic",
         "provider_anthropic_messages",
+        "provider_gemini",
         "provider_openai",
         "provider_openai_chat",
         "provider_openai_responses",

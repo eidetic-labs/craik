@@ -95,6 +95,8 @@ def _provider_base_url(provider: ModelProvider) -> str:
         url = configured
     elif provider.provider == "anthropic":
         url = "https://api.anthropic.com"
+    elif provider.provider == "gemini":
+        url = "https://generativelanguage.googleapis.com"
     else:
         url = "https://api.openai.com"
     try:

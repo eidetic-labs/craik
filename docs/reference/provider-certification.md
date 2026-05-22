@@ -1,13 +1,13 @@
 # Provider certification
 
-<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The MVP certification bar OpenAI and Anthropic must clear before they
-ship as governed provider paths — requirements, families, the
+The certification bar OpenAI, Anthropic, and Gemini must clear before
+they ship as governed provider paths — requirements, families, the
 implementation boundary, and the deterministic test posture.
 
 </div>
@@ -74,6 +74,12 @@ and none is blocked.
 <dd>Uses secret references for API credentials.</dd>
 </div>
 
+<div>
+<dt><code>gemini</code></dt>
+<dt><span className="craik-fields__type">v0.9.0</span></dt>
+<dd>Uses secret references for API credentials and Gemini-specific request normalization.</dd>
+</div>
+
 </div>
 
 Public metadata, receipts, docs, and certification fixtures must not
@@ -97,7 +103,8 @@ unless a live smoke profile is explicitly enabled.
 
 Deterministic tests against
 `craik.runtime.providers.provider_runtime` certify both OpenAI and
-Anthropic for:
+Anthropic, while `craik.runtime.providers.provider_runtime_gemini`
+certifies Gemini for:
 
 <div className="craik-grid">
 
@@ -134,6 +141,12 @@ external secret resolver.
 <dt>Anthropic</dt>
 <dt><span className="craik-fields__type">official</span></dt>
 <dd>Messages · streaming · tool use · model names · rate limits.</dd>
+</div>
+
+<div>
+<dt>Gemini</dt>
+<dt><span className="craik-fields__type">official</span></dt>
+<dd>generateContent · function calling · structured output · model names.</dd>
 </div>
 
 </div>

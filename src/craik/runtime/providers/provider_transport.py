@@ -131,6 +131,33 @@ def _fixture_response(
             ],
             "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
         }
+    if provider_family == "gemini":
+        return {
+            "responseId": response_id,
+            "modelVersion": model,
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {"text": text},
+                            {
+                                "functionCall": {
+                                    "name": "craik_structured_output",
+                                    "args": structured,
+                                }
+                            },
+                        ],
+                    },
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 21,
+                "candidatesTokenCount": 10,
+                "totalTokenCount": 31,
+            },
+        }
     return {
         "id": response_id,
         "model": model,

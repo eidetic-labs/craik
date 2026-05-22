@@ -24,6 +24,8 @@ class EnvVarApiKeySource:
             if secret:
                 headers["x-api-key"] = secret
             return headers
+        if family == "gemini":
+            return {"x-goog-api-key": secret} if secret else {}
         if secret:
             return {"Authorization": f"Bearer {secret}"}
         return {}

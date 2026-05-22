@@ -40,6 +40,8 @@ class CLIBridgeCredentialSource:
                 "Authorization": f"Bearer {token}",
                 "anthropic-version": "2023-06-01",
             }
+        if family == "gemini":
+            return {"x-goog-api-key": token}
         return {"Authorization": f"Bearer {token}"}
 
     def status(self) -> CredentialStatus:

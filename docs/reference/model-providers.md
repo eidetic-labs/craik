@@ -1,14 +1,15 @@
 # Model providers
 
-<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The `craik.model_provider` contract — what it records, the secret
-boundary, the registry, the provider runtime adapters (OpenAI +
-Anthropic), the provider-backed runner path, and budget/quota gating.
+boundary, the registry, the provider runtime adapters (OpenAI,
+Anthropic, Gemini, and OpenAI-compatible local models), the
+provider-backed runner path, and budget/quota gating.
 
 </div>
 
@@ -120,13 +121,26 @@ Built-in providers:
 <dd>Anthropic Messages API-compatible MVP execution.</dd>
 </div>
 
+<div>
+<dt><code>provider_gemini</code></dt>
+<dt><span className="craik-fields__type">third-party</span></dt>
+<dd>Gemini generateContent API-compatible v0.9.0 execution.</dd>
 </div>
 
-OpenAI and Anthropic records use third-party trust boundaries,
-external secret references, budget and quota references, and runtime
-adapter paths under `craik.runtime.providers.provider_runtime`.
-Default model metadata is non-secret and may be overridden by named
-configuration references before live use.
+<div>
+<dt><code>provider_local_openai_compatible</code></dt>
+<dt><span className="craik-fields__type">local</span></dt>
+<dd>Local OpenAI-compatible chat completions execution.</dd>
+</div>
+
+</div>
+
+OpenAI, Anthropic, and Gemini records use third-party trust
+boundaries, external secret references, budget and quota references,
+and runtime adapter paths under
+`craik.runtime.providers.provider_runtime`. Default model metadata is
+non-secret and may be overridden by named configuration references
+before live use.
 
 ## Provider runtime
 
@@ -159,9 +173,29 @@ helpers used by the MVP provider path.
 </ul>
 </div>
 
+<div>
+<h4>Gemini adapter</h4>
+<ul>
+<li>System instructions via <code>systemInstruction</code></li>
+<li>User and model turns via <code>contents</code></li>
+<li>Function declarations through Gemini tools</li>
+<li>Structured output through <code>generationConfig.responseSchema</code></li>
+<li>Normalized usage metadata + function calls</li>
+</ul>
 </div>
 
-Both adapters classify retryable API conditions and gate live access
+<div>
+<h4>Local adapter</h4>
+<ul>
+<li>OpenAI-compatible chat completions payloads</li>
+<li>Optional marker/no-secret local operation</li>
+<li>Loopback URLs only when explicitly allowed</li>
+</ul>
+</div>
+
+</div>
+
+Adapters classify retryable API conditions and gate live access
 behind an explicit `live_enabled=true` runtime setting. **Deterministic
 tests use fixtures and normalized payloads; they do not contact live
 providers.**
@@ -174,7 +208,7 @@ governed single-agent loop.
 <ol className="craik-steps">
 <li>Build or load the task case file.</li>
 <li>Compile a provider-runner prompt from the case file and policy envelope.</li>
-<li>Execute the loop through <code>provider_openai</code> or <code>provider_anthropic</code>.</li>
+<li>Execute the loop through a certified provider id such as <code>provider_openai</code>, <code>provider_anthropic</code>, or <code>provider_gemini</code>.</li>
 <li>Record provider receipts for every model step.</li>
 <li>Preserve side-effect receipts from the loop.</li>
 <li>Persist normalized run outputs.</li>
@@ -210,13 +244,14 @@ remaining budget/quota values for later receipts.
 
 ## Official docs verified
 
-Provider assumptions for the MVP runtime were checked against official
-provider docs on **2026-05-17**:
+Provider assumptions for the runtime were checked against official
+provider docs:
 
 <div className="craik-grid">
 
 <div><h4>OpenAI</h4><p>Responses API · streaming responses · structured outputs · function calling · model docs.</p></div>
 <div><h4>Anthropic</h4><p>Messages API · streaming messages · tool use · model overview · rate limit docs.</p></div>
+<div><h4>Gemini</h4><p>generateContent · function calling · structured output · model docs. Verified 2026-05-22.</p></div>
 
 </div>
 

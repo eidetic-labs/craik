@@ -6,13 +6,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 from craik.contracts.models import ModelProvider
-from craik.runtime.providers.provider_runtime import ANTHROPIC_OFFICIAL_DOCS, OPENAI_OFFICIAL_DOCS
+from craik.runtime.providers.provider_runtime import (
+    ANTHROPIC_OFFICIAL_DOCS,
+    GEMINI_OFFICIAL_DOCS,
+    OPENAI_OFFICIAL_DOCS,
+)
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
     assert_safe_provider_url,
 )
 
 ANTHROPIC_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.AnthropicProviderAdapter"
+GEMINI_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.GeminiProviderAdapter"
 OPENAI_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.OpenAIProviderAdapter"
 CHAT_COMPLETIONS_PROVIDER_ADAPTER = (
     "craik.runtime.providers.provider_runtime.ChatCompletionsProviderAdapter"
@@ -151,6 +156,35 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                         "docs/reference/model-providers.md",
                         "docs/reference/provider-certification.md",
                         *OPENAI_OFFICIAL_DOCS,
+                    ],
+                    "created_at": datetime.now(UTC),
+                }
+            ),
+            ModelProvider.model_validate(
+                {
+                    "id": "provider_gemini",
+                    "name": "Google Gemini Provider",
+                    "provider": "gemini",
+                    "modes": ["chat", "tool", "runner"],
+                    "capabilities": _mvp_provider_capabilities(),
+                    "trust_boundary": "third-party",
+                    "config_refs": [
+                        "CRAIK_GEMINI_MODEL",
+                        "CRAIK_GEMINI_BASE_URL",
+                    ],
+                    "secret_ref_names": ["CRAIK_GEMINI_API_KEY"],
+                    "budget_ref": "budget_gemini_monthly",
+                    "quota_ref": "quota_gemini_daily",
+                    "runtime_path": GEMINI_PROVIDER_ADAPTER,
+                    "metadata": {
+                        "base_url": "https://generativelanguage.googleapis.com",
+                        "default_model": "gemini-2.5-pro",
+                        "docs_verified": "2026-05-22",
+                    },
+                    "docs": [
+                        "docs/reference/model-providers.md",
+                        "docs/reference/provider-certification.md",
+                        *GEMINI_OFFICIAL_DOCS,
                     ],
                     "created_at": datetime.now(UTC),
                 }

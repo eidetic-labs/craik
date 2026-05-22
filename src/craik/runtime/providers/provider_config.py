@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from pydantic import Field, model_validator
@@ -26,6 +27,12 @@ ANTHROPIC_OFFICIAL_DOCS = (
     "https://docs.anthropic.com/en/docs/build-with-claude/tool-use",
     "https://docs.anthropic.com/en/docs/about-claude/models/all-models",
     "https://docs.anthropic.com/en/api/rate-limits",
+)
+GEMINI_OFFICIAL_DOCS = (
+    "https://ai.google.dev/api/generate-content",
+    "https://ai.google.dev/gemini-api/docs/function-calling",
+    "https://ai.google.dev/gemini-api/docs/structured-output",
+    "https://ai.google.dev/gemini-api/docs/models",
 )
 
 
@@ -68,11 +75,13 @@ class ProviderRuntimeConfig(CraikModel):
                 )
             except ProviderURLSafetyError as exc:
                 raise ValueError(str(exc)) from exc
-        expected_refs = (
-            ANTHROPIC_OFFICIAL_DOCS
-            if self.provider_family == "anthropic"
-            else OPENAI_OFFICIAL_DOCS
-        )
+        expected_refs: Sequence[str]
+        if self.provider_family == "anthropic":
+            expected_refs = ANTHROPIC_OFFICIAL_DOCS
+        elif self.provider_family == "gemini":
+            expected_refs = GEMINI_OFFICIAL_DOCS
+        else:
+            expected_refs = OPENAI_OFFICIAL_DOCS
         missing = [ref for ref in expected_refs if ref not in self.docs_refs]
         if missing:
             raise ValueError(f"provider runtime docs_refs missing official refs: {missing}")

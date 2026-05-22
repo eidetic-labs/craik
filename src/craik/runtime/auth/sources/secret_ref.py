@@ -97,6 +97,8 @@ class SecretRefCredentialSource:
                 "anthropic-version": "2023-06-01",
                 "x-api-key": secret,
             }
+        if family == "gemini":
+            return {"x-goog-api-key": secret}
         return {"Authorization": f"Bearer {secret}"}
 
     def status(self) -> CredentialStatus:

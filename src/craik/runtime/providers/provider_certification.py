@@ -9,7 +9,7 @@ from pydantic import Field, model_validator
 
 from craik.contracts.models import CraikModel
 
-MVPProviderFamily = Literal["openai", "anthropic"]
+MVPProviderFamily = Literal["openai", "anthropic", "gemini"]
 ProviderCertificationStatus = Literal["certified", "blocked"]
 
 MVP_PROVIDER_REQUIREMENTS = (

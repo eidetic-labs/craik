@@ -75,6 +75,7 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
         "gemini",
         "provider_anthropic",
         "provider_anthropic_messages",
+        "provider_gemini",
         "provider_local_openai_compatible",
         "provider_openai",
         "provider_openai_chat",
@@ -86,6 +87,7 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
     assert matrices["fixture"].trust.requires_receipts is False
     assert matrices["provider_openai"].runner.adapter == "provider-runtime"
     assert matrices["provider_anthropic"].runner.metadata["provider_family"] == "anthropic"
+    assert matrices["provider_gemini"].runner.metadata["provider_family"] == "gemini"
     assert (
         matrices["provider_local_openai_compatible"].runner.metadata["provider_family"]
         == "chat_completions"

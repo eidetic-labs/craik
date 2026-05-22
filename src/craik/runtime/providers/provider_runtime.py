@@ -13,6 +13,9 @@ from craik.runtime.providers.provider_config import (
     ANTHROPIC_OFFICIAL_DOCS as ANTHROPIC_OFFICIAL_DOCS,
 )
 from craik.runtime.providers.provider_config import (
+    GEMINI_OFFICIAL_DOCS as GEMINI_OFFICIAL_DOCS,
+)
+from craik.runtime.providers.provider_config import (
     OPENAI_OFFICIAL_DOCS as OPENAI_OFFICIAL_DOCS,
 )
 from craik.runtime.providers.provider_config import (
@@ -35,6 +38,9 @@ from craik.runtime.providers.provider_models import (
 )
 from craik.runtime.providers.provider_models import (
     ProviderTool as ProviderTool,
+)
+from craik.runtime.providers.provider_runtime_gemini import (
+    GeminiProviderAdapter as GeminiProviderAdapter,
 )
 from craik.runtime.providers.provider_runtime_support import (
     _anthropic_message,
@@ -412,7 +418,7 @@ def adapter_for_provider(
 ) -> ProviderRuntimeAdapter:
     """Return the runtime adapter for a configured MVP provider."""
     family = provider.provider
-    if family not in {"openai", "anthropic", "chat_completions"}:
+    if family not in {"openai", "anthropic", "gemini", "chat_completions"}:
         raise ValueError(f"provider {provider.id} is not an MVP live provider")
     model = str(provider.metadata.get("default_model", ""))
     if not model:
@@ -430,13 +436,21 @@ def adapter_for_provider(
         timeout_seconds=float(provider.metadata.get("timeout_seconds", 30.0)),
         max_retries=int(provider.metadata.get("max_retries", 3)),
         live_enabled=live_configured,
-        docs_refs=list(
-            ANTHROPIC_OFFICIAL_DOCS if family == "anthropic" else OPENAI_OFFICIAL_DOCS
-        ),
+        docs_refs=_official_docs_for_family(cast(ProviderFamily, family)),
     )
     transport = _transport_for_config(config)
     if family == "openai":
         return OpenAIProviderAdapter(config, transport=transport)
     if family == "anthropic":
         return AnthropicProviderAdapter(config, transport=transport)
+    if family == "gemini":
+        return GeminiProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)
+
+
+def _official_docs_for_family(family: ProviderFamily) -> list[str]:
+    if family == "anthropic":
+        return list(ANTHROPIC_OFFICIAL_DOCS)
+    if family == "gemini":
+        return list(GEMINI_OFFICIAL_DOCS)
+    return list(OPENAI_OFFICIAL_DOCS)
