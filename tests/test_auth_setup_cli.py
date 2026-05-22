@@ -49,7 +49,14 @@ def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) 
     local_payload = json.loads(local.stdout)
     assert local_payload["profile"]["provider_family"] == "chat_completions"
     assert local_payload["profile"]["metadata"]["allow_local_base_url"] is True
-    assert "Confirm the local OpenAI-compatible server" in local_payload["guidance"][1]
+    assert any(
+        "WARNING: Local model endpoint uses plaintext HTTP" in item
+        for item in local_payload["guidance"]
+    )
+    assert any(
+        "Confirm the local OpenAI-compatible server" in item
+        for item in local_payload["guidance"]
+    )
     assert not AuthProfileStore(tmp_path / "home").list()
 
 

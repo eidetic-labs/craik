@@ -14,11 +14,18 @@ from craik.runtime.agents import (
     start_agent_session,
 )
 from craik.runtime.projects.project_registry import ProjectRegistry
+from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.providers.provider_certification import provider_certification_matrix
-from craik.runtime.store import LocalStore
+from craik.runtime.providers.provider_runtime import adapter_for_provider
+from craik.runtime.providers.provider_transport import FixtureTransport
+from craik.runtime.store import CONTRACT_KINDS, LocalStore
 
 DEMO_OPERATOR_SUBJECT = "operator:persistent-agent-demo"
 DEMO_OPERATOR_ISSUER = "craik:demo"
+
+
+class DemoConfigError(RuntimeError):
+    """Raised when demo runtime configuration is unsafe."""
 
 
 @dataclass(frozen=True)
@@ -33,6 +40,8 @@ class PersistentAgentLaunchDemo:
         repo_path: Path,
         project_name: str = "Persistent Agent Demo",
         provider_ids: tuple[str, ...] | None = None,
+        allow_live: bool = False,
+        cleanup: bool = True,
     ) -> dict[str, Any]:
         """Launch persistent sessions, prompt them, and return linked artifacts."""
         project = ProjectRegistry(self.store).add_project(repo_path, name=project_name)
@@ -42,24 +51,31 @@ class PersistentAgentLaunchDemo:
             "provider_gemini",
             "provider_local_ollama",
         )
+        if not allow_live:
+            _assert_fixture_transports(providers)
         started_at = datetime.now(UTC).replace(microsecond=0)
-        executions = [
-            self._run_provider(
-                project_id=project.id,
-                provider_id=provider_id,
-                started_at=started_at,
-            )
-            for provider_id in providers
-        ]
-        return {
-            "schema": "craik.demo.persistent_agent_launch",
-            "version": "0.1.0",
-            "mode": "fixture",
-            "project": project.model_dump(mode="json", by_alias=True),
-            "provider_ids": list(providers),
-            "provider_executions": executions,
-            "commands": _demo_commands(project.id, providers[0]),
-        }
+        try:
+            executions = [
+                self._run_provider(
+                    project_id=project.id,
+                    provider_id=provider_id,
+                    started_at=started_at,
+                )
+                for provider_id in providers
+            ]
+            return {
+                "schema": "craik.demo.persistent_agent_launch",
+                "version": "0.1.0",
+                "mode": "live" if allow_live else "fixture",
+                "artifacts_cleaned": cleanup,
+                "project": project.model_dump(mode="json", by_alias=True),
+                "provider_ids": list(providers),
+                "provider_executions": executions,
+                "commands": _demo_commands(project.id, providers[0]),
+            }
+        finally:
+            if cleanup:
+                _delete_demo_session_artifacts(self.store)
 
     def _run_provider(
         self,
@@ -123,6 +139,45 @@ def _provider_matrix_row(provider_id: str) -> dict[str, Any]:
         if row.provider_id == provider_id:
             return row.model_dump(mode="json", by_alias=True)
     raise ValueError(f"provider is not in the certification matrix: {provider_id}")
+
+
+def _assert_fixture_transports(provider_ids: tuple[str, ...]) -> None:
+    registry = default_model_provider_registry()
+    for provider_id in provider_ids:
+        provider = registry.require(provider_id)
+        adapter = adapter_for_provider(provider)
+        if not isinstance(adapter.transport, FixtureTransport):
+            raise DemoConfigError(
+                "persistent-agent demo requires fixture transport; "
+                "pass --allow-live to use live provider transport explicitly"
+            )
+
+
+def _delete_demo_session_artifacts(store: LocalStore) -> None:
+    states = [
+        state
+        for state in store.list_agent_session_states()
+        if state.operator_subject == DEMO_OPERATOR_SUBJECT
+    ]
+    session_ids = {state.id for state in states}
+    events = [
+        event
+        for event in store.list_agent_session_events()
+        if event.operator_subject == DEMO_OPERATOR_SUBJECT or event.session_id in session_ids
+    ]
+    if not states and not events:
+        return
+    with store.transaction() as connection:
+        for event in events:
+            connection.execute(
+                "DELETE FROM records WHERE kind = ? AND id = ?",
+                (CONTRACT_KINDS["craik.agent_session_event"], event.id),
+            )
+        for state in states:
+            connection.execute(
+                "DELETE FROM records WHERE kind = ? AND id = ?",
+                (CONTRACT_KINDS["craik.agent_session_state"], state.id),
+            )
 
 
 def _demo_commands(project_id: str, provider_id: str) -> list[str]:

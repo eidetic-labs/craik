@@ -122,7 +122,9 @@ craik demo persistent-agent --repo-path .
 The demo is deterministic and uses fixture provider transport. It
 launches persistent sessions, runs a prompt, records provider receipts,
 writes handoffs, inspects final session state, and prints the exact
-operator commands that mirror the flow. By default it covers OpenAI,
+operator commands that mirror the flow. It deletes demo session
+artifacts on exit by default; pass `--keep-artifacts` only when you
+need to inspect those records afterward. By default it covers OpenAI,
 Anthropic, Gemini, and a local Ollama-style route:
 
 ```sh
@@ -131,6 +133,18 @@ craik demo persistent-agent \
   --provider-id provider_openai \
   --provider-id provider_anthropic
 ```
+
+The demo refuses non-fixture provider transport unless `--allow-live`
+is supplied. Use that override only when you intentionally want the demo
+to consume live provider quota.
+
+## Provider transport model
+
+Craik does not depend on the official OpenAI, Anthropic, or Gemini SDKs
+for persistent-agent execution. Provider adapters build published REST
+payloads and send them through Craik's transport layer. The tradeoff is
+a smaller runtime dependency surface and uniform receipt handling, while
+provider API changes must be tracked in Craik's adapters and tests.
 
 ## Stop and restart
 

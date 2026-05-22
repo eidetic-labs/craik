@@ -1430,6 +1430,7 @@ def test_demo_persistent_agent_command_runs_fixture_path(tmp_path: Path) -> None
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.demo.persistent_agent_launch"
     assert payload["mode"] == "fixture"
+    assert payload["artifacts_cleaned"] is True
     assert [item["provider_id"] for item in payload["provider_executions"]] == [
         "provider_openai",
         "provider_anthropic",

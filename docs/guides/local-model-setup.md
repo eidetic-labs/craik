@@ -114,7 +114,11 @@ It does not load or print third-party credentials.
 
 Loopback HTTP is only accepted for local provider setup or when
 `--allow-local-base-url` is passed intentionally. Third-party provider
-profiles should use HTTPS base URLs.
+profiles should use HTTPS base URLs. Setup output warns when a local
+model endpoint uses plaintext HTTP; that warning is acceptable for
+loopback-only servers and should be treated as unsafe if Ollama, LM
+Studio, vLLM, or another local endpoint is bound to a non-loopback
+interface.
 
 ## Secret references
 
