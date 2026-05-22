@@ -32,7 +32,7 @@ class RealChannelAdapterSpec:
     service: RealChannelService
     adapter_id: str
     name: str
-    token_env_var: str
+    secret_env_var: str
     default_workspace: str
     setup_hint: str
 
@@ -92,7 +92,7 @@ REAL_CHANNEL_ADAPTERS: dict[RealChannelService, RealChannelAdapterSpec] = {
         service="webchat",
         adapter_id="webchat_adapter",
         name="WebChat Local Browser Adapter",
-        token_env_var="CRAIK_WEBCHAT_TOKEN",
+        secret_env_var="CRAIK_WEBCHAT_TOKEN",
         default_workspace="local-browser",
         setup_hint="Use the local dashboard WebChat surface with a generated bearer token.",
     ),
@@ -100,7 +100,7 @@ REAL_CHANNEL_ADAPTERS: dict[RealChannelService, RealChannelAdapterSpec] = {
         service="telegram",
         adapter_id="telegram_adapter",
         name="Telegram Bot Adapter",
-        token_env_var="CRAIK_TELEGRAM_BOT_TOKEN",
+        secret_env_var="CRAIK_TELEGRAM_BOT_TOKEN",
         default_workspace="telegram",
         setup_hint="Create a Telegram bot token and expose it through CRAIK_TELEGRAM_BOT_TOKEN.",
     ),
@@ -108,7 +108,7 @@ REAL_CHANNEL_ADAPTERS: dict[RealChannelService, RealChannelAdapterSpec] = {
         service="discord",
         adapter_id="discord_adapter",
         name="Discord Bot Adapter",
-        token_env_var="CRAIK_DISCORD_BOT_TOKEN",
+        secret_env_var="CRAIK_DISCORD_BOT_TOKEN",
         default_workspace="discord",
         setup_hint="Create a Discord bot token and expose it through CRAIK_DISCORD_BOT_TOKEN.",
     ),
@@ -116,7 +116,7 @@ REAL_CHANNEL_ADAPTERS: dict[RealChannelService, RealChannelAdapterSpec] = {
         service="slack",
         adapter_id="slack_adapter",
         name="Slack App Adapter",
-        token_env_var="CRAIK_SLACK_BOT_TOKEN",
+        secret_env_var="CRAIK_SLACK_BOT_TOKEN",
         default_workspace="slack",
         setup_hint="Create a Slack bot token and expose it through CRAIK_SLACK_BOT_TOKEN.",
     ),
@@ -212,7 +212,7 @@ def channel_setup_plan(
     return ChannelSetupPlan(
         service=service,
         adapter_id=spec.adapter_id,
-        secret_ref=SecretRef(env_var=spec.token_env_var),
+        secret_ref=SecretRef(env_var=spec.secret_env_var),
         allowlist_id=f"allowlist_{service}",
         policy_envelope_id=f"policy_channel_{service}",
         pairing_required=True,
@@ -361,9 +361,9 @@ def diagnose_channel_adapter(
     """Return redacted readiness diagnostics for one adapter."""
     spec = _spec(service)
     values = env or {}
-    secret_ref = SecretRef(env_var=spec.token_env_var)
+    secret_ref = SecretRef(env_var=spec.secret_env_var)
     token_resolved = False
-    if env is not None and values.get(spec.token_env_var):
+    if env is not None and values.get(spec.secret_env_var):
         token_resolved = True
     else:
         try:
@@ -374,7 +374,7 @@ def diagnose_channel_adapter(
     credential_status = credential_storage_status(env).as_dict()
     warnings = []
     if not token_resolved:
-        warnings.append(f"missing secret reference {spec.token_env_var}")
+        warnings.append(f"missing secret reference {spec.secret_env_var}")
     if not credential_status["secure"]:
         warnings.append("credential backend is not OS-secure; keep token refs out of config")
     return ChannelDiagnostic(
