@@ -195,6 +195,18 @@ InstructionPromotionDecision = Literal["approved", "rejected", "deferred"]
 RecoveryStatus = Literal["clean_resume", "changed_state", "missing_prior_context"]
 GatewayMode = Literal["foreground", "daemon"]
 GatewayRuntimeStatus = Literal["stopped", "starting", "running", "stopping", "failed"]
+AgentSessionMode = Literal["foreground", "background", "interactive"]
+AgentSessionStatus = Literal[
+    "starting",
+    "running",
+    "idle",
+    "stopping",
+    "stopped",
+    "failed",
+    "auth_expired",
+    "provider_unavailable",
+    "sandbox_failed",
+]
 ChannelKind = Literal["messaging", "webhook", "scheduler", "voice", "custom"]
 ChannelCapabilityDirection = Literal["inbound", "outbound", "bidirectional"]
 ChannelPairingStatus = Literal["unpaired", "paired", "revoked"]
@@ -323,6 +335,8 @@ __all__ = [
     "RecoveryStatus",
     "GatewayMode",
     "GatewayRuntimeStatus",
+    "AgentSessionMode",
+    "AgentSessionStatus",
     "ChannelKind",
     "ChannelCapabilityDirection",
     "ChannelPairingStatus",

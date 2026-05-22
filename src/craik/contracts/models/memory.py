@@ -167,6 +167,67 @@ class GatewayRuntimeState(CraikModel):
         return self
 
 
+class AgentSessionState(CraikModel):
+    """Persisted lifecycle state for a persistent Craik agent session."""
+
+    schema_: Literal["craik.agent_session_state"] = Field(
+        default="craik.agent_session_state",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    id: str
+    project_id: str | None = None
+    operator_subject: str = Field(min_length=1)
+    operator_issuer: str | None = None
+    provider_id: str = Field(min_length=1)
+    model_id: str | None = None
+    auth_profile_id: str | None = None
+    auth_identity_hash: str | None = None
+    policy_envelope_id: str | None = None
+    mode: AgentSessionMode = "foreground"
+    status: AgentSessionStatus
+    pid: int | None = Field(default=None, ge=1)
+    endpoint_url: str | None = None
+    active_task_id: str | None = None
+    active_run_id: str | None = None
+    started_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    stopped_at: datetime | None = None
+    updated_at: datetime
+    receipt_ids: list[str] = Field(default_factory=list)
+    handoff_ids: list[str] = Field(default_factory=list)
+    recovery_session_id: str | None = None
+    recovery_metadata: dict[str, Any] = Field(default_factory=dict)
+    supervision_notes: list[str] = Field(default_factory=list)
+    redacted: bool = True
+
+    @model_validator(mode="after")
+    def validate_agent_session_state(self) -> AgentSessionState:
+        """Keep persistent agent lifecycle and trust-boundary state consistent."""
+        if self.status in {"running", "idle", "stopping"} and self.started_at is None:
+            raise ValueError("active agent session state requires started_at")
+        if self.status == "stopped" and self.stopped_at is None:
+            raise ValueError("stopped agent session state requires stopped_at")
+        if self.status in {"failed", "auth_expired", "provider_unavailable", "sandbox_failed"}:
+            if not self.supervision_notes:
+                raise ValueError("failed agent session state requires supervision_notes")
+        if self.pid is not None and self.status not in {"starting", "running", "idle", "stopping"}:
+            raise ValueError("agent session pid is only valid while process may be active")
+        if (
+            self.started_at is not None
+            and self.last_activity_at is not None
+            and self.last_activity_at < self.started_at
+        ):
+            raise ValueError("last_activity_at cannot precede started_at")
+        if (
+            self.started_at is not None
+            and self.stopped_at is not None
+            and self.stopped_at < self.started_at
+        ):
+            raise ValueError("stopped_at cannot precede started_at")
+        return self
+
+
 class GatewaySchedule(CraikModel):
     """Cron-like schedule definition for gateway-created tasks."""
 

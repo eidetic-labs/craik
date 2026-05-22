@@ -54,6 +54,39 @@
       "priority": "normal"
     }
   },
+  "craik.agent_session_state": {
+    "schema": "craik.agent_session_state",
+    "version": "0.1.0",
+    "id": "agent_session_project_stigmem_provider_openai",
+    "project_id": "project_stigmem",
+    "operator_subject": "operator-123",
+    "operator_issuer": "https://issuer.example.test",
+    "provider_id": "provider_openai",
+    "model_id": "gpt-5.2",
+    "auth_profile_id": "openai:work",
+    "auth_identity_hash": "example-identity-hash",
+    "policy_envelope_id": "policy_task_docs_reconcile",
+    "mode": "interactive",
+    "status": "running",
+    "pid": 4321,
+    "endpoint_url": "http://127.0.0.1:8766",
+    "active_task_id": "task_docs_reconcile",
+    "active_run_id": "run_docs_reconcile",
+    "started_at": "2026-05-22T06:00:00Z",
+    "last_activity_at": "2026-05-22T06:03:00Z",
+    "stopped_at": null,
+    "updated_at": "2026-05-22T06:03:00Z",
+    "receipt_ids": ["receipt_provider_call"],
+    "handoff_ids": ["handoff_docs_reconcile"],
+    "recovery_session_id": "recovery_session_project_stigmem",
+    "recovery_metadata": {
+      "resume_strategy": "reconnect"
+    },
+    "supervision_notes": [
+      "Persistent agent session is bound to provider_openai without stored secrets."
+    ],
+    "redacted": true
+  },
   "craik.agent_onboarding": {
     "schema": "craik.agent_onboarding",
     "version": "0.1.0",

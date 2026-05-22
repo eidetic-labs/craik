@@ -37,6 +37,22 @@ class ProfileStoreMixin(LocalStoreCore):
             self.list_contracts("craik.gateway_runtime_state"),
         )
 
+    def put_agent_session_state(self, state: AgentSessionState) -> None:
+        """Persist persistent agent session state."""
+        self.put_contract(state)
+
+    def get_agent_session_state(self, state_id: str) -> AgentSessionState | None:
+        """Load persistent agent session state by id."""
+        contract = self.get_contract("craik.agent_session_state", state_id)
+        return _cast_optional(AgentSessionState, contract)
+
+    def list_agent_session_states(self) -> list[AgentSessionState]:
+        """List persistent agent session states."""
+        return _cast_list(
+            AgentSessionState,
+            self.list_contracts("craik.agent_session_state"),
+        )
+
     def put_project(self, project: ProjectProfile) -> None:
         self.put_contract(project)
 
