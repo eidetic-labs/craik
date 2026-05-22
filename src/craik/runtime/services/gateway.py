@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 import signal
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -83,6 +84,7 @@ def install_gateway_service(
     paths: CraikPaths,
     *,
     target_platform: str | None = None,
+    executable_path: str | Path | None = None,
 ) -> GatewayServiceInstall:
     """Generate and write a user-service definition for the gateway."""
     store = LocalStore.from_paths(paths)
@@ -94,19 +96,20 @@ def install_gateway_service(
     if config is None:
         raise GatewayDaemonConfigError("gateway configuration missing; run craik setup first")
     backend = _service_backend(target_platform or platform.system())
+    executable = _resolve_craik_executable(executable_path)
     service_dir = paths.config / "services"
     service_dir.mkdir(parents=True, exist_ok=True)
     if backend == "launchd":
         path = service_dir / "com.eidetic-labs.craik.gateway.plist"
-        content = _launchd_plist(paths, config)
+        content = _launchd_plist(paths, config, executable)
         notes = ("Copy to ~/Library/LaunchAgents and run launchctl bootstrap gui/$UID.",)
     elif backend == "systemd":
         path = service_dir / "craik-gateway.service"
-        content = _systemd_unit(paths, config)
+        content = _systemd_unit(paths, config, executable)
         notes = ("Copy to ~/.config/systemd/user and run systemctl --user enable --now.",)
     else:
         path = service_dir / "craik-gateway.windows.txt"
-        content = _windows_service_plan(paths, config)
+        content = _windows_service_plan(paths, config, executable)
         notes = ("Windows service installation is documented as a manual plan for this release.",)
     path.write_text(content, encoding="utf-8")
     return GatewayServiceInstall(backend, path, True, content, notes)
@@ -200,7 +203,20 @@ def _service_backend(system_name: str) -> str:
     return "windows-plan"
 
 
-def _launchd_plist(paths: CraikPaths, config: GatewayConfig) -> str:
+def _resolve_craik_executable(executable_path: str | Path | None = None) -> Path:
+    candidate = Path(executable_path) if executable_path is not None else None
+    if candidate is None:
+        resolved = shutil.which("craik")
+        if resolved is None:
+            raise GatewayDaemonConfigError("craik executable not found on PATH")
+        candidate = Path(resolved)
+    candidate = candidate.expanduser()
+    if not candidate.is_absolute():
+        raise GatewayDaemonConfigError("gateway service executable path must be absolute")
+    return candidate
+
+
+def _launchd_plist(paths: CraikPaths, config: GatewayConfig, executable: Path) -> str:
     log_path = _gateway_log_path(paths, config)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
@@ -209,7 +225,7 @@ def _launchd_plist(paths: CraikPaths, config: GatewayConfig) -> str:
 <dict>
   <key>Label</key><string>com.eidetic-labs.craik.gateway</string>
   <key>ProgramArguments</key>
-  <array><string>craik</string><string>gateway</string><string>start</string></array>
+  <array><string>{executable}</string><string>gateway</string><string>start</string></array>
   <key>EnvironmentVariables</key>
   <dict><key>CRAIK_HOME</key><string>{paths.home}</string></dict>
   <key>RunAtLoad</key><true/>
@@ -223,7 +239,7 @@ def _launchd_plist(paths: CraikPaths, config: GatewayConfig) -> str:
 """
 
 
-def _systemd_unit(paths: CraikPaths, config: GatewayConfig) -> str:
+def _systemd_unit(paths: CraikPaths, config: GatewayConfig, executable: Path) -> str:
     log_path = _gateway_log_path(paths, config)
     return f"""[Unit]
 Description=Craik gateway service
@@ -232,7 +248,7 @@ After=network.target
 [Service]
 Type=simple
 Environment=CRAIK_HOME={paths.home}
-ExecStart=craik gateway start
+ExecStart={executable} gateway start
 Restart=on-failure
 StandardOutput=append:{log_path}
 StandardError=append:{log_path}
@@ -243,11 +259,11 @@ WantedBy=default.target
 """
 
 
-def _windows_service_plan(paths: CraikPaths, config: GatewayConfig) -> str:
+def _windows_service_plan(paths: CraikPaths, config: GatewayConfig, executable: Path) -> str:
     log_path = _gateway_log_path(paths, config)
     return (
         "Windows service installation is manual in v0.11.0.\n"
         f"CRAIK_HOME={paths.home}\n"
-        "Command=craik gateway start\n"
+        f"Command={executable} gateway start\n"
         f"LogFile={log_path}\n"
     )

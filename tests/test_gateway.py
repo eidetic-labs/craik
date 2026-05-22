@@ -209,15 +209,29 @@ def test_gateway_service_install_generates_launchd_and_systemd_units(tmp_path: P
     finally:
         store.close()
 
-    launchd = install_gateway_service(paths, target_platform="Darwin")
-    systemd = install_gateway_service(paths, target_platform="Linux")
+    executable = tmp_path / "bin" / "craik"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+
+    launchd = install_gateway_service(
+        paths,
+        target_platform="Darwin",
+        executable_path=executable,
+    )
+    systemd = install_gateway_service(
+        paths,
+        target_platform="Linux",
+        executable_path=executable,
+    )
 
     assert launchd.backend == "launchd"
     assert launchd.path.name.endswith(".plist")
     assert "CRAIK_HOME" in launchd.content
-    assert "craik</string><string>gateway</string><string>start" in launchd.content
+    assert f"{executable}</string><string>gateway</string><string>start" in launchd.content
+    assert "<string>craik</string>" not in launchd.content
     assert systemd.backend == "systemd"
-    assert "ExecStart=craik gateway start" in systemd.content
+    assert f"ExecStart={executable} gateway start" in systemd.content
+    assert "ExecStart=craik gateway start" not in systemd.content
     assert uninstall_gateway_service(paths)["installed"] is False
 
 

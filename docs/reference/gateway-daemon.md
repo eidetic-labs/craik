@@ -115,6 +115,9 @@ file already exists, startup fails instead of running a second daemon.
 `craik gateway install` writes a generated service definition under
 Craik config:
 
+The generated service uses the absolute `craik` executable resolved at
+install time, avoiding service-manager `PATH` ambiguity.
+
 <div className="craik-grid">
 
 <div><h4>macOS</h4><p><code>launchd</code> plist for a user LaunchAgent.</p></div>
