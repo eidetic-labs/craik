@@ -96,6 +96,35 @@ def test_agent_session_state_legacy_unsigned_rows_remain_readable(tmp_path) -> N
         store.close()
 
 
+def test_agent_session_state_legacy_none_hmac_reports_unverified(tmp_path) -> None:
+    store = LocalStore(tmp_path / "craik.sqlite3")
+    store.initialize()
+
+    try:
+        state = start_agent_session(
+            store,
+            session_id="agent_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+        )
+        _mutate_payload(
+            store,
+            "craik.agent_session_state",
+            state.id,
+            lambda payload: payload.update({"receipt_hmac": None}),
+        )
+
+        stored = store.get_agent_session_state(state.id)
+        read_result = store.get_agent_session_state_with_verification(state.id)
+
+        assert stored is not None
+        assert stored.receipt_hmac is None
+        assert read_result is not None
+        assert read_result.hmac_status == "unverified"
+    finally:
+        store.close()
+
+
 def test_agent_session_event_hmac_verified_and_tamper_detected(tmp_path) -> None:
     store = LocalStore(tmp_path / "craik.sqlite3")
     store.initialize()

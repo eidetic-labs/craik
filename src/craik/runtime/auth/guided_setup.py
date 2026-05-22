@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import urlparse
 
 from craik.runtime.auth.pool import CredentialPoolConfig, CredentialPoolEntry
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
+from craik.runtime.local_models import local_model_base_url_warnings
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.providers.provider_url_safety import assert_safe_provider_url
 
@@ -116,11 +116,8 @@ def credential_guidance(profile: AuthProfile, status: CredentialStatus) -> list[
         guidance.append("Verify the configured secret reference resolves before live use.")
     if profile.provider_family == "chat_completions":
         base_url = profile.metadata.get("base_url")
-        if isinstance(base_url, str) and urlparse(base_url).scheme == "http":
-            guidance.append(
-                "WARNING: Local model endpoint uses plaintext HTTP. Acceptable only for "
-                "loopback (127.0.0.1/::1). Do NOT bind Ollama to a non-loopback interface."
-            )
+        if isinstance(base_url, str):
+            guidance.extend(local_model_base_url_warnings(base_url))
         guidance.append("Confirm the local OpenAI-compatible server is listening at base_url.")
     return guidance
 
