@@ -19,6 +19,7 @@ from craik.runtime.channels.messaging import (
     messaging_response_payload,
     normalize_inbound_message,
 )
+from craik.runtime.channels.webhook_ingress import discord_signature_verifier_available
 from craik.runtime.secrets import SecretNotFoundError, SecretRef, SecretResolver
 from craik.runtime.shell.credential_storage import credential_storage_status
 
@@ -396,6 +397,8 @@ def diagnose_channel_adapter(
         warnings.append(f"missing secret reference {spec.secret_env_var}")
     if not credential_status["secure"]:
         warnings.append("credential backend is not OS-secure; keep token refs out of config")
+    if service == "discord" and not discord_signature_verifier_available():
+        warnings.append("discord native Ed25519 signature verifier is not available")
     return ChannelDiagnostic(
         service=service,
         configured=token_resolved,

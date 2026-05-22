@@ -46,6 +46,18 @@ The prefix prevents two providers from colliding on the same external
 identifier. A sender is not authorized by identity alone; it must also
 match an allowlist rule for the expected workspace or thread.
 
+## Webhook Signatures
+
+Inbound webhooks verify the platform-native request boundary before
+JSON parsing and dispatch. WebChat uses Craik's `X-Craik-Signature`
+HMAC header, Slack uses `X-Slack-Signature` plus
+`X-Slack-Request-Timestamp`, Telegram uses
+`X-Telegram-Bot-Api-Secret-Token`, and Discord requires native
+`X-Signature-Ed25519` / `X-Signature-Timestamp` verification support.
+If Discord Ed25519 verification is unavailable in the runtime
+environment, Discord ingress fails closed and `craik channels doctor
+discord` reports the missing verifier.
+
 ## Redaction
 
 Message text and response text are marked as redacted fields in the
