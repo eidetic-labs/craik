@@ -41,6 +41,9 @@ within the `0.x.0` stability expectations described in
 - Read-only memory impact preview view through `craik operator
   memory-impact`, preserving the boundary between proposals, facts to
   add, facts to invalidate, evidence gaps, and contradiction risks.
+- Read-only known traps view through `craik operator traps`, exposing
+  known traps and negative knowledge with project/task filters and
+  timestamped JSON output.
 
 ## 0.6.0 — 2026-05-21
 
