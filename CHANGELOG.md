@@ -70,6 +70,10 @@ within the `0.x.0` stability expectations described in
   of accepting session-file presence alone.
 - Gateway service generation now writes an absolute `craik` executable
   path into launchd, systemd, and Windows service-plan output.
+- Channel webhook ingress now supports platform-specific signature
+  boundaries for WebChat/Craik HMAC, Slack request signatures,
+  Telegram secret-token headers, and fail-closed Discord native
+  signature verification when an Ed25519 verifier is unavailable.
 
 ## 0.10.0 — 2026-05-22
 

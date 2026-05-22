@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 from datetime import UTC, datetime, timedelta
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -16,6 +17,7 @@ from craik.runtime.channels.persistence import (
 )
 
 WebhookIngressStatus = Literal["accepted", "invalid", "duplicate", "unauthorized"]
+WebhookSignaturePlatform = Literal["craik", "webchat", "slack", "telegram", "discord"]
 MAX_WEBHOOK_BODY_BYTES = 1024 * 1024
 MAX_WEBHOOK_JSON_DEPTH = 32
 DEFAULT_WEBHOOK_TIMESTAMP_WINDOW = timedelta(minutes=5)
@@ -80,6 +82,7 @@ def validate_webhook_request(
     secret: str,
     allowed_event_types: set[str],
     seen_event_ids: set[str],
+    signature_platform: WebhookSignaturePlatform = "craik",
     replay_store: WebhookReplayStore | None = None,
     now: datetime | None = None,
     max_body_bytes: int = MAX_WEBHOOK_BODY_BYTES,
@@ -94,25 +97,19 @@ def validate_webhook_request(
             reason="webhook body exceeds maximum size",
         )
 
-    signature_result = _signature_header(headers)
-    if signature_result is None:
+    signature_failure = _signature_failure(
+        body=body,
+        headers=headers,
+        secret=secret,
+        platform=signature_platform,
+        now=now or datetime.now(UTC),
+        timestamp_window=timestamp_window,
+    )
+    if signature_failure is not None:
         return WebhookIngressResult(
             status="invalid",
             accepted=False,
-            reason="webhook signature is missing or invalid",
-        )
-    signature, ambiguous = signature_result
-    if ambiguous:
-        return WebhookIngressResult(
-            status="invalid",
-            accepted=False,
-            reason="webhook signature header is ambiguous",
-        )
-    if not signature or not _signature_valid(body=body, secret=secret, signature=signature):
-        return WebhookIngressResult(
-            status="invalid",
-            accepted=False,
-            reason="webhook signature is missing or invalid",
+            reason=signature_failure,
         )
 
     try:
@@ -254,20 +251,188 @@ def webhook_signature(body: bytes, secret: str) -> str:
     return f"sha256={digest}"
 
 
+def slack_webhook_signature(body: bytes, secret: str, timestamp: str) -> str:
+    """Return Slack's v0 HMAC signature for one request body."""
+    base = b"v0:" + timestamp.encode("utf-8") + b":" + body
+    digest = hmac.new(secret.encode("utf-8"), base, hashlib.sha256).hexdigest()
+    return f"v0={digest}"
+
+
+def discord_signature_verifier_available() -> bool:
+    """Return whether native Discord Ed25519 verification can run."""
+    return find_spec("nacl") is not None or find_spec("cryptography") is not None
+
+
+def _signature_failure(
+    *,
+    body: bytes,
+    headers: dict[str, str],
+    secret: str,
+    platform: WebhookSignaturePlatform,
+    now: datetime,
+    timestamp_window: timedelta,
+) -> str | None:
+    if platform in {"craik", "webchat"}:
+        return _craik_signature_failure(body=body, headers=headers, secret=secret)
+    if platform == "slack":
+        return _slack_signature_failure(
+            body=body,
+            headers=headers,
+            secret=secret,
+            now=now,
+            timestamp_window=timestamp_window,
+        )
+    if platform == "telegram":
+        return _secret_token_failure(
+            headers=headers,
+            secret=secret,
+            header_name="X-Telegram-Bot-Api-Secret-Token",
+        )
+    return _discord_signature_failure(body=body, headers=headers, public_key=secret)
+
+
+def _craik_signature_failure(*, body: bytes, headers: dict[str, str], secret: str) -> str | None:
+    signature_result = _signature_header(headers, "X-Craik-Signature")
+    if signature_result is None:
+        return "webhook signature is missing or invalid"
+    signature, ambiguous = signature_result
+    if ambiguous:
+        return "webhook signature header is ambiguous"
+    if not signature or not _signature_valid(body=body, secret=secret, signature=signature):
+        return "webhook signature is missing or invalid"
+    return None
+
+
+def _slack_signature_failure(
+    *,
+    body: bytes,
+    headers: dict[str, str],
+    secret: str,
+    now: datetime,
+    timestamp_window: timedelta,
+) -> str | None:
+    signature_result = _signature_header(headers, "X-Slack-Signature")
+    timestamp_result = _signature_header(headers, "X-Slack-Request-Timestamp")
+    if signature_result is None or timestamp_result is None:
+        return "webhook signature is missing or invalid"
+    signature, signature_ambiguous = signature_result
+    timestamp, timestamp_ambiguous = timestamp_result
+    if signature_ambiguous or timestamp_ambiguous:
+        return "webhook signature header is ambiguous"
+    if timestamp is None:
+        return "webhook signature is missing or invalid"
+    parsed_timestamp = _unix_timestamp(timestamp)
+    if parsed_timestamp is None:
+        return "webhook signature is missing or invalid"
+    if parsed_timestamp < now - timestamp_window or parsed_timestamp > now + timestamp_window:
+        return "webhook signature timestamp is outside the allowed window"
+    expected = slack_webhook_signature(body, secret, timestamp)
+    if not signature or not hmac.compare_digest(signature, expected):
+        return "webhook signature is missing or invalid"
+    return None
+
+
+def _secret_token_failure(
+    *,
+    headers: dict[str, str],
+    secret: str,
+    header_name: str,
+) -> str | None:
+    token_result = _signature_header(headers, header_name)
+    if token_result is None:
+        return "webhook signature is missing or invalid"
+    token, ambiguous = token_result
+    if ambiguous:
+        return "webhook signature header is ambiguous"
+    if not token or not hmac.compare_digest(token, secret):
+        return "webhook signature is missing or invalid"
+    return None
+
+
+def _discord_signature_failure(
+    *,
+    body: bytes,
+    headers: dict[str, str],
+    public_key: str,
+) -> str | None:
+    signature_result = _signature_header(headers, "X-Signature-Ed25519")
+    timestamp_result = _signature_header(headers, "X-Signature-Timestamp")
+    if signature_result is None or timestamp_result is None:
+        return "webhook signature is missing or invalid"
+    signature, signature_ambiguous = signature_result
+    timestamp, timestamp_ambiguous = timestamp_result
+    if signature_ambiguous or timestamp_ambiguous:
+        return "webhook signature header is ambiguous"
+    if not discord_signature_verifier_available():
+        return "discord webhook signature verifier unavailable"
+    if _discord_signature_valid(
+        body=body,
+        public_key=public_key,
+        signature=signature or "",
+        timestamp=timestamp or "",
+    ):
+        return None
+    return "webhook signature is missing or invalid"
+
+
+def _discord_signature_valid(
+    *,
+    body: bytes,
+    public_key: str,
+    signature: str,
+    timestamp: str,
+) -> bool:
+    message = timestamp.encode("utf-8") + body
+    try:
+        from nacl.signing import VerifyKey  # type: ignore[import-not-found]
+
+        VerifyKey(bytes.fromhex(public_key)).verify(message, bytes.fromhex(signature))
+        return True
+    except ImportError:
+        pass
+    except Exception:
+        return False
+    try:
+        from cryptography.exceptions import InvalidSignature  # type: ignore[import-not-found]
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # type: ignore[import-not-found]
+            Ed25519PublicKey,
+        )
+
+        key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key))
+        key.verify(bytes.fromhex(signature), message)
+        return True
+    except ImportError:
+        return False
+    except (InvalidSignature, ValueError):
+        return False
+
+
 def _signature_valid(*, body: bytes, secret: str, signature: str) -> bool:
     expected = webhook_signature(body, secret)
     return hmac.compare_digest(signature, expected)
 
 
-def _signature_header(headers: dict[str, str]) -> tuple[str | None, bool] | None:
+def _signature_header(
+    headers: dict[str, str],
+    header_name: str,
+) -> tuple[str | None, bool] | None:
     values = [
         value
         for name, value in headers.items()
-        if name.lower() == "x-craik-signature"
+        if name.lower() == header_name.lower()
     ]
     if not values:
         return None
     return values[0], len(values) > 1
+
+
+def _unix_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=UTC)
+    except ValueError:
+        return None
 
 
 def _optional_string(value: Any) -> str | None:
