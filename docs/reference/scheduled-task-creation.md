@@ -25,7 +25,9 @@ preserving gateway context.
 ## Cron shape
 
 Conservative five-field cron-like expression. Supported field
-characters: digits, `*`, `/`, `,`, `-`.
+characters: digits, `*`, `/`, `,`, `-`. The minute field must not
+schedule work more often than every five minutes; `* * * * *` and
+`*/4 * * * *` are rejected by default.
 
 ```text
 0 9 * * *

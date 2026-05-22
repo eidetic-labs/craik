@@ -71,6 +71,7 @@ credentials in Craik config payloads.**
 | --- | --- | --- |
 | Schedule is rejected | Validation says five fields are required | Use a five-field cron-like expression. |
 | Schedule token is rejected | Validation reports unsupported cron field | Use only digits, `*`, `/`, `,`, and `-`. |
+| Schedule is too frequent | Validation reports the five-minute minimum | Use a minute field such as `*/5`, `*/15`, or a sparse explicit list. |
 | Task is not created | Result says tick already created a task | Use the existing task for that tick. |
 | Automation does not run | Result status is `disabled` | Enable the automation after reviewing policy and receipts. |
 | Automation is policy denied | Result status is `policy_denied` | Add `gateway.schedule.execute` only to the intended policy envelope. |
