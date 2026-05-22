@@ -21,6 +21,8 @@ within the `0.x.0` stability expectations described in
 - Read-only handoff viewer through `craik operator handoff`, accepting
   handoff ids or task ids and preserving the durable-summary redaction
   boundary.
+- Read-only receipt viewer through `craik operator receipt`, covering
+  capability and plugin receipt records with text and JSON output.
 
 ## 0.6.0 — 2026-05-21
 

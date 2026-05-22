@@ -14,6 +14,7 @@ from craik.runtime.companions.operator_views import (
     build_operator_surface_snapshot,
     format_handoff_viewer,
     format_operator_surface_overview,
+    format_receipt_viewer,
     format_work_graph_explorer,
 )
 from craik.runtime.store import LocalStore
@@ -109,6 +110,35 @@ def operator_handoff(
         )
     else:
         typer.echo("\n".join(format_handoff_viewer(handoff)))
+
+
+@operator_app.command("receipt")
+def operator_receipt(
+    receipt_id: Annotated[
+        str,
+        typer.Argument(help="Capability or plugin receipt id to inspect."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only receipt viewer."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        receipt = store.get_receipt(receipt_id) or store.get_plugin_receipt(receipt_id)
+    finally:
+        store.close()
+
+    if receipt is None:
+        raise typer.BadParameter(f"unknown receipt: {receipt_id}")
+    if json_output:
+        typer.echo(
+            json.dumps(receipt.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
+        )
+    else:
+        typer.echo("\n".join(format_receipt_viewer(receipt)))
 
 
 def _require_section(
