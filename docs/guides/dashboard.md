@@ -39,7 +39,9 @@ craik dashboard --dry-run
 
 You can provide a dashboard token through `--auth-token` or
 `CRAIK_DASHBOARD_TOKEN`. The dry-run output reports that token mode is
-active but does not echo the token value.
+active but does not echo the token value. If no dashboard token is
+configured, requests must include `X-Craik-Operator-Session` with the
+active operator session token.
 
 ## Pages
 
