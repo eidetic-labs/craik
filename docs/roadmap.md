@@ -396,7 +396,7 @@ reading raw logs.
 <div><h4>Handoff viewer</h4><p>Ready in PR · <code>craik operator handoff</code> renders durable handoff summaries.</p></div>
 <div><h4>Receipt viewer</h4><p>Ready in PR · <code>craik operator receipt</code> renders capability and plugin receipts.</p></div>
 <div><h4>Contradiction inbox</h4><p>Ready in PR · <code>craik operator contradictions</code> lists review-only contradiction state.</p></div>
-<div><h4>Evidence &amp; assumption views</h4></div>
+<div><h4>Evidence &amp; assumption views</h4><p>Ready in PR · <code>craik operator evidence</code> keeps assumptions separate from evidence.</p></div>
 <div><h4>Delegation queue</h4></div>
 <div><h4>Budget / quota view</h4></div>
 <div><h4>Instruction distillation view</h4></div>

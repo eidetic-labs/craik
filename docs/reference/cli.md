@@ -800,6 +800,19 @@ Options:
 - `--status`: Only include reports with status open, resolved, or ignored.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator evidence`
+
+Print the read-only evidence and assumption view.
+
+```text
+craik operator evidence [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Only include assumptions and scoped evidence for this task.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator handoff`
 
 Print the read-only handoff viewer.

@@ -1,14 +1,15 @@
 # Evidence and assumption view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over `craik.evidence_reference` and
-`craik.assumption` records — what the v0.7.0 TUI surface formats and
-the boundary that keeps assumptions visually separate from evidence.
+The read-only `craik operator evidence` view over
+`craik.evidence_reference` and `craik.assumption` records, what it
+formats, and the boundary that keeps assumptions visually separate
+from evidence.
 
 </div>
 
@@ -59,6 +60,20 @@ Missing evidence or assumptions render as `none`. The view does not
 validate, reject, promote, or write memory facts.
 
 </div>
+
+## Commands
+
+```bash
+craik operator evidence
+craik operator evidence --task-id task_docs
+craik operator evidence --json
+```
+
+The command lists evidence and assumptions together but keeps them in
+separate sections. `--task-id` filters assumptions by task id and
+includes global evidence plus evidence explicitly tagged with matching
+`metadata.task_id`. `--json` returns separate `evidence` and
+`assumptions` arrays for tooling.
 
 ## What's next
 

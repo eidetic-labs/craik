@@ -10,10 +10,12 @@ from craik.cli import app, package_version
 from craik.cli import receipts_app as mounted_receipts_app
 from craik.cli_receipts import receipts_app
 from craik.contracts.models import (
+    Assumption,
     CapabilityReceipt,
     ContextDebtRecord,
     ContradictionReport,
     DistilledInstructionProposal,
+    EvidenceReference,
     Handoff,
     InstructionProvenance,
     IntentLock,
@@ -372,6 +374,52 @@ def test_operator_contradictions_cli_renders_inbox(tmp_path: Path) -> None:
     assert "Contradiction Inbox: 1" in result.output
     assert "- contradiction_docs [open]" in result.output
     assert "Owner: unassigned" in result.output
+
+
+def test_operator_evidence_cli_keeps_assumptions_separate(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_evidence(
+            EvidenceReference.model_validate(
+                {
+                    "id": "evidence_cli",
+                    "source": "tests",
+                    "kind": "command",
+                    "locator": "uv run pytest",
+                    "summary": "Focused tests passed.",
+                    "metadata": {"task_id": "task_docs"},
+                }
+            )
+        )
+        store.put_assumption(
+            Assumption.model_validate(
+                {
+                    "id": "assumption_docs",
+                    "task_id": "task_docs",
+                    "statement": "Docs need a command example.",
+                    "rationale": "The operator page describes commands.",
+                    "evidence_ids": ["evidence_cli"],
+                    "confidence": 0.8,
+                    "status": "open",
+                }
+            )
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "evidence", "--task-id", "task_docs"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Evidence: 1" in result.output
+    assert "Assumptions: 1" in result.output
+    assert "assumption_docs [open]" in result.output
 
 
 def test_schema_list_includes_task_request() -> None:
