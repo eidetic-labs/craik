@@ -110,6 +110,25 @@ and redacted operator detail. `reconnect` moves the session back to
 `running`; `resume` moves it to `idle` while preserving prior task, run,
 receipt, handoff, and recovery references.
 
+## Run the launch demo
+
+```sh
+craik demo persistent-agent --repo-path .
+```
+
+The demo is deterministic and uses fixture provider transport. It
+launches persistent sessions, runs a prompt, records provider receipts,
+writes handoffs, inspects final session state, and prints the exact
+operator commands that mirror the flow. By default it covers OpenAI,
+Anthropic, Gemini, and a local Ollama-style route:
+
+```sh
+craik demo persistent-agent \
+  --repo-path . \
+  --provider-id provider_openai \
+  --provider-id provider_anthropic
+```
+
 ## Stop and restart
 
 ```sh

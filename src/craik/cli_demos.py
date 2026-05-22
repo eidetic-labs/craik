@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import demo_app
+from craik.runtime.agents.demo import PersistentAgentLaunchDemo
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.projects.demos import StigmemDocsDemo
 from craik.runtime.projects.demos_provider import ProviderBackedStigmemDocsDemo
@@ -120,6 +121,40 @@ def demo_stigmem_docs(
     finally:
         store.close()
 
+    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+
+
+@demo_app.command("persistent-agent")
+def demo_persistent_agent(
+    repo_path: Annotated[
+        Path,
+        typer.Option("--repo-path", help="Path inside the Git repository for the demo."),
+    ] = Path("."),
+    project_name: Annotated[
+        str,
+        typer.Option("--project-name", help="Project name to register for the demo."),
+    ] = "Persistent Agent Demo",
+    provider_id: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--provider-id",
+            help="Provider id to exercise. Repeat to override the default provider set.",
+        ),
+    ] = None,
+) -> None:
+    """Run the deterministic persistent agent launch demo."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        result = PersistentAgentLaunchDemo(store).run(
+            repo_path=repo_path,
+            project_name=project_name,
+            provider_ids=tuple(provider_id) if provider_id else None,
+        )
+    except (NotGitRepositoryError, ModelProviderNotFoundError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
     typer.echo(json.dumps(result, indent=2, sort_keys=True))
 
 

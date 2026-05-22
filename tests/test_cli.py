@@ -1396,6 +1396,44 @@ def test_demo_stigmem_docs_command_surfaces_provider_findings(tmp_path: Path) ->
     assert "MissingBridge" in payload["findings"]["docs_code_mismatches"][0]
 
 
+def test_demo_persistent_agent_command_runs_fixture_path(tmp_path: Path) -> None:
+    repo = tmp_path / "agent-demo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Agent Demo\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "README.md")
+    _run_git(repo, "commit", "-m", "initial")
+
+    result = runner.invoke(
+        app,
+        [
+            "demo",
+            "persistent-agent",
+            "--repo-path",
+            str(repo),
+            "--provider-id",
+            "provider_openai",
+            "--provider-id",
+            "provider_anthropic",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "craik.demo.persistent_agent_launch"
+    assert payload["mode"] == "fixture"
+    assert [item["provider_id"] for item in payload["provider_executions"]] == [
+        "provider_openai",
+        "provider_anthropic",
+    ]
+    assert {item["run_status"] for item in payload["provider_executions"]} == {
+        "completed"
+    }
+    assert all(item["receipt_ids"] for item in payload["provider_executions"])
+    assert any("craik agent status" in command for command in payload["commands"])
+
+
 def test_intent_show_reports_task_intent_lock(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

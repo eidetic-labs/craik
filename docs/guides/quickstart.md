@@ -169,6 +169,28 @@ contradiction, memory proposal, receipt, handoff, deterministic
 OpenAI/Anthropic provider runs, and a work-graph export. No file edits.
 No live model calls. This is also the command CI runs against every PR.
 
+## 8 · Try the persistent agent demo
+
+For the v0.9.0 persistent agent flow, run the deterministic launch demo
+from any Git checkout:
+
+```bash title="Persistent agent launch demo — no credentials required"
+craik demo persistent-agent --repo-path .
+```
+
+The demo launches fixture-backed persistent sessions for OpenAI,
+Anthropic, Gemini, and a local OpenAI-compatible preset, sends one
+prompt through each session, records provider receipts, writes handoffs,
+and inspects final session state. To keep the output shorter while
+testing the hosted-provider happy path:
+
+```bash title="Limit the persistent agent demo"
+craik demo persistent-agent \
+  --repo-path . \
+  --provider-id provider_openai \
+  --provider-id provider_anthropic
+```
+
 ## What you produced
 
 If you walked the full path above, your sandbox now contains:

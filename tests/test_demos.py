@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from craik.runtime.agents.demo import PersistentAgentLaunchDemo
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.demos import DEMO_TASK_ID, StigmemDocsDemo
 from craik.runtime.store import LocalStore
@@ -142,6 +143,54 @@ def test_stigmem_docs_demo_can_limit_provider_execution(
 
     assert [item["provider_id"] for item in result["provider_executions"]] == [
         "provider_openai"
+    ]
+
+
+def test_persistent_agent_launch_demo_runs_provider_matrix(
+    tmp_path: Path,
+    store: LocalStore,
+) -> None:
+    repo = _repo(tmp_path)
+
+    result = PersistentAgentLaunchDemo(store).run(repo_path=repo)
+
+    assert result["schema"] == "craik.demo.persistent_agent_launch"
+    assert result["mode"] == "fixture"
+    assert result["provider_ids"] == [
+        "provider_openai",
+        "provider_anthropic",
+        "provider_gemini",
+        "provider_local_ollama",
+    ]
+    assert len(result["provider_executions"]) == 4
+    for execution in result["provider_executions"]:
+        assert execution["launch_status"] == "running"
+        assert execution["prompt_exit_behavior"] == "completed"
+        assert execution["run_status"] == "completed"
+        assert execution["handoff_status"] == "completed"
+        assert execution["receipt_ids"]
+        assert execution["provider_setup"]["certification_status"] == "certified"
+        assert execution["status_inspection"]["status"] == "idle"
+        assert store.get_agent_session_state(execution["session_id"]) is not None
+        assert store.get_handoff(execution["handoff_id"]) is not None
+    assert any("craik agent launch" in command for command in result["commands"])
+    assert any("craik auth setup" in command for command in result["commands"])
+
+
+def test_persistent_agent_launch_demo_can_limit_providers(
+    tmp_path: Path,
+    store: LocalStore,
+) -> None:
+    repo = _repo(tmp_path)
+
+    result = PersistentAgentLaunchDemo(store).run(
+        repo_path=repo,
+        provider_ids=("provider_openai", "provider_anthropic"),
+    )
+
+    assert [item["provider_id"] for item in result["provider_executions"]] == [
+        "provider_openai",
+        "provider_anthropic",
     ]
 
 

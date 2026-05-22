@@ -412,6 +412,20 @@ Run built-in Craik demos.
 craik demo COMMAND [ARGS]...
 ```
 
+## `craik demo persistent-agent`
+
+Run the deterministic persistent agent launch demo.
+
+```text
+craik demo persistent-agent [OPTIONS]
+```
+
+Options:
+
+- `--repo-path`: Path inside the Git repository for the demo.; default `.`
+- `--project-name`: Project name to register for the demo.; default `Persistent Agent Demo`
+- `--provider-id`: Provider id to exercise. Repeat to override the default provider set.
+
 ## `craik demo stigmem-docs`
 
 Run the Stigmem documentation reconciliation demo.
