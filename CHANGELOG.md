@@ -23,6 +23,8 @@ within the `0.x.0` stability expectations described in
   boundary.
 - Read-only receipt viewer through `craik operator receipt`, covering
   capability and plugin receipt records with text and JSON output.
+- Read-only contradiction inbox through `craik operator contradictions`,
+  with task and status filters plus text and JSON output.
 
 ## 0.6.0 — 2026-05-21
 

@@ -12,6 +12,7 @@ from craik.cli_receipts import receipts_app
 from craik.contracts.models import (
     CapabilityReceipt,
     ContextDebtRecord,
+    ContradictionReport,
     DistilledInstructionProposal,
     Handoff,
     InstructionProvenance,
@@ -334,6 +335,43 @@ def test_operator_receipt_cli_renders_capability_receipt(tmp_path: Path) -> None
     assert "Capability Receipt: receipt_docs" in result.output
     assert "Status: passed" in result.output
     assert "Redacted: True" in result.output
+
+
+def test_operator_contradictions_cli_renders_inbox(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_contradiction(
+            ContradictionReport.model_validate(
+                {
+                    "id": "contradiction_docs",
+                    "task_id": "task_docs",
+                    "facts": ["Docs say preview.", "CLI command exists."],
+                    "summary": "Docs and CLI state disagree.",
+                    "affected_artifacts": ["docs/reference/contradiction-inbox-view.md"],
+                    "evidence_ids": ["evidence_cli"],
+                    "proposed_resolution": "Update docs.",
+                    "status": "open",
+                    "owner": None,
+                    "created_at": "2026-05-21T17:00:00Z",
+                }
+            )
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "contradictions", "--status", "open"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Contradiction Inbox: 1" in result.output
+    assert "- contradiction_docs [open]" in result.output
+    assert "Owner: unassigned" in result.output
 
 
 def test_schema_list_includes_task_request() -> None:

@@ -1,14 +1,14 @@
 # Contradiction inbox view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over `craik.contradiction_report`
-records — what the v0.7.0 TUI surface formats and the review-only
-boundary it preserves.
+The read-only `craik operator contradictions` view over
+`craik.contradiction_report` records, what it formats, and the
+review-only boundary it preserves.
 
 </div>
 
@@ -39,6 +39,20 @@ ignore, or mutate contradictions.
 ## Statuses
 
 The inbox displays open, resolved, and ignored contradiction reports.
+
+## Commands
+
+```bash
+craik operator contradictions
+craik operator contradictions --task-id task_docs
+craik operator contradictions --status open
+craik operator contradictions --json
+```
+
+The command lists reports with optional task and status filters. The
+text view is optimized for operator scanning; `--json` returns the
+persisted contradiction report payloads for tooling and exact contract
+inspection.
 
 ## Boundaries
 
