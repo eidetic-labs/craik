@@ -7,8 +7,42 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.10.0`; historical sign-offs remain below for
+pre-release gate is `0.11.0`; historical sign-offs remain below for
 audit continuity.
+
+</div>
+
+## v0.11.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Product surfaces and channel operations are in progress.**
+
+`0.11.0` moves Craik beyond command-only operation with a terminal UI,
+authenticated dashboard, desktop companion, service-managed gateway,
+real channel adapters, approval UX, diagnostics/update workflows, and
+multimodal companion contracts. Each goal lands through its own issue
+and PR before release prep.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Release signing-key asset rules</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/787">#787</a> · signed annotated tag rules, GitHub Release public signing-key asset, and fingerprint verification gate</dd></div>
+<div><dt>Terminal UI</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/788">#788</a> · <code>craik --tui</code>, <code>craik tui</code>, shared slash commands, multiline composer, status/model/session/approval/artifact/gateway/skill panels, autocomplete metadata, redacted approval modal fixture, tests, and guide docs</dd></div>
+<div><dt>Authenticated local dashboard</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/789">#789</a></dd></div>
+<div><dt>Desktop companion MVP</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/790">#790</a></dd></div>
+<div><dt>Gateway service lifecycle</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/791">#791</a></dd></div>
+<div><dt>Real channel adapters</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/792">#792</a></dd></div>
+<div><dt>Approval UX</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/793">#793</a></dd></div>
+<div><dt>Doctor, fix, and update</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/794">#794</a></dd></div>
+<div><dt>Multimodal and companion contracts</dt><dt><span className="craik-fields__type">pending</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/795">#795</a></dd></div>
 
 </div>
 

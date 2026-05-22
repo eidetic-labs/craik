@@ -178,6 +178,7 @@ const sidebars = {
       collapsed: true,
       items: [
         'reference/cli',
+        'guides/terminal-ui',
         'reference/config',
         'reference/readiness-states',
         'reference/slash-commands',
@@ -279,6 +280,7 @@ const sidebars = {
       label: '3 · Operator views',
       collapsed: false,
       items: [
+        'guides/terminal-ui',
         'reference/operator-surface',
         'reference/work-graph-explorer',
         'reference/handoff-viewer',

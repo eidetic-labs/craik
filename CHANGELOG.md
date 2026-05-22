@@ -10,6 +10,13 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.11.0 terminal UI entrypoints through `craik --tui` and
+  `craik tui`, with shared slash-command dispatch, multiline composer
+  support, status/model/session/approval/artifact/gateway/skill panels,
+  autocomplete metadata, and redacted approval modal fixtures.
+
 ### Changed
 
 - Release documentation now requires signed annotated tags plus a
