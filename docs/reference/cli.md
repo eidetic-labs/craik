@@ -786,6 +786,18 @@ Inspect read-only operator surface state.
 craik operator COMMAND [ARGS]...
 ```
 
+## `craik operator budget`
+
+Print the read-only budget and quota view.
+
+```text
+craik operator budget [OPTIONS]
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator contradictions`
 
 Print the read-only contradiction inbox.

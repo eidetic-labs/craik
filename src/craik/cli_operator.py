@@ -11,8 +11,10 @@ import typer
 from craik.cli import operator_app
 from craik.contracts.models import ContradictionStatus
 from craik.runtime.companions.operator_views import (
+    BudgetQuotaSnapshot,
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
+    format_budget_quota_view,
     format_contradiction_inbox,
     format_delegation_queue,
     format_evidence_assumption_view,
@@ -254,6 +256,27 @@ def operator_delegations(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_delegation_queue(delegations)))
+
+
+@operator_app.command("budget")
+def operator_budget(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only budget and quota view."""
+    snapshot = BudgetQuotaSnapshot(
+        missing=["cost", "tokens", "requests", "quota"],
+        notes=[
+            "No persisted budget or quota usage source is configured.",
+            "Missing data is displayed explicitly and not inferred from logs.",
+        ],
+    )
+    if json_output:
+        typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_budget_quota_view(snapshot)))
 
 
 def _require_section(
