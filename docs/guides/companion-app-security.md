@@ -172,6 +172,11 @@ Mobile offline action queues are deferred unless they can guarantee
 receipts, ordering, replay protection, and operator review before side
 effects occur.
 
+Future `craik://` URL handlers must route only to review pages such as
+status, dashboard, or approval detail views. A URL handler must never
+auto-approve, auto-deny, submit credentials, or dispatch a mutating
+runtime action from a deep link alone.
+
 ## Redaction boundary
 
 Companion surfaces use the same redaction posture as other Craik

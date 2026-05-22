@@ -74,6 +74,9 @@ within the `0.x.0` stability expectations described in
   boundaries for WebChat/Craik HMAC, Slack request signatures,
   Telegram secret-token headers, and fail-closed Discord native
   signature verification when an Ed25519 verifier is unavailable.
+- Local release signing-key exports are ignored by default, and
+  desktop `craik://` URL-scheme guidance now requires review-only
+  routing with no direct approval or mutating side effects.
 
 ## 0.10.0 — 2026-05-22
 

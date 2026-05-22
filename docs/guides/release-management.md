@@ -79,6 +79,9 @@ gh release view vX.Y.Z --repo eidetic-labs/craik --json assets --jq '.assets[].n
 `craik-release-signing-key.asc` is a public key export, not a detached
 signature. Maintainers must verify that its fingerprint matches the key
 reported by `git tag -v vX.Y.Z` before treating the release as complete.
+Local signing-key exports are ignored by the repository. Do not commit
+`craik-release-signing-key.asc` or any private/secret signing key
+export; upload the public key only as a GitHub Release asset.
 
 ## Release Notes
 
