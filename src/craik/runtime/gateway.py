@@ -35,9 +35,14 @@ class GatewayDaemonConfigError(GatewayDaemonError):
 class GatewayServer(Protocol):
     server_address: tuple[str | bytes | bytearray, int]
 
-    def serve_forever(self, poll_interval: float = 0.5) -> None: ...
-    def shutdown(self) -> None: ...
-    def server_close(self) -> None: ...
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        raise NotImplementedError
+
+    def shutdown(self) -> None:
+        raise NotImplementedError
+
+    def server_close(self) -> None:
+        raise NotImplementedError
 
 
 ServerFactory = Callable[[GatewayConfig], GatewayServer]
@@ -188,6 +193,7 @@ def run_gateway_daemon(
     lock_path: Path | None = None
     server: GatewayServer | None = None
     state: GatewayRuntimeState | None = None
+    interrupted = False
     try:
         store.initialize()
         config = store.get_gateway_config(DEFAULT_GATEWAY_CONFIG_ID)
@@ -215,7 +221,7 @@ def run_gateway_daemon(
             else:
                 server.serve_forever()
         except KeyboardInterrupt:
-            pass
+            interrupted = True
         except Exception as error:
             failed = gateway_failed_state(
                 state,
@@ -228,6 +234,15 @@ def run_gateway_daemon(
                 server.shutdown()
                 server.server_close()
         stopped = gateway_stopped_state(state)
+        if interrupted:
+            stopped = stopped.model_copy(
+                update={
+                    "supervision_notes": [
+                        *stopped.supervision_notes,
+                        "Gateway stopped after keyboard interrupt.",
+                    ],
+                }
+            )
         store.put_gateway_runtime_state(stopped)
         return stopped
     finally:

@@ -18,13 +18,26 @@ from craik.contracts.models import (
 class GatewayArtifactStore(Protocol):
     """Store surface required by gateway channel persistence helpers."""
 
-    def put_channel_adapter_contract(self, contract: ChannelAdapterContract) -> None: ...
-    def put_channel_identity_pairing(self, pairing: ChannelIdentityPairing) -> None: ...
-    def put_channel_allowlist(self, allowlist: ChannelAllowlist) -> None: ...
-    def put_gateway_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt: ...
-    def put_gateway_schedule(self, schedule: GatewaySchedule) -> None: ...
-    def put_scheduled_automation(self, automation: ScheduledAutomation) -> None: ...
-    def put_channel_policy_envelope(self, policy: PolicyEnvelope) -> None: ...
+    def put_channel_adapter_contract(self, contract: ChannelAdapterContract) -> None:
+        raise NotImplementedError
+
+    def put_channel_identity_pairing(self, pairing: ChannelIdentityPairing) -> None:
+        raise NotImplementedError
+
+    def put_channel_allowlist(self, allowlist: ChannelAllowlist) -> None:
+        raise NotImplementedError
+
+    def put_gateway_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt:
+        raise NotImplementedError
+
+    def put_gateway_schedule(self, schedule: GatewaySchedule) -> None:
+        raise NotImplementedError
+
+    def put_scheduled_automation(self, automation: ScheduledAutomation) -> None:
+        raise NotImplementedError
+
+    def put_channel_policy_envelope(self, policy: PolicyEnvelope) -> None:
+        raise NotImplementedError
 
 
 def persist_gateway_channel_artifacts(

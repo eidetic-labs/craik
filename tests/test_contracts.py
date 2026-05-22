@@ -39,6 +39,13 @@ def test_contract_fixtures_pin_schema_version(fixtures: dict[str, dict[str, Any]
         assert payload["version"] == SCHEMA_VERSION
 
 
+def test_base_contract_module_imports_without_validator_side_effects() -> None:
+    base = importlib.import_module("craik.contracts.models.base")
+
+    assert base.SCHEMA_VERSION == SCHEMA_VERSION
+    assert hasattr(base, "BaseModel")
+
+
 def test_agent_session_state_enforces_lifecycle_consistency(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

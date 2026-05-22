@@ -16,7 +16,7 @@ from craik.contracts.models import (
     TaskRun,
     TaskRunStatus,
 )
-from craik.runtime.companions.handoff_markdown import render_markdown as render_markdown
+from craik.runtime.companions.handoff_markdown import render_markdown as _render_markdown
 from craik.runtime.policy.intent_locks import IntentLockManager
 from craik.runtime.policy.redaction import redact
 from craik.runtime.runners.runner_metadata import (
@@ -50,6 +50,12 @@ class HandoffBlockedByExitDisciplineError(HandoffError):
 
 class RunHandoffContextError(HandoffContextError):
     """Raised when required run handoff context is missing."""
+
+
+def render_markdown(handoff: Handoff) -> str:
+    """Render a handoff as Markdown."""
+    return _render_markdown(handoff)
+
 
 @dataclass(frozen=True)
 class HandoffWriter:
