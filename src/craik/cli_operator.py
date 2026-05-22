@@ -12,11 +12,13 @@ from craik.cli import operator_app
 from craik.runtime.companions.operator_views import (
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
+    format_handoff_viewer,
     format_operator_surface_overview,
     format_work_graph_explorer,
 )
 from craik.runtime.store import LocalStore
 from craik.runtime.work.graph import WorkGraphExporter, WorkGraphTaskNotFoundError
+from craik.runtime.work.handoffs import HandoffNotFoundError, HandoffWriter
 
 
 @operator_app.command("overview")
@@ -78,6 +80,35 @@ def operator_work_graph(
         )
     else:
         typer.echo("\n".join(format_work_graph_explorer(export)))
+
+
+@operator_app.command("handoff")
+def operator_handoff(
+    handoff_or_task_id: Annotated[
+        str,
+        typer.Argument(help="Handoff id or task id to inspect."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only handoff viewer."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        handoff = HandoffWriter(store).require(handoff_or_task_id)
+    except HandoffNotFoundError as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
+
+    if json_output:
+        typer.echo(
+            json.dumps(handoff.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
+        )
+    else:
+        typer.echo("\n".join(format_handoff_viewer(handoff)))
 
 
 def _require_section(

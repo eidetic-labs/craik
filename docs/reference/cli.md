@@ -786,6 +786,18 @@ Inspect read-only operator surface state.
 craik operator COMMAND [ARGS]...
 ```
 
+## `craik operator handoff`
+
+Print the read-only handoff viewer.
+
+```text
+craik operator handoff [OPTIONS] HANDOFF_OR_TASK_ID
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator overview`
 
 Print the read-only operator surface overview.

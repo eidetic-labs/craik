@@ -34,8 +34,8 @@ closure, and branch pruning before the next goal begins.
 </div>
 
 <div><dt>Dashboard / TUI decision</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/685">#685</a> · CLI-first <code>craik operator overview</code> · read-only snapshot and formatter contract</dd></div>
-<div><dt>Work graph explorer</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/686">#686</a> · <code>craik operator work-graph</code> · terminal view and JSON export</dd></div>
-<div><dt>Handoff viewer</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/687">#687</a> · summaries, risks, receipts, and next steps</dd></div>
+<div><dt>Work graph explorer</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/686">#686</a> · <code>craik operator work-graph</code> · terminal view and JSON export</dd></div>
+<div><dt>Handoff viewer</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/687">#687</a> · <code>craik operator handoff</code> · durable summary, risks, receipts, and next steps</dd></div>
 <div><dt>Receipt viewer</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/688">#688</a> · capability and plugin receipt inspection</dd></div>
 <div><dt>Contradiction inbox</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/689">#689</a> · contradiction and operator-attention queue</dd></div>
 <div><dt>Evidence and assumption views</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/690">#690</a> · evidence, assumptions, and memory impact links</dd></div>

@@ -18,6 +18,9 @@ within the `0.x.0` stability expectations described in
 - Read-only work graph explorer through `craik operator work-graph`,
   with terminal formatting for nodes and edges plus JSON output for
   tooling.
+- Read-only handoff viewer through `craik operator handoff`, accepting
+  handoff ids or task ids and preserving the durable-summary redaction
+  boundary.
 
 ## 0.6.0 — 2026-05-21
 
