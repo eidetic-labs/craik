@@ -7,7 +7,10 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
+from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
+from craik.runtime.store import DATABASE_NAME, LocalStore
 
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
 
@@ -112,6 +115,8 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(
             "Use `craik session list` or `craik session resume <session-id>`."
         )
+    if command.name == "approvals":
+        return SlashCommandResult(_approval_text(env))
     return SlashCommandResult(f"Use `craik {command.name}` for the full command surface.")
 
 
@@ -136,6 +141,19 @@ def _help_text(args: list[str]) -> str:
         )
     rows = [f"/{command.name:<10} {command.summary}" for command in COMMANDS]
     return "Craik slash commands\n" + "\n".join(rows)
+
+
+def _approval_text(env: dict[str, str] | None) -> str:
+    paths = resolve_craik_paths(env)
+    if not (paths.state / DATABASE_NAME).exists():
+        return "No approval queue is initialized. Use `craik approvals list` after setup."
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        payload = approval_queue_payload(store)
+    finally:
+        store.close()
+    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def _suggest(name: str) -> str | None:

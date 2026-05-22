@@ -46,6 +46,7 @@ class TuiStoreSummary:
     runs: int = 0
     handoffs: int = 0
     receipts: int = 0
+    approvals: int = 0
     gateway_states: tuple[str, ...] = ()
     skill_proposals: int = 0
     warnings: tuple[str, ...] = ()
@@ -84,7 +85,7 @@ def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
         _composer_panel(),
         _model_panel(readiness),
         _session_panel(summary),
-        _approval_panel(),
+        _approval_panel(summary),
         _artifact_panel(summary),
         _gateway_panel(summary),
         _skill_panel(summary),
@@ -121,6 +122,8 @@ def render_approval_modal(
     target: str,
     risk: str,
     policy: str,
+    operator: str | None = None,
+    retry_path: str = "retry the blocked command after approval",
 ) -> str:
     """Render the approval modal fixture shared by TUI tests and docs."""
     panel = TuiPanel(
@@ -131,6 +134,8 @@ def render_approval_modal(
             f"Target: {_safe(target)}",
             f"Risk: {_safe(risk)}",
             f"Policy: {_safe(policy)}",
+            f"Operator: {_safe(operator or 'unassigned')}",
+            f"Retry: {_safe(retry_path)}",
             "Actions: approve | deny | inspect receipt",
         ),
     )
@@ -248,12 +253,12 @@ def _session_panel(summary: TuiStoreSummary) -> TuiPanel:
     )
 
 
-def _approval_panel() -> TuiPanel:
+def _approval_panel(summary: TuiStoreSummary) -> TuiPanel:
     return TuiPanel(
         "Approvals",
         (
-            "Queue: pending approvals are shown here when available.",
-            "Commands: /approvals, approve, deny, inspect receipt.",
+            f"Open: {summary.approvals}",
+            "Commands: /approvals, craik approvals approve|deny, inspect receipt.",
         ),
     )
 
@@ -302,6 +307,14 @@ def _store_summary(env: dict[str, str] | None) -> TuiStoreSummary:
             runs=_count(store, "list_task_runs"),
             handoffs=_count(store, "list_handoffs"),
             receipts=_count(store, "list_receipts") + _count(store, "list_plugin_receipts"),
+            approvals=len(
+                [
+                    delegation
+                    for delegation in _safe_list(store, "list_human_delegations")
+                    if getattr(delegation, "kind", None) == "approval"
+                    and getattr(delegation, "status", None) == "open"
+                ]
+            ),
             gateway_states=tuple(
                 _safe(getattr(state, "status", "unknown"))
                 for state in _safe_list(store, "list_gateway_runtime_states")

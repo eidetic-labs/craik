@@ -209,6 +209,9 @@ def test_desktop_approval_notification_redacts_target() -> None:
     )
 
     assert notification.deep_link.endswith("/approvals?approval=approval_docs")
+    assert notification.risk == "operator review required"
+    assert notification.policy == "strict"
+    assert notification.retry_path == "retry the blocked command after approval"
     assert "sk-live-secret-token" not in notification.body
     assert "[REDACTED]" in notification.body
 

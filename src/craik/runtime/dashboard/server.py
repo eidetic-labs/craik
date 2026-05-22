@@ -21,6 +21,7 @@ from craik.runtime.auth.visibility import visible_auth_profiles
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
+from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.store import DATABASE_NAME, LocalStore
@@ -123,6 +124,8 @@ def handle_dashboard_request(
             {"error": "dashboard authentication required"},
         )
     if method == "GET":
+        if parsed.path == "/api/approvals":
+            return _api_approvals(env)
         return _get(parsed.path, config=config, env=env)
     if method == "POST" and parsed.path == "/api/actions":
         return _post_action(body, env=env)
@@ -202,6 +205,13 @@ def _dashboard_snapshot(env: dict[str, str] | None) -> dict[str, object]:
                     "handoffs": _count(store, "list_handoffs"),
                     "receipts": _count(store, "list_receipts")
                     + _count(store, "list_plugin_receipts"),
+                    "approvals": len(
+                        [
+                            delegation
+                            for delegation in store.list_human_delegations()
+                            if delegation.kind == "approval" and delegation.status == "open"
+                        ]
+                    ),
                     "gateway_states": _count(store, "list_gateway_runtime_states"),
                     "skill_proposals": _count(store, "list_distilled_instruction_proposals"),
                 }
@@ -248,7 +258,7 @@ def _page_for_path(path: str, snapshot: dict[str, object]) -> DashboardPage | No
         "/runs": ("Runs", [f"runs: {counts.get('runs', 0)}"]),
         "/handoffs": ("Handoffs", [f"handoffs: {counts.get('handoffs', 0)}"]),
         "/receipts": ("Receipts", [f"receipts: {counts.get('receipts', 0)}"]),
-        "/approvals": ("Approvals", [f"approvals: {counts.get('approvals', 0)}"]),
+        "/approvals": ("Approvals", _approval_items(snapshot)),
         "/gateway/logs": ("Gateway Logs", [f"log: {snapshot['gateway_logs']}"]),
         "/skills": ("Skill Proposals", [f"proposals: {counts.get('skill_proposals', 0)}"]),
         "/models": ("Model Picker", [f"active: {snapshot['model_picker']}"]),
@@ -301,6 +311,30 @@ def _provider_items(snapshot: dict[str, object]) -> list[str]:
     if not isinstance(providers, list) or not providers:
         return ["providers: none configured or visible"]
     return [str(provider) for provider in providers]
+
+
+def _approval_items(snapshot: dict[str, object]) -> list[str]:
+    counts = snapshot["counts"]
+    count = counts.get("approvals", 0) if isinstance(counts, dict) else 0
+    return [
+        f"open approvals: {count}",
+        "actions: craik approvals show <id>",
+        "approve: craik approvals approve <id> --reason <reason>",
+        "deny: craik approvals deny <id> --reason <reason>",
+    ]
+
+
+def _api_approvals(env: dict[str, str] | None) -> DashboardResponse:
+    paths = resolve_craik_paths(env)
+    if not (paths.state / DATABASE_NAME).exists():
+        return _json_response(HTTPStatus.OK, {"count": 0, "approvals": []})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        payload = approval_queue_payload(store)
+    finally:
+        store.close()
+    return _json_response(HTTPStatus.OK, payload)
 
 
 def _handler(

@@ -65,6 +65,9 @@ class DesktopApprovalNotification(CraikModel):
     title: str
     body: str
     deep_link: str
+    retry_path: str
+    policy: str
+    risk: str
     redacted: bool = True
 
 
@@ -244,6 +247,9 @@ def desktop_approval_notification(
     *,
     capability: str,
     target: str,
+    risk: str = "operator review required",
+    policy: str = "strict",
+    retry_path: str = "retry the blocked command after approval",
     dashboard_base_url: str = "http://127.0.0.1:8787",
 ) -> DesktopApprovalNotification:
     """Create a redacted approval notification with dashboard deep link."""
@@ -253,6 +259,9 @@ def desktop_approval_notification(
         title="Craik approval required",
         body=f"{_safe(capability)} requires review for {_safe(target)}",
         deep_link=f"{dashboard_base_url.rstrip('/')}/approvals?approval={safe_id}",
+        retry_path=_safe(retry_path),
+        policy=_safe(policy),
+        risk=_safe(risk),
     )
 
 
