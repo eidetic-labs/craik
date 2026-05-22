@@ -324,6 +324,22 @@ Run read-only diagnostics for local and gateway readiness.
 craik doctor
 ```
 
+## `craik gateway`
+
+Run and inspect the local gateway daemon.
+
+```text
+craik gateway COMMAND [ARGS]...
+```
+
+## `craik gateway start`
+
+Run the foreground gateway daemon until interrupted.
+
+```text
+craik gateway start
+```
+
 ## `craik graph`
 
 Export Craik work graphs.

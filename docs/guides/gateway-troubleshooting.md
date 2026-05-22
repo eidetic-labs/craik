@@ -14,11 +14,11 @@ don't expose secrets.
 
 <div className="craik-keypoint">
 
-**Gateway daemon is a roadmap surface.**
+**Gateway daemon is foreground and health-checkable.**
 
-Always-on gateway daemon is a v0.8.0 capability. Setup, diagnostics,
-and contracts ship earlier, but a production dispatch loop is not part
-of the MVP.
+v0.8.0 ships `craik gateway start`, persisted runtime state, and a
+local `/health` endpoint. A production dispatch loop is not part of
+the MVP.
 
 </div>
 

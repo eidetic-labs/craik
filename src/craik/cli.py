@@ -17,7 +17,12 @@ from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.doctor import run_doctor
-from craik.runtime.gateway import default_gateway_config, gateway_configured_state
+from craik.runtime.gateway import (
+    GatewayDaemonError,
+    default_gateway_config,
+    gateway_configured_state,
+    run_gateway_daemon,
+)
 from craik.runtime.paths import (
     CraikPaths,
     ensure_craik_home,
@@ -90,6 +95,8 @@ references_app = typer.Typer(help="Inspect and verify reference integrations.")
 app.add_typer(references_app, name="references")
 operator_app = typer.Typer(help="Inspect read-only operator surface state.")
 app.add_typer(operator_app, name="operator")
+gateway_app = typer.Typer(help="Run and inspect the local gateway daemon.")
+app.add_typer(gateway_app, name="gateway")
 
 
 def package_version() -> str:
@@ -226,6 +233,18 @@ def update_command() -> None:
     """Print safe update guidance without modifying the installation."""
     payload = update_guidance_payload(installed_version=package_version())
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@gateway_app.command("start")
+def gateway_start_command() -> None:
+    """Run the foreground gateway daemon until interrupted."""
+    _operator_identity()
+    paths = resolve_craik_paths()
+    try:
+        state = run_gateway_daemon(paths)
+    except GatewayDaemonError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(state.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
 
 
 @schema_app.command("list")

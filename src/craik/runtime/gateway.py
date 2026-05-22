@@ -2,12 +2,45 @@
 
 from __future__ import annotations
 
+import json
+import os
+import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Protocol
 
 from craik.contracts.models import GatewayConfig, GatewayRuntimeState
+from craik.runtime.paths import CraikPaths
+from craik.runtime.store import LocalStore
 
 DEFAULT_GATEWAY_CONFIG_ID = "gateway_default"
 DEFAULT_GATEWAY_STATE_ID = "gateway_state_default"
+
+
+class GatewayDaemonError(RuntimeError):
+    """Base gateway daemon runtime error."""
+
+
+class GatewayDaemonAlreadyRunningError(GatewayDaemonError):
+    """Raised when the gateway pid-file lock already exists."""
+
+
+class GatewayDaemonConfigError(GatewayDaemonError):
+    """Raised when the gateway cannot load a persisted configuration."""
+
+
+class GatewayServer(Protocol):
+    server_address: tuple[str | bytes | bytearray, int]
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None: ...
+    def shutdown(self) -> None: ...
+    def server_close(self) -> None: ...
+
+
+ServerFactory = Callable[[GatewayConfig], GatewayServer]
 
 
 def default_gateway_config(
@@ -141,3 +174,119 @@ def gateway_failed_state(
             "supervision_notes": [*state.supervision_notes, reason],
         }
     )
+
+
+def run_gateway_daemon(
+    paths: CraikPaths,
+    *,
+    stop_event: threading.Event | None = None,
+    ready_event: threading.Event | None = None,
+    server_factory: ServerFactory | None = None,
+) -> GatewayRuntimeState:
+    """Run the foreground gateway service and persist lifecycle transitions."""
+    store = LocalStore.from_paths(paths)
+    lock_path: Path | None = None
+    server: GatewayServer | None = None
+    state: GatewayRuntimeState | None = None
+    try:
+        store.initialize()
+        config = store.get_gateway_config(DEFAULT_GATEWAY_CONFIG_ID)
+        if config is None:
+            raise GatewayDaemonConfigError(
+                "gateway configuration missing; run craik setup before starting the daemon"
+            )
+        if not config.enabled:
+            raise GatewayDaemonConfigError(
+                "gateway configuration is disabled; run craik setup --enable-gateway"
+            )
+        lock_path = _gateway_pid_path(paths, config)
+        _acquire_gateway_lock(lock_path)
+        state = gateway_starting_state(config, pid=os.getpid())
+        store.put_gateway_runtime_state(state)
+        try:
+            server = (server_factory or _http_server)(config)
+            state = gateway_running_state(config, pid=os.getpid())
+            store.put_gateway_runtime_state(state)
+            if ready_event is not None:
+                ready_event.set()
+            if stop_event is not None:
+                while not stop_event.wait(0.1):
+                    pass
+            else:
+                server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        except Exception as error:
+            failed = gateway_failed_state(
+                state,
+                reason=f"gateway daemon failed: {error}",
+            )
+            store.put_gateway_runtime_state(failed)
+            raise
+        finally:
+            if server is not None:
+                server.shutdown()
+                server.server_close()
+        stopped = gateway_stopped_state(state)
+        store.put_gateway_runtime_state(stopped)
+        return stopped
+    finally:
+        if lock_path is not None:
+            _release_gateway_lock(lock_path)
+        store.close()
+
+
+def _gateway_pid_path(paths: CraikPaths, config: GatewayConfig) -> Path:
+    pid_file = config.pid_file or "gateway.pid"
+    path = Path(pid_file)
+    if not path.is_absolute():
+        path = paths.state / path
+    return path
+
+
+def _acquire_gateway_lock(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except FileExistsError:
+        raise GatewayDaemonAlreadyRunningError(
+            f"gateway daemon already running or stale pid file exists: {path}"
+        ) from None
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(f"{os.getpid()}\n")
+
+
+def _release_gateway_lock(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def _http_server(config: GatewayConfig) -> GatewayServer:
+    return ThreadingHTTPServer((config.bind_host, config.port), _GatewayRequestHandler)
+
+
+class _GatewayRequestHandler(BaseHTTPRequestHandler):
+    server_version = "CraikGateway/0.8"
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path != "/health":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        body = json.dumps(
+            {
+                "status": "ok",
+                "service": "craik.gateway",
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return

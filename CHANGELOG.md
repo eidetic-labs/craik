@@ -15,6 +15,8 @@ within the `0.x.0` stability expectations described in
 - v0.8.0 gateway/channel persistence helpers for adapter contracts,
   identity pairings, allowlists, gateway receipts, schedules,
   scheduled automations, and channel policy envelopes.
+- v0.8.0 foreground gateway daemon command with pid-file locking,
+  `/health` serving, and persisted runtime-state transitions.
 
 ## 0.7.0 — 2026-05-22
 

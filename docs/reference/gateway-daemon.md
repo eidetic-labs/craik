@@ -1,24 +1,25 @@
 # Gateway daemon mode
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The two contracts that describe gateway lifecycle (`gateway_config`
-and `gateway_runtime_state`), the shipped lifecycle states, and the
-boundary between contract-level helpers and a real production daemon.
+The foreground gateway daemon, the two contracts that describe gateway
+lifecycle (`gateway_config` and `gateway_runtime_state`), and the
+current boundary between the health service and channel dispatch.
 
 </div>
 
 <div className="craik-keypoint">
 
-**Gateway daemon mode is post-MVP unless a later proof workflow explicitly pulls it forward.**
+**Gateway daemon mode is foreground and local-first.**
 
-The current surface documents contracts and deterministic lifecycle
-helpers — not an operational always-on service. See
-[Post-MVP Scope](post-mvp-scope.md).
+`craik gateway start` runs a foreground HTTP service with a `/health`
+endpoint, takes a pid-file lock, and persists lifecycle transitions.
+Channel dispatch remains policy-bound contract work; do not expose the
+daemon publicly without TLS termination and explicit policy.
 
 </div>
 
@@ -88,6 +89,20 @@ helpers — not an operational always-on service. See
 
 </div>
 
+## Start command
+
+Run setup first, then start the foreground daemon:
+
+```bash
+craik setup --enable-gateway --policy-envelope-id policy_gateway
+craik gateway start
+```
+
+The command requires an active operator session, loads
+`gateway_default`, writes `starting`, writes `running` after the HTTP
+server binds, and writes `stopped` on graceful shutdown. If the pid
+file already exists, startup fails instead of running a second daemon.
+
 <div className="craik-keypoint">
 
 **Public binds require policy and explicit TLS acknowledgement.**
@@ -103,36 +118,27 @@ gateway behind TLS termination or keep it on a private network.
 
 ## Boundary
 
-This phase defines lifecycle state, persistence, and inspection
-boundaries. It does not add:
+This phase defines a runnable health service, lifecycle state,
+persistence, and inspection boundaries. It does not yet add:
 
 <div className="craik-grid">
 
 <div><h4>Open inbound messages</h4></div>
-<div><h4>Webhook handling</h4></div>
-<div><h4>Channel adapters</h4></div>
-<div><h4>Scheduled task creation</h4></div>
 <div><h4>Production dispatch loop</h4></div>
+<div><h4>Hosted TLS termination</h4></div>
 
 </div>
 
-Those surfaces are post-MVP work items and must attach policy checks
-and receipts before they can affect runtime state.
+Those surfaces must attach policy checks and receipts before they can
+affect runtime state.
 
 Gateway records are safe to inspect from the operator surface and
-local store. Starting a real long-running service remains an explicit
-supervisor operation; tests use deterministic lifecycle helpers rather
-than background processes.
+local store. Starting a long-running service remains an explicit
+operator action.
 
 ## What's next
 
 <div className="craik-next">
-
-<a href="../post-mvp-scope/">
-<strong>Reference</strong>
-<span>Post-MVP scope</span>
-<small>Why a production gateway daemon is deferred.</small>
-</a>
 
 <a href="../../guides/gateway-troubleshooting/">
 <strong>Guide</strong>
