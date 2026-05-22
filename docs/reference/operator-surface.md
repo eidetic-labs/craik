@@ -1,27 +1,29 @@
 # Operator surface
 
-<p className="craik-meta"><span>3 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view contracts and formatter helpers Craik
-ships, and the boundary between them and a complete dashboard.
+The read-only operator surface Craik ships, the formatter contracts
+behind each view, and the boundary between the CLI-first surface and a
+complete dashboard.
 
 </div>
 
 <div className="craik-keypoint">
 
-**A complete TUI or dashboard is post-MVP scope.**
+**Craik chose a CLI-first operator surface for v0.7.0.**
 
-The first operator inspection work is terminal-friendly formatting
-backed by local-store queries and validated contracts. See
-[Post-MVP Scope](post-mvp-scope.md).
+The shipped entrypoint is `craik operator overview`: a read-only,
+terminal-friendly surface backed by local-store queries and validated
+formatter contracts. A complete TUI or dashboard is post-MVP scope.
+See [Post-MVP Scope](post-mvp-scope.md).
 
 </div>
 
-## Why formatter-first
+## Why CLI-first
 
 <div className="craik-grid">
 
@@ -39,17 +41,40 @@ backed by local-store queries and validated contracts. See
 
 **Read-only by default.**
 
-The v0.7.0 operator surface may display state from the local store,
-docs, fixtures, and validated contracts. It must not mutate memory,
-approve grants, resolve contradictions, delete records, or execute
-plugins without an explicit future command and policy boundary.
+The v0.7.0 operator surface displays state from the local store and
+validated contracts. It must not mutate memory, approve grants,
+resolve contradictions, delete records, or execute plugins without an
+explicit future command and policy boundary.
 
 </div>
 
-## Preview navigation
+## Commands
 
-Future TUI or dashboard work should organize views around operator
-questions.
+The shared overview command prints the current project state grouped by
+operator question.
+
+```bash
+craik operator overview
+craik operator overview --project project_docs
+craik operator overview --section inbox
+craik operator overview --json
+```
+
+`--project` scopes records that carry a project id or link to a task in
+that project. Global records without project or task scope remain
+visible because hiding them would imply a relationship Craik cannot
+prove from the persisted record.
+
+The JSON payload is the same read-only snapshot used by the text view:
+`project_id`, `read_only`, `sections`, and `notes`. Every section names
+the navigation id, count, status, suggested command, backing contract
+kinds, and a short summary.
+
+## Navigation
+
+The CLI surface organizes views around operator questions. The first
+command is an overview; follow-on commands can reuse the same section
+ids and formatter contracts.
 
 <div className="craik-grid">
 
@@ -100,11 +125,12 @@ The initial surface reads from existing contracts and store helpers.
 See the [schema reference](schemas.md) for the persisted field shapes
 of each contract.
 
-## Follow-on views
+## Follow-on surfaces
 
-Post-MVP work can add these views incrementally behind the same
-read-only boundary. Each view should have focused tests for
-formatting, empty-state behavior, and links to the underlying
+Future TUI or dashboard work can reuse the overview snapshot and
+individual formatter contracts behind the same read-only boundary.
+Each new command or panel should have focused tests for formatting,
+empty-state behavior, project scoping, and links to the underlying
 contracts before it is described as operational.
 
 ## What's next

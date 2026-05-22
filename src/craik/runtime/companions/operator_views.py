@@ -26,6 +26,7 @@ from craik.contracts.models import (
 )
 from craik.runtime.companions import operator_artifact_views as _operator_artifact_views
 from craik.runtime.companions import operator_knowledge_views as _operator_knowledge_views
+from craik.runtime.companions import operator_surface as _operator_surface
 from craik.runtime.memory import operator_memory_views as _operator_memory_views
 
 format_contradiction_inbox = _operator_artifact_views.format_contradiction_inbox
@@ -37,6 +38,10 @@ KnowledgeResolutionSnapshot = _operator_knowledge_views.KnowledgeResolutionSnaps
 format_knowledge_resolution_view = _operator_knowledge_views.format_knowledge_resolution_view
 MemoryImpactPreviewSnapshot = _operator_memory_views.MemoryImpactPreviewSnapshot
 format_memory_impact_preview_view = _operator_memory_views.format_memory_impact_preview_view
+OperatorSurfaceSection = _operator_surface.OperatorSurfaceSection
+OperatorSurfaceSnapshot = _operator_surface.OperatorSurfaceSnapshot
+build_operator_surface_snapshot = _operator_surface.build_operator_surface_snapshot
+format_operator_surface_overview = _operator_surface.format_operator_surface_overview
 
 
 @dataclass(frozen=True)

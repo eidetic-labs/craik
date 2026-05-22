@@ -82,6 +82,8 @@ plugins_app = typer.Typer(help="Install and govern runtime plugins.")
 app.add_typer(plugins_app, name="plugins")
 references_app = typer.Typer(help="Inspect and verify reference integrations.")
 app.add_typer(references_app, name="references")
+operator_app = typer.Typer(help="Inspect read-only operator surface state.")
+app.add_typer(operator_app, name="operator")
 
 
 def package_version() -> str:
@@ -248,6 +250,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_skills",
         "craik.cli_plugins",
         "craik.cli_references",
+        "craik.cli_operator",
         "craik.cli_tasks",
     ):
         import_module(module_name)

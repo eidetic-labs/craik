@@ -7,8 +7,46 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.6.0`; historical sign-offs remain below for
+pre-release gate is `0.7.0`; historical sign-offs remain below for
 audit continuity.
+
+</div>
+
+## v0.7.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Operator experience gate.**
+
+`0.7.0` ships a read-only operator surface for inspecting project
+state without reading raw logs. Each goal issue must ship
+implementation, tests, docs, validation, a green PR, merge, issue
+closure, and branch pruning before the next goal begins.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>Dashboard / TUI decision</dt><dt><span className="craik-fields__type">ready in PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/685">#685</a> · CLI-first <code>craik operator overview</code> · read-only snapshot and formatter contract</dd></div>
+<div><dt>Work graph explorer</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/686">#686</a> · graph navigation and exports</dd></div>
+<div><dt>Handoff viewer</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/687">#687</a> · summaries, risks, receipts, and next steps</dd></div>
+<div><dt>Receipt viewer</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/688">#688</a> · capability and plugin receipt inspection</dd></div>
+<div><dt>Contradiction inbox</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/689">#689</a> · contradiction and operator-attention queue</dd></div>
+<div><dt>Evidence and assumption views</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/690">#690</a> · evidence, assumptions, and memory impact links</dd></div>
+<div><dt>Delegation queue</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/691">#691</a> · human delegation inspection</dd></div>
+<div><dt>Budget / quota view</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/692">#692</a> · configured limits, usage, missing data, and exceeded budgets</dd></div>
+<div><dt>Instruction distillation view</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/693">#693</a> · sources, snapshots, provenance, proposals, and reviews</dd></div>
+<div><dt>Quality gate view</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/694">#694</a> · handoff, evidence, critic, and red-team signals</dd></div>
+<div><dt>Memory impact preview</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/695">#695</a> · previewed durable-memory effects</dd></div>
+<div><dt>Known traps view</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/696">#696</a> · known traps and negative knowledge</dd></div>
+<div><dt>Run delta view</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/697">#697</a> · recovery and continuity deltas</dd></div>
+<div><dt>Release readiness and docs assessment</dt><dt><span className="craik-fields__type">planned</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/698">#698</a> · final 0.7.0 readiness record, changelog, and docs assessment</dd></div>
 
 </div>
 

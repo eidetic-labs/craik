@@ -61,6 +61,7 @@ def test_receipts_app_is_mounted_from_extracted_module() -> None:
         (["connect", "--help"], "stigmem"),
         (["demo", "--help"], "stigmem-docs"),
         (["handoff", "--help"], "create"),
+        (["operator", "--help"], "overview"),
         (["plugins", "--help"], "grant"),
         (["references", "--help"], "verify"),
         (["scope-change", "--help"], "decide"),
@@ -205,6 +206,19 @@ def test_root_help_describes_governed_runtime_substrate() -> None:
 
     assert result.exit_code == 0
     assert "Governed agent-runtime substrate" in result.output
+
+
+def test_operator_overview_cli_renders_empty_read_only_surface(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "overview"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Operator Surface" in result.output
+    assert "Read-only: True" in result.output
+    assert "Missing data is unavailable, not inferred." in result.output
 
 
 def test_schema_list_includes_task_request() -> None:

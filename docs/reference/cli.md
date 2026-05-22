@@ -778,6 +778,28 @@ Options:
 - `--trusted-local-fail-open`: Explicitly opt in to trusted-local fail-open semantics.; default `false`
 - `--max-recent-handoffs`: Recent handoffs to include.; default `5`
 
+## `craik operator`
+
+Inspect read-only operator surface state.
+
+```text
+craik operator COMMAND [ARGS]...
+```
+
+## `craik operator overview`
+
+Print the read-only operator surface overview.
+
+```text
+craik operator overview [OPTIONS]
+```
+
+Options:
+
+- `--project`: Only include records in this project scope.
+- `--section`: Only print one operator surface section.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik plugins`
 
 Install and govern runtime plugins.
