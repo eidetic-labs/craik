@@ -152,11 +152,23 @@ def setup_command(
         str | None,
         typer.Option("--policy-envelope-id", help="Policy envelope for gateway authority."),
     ] = None,
+    allow_insecure_public_gateway: Annotated[
+        bool,
+        typer.Option(
+            "--allow-insecure-public-gateway",
+            help="Explicitly allow a public gateway bind without TLS termination.",
+        ),
+    ] = False,
 ) -> None:
     """Initialize local state and write non-secret gateway setup output."""
     resolved_paths = resolve_craik_paths()
     if (resolved_paths.state / DATABASE_NAME).exists():
         _operator_identity()
+    public_bind = gateway_bind_host in {"0.0.0.0", "::"}  # nosec B104
+    if public_bind and policy_envelope_id and not allow_insecure_public_gateway:
+        raise typer.BadParameter(
+            "public gateway bind without TLS requires --allow-insecure-public-gateway"
+        )
     paths = ensure_craik_home()
     store = LocalStore.from_paths(paths)
     try:
@@ -186,6 +198,11 @@ def setup_command(
                 "Run gateway diagnostics before starting the daemon.",
             ],
         }
+        if public_bind:
+            payload["warnings"] = [
+                "Public gateway bind configured without TLS termination; place it behind TLS "
+                "or keep it on a private network."
+            ]
     finally:
         store.close()
 
