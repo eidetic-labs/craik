@@ -1,6 +1,6 @@
 # Speech-to-text adapter contract
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -17,7 +17,8 @@ validation rules, and the redaction boundary.
 
 Speech-to-text results must not persist raw audio, audio bytes,
 waveforms, raw payloads, private transcript metadata, credentials,
-tokens, or private local state.
+tokens, or private local state. Transcript text, segment text, and
+metadata all pass through the shared redaction boundary before storage.
 
 </div>
 

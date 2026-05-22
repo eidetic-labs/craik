@@ -1,6 +1,6 @@
 # Multimodal artifact references
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
