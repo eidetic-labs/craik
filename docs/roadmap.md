@@ -400,7 +400,7 @@ reading raw logs.
 <div><h4>Delegation queue</h4><p>Ready in PR · <code>craik operator delegations</code> lists human delegation points.</p></div>
 <div><h4>Budget / quota view</h4><p>Ready in PR · <code>craik operator budget</code> displays missing budget data explicitly.</p></div>
 <div><h4>Instruction distillation view</h4><p>Ready in PR · <code>craik operator instructions</code> renders sources, snapshots, provenance, proposals, and reviews.</p></div>
-<div><h4>Quality gate view</h4></div>
+<div><h4>Quality gate view</h4><p>Ready in PR · <code>craik operator quality</code> summarizes handoff, evidence, critic, and red-team signals.</p></div>
 <div><h4>Memory impact preview</h4></div>
 <div><h4>Known traps view</h4></div>
 <div><h4>Run delta view</h4></div>

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
-from typing import Annotated, cast
+from dataclasses import fields, is_dataclass
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -14,6 +14,7 @@ from craik.runtime.companions.operator_views import (
     BudgetQuotaSnapshot,
     InstructionDistillationSnapshot,
     OperatorSurfaceSnapshot,
+    QualityGateSnapshot,
     build_operator_surface_snapshot,
     format_budget_quota_view,
     format_contradiction_inbox,
@@ -22,6 +23,7 @@ from craik.runtime.companions.operator_views import (
     format_handoff_viewer,
     format_instruction_distillation_view,
     format_operator_surface_overview,
+    format_quality_gate_view,
     format_receipt_viewer,
     format_work_graph_explorer,
 )
@@ -58,7 +60,7 @@ def operator_overview(
         snapshot = _require_section(snapshot, section_id)
 
     if json_output:
-        typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
+        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_operator_surface_overview(snapshot)))
 
@@ -276,7 +278,7 @@ def operator_budget(
         ],
     )
     if json_output:
-        typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
+        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_budget_quota_view(snapshot)))
 
@@ -303,9 +305,35 @@ def operator_instructions(
         store.close()
 
     if json_output:
-        typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
+        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_instruction_distillation_view(snapshot)))
+
+
+@operator_app.command("quality")
+def operator_quality(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only quality gate view."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        snapshot = QualityGateSnapshot(
+            handoff_scores=store.list_handoff_quality_scores(),
+            evidence_scores=store.list_evidence_coverage_scores(),
+            critic_findings=store.list_runtime_critic_findings(),
+            red_team_findings=store.list_red_team_findings(),
+        )
+    finally:
+        store.close()
+
+    if json_output:
+        typer.echo(json.dumps(_json_ready(snapshot), indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_quality_gate_view(snapshot)))
 
 
 def _require_section(
@@ -328,3 +356,18 @@ def _contradiction_status(value: str) -> ContradictionStatus:
     if value not in {"open", "resolved", "ignored"}:
         raise typer.BadParameter(f"unsupported contradiction status: {value}")
     return cast(ContradictionStatus, value)
+
+
+def _json_ready(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json", by_alias=True)
+    if is_dataclass(value):
+        return {
+            field.name: _json_ready(getattr(value, field.name))
+            for field in fields(value)
+        }
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_ready(item) for key, item in value.items()}
+    return value

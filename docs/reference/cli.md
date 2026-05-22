@@ -877,6 +877,18 @@ Options:
 - `--section`: Only print one operator surface section.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator quality`
+
+Print the read-only quality gate view.
+
+```text
+craik operator quality [OPTIONS]
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator receipt`
 
 Print the read-only receipt viewer.
