@@ -116,3 +116,45 @@ def test_cli_auth_coverage_guard_scans_new_cli_modules(tmp_path, monkeypatch) ->
 
 def test_cli_auth_exemption_surface_is_bounded() -> None:
     assert len(check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS) <= 8
+
+
+def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> None:
+    assert check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS == {
+        ("src/craik/cli_auth.py", "login"): (
+            "bootstrap command; it creates the operator session required by auth-gated commands"
+        ),
+        ("src/craik/cli_auth.py", "logout"): (
+            "bootstrap command; operators must be able to clear a stale or missing session"
+        ),
+        ("src/craik/cli_auth.py", "whoami"): (
+            "session introspection command; it reports missing sessions without requiring one first"
+        ),
+        ("src/craik/cli_demos.py", "demo_persistent_agent"): (
+            "deterministic demo uses fixture identity and is hardened separately "
+            "from real agent commands"
+        ),
+        ("src/craik/cli_demos.py", "demo_stigmem_docs"): (
+            "onboarding demo uses fixture-local state before an operator session exists"
+        ),
+        ("src/craik/cli_onboarding.py", "onboard"): (
+            "first-run bootstrap command that may execute before operator login is configured"
+        ),
+        ("src/craik/cli_operations.py", "policy_test"): (
+            "deterministic release/security baseline run by CI before operator login exists"
+        ),
+    }
+
+
+def test_store_writer_exemption_surface_matches_documented_legacy_writers() -> None:
+    assert check_release_readiness.STORE_WRITER_EXEMPTIONS == {
+        "src/craik/runtime/store/memory.py": {
+            "put_assumption": (
+                "legacy direct-store API; assumptions are persisted through fixtures/tests"
+            ),
+        },
+        "src/craik/runtime/store/work.py": {
+            "put_capability_grant": (
+                "legacy direct-store API; grant orchestration is still runtime-facing"
+            ),
+        },
+    }
