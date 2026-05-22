@@ -800,6 +800,20 @@ Options:
 - `--status`: Only include reports with status open, resolved, or ignored.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator delegations`
+
+Print the read-only delegation queue.
+
+```text
+craik operator delegations [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Only include delegation points for this task.
+- `--status`: Only include delegation points with this status.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator evidence`
 
 Print the read-only evidence and assumption view.

@@ -17,6 +17,7 @@ from craik.contracts.models import (
     DistilledInstructionProposal,
     EvidenceReference,
     Handoff,
+    HumanDelegationPoint,
     InstructionProvenance,
     IntentLock,
     ReceiptResult,
@@ -420,6 +421,43 @@ def test_operator_evidence_cli_keeps_assumptions_separate(tmp_path: Path) -> Non
     assert "Evidence: 1" in result.output
     assert "Assumptions: 1" in result.output
     assert "assumption_docs [open]" in result.output
+
+
+def test_operator_delegations_cli_renders_queue(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_human_delegation(
+            HumanDelegationPoint.model_validate(
+                {
+                    "id": "delegation_docs",
+                    "task_id": "task_docs",
+                    "kind": "approval",
+                    "status": "open",
+                    "summary": "Approve docs change.",
+                    "requested_decision": "Can we ship the docs update?",
+                    "requested_by": "agent:codex",
+                    "owner": None,
+                    "receipt_ids": ["receipt_docs"],
+                    "created_at": "2026-05-21T17:00:00Z",
+                }
+            )
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "delegations", "--status", "open"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Delegation Queue: 1" in result.output
+    assert "- delegation_docs [open/approval]" in result.output
+    assert "Owner: unassigned" in result.output
 
 
 def test_schema_list_includes_task_request() -> None:
