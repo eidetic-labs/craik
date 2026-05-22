@@ -11,14 +11,14 @@ import typer
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.doctor import run_doctor
 from craik.runtime.gateway import GatewayDaemonError, run_gateway_daemon
-from craik.runtime.gateway_service import (
+from craik.runtime.paths import resolve_craik_home, resolve_craik_paths
+from craik.runtime.services.gateway import (
     gateway_logs_payload,
     gateway_status_payload,
     install_gateway_service,
     request_gateway_stop,
     uninstall_gateway_service,
 )
-from craik.runtime.paths import resolve_craik_home, resolve_craik_paths
 
 gateway_app = typer.Typer(help="Run and inspect the local gateway daemon.")
 

@@ -19,14 +19,14 @@ from craik.runtime.gateway import (
     gateway_stopped_state,
     run_gateway_daemon,
 )
-from craik.runtime.gateway_service import (
+from craik.runtime.paths import ensure_craik_home
+from craik.runtime.services.gateway import (
     gateway_logs_payload,
     gateway_status_payload,
     install_gateway_service,
     request_gateway_stop,
     uninstall_gateway_service,
 )
-from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
 
 NOW = datetime(2026, 5, 16, 18, 10, tzinfo=UTC)
