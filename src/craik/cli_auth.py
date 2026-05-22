@@ -20,12 +20,21 @@ from craik.runtime.auth import (
     CredentialKind,
     CredentialStatus,
 )
+from craik.runtime.auth.guided_setup import (
+    DEFAULT_REF_MANAGER,
+    FILE_REF_MANAGER,
+    build_guided_auth_profile,
+    credential_guidance,
+    default_pool_for_profile,
+    guided_provider_defaults,
+)
 from craik.runtime.auth.operator import (
     OIDCAuthenticator,
     OIDCConfig,
     OperatorSessionNotFoundError,
     OperatorSessionStore,
 )
+from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.providers.provider_url_safety import (
@@ -130,7 +139,7 @@ def auth_add(
     if credential_kind is CredentialKind.SECRET_REF:
         if not ref:
             raise typer.BadParameter("--ref is required for secret-ref profiles")
-        if manager == "file" and Path(ref).expanduser().is_absolute():
+        if manager == FILE_REF_MANAGER and Path(ref).expanduser().is_absolute():
             raise typer.BadParameter("file secret refs must be relative to the secrets root")
 
     family = profile_id.split(":", 1)[0]
@@ -147,6 +156,86 @@ def auth_add(
 
     AuthProfileStore.from_env().put(profile)
     typer.echo(json.dumps(_profile_payload(profile), indent=2, sort_keys=True))
+
+
+@auth_app.command("setup")
+def auth_setup(
+    provider: Annotated[
+        str,
+        typer.Argument(help="Provider family: openai, anthropic, gemini, or local."),
+    ],
+    profile_id: Annotated[
+        str | None,
+        typer.Option("--profile-id", help="Auth profile id to create."),
+    ] = None,
+    env_var: Annotated[
+        str | None,
+        typer.Option("--env-var", help="Environment variable containing the API key."),
+    ] = None,
+    secret_ref: Annotated[
+        str | None,
+        typer.Option("--secret-ref", help="Secret reference instead of an environment variable."),
+    ] = None,
+    ref_manager: Annotated[
+        str,
+        typer.Option("--secret-manager", help="Secret manager for --secret-ref."),
+    ] = DEFAULT_REF_MANAGER,
+    secrets_root: Annotated[
+        str | None,
+        typer.Option("--secrets-root", help="Root directory for file secret references."),
+    ] = None,
+    base_url: Annotated[
+        str | None,
+        typer.Option("--base-url", help="Provider base URL."),
+    ] = None,
+    allow_local_base_url: Annotated[
+        bool,
+        typer.Option("--allow-local-base-url", help="Allow loopback HTTP provider URLs."),
+    ] = False,
+    pool: Annotated[
+        bool,
+        typer.Option("--pool/--no-pool", help="Create or update the default credential pool."),
+    ] = True,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Validate and print redacted setup without writing state."),
+    ] = False,
+) -> None:
+    """Guided setup for provider authentication profiles."""
+    try:
+        resolved = guided_provider_defaults(provider)
+        profile = build_guided_auth_profile(
+            resolved,
+            profile_id=profile_id,
+            env_var=env_var,
+            secret_ref=secret_ref,
+            ref_manager=ref_manager,
+            secrets_root=secrets_root,
+            base_url=base_url,
+            allow_local_base_url=allow_local_base_url,
+        )
+    except (ProviderURLSafetyError, ValidationError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from None
+
+    status = _source_status(profile)
+    guidance = credential_guidance(profile, status)
+    pool_config = default_pool_for_profile(profile) if pool else None
+    if not dry_run:
+        AuthProfileStore.from_env().put(profile)
+        if pool_config is not None:
+            CredentialPool.from_env().put(pool_config)
+
+    payload = {
+        "dry_run": dry_run,
+        "provider": provider,
+        "profile": _profile_payload(profile),
+        "status": status.model_dump(mode="json"),
+        "guidance": guidance,
+        "writes": [] if dry_run else ["auth_profile", *(["credential_pool"] if pool else [])],
+        "credential_pool": pool_config.model_dump(mode="json") if pool_config is not None else None,
+        "redacted": True,
+    }
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
 @auth_app.command("remove")

@@ -201,6 +201,26 @@ Remove an auth profile.
 craik auth remove [OPTIONS] PROFILE_ID
 ```
 
+## `craik auth setup`
+
+Guided setup for provider authentication profiles.
+
+```text
+craik auth setup [OPTIONS] PROVIDER
+```
+
+Options:
+
+- `--profile-id`: Auth profile id to create.
+- `--env-var`: Environment variable containing the API key.
+- `--secret-ref`: Secret reference instead of an environment variable.
+- `--secret-manager`: Secret manager for --secret-ref.; default `env`
+- `--secrets-root`: Root directory for file secret references.
+- `--base-url`: Provider base URL.
+- `--allow-local-base-url`: Allow loopback HTTP provider URLs.; default `false`
+- `--pool, --no-pool`: Create or update the default credential pool.; default `true`
+- `--dry-run`: Validate and print redacted setup without writing state.; default `false`
+
 ## `craik auth status`
 
 Show auth profile health and last-use status.

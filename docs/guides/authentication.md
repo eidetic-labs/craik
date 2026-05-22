@@ -1,6 +1,6 @@
 # Authentication and credentials
 
-<p className="craik-meta"><span>7 min read</span><span>For operators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>7 min read</span><span>For operators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -56,6 +56,30 @@ when the issuer exposes a revocation endpoint.
 Profiles live in `<CRAIK_HOME>/auth-profiles.json` and use
 `<provider_family>:<name>` IDs such as `anthropic:work` or
 `chat_completions:local`. Profile metadata is masked in CLI output.
+
+### Guided setup
+
+Use guided setup for the common provider families:
+
+```sh
+craik auth setup openai
+craik auth setup anthropic
+craik auth setup gemini
+craik auth setup local --base-url http://localhost:11434/v1
+```
+
+The setup command writes a typed auth profile and, by default, a
+single-profile credential pool. It prints redacted validation output
+including credential health and missing-secret guidance. Use
+`--dry-run` to validate the shape without writing state.
+
+```sh
+craik auth setup openai --dry-run
+craik auth setup openai --secret-ref OPENAI_API_KEY --dry-run
+```
+
+Loopback HTTP base URLs are rejected unless the selected provider is
+`local` or `--allow-local-base-url` is passed explicitly.
 
 ### Env-var API key
 
@@ -147,8 +171,8 @@ the run should rotate or fail over between them. Pools are stored in
 
 </div>
 
-The current CLI exposes profile operations; pool configuration is
-file-backed.
+`craik auth setup` writes the default single-profile pool for guided
+provider setup. More advanced pool strategies remain file-backed.
 
 ## Approval flow
 
@@ -303,6 +327,12 @@ credential or account identifier in the receipt.
 <strong>Guide</strong>
 <span>Connecting Stigmem</span>
 <small>Configure the node URL Stigmem-backed credentials resolve against.</small>
+</a>
+
+<a href="../local-model-setup/">
+<strong>Guide</strong>
+<span>Local model setup</span>
+<small>Configure local OpenAI-compatible providers.</small>
 </a>
 
 <a href="../../adr/credential-and-identity-architecture/">
