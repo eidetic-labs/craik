@@ -7,8 +7,8 @@
 **What you'll find here**
 
 The persistent agent session lifecycle introduced in v0.9.0: command
-surface, status values, transition rules, operator gating, and the
-relationship to one-shot task runs.
+surface, status values, transition rules, prompt-loop records,
+operator gating, and the relationship to one-shot task runs.
 
 </div>
 
@@ -18,6 +18,7 @@ relationship to one-shot task runs.
 | --- | --- | --- |
 | `craik run execute` | Execute one bounded task run. | `craik.task_run`, outputs, receipts, handoffs. |
 | `craik agent launch` | Create a persistent agent session. | `craik.agent_session_state`. |
+| `craik agent prompt` | Send one prompt through the session provider. | Task, run, outputs, receipts, handoff, session links, and `craik.agent_session_event`. |
 | `craik agent status` | Inspect one persistent session. | May mark stale pid sessions failed. |
 | `craik agent stop` | Stop an active persistent session. | Clears pid and records `stopped_at`. |
 | `craik agent restart` | Restart a stopped or failed session. | Clears `stopped_at` and records a new start time. |
@@ -71,20 +72,55 @@ Restartable statuses are `stopped`, `failed`, `auth_expired`,
 
 </div>
 
+## Prompt loop
+
+`craik agent prompt SESSION_ID "prompt text"` accepts prompts only for
+active sessions. The command checks that the active operator session
+matches the stored session subject and issuer before creating work. A
+prompt run creates a task in the session project, executes the
+provider-backed runner path, records provider receipts, writes a
+handoff, and updates the session with the active task id, active run id,
+receipt ids, handoff ids, and recovery metadata.
+
+Prompt completion returns the session to `idle`. Interruption is
+explicit: max-iteration and token-budget interruptions keep the session
+idle, store `exit_behavior: interrupted`, and link the incomplete
+handoff for recovery. `/exit`, `exit`, `/quit`, and `quit` stop the
+session without creating a provider run.
+
+## Event records
+
+`craik.agent_session_event` is the append-only event record for
+persistent sessions. Events are redacted and store references rather
+than credential material:
+
+| Event | When it is emitted |
+| --- | --- |
+| `prompt_received` | A non-exit prompt is accepted and converted into a task. |
+| `run_completed` | The provider-backed run finishes without interruption. |
+| `run_interrupted` | The provider-backed run writes an incomplete handoff for recovery. |
+| `exited` | The operator sends an explicit exit prompt. |
+
+Events include session, operator, project, provider, model, policy,
+task, run, handoff, receipt, metadata, and recovery references. Prompt
+text is represented by a short hash in event metadata.
+
 ## Operator gate
 
 Every `craik agent` lifecycle command requires an active operator
 session. The persisted session stores the operator subject and issuer,
-so later provider sessions, recovery records, and receipts can link
+and prompt execution rejects sessions owned by a different operator.
+Provider sessions, recovery records, and receipts can therefore link
 runtime state to an authenticated operator without storing credentials
 or tokens in the local store.
 
 ## Foreground and background state
 
-v0.9.0 starts with foreground lifecycle state. The `pid` and
-`endpoint_url` fields are optional because foreground launch does not
-require a daemon pid. When background execution is added, pid-backed
-sessions use the same status path and stale pid recovery semantics.
+v0.9.0 starts with foreground lifecycle state and a provider-backed
+prompt loop. The `pid` and `endpoint_url` fields are optional because
+foreground launch does not require a daemon pid. When background
+execution is added, pid-backed sessions use the same status path and
+stale pid recovery semantics.
 
 ## Validation
 
@@ -92,5 +128,7 @@ sessions use the same status path and stale pid recovery semantics.
 uv run --extra dev pytest tests/test_cli_agents.py tests/test_agent_sessions.py
 ```
 
-Expected output: lifecycle commands and typed session helpers enforce
-operator gates and valid transitions.
+Expected output: lifecycle commands, prompt execution, event
+persistence, receipt and handoff linkage, interruption handling,
+explicit exits, and typed session helpers enforce operator gates and
+valid transitions.

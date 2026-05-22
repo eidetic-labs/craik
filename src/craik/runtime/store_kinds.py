@@ -6,6 +6,7 @@ CONTRACT_KINDS: dict[str, str] = {
     "craik.adjudication_outcome": "adjudication_outcomes",
     "craik.adapter_package": "adapter_packages",
     "craik.agent_message": "agent_messages",
+    "craik.agent_session_event": "agent_session_events",
     "craik.agent_session_state": "agent_session_states",
     "craik.project_profile": "projects",
     "craik.run_output": "run_outputs",

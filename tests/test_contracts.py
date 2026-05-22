@@ -56,6 +56,24 @@ def test_agent_session_state_enforces_lifecycle_consistency(
         CONTRACT_REGISTRY["craik.agent_session_state"].model_validate(failed)
 
 
+def test_agent_session_event_records_redacted_runtime_links(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    parsed = CONTRACT_REGISTRY["craik.agent_session_event"].model_validate(
+        fixtures["craik.agent_session_event"]
+    )
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["redacted"] is True
+    assert dumped["event_type"] == "run_completed"
+    assert dumped["session_id"] == "agent_session_project_stigmem_provider_openai"
+    assert dumped["run_id"] == "run_docs_reconcile"
+    assert dumped["handoff_id"] == "handoff_docs_reconcile"
+    assert dumped["receipt_ids"] == ["receipt_provider_call"]
+    assert dumped["metadata"]["prompt_hash"] == "87a7d3f6c2e9b145"
+    assert "prompt" not in dumped["metadata"]
+
+
 def test_capability_receipt_auth_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

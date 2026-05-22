@@ -87,6 +87,33 @@
     ],
     "redacted": true
   },
+  "craik.agent_session_event": {
+    "schema": "craik.agent_session_event",
+    "version": "0.1.0",
+    "id": "agent_event_docs_reconcile_prompt",
+    "session_id": "agent_session_project_stigmem_provider_openai",
+    "event_type": "run_completed",
+    "operator_subject": "operator-123",
+    "operator_issuer": "https://issuer.example.test",
+    "project_id": "project_stigmem",
+    "provider_id": "provider_openai",
+    "model_id": "gpt-5.2",
+    "policy_envelope_id": "policy_task_docs_reconcile",
+    "task_id": "task_docs_reconcile",
+    "run_id": "run_docs_reconcile",
+    "handoff_id": "handoff_docs_reconcile",
+    "receipt_ids": ["receipt_provider_call"],
+    "recovery_metadata": {
+      "exit_behavior": "completed",
+      "handoff_id": "handoff_docs_reconcile"
+    },
+    "metadata": {
+      "prompt_hash": "87a7d3f6c2e9b145",
+      "run_status": "completed"
+    },
+    "created_at": "2026-05-22T06:03:00Z",
+    "redacted": true
+  },
   "craik.agent_onboarding": {
     "schema": "craik.agent_onboarding",
     "version": "0.1.0",

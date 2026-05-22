@@ -6,9 +6,9 @@
 
 **What you'll do**
 
-Launch and manage the v0.9.0 persistent agent session control plane.
-This guide covers the lifecycle CLI, the operator-session requirement,
-and the boundary between one-shot runs and persistent agents.
+Launch and manage the v0.9.0 persistent agent runtime. This guide
+covers the lifecycle CLI, the operator-session requirement, the
+provider-backed prompt loop, and the records Craik leaves behind.
 
 </div>
 
@@ -16,10 +16,10 @@ and the boundary between one-shot runs and persistent agents.
 
 **One-shot runs and persistent agents are separate surfaces.**
 
-Use `craik run execute` for bounded task runs that produce task-run
-state, receipts, outputs, and handoffs. Use `craik agent` commands for
-longer-lived agent session state that can later host provider-backed
-prompt loops.
+Use `craik run execute` for bounded one-shot task runs. Use
+`craik agent launch` plus `craik agent prompt` when you want a
+longer-lived session that keeps provider, model, project, operator,
+policy, receipt, handoff, and recovery links together.
 
 </div>
 
@@ -48,10 +48,33 @@ craik agent launch \
 ```
 
 The command persists a `craik.agent_session_state` record and returns
-JSON. In v0.9.0 the launch surface records foreground control-plane
-state first. Provider-backed interactive loops, daemon execution, and
-background process supervision are implemented by the later v0.9.0
-provider-session and recovery goals.
+JSON. The session is bound to the active operator subject and issuer,
+the project id, provider id, optional model id, optional auth profile,
+and optional policy envelope.
+
+## Send a prompt
+
+```sh
+craik agent prompt agent_docs "Implement the next bounded provider task."
+```
+
+`prompt` creates a task under the session project, executes it through
+the session provider, and returns the same run, provider receipt,
+handoff, and output shape used by provider-backed one-shot runs. The
+session moves back to `idle` when the run finishes and stores the active
+task id, run id, receipt ids, handoff ids, and recovery metadata.
+
+Use `/exit`, `exit`, `/quit`, or `quit` as the prompt text to stop the
+session without starting a provider run:
+
+```sh
+craik agent prompt agent_docs /exit
+```
+
+For deterministic fixture-backed validation, the command grants the
+fixture action by default. Use `--no-allow-fixture-action` to exercise
+the blocked approval path, `--max-iterations` to test interruption, and
+`--provider-token-budget` to test token-budget interruption.
 
 ## Inspect and list sessions
 
@@ -87,8 +110,15 @@ material:
 <div><h4>Provider</h4><p>Provider id, model id, and optional auth profile id.</p></div>
 <div><h4>Lifecycle</h4><p>Mode, status, timestamps, pid, endpoint URL, and supervision notes.</p></div>
 <div><h4>Links</h4><p>Project, task, run, policy envelope, receipt, handoff, and recovery ids.</p></div>
+<div><h4>Events</h4><p>Prompt, run completion, interruption, and exit events.</p></div>
 
 </div>
+
+Each prompt also persists redacted `craik.agent_session_event` records.
+Events carry stable ids for the session, task, run, handoff, receipts,
+provider, model, policy envelope, and recovery metadata. The raw prompt
+is not stored in the event; Craik stores a short prompt hash for
+correlation without adding operator text to logs.
 
 ## Validation
 
@@ -96,8 +126,10 @@ material:
 uv run --extra dev pytest tests/test_cli_agents.py tests/test_agent_sessions.py
 ```
 
-Expected output: launch, status, stop, restart, operator-session gates,
-invalid transitions, and stale-pid recovery tests pass.
+Expected output: launch, prompt, status, stop, restart,
+operator-session gates, invalid transitions, prompt events, receipt and
+handoff links, interruption recovery metadata, explicit exit behavior,
+and stale-pid recovery tests pass.
 
 ## What's next
 

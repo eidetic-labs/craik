@@ -52,6 +52,20 @@ List persisted persistent agent sessions.
 craik agent list
 ```
 
+## `craik agent prompt`
+
+Send one provider-backed prompt to an active persistent agent session.
+
+```text
+craik agent prompt [OPTIONS] SESSION_ID PROMPT
+```
+
+Options:
+
+- `--max-iterations`: Maximum provider loop iterations.; default `5`
+- `--allow-fixture-action, --no-allow-fixture-action`: Grant the deterministic fixture shell action used by provider tests.; default `true`
+- `--provider-token-budget`: Optional provider token budget.
+
 ## `craik agent restart`
 
 Restart a stopped or failed persistent agent session.
