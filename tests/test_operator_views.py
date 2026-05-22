@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from craik.contracts.models import (
     Assumption,
@@ -36,8 +37,10 @@ from craik.runtime.companions.operator_views import (
     KnowledgeResolutionSnapshot,
     KnownTrapsSnapshot,
     MemoryImpactPreviewSnapshot,
+    OperatorSurfaceSnapshot,
     QualityGateSnapshot,
     RunDeltaSnapshot,
+    build_operator_surface_snapshot,
     format_budget_quota_view,
     format_contradiction_inbox,
     format_delegation_queue,
@@ -47,6 +50,7 @@ from craik.runtime.companions.operator_views import (
     format_knowledge_resolution_view,
     format_known_traps_view,
     format_memory_impact_preview_view,
+    format_operator_surface_overview,
     format_quality_gate_view,
     format_receipt_viewer,
     format_run_delta_view,
@@ -54,6 +58,93 @@ from craik.runtime.companions.operator_views import (
 )
 
 NOW = datetime(2026, 5, 16, 17, 55, tzinfo=UTC)
+
+
+class _OperatorSurfaceStore:
+    def __init__(self) -> None:
+        self.tasks = [
+            SimpleNamespace(id="task_docs", project_id="project_docs"),
+            SimpleNamespace(id="task_other", project_id="project_other"),
+        ]
+        self.handoffs = [SimpleNamespace(id="handoff_docs", task_id="task_docs")]
+        self.contradictions = [SimpleNamespace(id="contradiction_docs", task_id="task_docs")]
+        self.delegations = [SimpleNamespace(id="delegation_docs", task_id="task_docs")]
+        self.evidence = [SimpleNamespace(id="evidence_docs", task_id="task_docs")]
+
+    def list_tasks(self) -> list[SimpleNamespace]:
+        return self.tasks
+
+    def list_graph_events(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id="graph_docs", task_id="task_docs")]
+
+    def list_handoffs(self) -> list[SimpleNamespace]:
+        return self.handoffs
+
+    def list_receipts(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id="receipt_docs", task_id="task_docs")]
+
+    def list_plugin_receipts(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id="plugin_receipt_docs", task_id="task_docs")]
+
+    def list_contradictions(self) -> list[SimpleNamespace]:
+        return self.contradictions
+
+    def list_human_delegations(self) -> list[SimpleNamespace]:
+        return self.delegations
+
+    def list_context_requests(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_evidence(self) -> list[SimpleNamespace]:
+        return self.evidence
+
+    def list_assumptions(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_memory_impact_previews(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_handoff_quality_scores(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_evidence_coverage_scores(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_runtime_critic_findings(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_red_team_findings(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_instruction_sources(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id="source_global")]
+
+    def list_instruction_source_snapshots(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_instruction_provenance(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_distilled_instruction_proposals(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_instruction_promotion_reviews(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_known_traps(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_negative_knowledge(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_run_deltas(self) -> list[SimpleNamespace]:
+        return []
+
+    def list_recovery_sessions(self) -> list[SimpleNamespace]:
+        return []
+
+    def put_contract(self, _record: object) -> None:
+        raise AssertionError("operator surface overview must be read-only")
 
 
 def test_operator_views_reexports_artifact_formatters() -> None:
@@ -88,6 +179,46 @@ def test_operator_views_reexports_artifact_formatters() -> None:
         operator_views.format_memory_impact_preview_view
         is operator_memory_views.format_memory_impact_preview_view
     )
+
+
+def test_operator_surface_snapshot_counts_project_scoped_records() -> None:
+    snapshot = build_operator_surface_snapshot(
+        _OperatorSurfaceStore(),
+        project_id="project_docs",
+    )
+
+    assert snapshot.read_only is True
+    assert snapshot.project_id == "project_docs"
+    sections = {section.id: section for section in snapshot.sections}
+    assert sections["overview"].count == 1
+    assert sections["work-graph"].count == 1
+    assert sections["handoffs"].count == 1
+    assert sections["receipts"].count == 2
+    assert sections["inbox"].status == "attention"
+    assert sections["inbox"].count == 2
+    assert sections["instructions"].count == 1
+    assert "local-store read helpers" in snapshot.notes[1]
+
+
+def test_operator_surface_overview_formats_read_only_boundary() -> None:
+    snapshot = OperatorSurfaceSnapshot(
+        project_id=None,
+        read_only=True,
+        sections=[],
+        notes=["Missing data is unavailable, not inferred."],
+    )
+
+    lines = format_operator_surface_overview(snapshot)
+
+    assert lines[:5] == [
+        "Operator Surface",
+        "Project: all",
+        "Read-only: True",
+        "",
+        "Views",
+    ]
+    assert "- none" in lines
+    assert "- Missing data is unavailable, not inferred." in lines
 
 
 def test_work_graph_explorer_formats_nodes_and_edges() -> None:

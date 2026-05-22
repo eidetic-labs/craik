@@ -10,6 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.7.0 read-only operator surface overview through `craik operator
+  overview`, with project scoping, JSON output, section navigation,
+  local-store counts, and CLI-first operator surface documentation.
+
 ## 0.6.0 — 2026-05-21
 
 ### Added
