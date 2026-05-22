@@ -17,7 +17,7 @@ from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.doctor import run_doctor
-from craik.runtime.gateway import default_gateway_config
+from craik.runtime.gateway import default_gateway_config, gateway_configured_state
 from craik.runtime.paths import (
     CraikPaths,
     ensure_craik_home,
@@ -188,9 +188,12 @@ def setup_command(
         except ValidationError as error:
             raise typer.BadParameter(str(error)) from None
         store.put_gateway_config(config)
+        runtime_state = gateway_configured_state(config)
+        store.put_gateway_runtime_state(runtime_state)
         payload = {
             "home": _paths_payload(paths),
             "gateway_config": config.model_dump(mode="json", by_alias=True),
+            "gateway_runtime_state": runtime_state.model_dump(mode="json", by_alias=True),
             "secrets_written": False,
             "next_steps": [
                 "Review gateway_config before enabling external ingress.",

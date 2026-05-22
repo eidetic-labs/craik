@@ -115,6 +115,11 @@ The setup output prints:
 </div>
 
 <div>
+<h4><code>gateway_runtime_state</code></h4>
+<p>The initial stopped lifecycle state written alongside the gateway configuration.</p>
+</div>
+
+<div>
 <h4><code>secrets_written = false</code></h4>
 <p>Always. Confirmation that the wizard hasn't asked for or stored secret material.</p>
 </div>

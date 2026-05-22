@@ -55,6 +55,29 @@ def gateway_starting_state(
     )
 
 
+def gateway_configured_state(
+    config: GatewayConfig,
+    *,
+    receipt_ids: list[str] | None = None,
+    configured_at: datetime | None = None,
+) -> GatewayRuntimeState:
+    """Create an initial stopped state after gateway configuration is written."""
+    now = configured_at or datetime.now(UTC)
+    return GatewayRuntimeState(
+        id=DEFAULT_GATEWAY_STATE_ID,
+        config_id=config.id,
+        project_id=config.project_id,
+        mode=config.mode,
+        status="stopped",
+        pid=None,
+        stopped_at=now,
+        updated_at=now,
+        policy_envelope_id=config.policy_envelope_id,
+        receipt_ids=receipt_ids or [],
+        supervision_notes=["Gateway configured; daemon has not been started."],
+    )
+
+
 def gateway_running_state(
     config: GatewayConfig,
     *,

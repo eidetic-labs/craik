@@ -56,3 +56,24 @@ def test_cli_auth_coverage_guard_accepts_operator_auth() -> None:
     assert check_release_readiness._has_command_decorator(function)
     assert check_release_readiness._touches_local_store(function)
     assert check_release_readiness._calls_operator_auth(function)
+
+
+def test_writer_coverage_guard_scans_profile_store_writers() -> None:
+    profile_store = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "craik"
+        / "runtime"
+        / "store"
+        / "profiles.py"
+    )
+
+    assert "put_gateway_runtime_state" in check_release_readiness._store_writer_names(
+        profile_store
+    )
+
+
+def test_cli_auth_coverage_guard_includes_root_cli() -> None:
+    paths = {path.name for path in check_release_readiness._cli_command_paths()}
+
+    assert "cli.py" in paths

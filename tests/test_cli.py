@@ -782,15 +782,21 @@ def test_setup_wizard_writes_non_secret_gateway_config(tmp_path) -> None:
     assert payload["gateway_config"]["project_id"] == "project_gateway"
     assert payload["gateway_config"]["enabled"] is True
     assert payload["gateway_config"]["policy_envelope_id"] == "policy_gateway"
+    assert payload["gateway_runtime_state"]["status"] == "stopped"
+    assert payload["gateway_runtime_state"]["config_id"] == "gateway_default"
     assert "api_key" not in json.dumps(payload).lower()
 
     store = LocalStore.from_paths(ensure_craik_home({"CRAIK_HOME": str(home)}))
     try:
         store.initialize()
         config = store.get_gateway_config("gateway_default")
+        runtime_state = store.get_gateway_runtime_state("gateway_state_default")
         assert config is not None
         assert config.enabled is True
         assert config.project_id == "project_gateway"
+        assert runtime_state is not None
+        assert runtime_state.status == "stopped"
+        assert runtime_state.config_id == "gateway_default"
     finally:
         store.close()
 
