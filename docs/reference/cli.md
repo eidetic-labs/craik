@@ -800,6 +800,19 @@ Options:
 - `--section`: Only print one operator surface section.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator work-graph`
+
+Print the read-only work graph explorer.
+
+```text
+craik operator work-graph [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Only include graph objects for this task.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik plugins`
 
 Install and govern runtime plugins.
