@@ -88,7 +88,8 @@ def test_post_mvp_deferral_docs_keep_scope_honest() -> None:
     ]:
         assert required in post_mvp
 
-    assert "Gateway daemon mode is post-MVP" in gateway
+    assert "Gateway daemon mode is foreground and local-first" in gateway
+    assert "Production dispatch loop" in gateway
     assert "A complete TUI" in operator
     assert "dashboard is post-MVP scope" in operator
     assert "Additional live runner adapters are post-MVP" in runners

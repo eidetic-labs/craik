@@ -1,3 +1,4 @@
+import threading
 from datetime import UTC, datetime
 
 import pytest
@@ -12,6 +13,7 @@ from craik.runtime.gateway import (
     gateway_failed_state,
     gateway_running_state,
     gateway_stopped_state,
+    run_gateway_daemon,
 )
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
@@ -91,6 +93,74 @@ def test_gateway_contracts_round_trip_through_local_store(tmp_path) -> None:
         assert store.list_gateway_runtime_states() == [state]
     finally:
         store.close()
+
+
+class _FakeGatewayServer:
+    server_address = ("127.0.0.1", 8765)
+
+    def __init__(self) -> None:
+        self.closed = False
+        self.shutdown_called = False
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        return
+
+    def shutdown(self) -> None:
+        self.shutdown_called = True
+
+    def server_close(self) -> None:
+        self.closed = True
+
+
+def test_run_gateway_daemon_persists_running_and_stopped_states(tmp_path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    server = _FakeGatewayServer()
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+        store.put_gateway_config(config.model_copy(update={"enabled": True}))
+    finally:
+        store.close()
+
+    stop_event = threading.Event()
+    stop_event.set()
+    stopped = run_gateway_daemon(
+        paths,
+        stop_event=stop_event,
+        server_factory=lambda config: server,
+    )
+
+    assert stopped.status == "stopped"
+    assert stopped.pid is None
+    assert server.shutdown_called is True
+    assert server.closed is True
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        persisted = store.get_gateway_runtime_state("gateway_state_default")
+        assert persisted == stopped
+    finally:
+        store.close()
+
+
+def test_run_gateway_daemon_rejects_existing_pid_file(tmp_path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        config = default_gateway_config(project_id="project_gateway", created_at=NOW)
+        store.put_gateway_config(config.model_copy(update={"enabled": True}))
+        (paths.state / "gateway.pid").write_text("1234\n")
+        with pytest.raises(RuntimeError, match="pid file"):
+            run_gateway_daemon(
+                paths,
+                stop_event=threading.Event(),
+                server_factory=lambda config: _FakeGatewayServer(),
+            )
+    finally:
+        store.close()
+        (paths.state / "gateway.pid").unlink(missing_ok=True)
 
 
 def test_gateway_config_rejects_public_bind_without_policy() -> None:
