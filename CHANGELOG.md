@@ -32,6 +32,9 @@ within the `0.x.0` stability expectations described in
   with task and status filters for human delegation points.
 - Read-only budget/quota view through `craik operator budget`, making
   missing persisted cost, token, request, and quota data explicit.
+- Read-only instruction distillation view through `craik operator
+  instructions`, showing sources, snapshots, provenance, proposals,
+  and promotion reviews without mutating authority.
 
 ## 0.6.0 — 2026-05-21
 

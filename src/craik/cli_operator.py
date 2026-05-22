@@ -12,6 +12,7 @@ from craik.cli import operator_app
 from craik.contracts.models import ContradictionStatus
 from craik.runtime.companions.operator_views import (
     BudgetQuotaSnapshot,
+    InstructionDistillationSnapshot,
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
     format_budget_quota_view,
@@ -19,6 +20,7 @@ from craik.runtime.companions.operator_views import (
     format_delegation_queue,
     format_evidence_assumption_view,
     format_handoff_viewer,
+    format_instruction_distillation_view,
     format_operator_surface_overview,
     format_receipt_viewer,
     format_work_graph_explorer,
@@ -277,6 +279,33 @@ def operator_budget(
         typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_budget_quota_view(snapshot)))
+
+
+@operator_app.command("instructions")
+def operator_instructions(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only instruction distillation view."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        snapshot = InstructionDistillationSnapshot(
+            sources=store.list_instruction_sources(),
+            snapshots=store.list_instruction_source_snapshots(),
+            provenance=store.list_instruction_provenance(),
+            proposals=store.list_distilled_instruction_proposals(),
+            reviews=store.list_instruction_promotion_reviews(),
+        )
+    finally:
+        store.close()
+
+    if json_output:
+        typer.echo(json.dumps(asdict(snapshot), indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_instruction_distillation_view(snapshot)))
 
 
 def _require_section(
