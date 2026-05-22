@@ -369,6 +369,7 @@
     "revoked_by": null,
     "revocation_reason": null,
     "audit_ids": ["receipt_pair_alice"],
+    "expires_at": "2026-05-17T18:45:00Z",
     "created_at": "2026-05-16T18:44:00Z",
     "updated_at": "2026-05-16T18:45:00Z"
   },
