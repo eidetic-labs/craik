@@ -516,17 +516,29 @@ verification.
 
 </div>
 
-### v0.10.0 · Self-improving skills and learning loops
+### v0.10.0 · Agent shell, progressive setup, and learning controls
 
 <div className="craik-lead">
 
-**Required outcome.** Craik can improve reusable operating guidance
-without allowing agents to silently rewrite their own authority.
+**Required outcome.** A user can launch Craik with `craik` before any
+provider or operator auth is configured, receive clear in-runtime
+guidance, configure auth/model/session state through browser-assisted
+and slash-command flows, and review self-improving skill changes without
+allowing agents to silently rewrite their own authority.
 
 </div>
 
 <div className="craik-grid">
 
+<div><h4><code>craik</code> interactive agent shell</h4></div>
+<div><h4><code>craik chat</code> and quiet one-shot mode</h4></div>
+<div><h4>Progressive setup states</h4><p>Unconfigured · fixture · local model · operator-only · provider-only · fully ready · restricted/offline.</p></div>
+<div><h4>Runtime slash-command registry</h4><p><code>/help</code> · <code>/setup</code> · <code>/auth</code> · <code>/provider</code> · <code>/model</code> · <code>/status</code> · <code>/doctor</code> · <code>/sessions</code> · <code>/approvals</code>.</p></div>
+<div><h4>Browser-assisted provider login</h4><p>OpenAI · Anthropic · Gemini · local models, using official OAuth where available and guided secure key capture otherwise.</p></div>
+<div><h4>Secure credential storage</h4><p>OS keychain backends plus explicit file-backed fallback warnings.</p></div>
+<div><h4>Model UX layer</h4><p>List · status · set · probe · aliases · fallbacks · in-session switching.</p></div>
+<div><h4>Session UX</h4><p>List · show · resume · rename · export · prune · delete.</p></div>
+<div><h4>Profiles and personas</h4><p>Isolated provider config, sessions, skills, memory, and gateway state.</p></div>
 <div><h4>Skill performance telemetry</h4></div>
 <div><h4>Autonomous skill proposals</h4></div>
 <div><h4>Skill improvement proposals</h4></div>
@@ -536,6 +548,7 @@ without allowing agents to silently rewrite their own authority.
 <div><h4>Learning-loop receipts</h4></div>
 <div><h4>Promotion approval gates</h4></div>
 <div><h4>Rollback path</h4><p>For bad skill updates.</p></div>
+<div><h4>Usage and insight summaries</h4><p>Provider calls · tokens · costs where known · approvals · denials · session activity · skill impact.</p></div>
 <div><h4>Trajectory export format</h4></div>
 <div><h4>Trajectory compression</h4></div>
 <div><h4>Learning-loop docs</h4></div>
@@ -544,64 +557,84 @@ without allowing agents to silently rewrite their own authority.
 
 Builds on instruction distillation and the skill/plugin system. Agents
 may propose changes to skills, but changes remain reviewable until
-policy allows promotion.
+policy allows promotion. The agent shell is the public interaction
+surface for setup and learning controls; subsystem CLI commands remain
+available for automation.
 
-### v0.11.0 · Multimodal and companion surfaces
+### v0.11.0 · TUI, dashboard, desktop, gateway operations, and channels
 
 <div className="craik-lead">
 
-**Required outcome.** Craik can expose durable agent work through
-richer operator surfaces without compromising its policy and evidence
-model.
+**Required outcome.** Craik can expose durable agent work through a
+keyboard-first TUI, authenticated local dashboard, desktop companion
+surface, manageable gateway service lifecycle, first real channel
+adapters, and multimodal companion contracts without compromising its
+policy and evidence model.
 
 </div>
 
 <div className="craik-grid">
 
+<div><h4><code>craik --tui</code></h4><p>Shared slash commands · model/session pickers · approvals · run/handoff/receipt panels · streaming output.</p></div>
+<div><h4><code>craik dashboard</code></h4><p>Authenticated local web dashboard for status, sessions, runs, approvals, provider/model state, gateway logs, and skill proposals.</p></div>
+<div><h4>Desktop companion MVP</h4><p>Gateway control · provider health · approval notifications · dashboard launch · diagnostics.</p></div>
+<div><h4>Gateway service lifecycle</h4><p>Install · uninstall · start · stop · restart · status · logs · doctor.</p></div>
+<div><h4>Real channel adapters</h4><p>WebChat · Telegram · Discord · Slack.</p></div>
+<div><h4>Channel pairing and allowlists</h4></div>
+<div><h4>Channel-scoped policy envelopes</h4></div>
+<div><h4>Approval queue UX</h4><p>Shell · TUI · dashboard · desktop notifications.</p></div>
+<div><h4>Product-grade diagnostics</h4><p><code>craik doctor --fix</code> for narrow, explicit setup and security posture repairs.</p></div>
+<div><h4>Update workflow</h4><p><code>craik update --check</code> · <code>craik update</code>.</p></div>
 <div><h4>Voice I/O posture</h4></div>
 <div><h4>Speech-to-text adapter contract</h4></div>
 <div><h4>Text-to-speech adapter contract</h4></div>
 <div><h4>Multimodal artifact references</h4></div>
-<div><h4>Desktop companion app decision</h4></div>
+<div><h4>Desktop companion app security</h4></div>
 <div><h4>Mobile companion app decision</h4></div>
 <div><h4>Visual workspace decision</h4></div>
 <div><h4>Work graph → workspace bridge</h4></div>
 <div><h4>Accessibility requirements</h4></div>
-<div><h4>Companion app security docs</h4></div>
 <div><h4>Multimodal redaction tests</h4></div>
 
 </div>
 
 <div className="craik-keypoint">
 
-**Optional phase.**
+**Product surface phase.**
 
-This phase is optional unless Craik deliberately competes with
-personal-assistant surfaces. It must not block server-side
-software-delivery workflows.
+This phase turns the governed runtime into a usable local agent product.
+The companion surfaces must share the same command/action registry,
+auth model, policy gates, and receipt boundaries as the CLI.
 
 </div>
 
-### v0.12.0 · Migration, i18n, and ecosystem compatibility
+### v0.12.0 · Migration, ecosystem compatibility, and i18n
 
 <div className="craik-lead">
 
 **Required outcome.** Teams can adopt Craik from adjacent tools and
-operate it in broader language and ecosystem contexts.
+operate it in broader language and ecosystem contexts through executable
+import dry-runs, compatibility fixtures, bridge protocols, secret
+migration policy, and localized operator-facing surfaces.
 
 </div>
 
 <div className="craik-grid">
 
-<div><h4>Adjacent-tool migration assessment</h4></div>
-<div><h4>Multi-agent tool migration assessment</h4></div>
-<div><h4>Import dry-run reports</h4></div>
+<div><h4>Adjacent-runtime migration inspect</h4></div>
+<div><h4>Adjacent-runtime migration plan</h4></div>
+<div><h4>Adjacent-runtime import dry-run</h4></div>
+<div><h4>Migration reports</h4><p>Automatic imports · manual actions · skipped secrets · security posture changes · next commands.</p></div>
 <div><h4>Memory / skill / config migration maps</h4></div>
-<div><h4>Secret migration policy</h4></div>
-<div><h4>MCP ecosystem compatibility guide</h4></div>
-<div><h4>Adjacent-runtime bridge decision</h4></div>
-<div><h4>Multi-agent workflow bridge decision</h4></div>
+<div><h4>Secret migration implementation</h4><p>No raw secret copy by default · OS keychain import · redacted migration receipts.</p></div>
+<div><h4>Compatibility fixtures</h4><p>Provider config · model fallback · profile · channel binding · session · memory · skill · schedule · sandbox shapes.</p></div>
+<div><h4>MCP server mode</h4></div>
+<div><h4>MCP client config import/export</h4></div>
+<div><h4>Session export/import compatibility</h4></div>
+<div><h4>Agent/client protocol bridge decision</h4></div>
+<div><h4>Multi-agent workflow bridge</h4></div>
 <div><h4>Locale / i18n framework</h4></div>
+<div><h4>Localized shell/TUI/dashboard messages</h4></div>
 <div><h4>Translated docs strategy</h4></div>
 <div><h4>Ecosystem compatibility tests</h4></div>
 
