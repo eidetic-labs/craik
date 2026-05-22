@@ -425,6 +425,8 @@ Options:
 - `--repo-path`: Path inside the Git repository for the demo.; default `.`
 - `--project-name`: Project name to register for the demo.; default `Persistent Agent Demo`
 - `--provider-id`: Provider id to exercise. Repeat to override the default provider set.
+- `--allow-live`: Allow the demo to use live provider transport.; default `false`
+- `--keep-artifacts`: Keep demo agent session artifacts after exit.; default `false`
 
 ## `craik demo stigmem-docs`
 

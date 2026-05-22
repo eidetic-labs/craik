@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import demo_app
-from craik.runtime.agents.demo import PersistentAgentLaunchDemo
+from craik.runtime.agents.demo import DemoConfigError, PersistentAgentLaunchDemo
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.projects.demos import StigmemDocsDemo
 from craik.runtime.projects.demos_provider import ProviderBackedStigmemDocsDemo
@@ -141,6 +141,14 @@ def demo_persistent_agent(
             help="Provider id to exercise. Repeat to override the default provider set.",
         ),
     ] = None,
+    allow_live: Annotated[
+        bool,
+        typer.Option("--allow-live", help="Allow the demo to use live provider transport."),
+    ] = False,
+    keep_artifacts: Annotated[
+        bool,
+        typer.Option("--keep-artifacts", help="Keep demo agent session artifacts after exit."),
+    ] = False,
 ) -> None:
     """Run the deterministic persistent agent launch demo."""
     store = LocalStore.from_env()
@@ -150,8 +158,15 @@ def demo_persistent_agent(
             repo_path=repo_path,
             project_name=project_name,
             provider_ids=tuple(provider_id) if provider_id else None,
+            allow_live=allow_live,
+            cleanup=not keep_artifacts,
         )
-    except (NotGitRepositoryError, ModelProviderNotFoundError, ValueError) as error:
+    except (
+        DemoConfigError,
+        NotGitRepositoryError,
+        ModelProviderNotFoundError,
+        ValueError,
+    ) as error:
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()

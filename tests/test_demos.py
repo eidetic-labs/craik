@@ -1,9 +1,11 @@
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from craik.runtime.agents.demo import PersistentAgentLaunchDemo
+from craik.runtime.agents import demo as agent_demo
+from craik.runtime.agents.demo import DemoConfigError, PersistentAgentLaunchDemo
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.demos import DEMO_TASK_ID, StigmemDocsDemo
 from craik.runtime.store import LocalStore
@@ -171,10 +173,11 @@ def test_persistent_agent_launch_demo_runs_provider_matrix(
         assert execution["receipt_ids"]
         assert execution["provider_setup"]["certification_status"] == "certified"
         assert execution["status_inspection"]["status"] == "idle"
-        assert store.get_agent_session_state(execution["session_id"]) is not None
+        assert store.get_agent_session_state(execution["session_id"]) is None
         assert store.get_handoff(execution["handoff_id"]) is not None
     assert any("craik agent launch" in command for command in result["commands"])
     assert any("craik auth setup" in command for command in result["commands"])
+    assert result["artifacts_cleaned"] is True
 
 
 def test_persistent_agent_launch_demo_can_limit_providers(
@@ -192,6 +195,43 @@ def test_persistent_agent_launch_demo_can_limit_providers(
         "provider_openai",
         "provider_anthropic",
     ]
+
+
+def test_persistent_agent_launch_demo_can_keep_artifacts(
+    tmp_path: Path,
+    store: LocalStore,
+) -> None:
+    repo = _repo(tmp_path)
+
+    result = PersistentAgentLaunchDemo(store).run(
+        repo_path=repo,
+        provider_ids=("provider_openai",),
+        cleanup=False,
+    )
+
+    session_id = result["provider_executions"][0]["session_id"]
+    assert result["artifacts_cleaned"] is False
+    assert store.get_agent_session_state(session_id) is not None
+    assert store.list_agent_session_events()
+
+
+def test_persistent_agent_launch_demo_rejects_non_fixture_transport(
+    tmp_path: Path,
+    store: LocalStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(
+        agent_demo,
+        "adapter_for_provider",
+        lambda provider: SimpleNamespace(transport=object()),
+    )
+
+    with pytest.raises(DemoConfigError, match="requires fixture transport"):
+        PersistentAgentLaunchDemo(store).run(
+            repo_path=repo,
+            provider_ids=("provider_openai",),
+        )
 
 
 def _repo(

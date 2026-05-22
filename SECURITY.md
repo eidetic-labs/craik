@@ -204,6 +204,43 @@ daemon processes.
   supervision remain future work. Treat fixture adapters and local
   webhook helpers as controlled integration surfaces.
 
+## v0.9.0 Persistent Agent Runtime Trust Model
+
+Craik's persistent-agent surface keeps provider-backed sessions local,
+operator-bound, and auditable. A persistent session is not a hosted
+assistant endpoint; it is a local runtime record that links operator
+identity, provider route, project scope, policy envelope, receipts,
+handoffs, recovery state, and redacted lifecycle metadata.
+
+- Every `craik agent ...` command requires an active local operator
+  session before reading or mutating agent state. Demo commands are
+  explicitly fixture-bound unless the operator passes a live override.
+- Agent session state and event records carry local receipt HMAC
+  integrity. Default store reads reject tampered signed records; legacy
+  unsigned rows remain readable as `unverified` during the migration
+  window. Resumed sessions verify before honoring persisted authority.
+- Provider credential profiles and pools live under Craik home with
+  owner-only permissions on POSIX systems. Credentials are referenced by
+  profile id, pool id, environment variable, or secret reference; they
+  are not copied into session state, receipts, logs, or CLI JSON output.
+- Third-party provider requests require HTTPS base URLs with certificate
+  verification enabled. Local OpenAI-compatible model endpoints may use
+  plaintext HTTP only when bound to loopback (`127.0.0.1`, `localhost`,
+  or `::1`); setup warns operators not to expose Ollama-style endpoints
+  on non-loopback interfaces.
+- Craik intentionally uses a small provider transport layer over
+  published REST APIs instead of adding official OpenAI, Anthropic, or
+  Gemini SDK dependencies. This narrows the dependency surface but means
+  provider API changes must be tracked in Craik's adapters and tests.
+- Sandbox backends enforce execution boundaries at runtime. Local
+  process, Docker, SSH/remote shell, browser, and MCP paths record
+  environment capability receipts; denied side effects produce explicit
+  denial receipts rather than silent execution.
+- The persistent-agent launch demo uses fixture transport by default
+  and deletes demo session artifacts on exit. `--allow-live` and
+  `--keep-artifacts` are explicit operator acknowledgements for live
+  provider calls or post-demo inspection.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.
