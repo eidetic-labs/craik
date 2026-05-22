@@ -36,13 +36,13 @@ audit trail.
 <div>
 <dt>Unpaired</dt>
 <dt><span className="craik-fields__type">observation only</span></dt>
-<dd>Channel kind · external account id · optional service name · optional display name · optional metadata. <strong>Must not</strong> carry subject, policy envelope, pairing audit, or revocation fields. Does not allow privileged ingress.</dd>
+<dd>Channel kind · external account id · expiry timestamp · optional service name · optional display name · optional metadata. <strong>Must not</strong> carry subject, policy envelope, pairing audit, or revocation fields. Does not allow privileged ingress.</dd>
 </div>
 
 <div>
 <dt>Paired</dt>
 <dt><span className="craik-fields__type">conditional</span></dt>
-<dd>Craik subject · policy envelope id · pairing timestamp · actor that approved · at least one audit id. Authorizes privileged ingress only through the linked policy envelope and only when later allowlist and capability checks pass.</dd>
+<dd>Craik subject · policy envelope id · pairing timestamp · actor that approved · expiry timestamp · at least one audit id. Authorizes privileged ingress only through the linked policy envelope and only before expiry when later allowlist and capability checks pass.</dd>
 </div>
 
 <div>
@@ -61,7 +61,8 @@ audit trail.
 
 Gateway policy, channel allowlists, capability grants, redaction, and
 receipts still decide what can happen after an inbound event is
-normalized.
+normalized. Helper-created pairing records default to a 24-hour expiry;
+expired pairings cannot authorize privileged ingress.
 
 </div>
 

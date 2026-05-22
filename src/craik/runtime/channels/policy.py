@@ -53,7 +53,8 @@ def select_channel_policy(
 ) -> ChannelPolicySelection:
     """Bind a normalized inbound channel event to a narrow policy envelope."""
     event_id = _optional_string(event.get("event_id"))
-    if not allows_privileged_ingress(pairing):
+    checked_at = _optional_datetime(event.get("received_at")) or datetime.now(UTC)
+    if not allows_privileged_ingress(pairing, now=checked_at):
         return ChannelPolicySelection(
             allowed=False,
             reason=f"channel identity {pairing.id} is not paired",
@@ -141,4 +142,15 @@ def channel_policy_denial_receipt(
 def _optional_string(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value
+    return None
+
+
+def _optional_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     return None

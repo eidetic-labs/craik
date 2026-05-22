@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from craik.contracts.models import ChannelIdentityPairing, ChannelKind
+
+DEFAULT_PAIRING_TTL = timedelta(hours=24)
 
 
 def unpaired_channel_identity(
@@ -15,9 +17,11 @@ def unpaired_channel_identity(
     service: str | None = None,
     display_name: str | None = None,
     created_at: datetime | None = None,
+    expires_at: datetime | None = None,
 ) -> ChannelIdentityPairing:
     """Create an unpaired external account record without authority."""
     now = created_at or datetime.now(UTC)
+    expiry = expires_at or now + DEFAULT_PAIRING_TTL
     return ChannelIdentityPairing.model_validate(
         {
             "id": pairing_id,
@@ -28,6 +32,7 @@ def unpaired_channel_identity(
                 "display_name": display_name,
             },
             "status": "unpaired",
+            "expires_at": expiry,
             "created_at": now,
             "updated_at": now,
         }
@@ -42,9 +47,13 @@ def pair_channel_identity(
     paired_by: str,
     audit_id: str,
     paired_at: datetime | None = None,
+    expires_at: datetime | None = None,
 ) -> ChannelIdentityPairing:
     """Pair an external account to a Craik subject with audit and policy context."""
     now = paired_at or datetime.now(UTC)
+    expiry = expires_at or pairing.expires_at
+    if expiry is not None and expiry <= now:
+        raise ValueError("channel identity pairing token has expired")
     return pairing.model_copy(
         update={
             "status": "paired",
@@ -52,6 +61,7 @@ def pair_channel_identity(
             "policy_envelope_id": policy_envelope_id,
             "paired_at": now,
             "paired_by": paired_by,
+            "expires_at": expiry,
             "audit_ids": [*pairing.audit_ids, audit_id],
             "updated_at": now,
         }
@@ -80,10 +90,17 @@ def revoke_channel_identity(
     )
 
 
-def allows_privileged_ingress(pairing: ChannelIdentityPairing) -> bool:
+def allows_privileged_ingress(
+    pairing: ChannelIdentityPairing,
+    *,
+    now: datetime | None = None,
+) -> bool:
     """Return whether a channel identity can authorize privileged ingress."""
+    checked_at = now or datetime.now(UTC)
     return (
         pairing.status == "paired"
         and pairing.subject is not None
         and pairing.policy_envelope_id is not None
+        and pairing.expires_at is not None
+        and pairing.expires_at > checked_at
     )

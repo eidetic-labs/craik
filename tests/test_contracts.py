@@ -128,6 +128,21 @@ def test_policy_envelope_operator_fields_round_trip(
     assert dumped["allowed_agent_role_ids"] == ["role_verifier"]
 
 
+def test_channel_identity_pairing_requires_expiry(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.channel_identity_pairing"])
+
+    parsed = CONTRACT_REGISTRY["craik.channel_identity_pairing"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["expires_at"] == "2026-05-17T18:45:00Z"
+
+    payload.pop("expires_at")
+    with pytest.raises(ValidationError, match="expires_at"):
+        CONTRACT_REGISTRY["craik.channel_identity_pairing"].model_validate(payload)
+
+
 def test_instruction_registration_contracts_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

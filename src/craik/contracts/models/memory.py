@@ -282,6 +282,7 @@ class ChannelIdentityPairing(CraikModel):
     revoked_by: str | None = None
     revocation_reason: str | None = None
     audit_ids: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -300,6 +301,8 @@ class ChannelIdentityPairing(CraikModel):
             }
             if any(value is not None for value in forbidden.values()):
                 raise ValueError("unpaired channel identities must not carry authority fields")
+            if self.expires_at is None:
+                raise ValueError("unpaired channel identities require expires_at")
         if self.status == "paired":
             if not self.subject:
                 raise ValueError("paired channel identities require subject")
@@ -309,6 +312,8 @@ class ChannelIdentityPairing(CraikModel):
                 raise ValueError("paired channel identities require paired_at and paired_by")
             if not self.audit_ids:
                 raise ValueError("paired channel identities require audit_ids")
+            if self.expires_at is None:
+                raise ValueError("paired channel identities require expires_at")
             if self.revoked_at is not None or self.revoked_by or self.revocation_reason:
                 raise ValueError("paired channel identities must not carry revocation fields")
         if self.status == "revoked":
