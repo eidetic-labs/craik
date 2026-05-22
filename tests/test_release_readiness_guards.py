@@ -73,6 +73,92 @@ def test_writer_coverage_guard_scans_profile_store_writers() -> None:
     )
 
 
+def test_writer_coverage_guard_accepts_transitive_production_callers(
+    tmp_path, monkeypatch
+) -> None:
+    store_dir = tmp_path / "src" / "craik" / "runtime" / "store"
+    store_dir.mkdir(parents=True)
+    (store_dir / "example.py").write_text(
+        textwrap.dedent(
+            """
+            class ExampleStoreMixin:
+                def put_live(self, value): ...
+            """
+        ),
+        encoding="utf-8",
+    )
+    src = tmp_path / "src" / "craik"
+    (src / "channel_setup.py").write_text(
+        textwrap.dedent(
+            """
+            def persist_live(store, value):
+                store.put_live(value)
+            """
+        ),
+        encoding="utf-8",
+    )
+    (src / "cli_widget.py").write_text(
+        textwrap.dedent(
+            """
+            import typer
+
+            app = typer.Typer()
+
+            @app.command("setup")
+            def setup() -> None:
+                persist_live(store, "value")
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._extension_writer_call_failures() == []
+
+
+def test_writer_coverage_guard_rejects_unreachable_wrapper(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "src" / "craik" / "runtime" / "store"
+    store_dir.mkdir(parents=True)
+    (store_dir / "example.py").write_text(
+        textwrap.dedent(
+            """
+            class ExampleStoreMixin:
+                def put_dead(self, value): ...
+            """
+        ),
+        encoding="utf-8",
+    )
+    src = tmp_path / "src" / "craik"
+    (src / "channel_setup.py").write_text(
+        textwrap.dedent(
+            """
+            def persist_dead(store, value):
+                store.put_dead(value)
+            """
+        ),
+        encoding="utf-8",
+    )
+    (src / "cli_widget.py").write_text(
+        textwrap.dedent(
+            """
+            import typer
+
+            app = typer.Typer()
+
+            @app.command("setup")
+            def setup() -> None:
+                pass
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._extension_writer_call_failures() == [
+        "src/craik/runtime/store/example.py: put_dead has no production caller"
+    ]
+
+
 def test_cli_auth_coverage_guard_includes_root_cli() -> None:
     paths = {path.name for path in check_release_readiness._cli_command_paths()}
 

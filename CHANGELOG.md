@@ -53,6 +53,15 @@ within the `0.x.0` stability expectations described in
 - Release documentation now requires signed annotated tags plus a
   `craik-release-signing-key.asc` public-key asset on each GitHub
   Release, with fingerprint verification against the tag-signing key.
+- `craik channels setup` now persists adapter contracts, identity
+  pairings, allowlists, and policy envelopes; channel diagnostics now
+  report persisted setup state.
+
+### Security
+
+- Release readiness now checks store-writer reachability through
+  production wrappers, and webhook ingress receipts use the shared
+  gateway channel persistence path.
 
 ## 0.10.0 — 2026-05-22
 

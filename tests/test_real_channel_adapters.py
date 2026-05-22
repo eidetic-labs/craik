@@ -1,8 +1,10 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from typer.testing import CliRunner
 
 from craik.cli import app
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.channels.allowlist import evaluate_channel_allowlist
 from craik.runtime.channels.identity import pair_channel_identity, unpaired_channel_identity
 from craik.runtime.channels.policy import select_channel_policy
@@ -17,6 +19,7 @@ from craik.runtime.channels.real_adapters import (
     real_channel_adapter_contract,
     supported_real_channel_services,
 )
+from craik.runtime.paths import ensure_craik_home
 
 NOW = datetime(2026, 5, 22, 12, 0, tzinfo=UTC)
 runner = CliRunner()
@@ -180,11 +183,13 @@ def test_channel_doctor_reports_missing_token_without_leaking_values() -> None:
     assert "CRAIK_SLACK_BOT_TOKEN" in diagnostic["warnings"][0]
 
 
-def test_channels_cli_exposes_setup_and_fixture_paths() -> None:
+def test_channels_cli_exposes_setup_and_fixture_paths(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     setup = runner.invoke(
         app,
         ["channels", "setup", "webchat"],
-        env={"CRAIK_WEBCHAT_TOKEN": "super-secret-value"},
+        env={"CRAIK_HOME": str(home), "CRAIK_WEBCHAT_TOKEN": "super-secret-value"},
     )
     assert setup.exit_code == 0
     assert "CRAIK_WEBCHAT_TOKEN" in setup.stdout
@@ -201,3 +206,17 @@ def test_channels_cli_exposes_setup_and_fixture_paths() -> None:
     )
     assert normalized.exit_code == 0
     assert "webchat:u1" in normalized.stdout
+
+
+def _put_operator_session(home: Path) -> None:
+    ensure_craik_home({"CRAIK_HOME": str(home)})
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator:test",
+            email="operator@example.test",
+            groups=["platform"],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )

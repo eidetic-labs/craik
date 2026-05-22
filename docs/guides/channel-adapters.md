@@ -49,14 +49,17 @@ List the adapter contracts:
 craik channels list
 ```
 
-Generate a redacted setup plan:
+Install the default channel artifacts and print a redacted setup plan:
 
 ```sh
 craik channels setup telegram
 ```
 
-The setup plan reports the environment variable to use as a secret
-reference. It does not echo token material.
+The setup command requires an active operator session. It persists the
+adapter contract, an operator-bound bootstrap pairing, a deny-by-default
+allowlist, and a channel-scoped policy envelope, then reports the
+environment variable to use as a secret reference. It does not echo
+token material.
 
 <div className="craik-fields">
 <div><dt>WebChat</dt><dt><span className="craik-fields__type">secret ref</span></dt><dd><code>CRAIK_WEBCHAT_TOKEN</code></dd></div>
@@ -72,7 +75,8 @@ craik channels doctor slack
 ```
 
 Diagnostics report whether the token resolves and whether the platform
-credential backend is secure. They never print the token.
+credential backend is secure. They also report whether setup artifacts
+exist in the local store. Diagnostics never print the token.
 
 ## Fixture Validation
 

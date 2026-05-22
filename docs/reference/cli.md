@@ -443,7 +443,7 @@ Options:
 
 ## `craik channels setup`
 
-Show a redacted setup plan for a channel adapter.
+Persist channel adapter setup artifacts and show a redacted setup plan.
 
 ```text
 craik channels setup [OPTIONS] SERVICE
