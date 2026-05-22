@@ -81,6 +81,41 @@ craik auth setup openai --secret-ref OPENAI_API_KEY --dry-run
 Loopback HTTP base URLs are rejected unless the selected provider is
 `local` or `--allow-local-base-url` is passed explicitly.
 
+### Browser-assisted provider login
+
+Use `craik auth login` when you want the shell-style setup flow. It opens
+the provider's key or credential page when a browser is available, keeps
+copy/paste fallback available with `--no-browser`, writes a redacted auth
+profile, and reports credential storage posture.
+
+```sh
+craik auth login openai
+craik auth login anthropic
+craik auth login gemini
+craik auth login local --base-url http://localhost:11434/v1
+```
+
+Preview the resulting profile without writing state:
+
+```sh
+craik auth login openai --dry-run
+```
+
+Provider login configures provider credentials. Operator identity remains
+available through `craik login` and `craik whoami`.
+
+### Credential storage posture
+
+Inspect the credential backend without printing secret material:
+
+```sh
+craik auth storage status
+craik auth migrate-secrets --dry-run
+```
+
+On platforms where a native keychain is not available, Craik reports the
+file-backed fallback explicitly and keeps outputs redacted.
+
 ### Env-var API key
 
 ```sh

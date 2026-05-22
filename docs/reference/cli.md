@@ -17,6 +17,7 @@ craik [OPTIONS] COMMAND [ARGS]...
 Options:
 
 - `--version`: Print the installed Craik version and exit.; default `false`
+- `-z, --one-shot`: Run one quiet one-shot prompt and exit.
 
 ## `craik agent`
 
@@ -221,6 +222,36 @@ List configured auth profiles.
 craik auth list
 ```
 
+## `craik auth login`
+
+Browser-assisted provider login with secure copy/paste fallback.
+
+```text
+craik auth login [OPTIONS] PROVIDER
+```
+
+Options:
+
+- `--no-browser`: Print provider setup URL instead of opening a browser.; default `false`
+- `--profile-id`: Auth profile id to create.
+- `--env-var`: Environment variable containing the provider key.
+- `--secret-ref`: Secret reference instead of an environment variable.
+- `--base-url`: Provider base URL for local-compatible providers.
+- `--allow-local-base-url`: Allow loopback HTTP provider URLs.; default `false`
+- `--dry-run`: Validate and print redacted setup without writing state.; default `false`
+
+## `craik auth migrate-secrets`
+
+Preview migration from file/env references into a secure backend.
+
+```text
+craik auth migrate-secrets [OPTIONS]
+```
+
+Options:
+
+- `--dry-run, --apply`: Preview migration by default.; default `true`
+
 ## `craik auth remove`
 
 Remove an auth profile.
@@ -255,6 +286,22 @@ Show auth profile health and last-use status.
 
 ```text
 craik auth status
+```
+
+## `craik auth storage`
+
+Inspect and migrate credential storage posture.
+
+```text
+craik auth storage COMMAND [ARGS]...
+```
+
+## `craik auth storage status`
+
+Show credential storage backend posture without printing secrets.
+
+```text
+craik auth storage status
 ```
 
 ## `craik auth test`
@@ -295,6 +342,18 @@ Show one persisted case file by case id or task id.
 ```text
 craik case show [OPTIONS] CASE_OR_TASK_ID
 ```
+
+## `craik chat`
+
+Launch the Craik agent shell or run one conversational prompt.
+
+```text
+craik chat [OPTIONS]
+```
+
+Options:
+
+- `-q, --prompt`: Run one conversational prompt and exit.
 
 ## `craik connect`
 
@@ -559,6 +618,14 @@ Print resolved Craik local state paths without creating directories.
 
 ```text
 craik home show
+```
+
+## `craik insights`
+
+Show high-level runtime activity insights.
+
+```text
+craik insights
 ```
 
 ## `craik instructions`
@@ -910,6 +977,71 @@ Show one local memory proposal.
 craik memory show [OPTIONS] PROPOSAL_ID
 ```
 
+## `craik model`
+
+Inspect and select active model routing.
+
+```text
+craik model COMMAND [ARGS]...
+```
+
+## `craik model alias`
+
+List, add, or remove model aliases.
+
+```text
+craik model alias [OPTIONS] ACTION
+```
+
+Options:
+
+- `--name`
+- `--target`
+
+## `craik model fallback`
+
+List, add, remove, or clear model fallback order.
+
+```text
+craik model fallback [OPTIONS] ACTION
+```
+
+Options:
+
+- `--model`
+
+## `craik model list`
+
+List configured provider/model choices and local presets.
+
+```text
+craik model list
+```
+
+## `craik model probe`
+
+Probe model readiness without sending live prompts.
+
+```text
+craik model probe
+```
+
+## `craik model set`
+
+Set the active model as <provider>/<model>.
+
+```text
+craik model set [OPTIONS] MODEL
+```
+
+## `craik model status`
+
+Show active model state and readiness.
+
+```text
+craik model status
+```
+
 ## `craik onboard`
 
 Print runner-readable onboarding context for a project.
@@ -1247,6 +1379,90 @@ Run policy regression checks required for release gates.
 
 ```text
 craik policy test
+```
+
+## `craik profile`
+
+Manage local Craik profiles and personas.
+
+```text
+craik profile COMMAND [ARGS]...
+```
+
+## `craik profile create`
+
+Create a local Craik profile.
+
+```text
+craik profile create [OPTIONS] NAME
+```
+
+Options:
+
+- `--description`: default ``
+
+## `craik profile delete`
+
+Delete a local Craik profile.
+
+```text
+craik profile delete [OPTIONS] NAME
+```
+
+Options:
+
+- `--yes`: Confirm profile deletion.; default `false`
+
+## `craik profile export`
+
+Export profile settings without secrets.
+
+```text
+craik profile export
+```
+
+## `craik profile import`
+
+Import profile settings from a redacted JSON export.
+
+```text
+craik profile import [OPTIONS] PATH
+```
+
+## `craik profile list`
+
+List local Craik profiles.
+
+```text
+craik profile list
+```
+
+## `craik profile rename`
+
+Rename a local Craik profile.
+
+```text
+craik profile rename [OPTIONS] OLD NEW
+```
+
+## `craik profile show`
+
+Show one local Craik profile.
+
+```text
+craik profile show [OPTIONS]
+```
+
+Options:
+
+- `--name`
+
+## `craik profile use`
+
+Set the active local Craik profile.
+
+```text
+craik profile use [OPTIONS] NAME
 ```
 
 ## `craik project`
@@ -1662,6 +1878,78 @@ Options:
 - `--sibling-title`: Title for a sibling task decision.
 - `--handoff-id`: Handoff id for a handoff decision.
 
+## `craik session`
+
+Inspect and manage persistent Craik sessions.
+
+```text
+craik session COMMAND [ARGS]...
+```
+
+## `craik session delete`
+
+Mark a session as stopped; raw record deletion is intentionally not supported.
+
+```text
+craik session delete [OPTIONS] SESSION_ID
+```
+
+Options:
+
+- `--yes`: Confirm session deletion.; default `false`
+
+## `craik session export`
+
+Export one redacted persistent session.
+
+```text
+craik session export [OPTIONS] SESSION_ID
+```
+
+## `craik session list`
+
+List persistent agent sessions.
+
+```text
+craik session list
+```
+
+## `craik session prune`
+
+Preview pruning stopped sessions; destructive deletion is not performed.
+
+```text
+craik session prune [OPTIONS]
+```
+
+Options:
+
+- `--yes`: Confirm pruning stopped sessions.; default `false`
+
+## `craik session rename`
+
+Assign a display name to a persistent session.
+
+```text
+craik session rename [OPTIONS] SESSION_ID NAME
+```
+
+## `craik session resume`
+
+Print resume guidance for one persistent session.
+
+```text
+craik session resume [OPTIONS] SESSION_ID
+```
+
+## `craik session show`
+
+Show one persistent agent session.
+
+```text
+craik session show [OPTIONS] SESSION_ID
+```
+
 ## `craik setup`
 
 Initialize local state and write non-secret gateway setup output.
@@ -1703,6 +1991,26 @@ Enable a skill registry entry.
 craik skills enable [OPTIONS] ENTRY_ID
 ```
 
+## `craik skills eval`
+
+Report replay/eval readiness for skill promotion gates.
+
+```text
+craik skills eval [OPTIONS]
+```
+
+Options:
+
+- `--package-id`
+
+## `craik skills history`
+
+Show skill package and learning-loop receipt history.
+
+```text
+craik skills history
+```
+
 ## `craik skills install`
 
 Install a skill package manifest.
@@ -1723,12 +2031,68 @@ Options:
 
 - `--scope`: Optional registry scope: project or global.
 
+## `craik skills promote`
+
+Preview a skill promotion decision; promotion remains approval-gated.
+
+```text
+craik skills promote [OPTIONS] PROPOSAL_ID
+```
+
+Options:
+
+- `--dry-run, --apply`: default `true`
+
+## `craik skills proposals`
+
+List reviewable learning-loop proposal sources.
+
+```text
+craik skills proposals
+```
+
+## `craik skills rollback`
+
+Preview rollback posture for a skill package.
+
+```text
+craik skills rollback [OPTIONS] PACKAGE_ID
+```
+
+Options:
+
+- `--dry-run, --apply`: default `true`
+
 ## `craik skills show`
 
 Show one installed skill package.
 
 ```text
 craik skills show [OPTIONS] PACKAGE_ID
+```
+
+## `craik skills telemetry`
+
+Summarize redacted skill invocation telemetry inputs.
+
+```text
+craik skills telemetry
+```
+
+## `craik slash`
+
+Dispatch one slash command for tests and shell integrations.
+
+```text
+craik slash [OPTIONS] COMMAND
+```
+
+## `craik status`
+
+Show progressive setup readiness for shell and runtime actions.
+
+```text
+craik status
 ```
 
 ## `craik task`
@@ -1795,6 +2159,14 @@ Print safe update guidance without modifying the installation.
 
 ```text
 craik update
+```
+
+## `craik usage`
+
+Show provider, approval, and session usage summary.
+
+```text
+craik usage
 ```
 
 ## `craik version`
