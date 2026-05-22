@@ -101,6 +101,7 @@ def test_tui_approval_modal_redacts_secret_like_targets() -> None:
     )
 
     assert "Approval" in rendered
+    assert "Retry: retry the blocked command after approval" in rendered
     assert "sk-live-secret-token" not in rendered
     assert "[REDACTED]" in rendered
 

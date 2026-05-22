@@ -35,6 +35,10 @@ within the `0.x.0` stability expectations described in
   commands, secret-reference plans, pairing and allowlist policy gates,
   provider-specific inbound normalization, redacted outbound delivery
   receipts, and channel security docs.
+- v0.11.0 approval queue UX through `/approvals` and
+  `craik approvals list|show|approve|deny`, with dashboard queue
+  payloads, TUI approval counts, desktop approval notification context,
+  decision receipts, retry-path linkage, and approval guide docs.
 
 ### Changed
 

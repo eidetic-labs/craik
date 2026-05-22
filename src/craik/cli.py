@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from craik import __version__
 from craik.cli_agents import agent_app
+from craik.cli_approvals import approvals_app
 from craik.cli_channels import channels_app
 from craik.cli_gateway import gateway_app
 from craik.cli_prompt_safety import resolve_cli_prompt
@@ -82,6 +83,7 @@ app.add_typer(agent_message_app, name="agent-message")
 app.add_typer(agent_app, name="agent")
 auth_app = typer.Typer(help="Manage provider credential profiles.")
 app.add_typer(auth_app, name="auth")
+app.add_typer(approvals_app, name="approvals")
 contradictions_app = typer.Typer(help="Manage local contradiction reports.")
 app.add_typer(contradictions_app, name="contradictions")
 graph_app = typer.Typer(help="Export Craik work graphs.")
@@ -372,12 +374,26 @@ def desktop_action_command(action_id: str) -> None:
 
 
 @desktop_app.command("notify-approval")
-def desktop_notify_approval_command(approval_id: str, capability: str, target: str) -> None:
+def desktop_notify_approval_command(
+    approval_id: str,
+    capability: str,
+    target: str,
+    risk: Annotated[str, typer.Option("--risk", help="Approval risk summary.")] = (
+        "operator review required"
+    ),
+    policy: Annotated[str, typer.Option("--policy", help="Policy profile or envelope.")] = "strict",
+    retry_path: Annotated[str, typer.Option("--retry-path", help="Retry path after decision.")] = (
+        "retry the blocked command after approval"
+    ),
+) -> None:
     """Render a desktop approval notification fixture."""
     payload = desktop_approval_notification(
         approval_id,
         capability=capability,
         target=target,
+        risk=risk,
+        policy=policy,
+        retry_path=retry_path,
     ).model_dump(mode="json")
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 

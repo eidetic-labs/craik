@@ -159,6 +159,58 @@ Options:
 - `--to-role-kind`: Recipient role kind.
 - `--handoff-id`: Related handoff id.
 
+## `craik approvals`
+
+Review and decide pending approval requests.
+
+```text
+craik approvals COMMAND [ARGS]...
+```
+
+## `craik approvals approve`
+
+Approve one request and emit a decision receipt.
+
+```text
+craik approvals approve [OPTIONS] APPROVAL_ID
+```
+
+Options:
+
+- `--reason`: Approval reason.
+
+## `craik approvals deny`
+
+Deny one request and emit an actionable decision receipt.
+
+```text
+craik approvals deny [OPTIONS] APPROVAL_ID
+```
+
+Options:
+
+- `--reason`: Denial reason.
+
+## `craik approvals list`
+
+List approval requests.
+
+```text
+craik approvals list [OPTIONS]
+```
+
+Options:
+
+- `--include-resolved`: Include resolved approval records.; default `false`
+
+## `craik approvals show`
+
+Show one approval request.
+
+```text
+craik approvals show [OPTIONS] APPROVAL_ID
+```
+
 ## `craik auth`
 
 Manage provider credential profiles.
@@ -608,6 +660,12 @@ Render a desktop approval notification fixture.
 ```text
 craik desktop notify-approval [OPTIONS] APPROVAL_ID CAPABILITY TARGET
 ```
+
+Options:
+
+- `--risk`: Approval risk summary.; default `operator review required`
+- `--policy`: Policy profile or envelope.; default `strict`
+- `--retry-path`: Retry path after decision.; default `retry the blocked command after approval`
 
 ## `craik desktop status`
 

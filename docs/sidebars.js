@@ -180,6 +180,7 @@ const sidebars = {
         'reference/cli',
         'guides/terminal-ui',
         'guides/dashboard',
+        'guides/approvals',
         'reference/config',
         'reference/readiness-states',
         'reference/slash-commands',
@@ -283,6 +284,7 @@ const sidebars = {
       items: [
         'guides/terminal-ui',
         'guides/dashboard',
+        'guides/approvals',
         'reference/operator-surface',
         'reference/work-graph-explorer',
         'reference/handoff-viewer',
