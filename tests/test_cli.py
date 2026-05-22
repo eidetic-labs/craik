@@ -486,6 +486,31 @@ def test_operator_instructions_cli_renders_empty_distillation_view(tmp_path: Pat
     assert "Distilled Proposals" in result.output
 
 
+def test_operator_quality_cli_renders_empty_quality_gate(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "quality"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert "Quality Gate: clear" in result.output
+    assert "Handoff Quality Scores" in result.output
+    assert "Red-Team Findings" in result.output
+
+
+def test_operator_quality_cli_json_renders_snapshot(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["operator", "quality", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0
+    assert '"handoff_scores": []' in result.output
+    assert '"red_team_findings": []' in result.output
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 

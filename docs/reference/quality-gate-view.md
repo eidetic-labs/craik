@@ -1,6 +1,6 @@
 # Quality gate view
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
@@ -8,7 +8,8 @@
 
 The read-only operator display for handoff quality scores, evidence
 coverage, runtime critic findings, and red-team findings — what it
-formats and the gate states it reports.
+formats and the gate states it reports through `craik operator
+quality`.
 
 </div>
 
@@ -20,6 +21,17 @@ The gate state does not mutate policy or approve work. It is a compact
 operator summary of the underlying contracts.
 
 </div>
+
+## Commands
+
+```bash
+craik operator quality
+craik operator quality --json
+```
+
+`craik operator quality` prints the terminal gate view. `--json`
+emits the same read-only snapshot for tooling with `handoff_scores`,
+`evidence_scores`, `critic_findings`, and `red_team_findings` arrays.
 
 ## What it formats
 

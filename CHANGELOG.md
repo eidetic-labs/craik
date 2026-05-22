@@ -35,6 +35,9 @@ within the `0.x.0` stability expectations described in
 - Read-only instruction distillation view through `craik operator
   instructions`, showing sources, snapshots, provenance, proposals,
   and promotion reviews without mutating authority.
+- Read-only quality gate view through `craik operator quality`,
+  summarizing handoff scores, evidence scores, critic findings, and
+  red-team findings with text and JSON output.
 
 ## 0.6.0 — 2026-05-21
 
