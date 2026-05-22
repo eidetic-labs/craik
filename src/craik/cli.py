@@ -18,6 +18,13 @@ from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.companions.desktop_companion import (
+    desktop_approval_notification,
+    desktop_companion_action,
+    desktop_companion_actions,
+    desktop_companion_snapshot,
+    desktop_update_check_payload,
+)
 from craik.runtime.dashboard import (
     DashboardConfig,
     DashboardConfigError,
@@ -114,6 +121,8 @@ session_app = typer.Typer(help="Inspect and manage persistent Craik sessions.")
 app.add_typer(session_app, name="session")
 profile_app = typer.Typer(help="Manage local Craik profiles and personas.")
 app.add_typer(profile_app, name="profile")
+desktop_app = typer.Typer(help="Inspect and launch desktop companion MVP actions.")
+app.add_typer(desktop_app, name="desktop")
 
 
 def package_version() -> str:
@@ -285,9 +294,16 @@ def doctor_command() -> None:
 
 
 @app.command("update")
-def update_command() -> None:
+def update_command(
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="Check for update guidance without changing installation."),
+    ] = False,
+) -> None:
     """Print safe update guidance without modifying the installation."""
     payload = update_guidance_payload(installed_version=package_version())
+    if check:
+        payload["mode"] = "check"
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
@@ -329,6 +345,53 @@ def dashboard_command(
         run_dashboard_server(config)
     except DashboardConfigError as error:
         raise typer.BadParameter(str(error)) from None
+
+
+@desktop_app.command("status")
+def desktop_status_command() -> None:
+    """Show desktop companion status, dashboard link, and gateway/provider health."""
+    payload = desktop_companion_snapshot().model_dump(mode="json")
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@desktop_app.command("menu")
+def desktop_menu_command() -> None:
+    """List desktop companion tray/menu actions."""
+    payload = [action.model_dump(mode="json") for action in desktop_companion_actions()]
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@desktop_app.command("action")
+def desktop_action_command(action_id: str) -> None:
+    """Show the command backing one desktop companion action."""
+    try:
+        action = desktop_companion_action(action_id)
+    except KeyError:
+        raise typer.BadParameter(f"unknown desktop companion action: {action_id}") from None
+    typer.echo(json.dumps(action.model_dump(mode="json"), indent=2, sort_keys=True))
+
+
+@desktop_app.command("notify-approval")
+def desktop_notify_approval_command(approval_id: str, capability: str, target: str) -> None:
+    """Render a desktop approval notification fixture."""
+    payload = desktop_approval_notification(
+        approval_id,
+        capability=capability,
+        target=target,
+    ).model_dump(mode="json")
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@desktop_app.command("update-check")
+def desktop_update_check_command() -> None:
+    """Show the desktop companion update-check payload."""
+    typer.echo(
+        json.dumps(
+            desktop_update_check_payload(package_version()),
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 @gateway_app.command("start")

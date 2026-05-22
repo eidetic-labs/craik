@@ -525,6 +525,54 @@ Options:
 - `--provider`: Run one provider-backed demo path and surface model findings. Set CRAIK_LIVE=1 for live transport; otherwise fixture transport is used.
 - `--max-tokens`: Approximate case-file context budget.; default `24000`
 
+## `craik desktop`
+
+Inspect and launch desktop companion MVP actions.
+
+```text
+craik desktop COMMAND [ARGS]...
+```
+
+## `craik desktop action`
+
+Show the command backing one desktop companion action.
+
+```text
+craik desktop action [OPTIONS] ACTION_ID
+```
+
+## `craik desktop menu`
+
+List desktop companion tray/menu actions.
+
+```text
+craik desktop menu
+```
+
+## `craik desktop notify-approval`
+
+Render a desktop approval notification fixture.
+
+```text
+craik desktop notify-approval [OPTIONS] APPROVAL_ID CAPABILITY TARGET
+```
+
+## `craik desktop status`
+
+Show desktop companion status, dashboard link, and gateway/provider health.
+
+```text
+craik desktop status
+```
+
+## `craik desktop update-check`
+
+Show the desktop companion update-check payload.
+
+```text
+craik desktop update-check
+```
+
 ## `craik doctor`
 
 Run read-only diagnostics for local and gateway readiness.
@@ -2185,8 +2233,12 @@ craik tui
 Print safe update guidance without modifying the installation.
 
 ```text
-craik update
+craik update [OPTIONS]
 ```
+
+Options:
+
+- `--check`: Check for update guidance without changing installation.; default `false`
 
 ## `craik usage`
 

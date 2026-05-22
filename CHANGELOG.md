@@ -21,6 +21,11 @@ within the `0.x.0` stability expectations described in
   operator-session authorization, status/provider/session/run/handoff/
   receipt/approval/gateway/skill/model pages, shared slash-command
   action dispatch, redacted rendering, route tests, and security docs.
+- v0.11.0 desktop companion MVP commands through `craik desktop`,
+  including status, menu action metadata, dashboard launch action,
+  gateway command actions, provider/auth health, approval notification
+  deep links, doctor/update actions, redaction tests, and companion
+  security docs.
 
 ### Changed
 

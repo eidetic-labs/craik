@@ -191,6 +191,19 @@ uv run --extra dev pytest tests/test_accessibility.py tests/test_docs.py
 
 Expected: `passed`.
 
+For the desktop companion MVP, also validate the CLI wrappers:
+
+```sh
+craik desktop status
+craik desktop menu
+craik desktop action open_dashboard
+craik desktop notify-approval approval_123 model.chat "provider request"
+```
+
+The output must remain redacted, local-vs-remote posture must be
+explicit, and gateway start/stop/restart actions must require
+confirmation rather than running silently in the background.
+
 ## What's next
 
 <div className="craik-next">
