@@ -27,7 +27,7 @@ documentation accuracy, provider support, and package publication.
 
 The MVP is complete when Craik can run one real software-delivery
 workflow end-to-end with **OIDC-authenticated operators · typed
-credential profiles · OpenAI and Anthropic provider support ·
+credential profiles · OpenAI, Anthropic, and Gemini provider support ·
 policy-enforced side effects · durable receipts that name both
 operator and credential identity · a useful handoff · accurate
 documentation · package-release quality gates.**
@@ -128,16 +128,17 @@ Tracking issue: [#303](https://github.com/eidetic-labs/craik/issues/303).
 - [x] Add migration compatibility tests.
 - [x] Add migration failure and recovery docs.
 
-### 5. Provider runtime: OpenAI and Anthropic
+### 5. Provider runtime: OpenAI, Anthropic, and Gemini
 
 Tracking issue: [#304](https://github.com/eidetic-labs/craik/issues/304).
 
 - [x] Add provider abstraction for chat, streaming, tool calls, structured output, retries, errors, and usage metadata.
 - [x] Implement OpenAI provider adapter.
 - [x] Implement Anthropic provider adapter.
+- [x] Implement Gemini provider adapter.
 - [x] Store API access through typed credential profiles, credential pools, and secret references — not raw keys.
 - [x] Add provider receipts and redaction behavior.
-- [x] Add certification fixtures and tests for both providers.
+- [x] Add certification fixtures and tests for certified providers.
 - [x] Verify official provider docs before implementation work that depends on live API behavior.
 
 ### 5A. Authentication, credentials, and operator identity
@@ -166,7 +167,7 @@ Tracking issue: [#302](https://github.com/eidetic-labs/craik/issues/302).
 - [x] Persist normalized runner outputs.
 - [x] Create receipts for side effects and provider calls.
 - [x] Produce durable handoffs on completion, block, failure, and interruption.
-- [x] Add OpenAI and Anthropic parity checks for the MVP task path.
+- [x] Add OpenAI, Anthropic, and Gemini parity checks for the MVP task path.
 
 ### 7. Policy-enforced side effects
 
@@ -270,7 +271,7 @@ The release ships when every criterion below holds.
 
 - [ ] A clean install can run the accepted demo.
 - [ ] The accepted demo includes operator authentication and provider credential profile setup.
-- [ ] OpenAI and Anthropic provider paths both pass certification tests.
+- [ ] OpenAI, Anthropic, and Gemini provider paths pass certification tests.
 - [ ] Provider receipts name both operator identity and credential identity.
 - [ ] Side effects are policy-gated and receipt-backed.
 - [ ] Redaction is applied before persistence and docs publication.

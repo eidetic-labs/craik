@@ -27,10 +27,12 @@ from craik.runtime.providers.model_providers import default_model_provider_regis
 from craik.runtime.providers.provider_runner import ProviderBackedStepRunner
 from craik.runtime.providers.provider_runtime import (
     ANTHROPIC_OFFICIAL_DOCS,
+    GEMINI_OFFICIAL_DOCS,
     OPENAI_OFFICIAL_DOCS,
     AnthropicProviderAdapter,
     ChatCompletionsProviderAdapter,
     CredentialApprovalRequiredError,
+    GeminiProviderAdapter,
     OpenAIProviderAdapter,
     ProviderLiveAccessNotConfiguredError,
     ProviderMessage,
@@ -157,6 +159,19 @@ def _chat_completions_adapter(
             secret_ref_name="CRAIK_OPENAI_API_KEY",
             live_enabled=live_enabled,
             docs_refs=list(OPENAI_OFFICIAL_DOCS),
+        )
+    )
+
+
+def _gemini_adapter(*, live_enabled: bool = False) -> GeminiProviderAdapter:
+    return GeminiProviderAdapter(
+        ProviderRuntimeConfig(
+            provider_id="provider_gemini",
+            provider_family="gemini",
+            model="gemini-2.5-pro",
+            secret_ref_name="CRAIK_GEMINI_API_KEY",
+            live_enabled=live_enabled,
+            docs_refs=list(GEMINI_OFFICIAL_DOCS),
         )
     )
 
@@ -374,6 +389,76 @@ def test_chat_completions_response_normalizes_content_tool_calls_usage() -> None
     assert terminal.retryable is False
 
 
+def test_gemini_payload_supports_messages_tools_structured_output_and_system_instruction() -> None:
+    payload = _gemini_adapter().build_payload(_request())
+
+    assert payload["_path"] == "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"
+    assert payload["systemInstruction"] == {"parts": [{"text": "Follow the policy."}]}
+    assert payload["contents"] == [
+        {"role": "user", "parts": [{"text": "Create a plan."}]}
+    ]
+    assert payload["tools"][0]["functionDeclarations"][0]["name"] == "lookup_case"
+    assert payload["tools"][0]["functionDeclarations"][0]["parameters"]["required"] == [
+        "case_id"
+    ]
+    assert payload["toolConfig"] == {"functionCallingConfig": {"mode": "AUTO"}}
+    assert payload["generationConfig"]["maxOutputTokens"] == 1024
+    assert payload["generationConfig"]["responseMimeType"] == "application/json"
+    assert payload["generationConfig"]["responseSchema"]["required"] == ["answer"]
+
+
+def test_gemini_response_normalizes_text_tool_calls_usage_and_retry_decisions() -> None:
+    adapter = _gemini_adapter()
+    result = adapter.normalize_response(
+        {
+            "responseId": "gemini_resp_123",
+            "modelVersion": "gemini-2.5-pro",
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {"text": '{"answer":"ok"}'},
+                            {
+                                "functionCall": {
+                                    "name": "lookup_case",
+                                    "args": {
+                                        "token": "craik-test-not-a-real-key-01",
+                                        "case_id": "case_1",
+                                    },
+                                }
+                            },
+                        ],
+                    }
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 12,
+                "candidatesTokenCount": 7,
+                "totalTokenCount": 19,
+            },
+        }
+    )
+    retryable = adapter.classify_error(status_code=503, headers={"Retry-After": "5"})
+    throttled = adapter.classify_error(status_code=429)
+    terminal = adapter.classify_error(status_code=400)
+
+    assert result.text == '{"answer":"ok"}'
+    assert result.structured_output == {"answer": "ok"}
+    assert result.tool_calls == [
+        {
+            "name": "lookup_case",
+            "arguments": {"token": "[REDACTED]", "case_id": "case_1"},
+        }
+    ]
+    assert result.usage == {"input_tokens": 12, "output_tokens": 7, "total_tokens": 19}
+    assert result.response_id == "gemini_resp_123"
+    assert retryable.retryable is True
+    assert retryable.retry_after_seconds == 5
+    assert throttled.retryable is True
+    assert terminal.retryable is False
+
+
 def test_chat_completions_stream_chunk_normalizes_delta_content_and_tool_calls() -> None:
     chunk = _chat_completions_adapter().normalize_chunk(
         {
@@ -437,10 +522,13 @@ def test_live_provider_access_requires_explicit_enablement() -> None:
     with pytest.raises(ProviderLiveAccessNotConfiguredError):
         _anthropic_adapter().require_live_access()
     with pytest.raises(ProviderLiveAccessNotConfiguredError):
+        _gemini_adapter().require_live_access()
+    with pytest.raises(ProviderLiveAccessNotConfiguredError):
         _chat_completions_adapter().require_live_access()
 
     _openai_adapter(live_enabled=True).require_live_access()
     _anthropic_adapter(live_enabled=True).require_live_access()
+    _gemini_adapter(live_enabled=True).require_live_access()
     _chat_completions_adapter(live_enabled=True).require_live_access()
 
 
@@ -449,10 +537,11 @@ def test_live_provider_access_requires_explicit_enablement() -> None:
     [
         (_openai_adapter(), "openai"),
         (_anthropic_adapter(), "anthropic"),
+        (_gemini_adapter(), "gemini"),
     ],
 )
 def test_fixture_transport_yields_provider_family_response(
-    adapter: OpenAIProviderAdapter | AnthropicProviderAdapter,
+    adapter: OpenAIProviderAdapter | AnthropicProviderAdapter | GeminiProviderAdapter,
     family: ProviderFamily,
 ) -> None:
     transport: ProviderTransport = FixtureTransport(
@@ -477,6 +566,7 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
 
     openai = adapter_for_provider(registry.require("provider_openai"))
     anthropic = adapter_for_provider(registry.require("provider_anthropic"))
+    gemini = adapter_for_provider(registry.require("provider_gemini"))
     openai_responses = adapter_for_provider(registry.require("provider_openai_responses"))
     anthropic_messages = adapter_for_provider(
         registry.require("provider_anthropic_messages")
@@ -492,6 +582,10 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     assert isinstance(anthropic, AnthropicProviderAdapter)
     assert anthropic.config.secret_ref_name == "CRAIK_ANTHROPIC_API_KEY"
     assert anthropic.config.docs_refs == list(ANTHROPIC_OFFICIAL_DOCS)
+    assert isinstance(gemini, GeminiProviderAdapter)
+    assert gemini.config.secret_ref_name == "CRAIK_GEMINI_API_KEY"
+    assert gemini.config.base_url == "https://generativelanguage.googleapis.com"
+    assert gemini.config.docs_refs == list(GEMINI_OFFICIAL_DOCS)
     assert isinstance(openai_responses, OpenAIProviderAdapter)
     assert openai_responses.config.secret_ref_name == "OPENAI_API_KEY"
     assert openai_responses.config.base_url == "https://api.openai.com"
@@ -595,6 +689,14 @@ def test_provider_runtime_config_resolves_secret_reference(
     monkeypatch.setenv("CRAIK_OPENAI_API_KEY", "resolved-secret")
 
     assert _openai_adapter().config.resolve_secret(SecretResolver()) == "resolved-secret"
+
+
+def test_provider_headers_use_gemini_api_key_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRAIK_GEMINI_API_KEY", "gemini-secret")
+
+    assert _provider_headers(_gemini_adapter().config) == {"x-goog-api-key": "gemini-secret"}
 
 
 def test_provider_headers_resolve_auth_profile(

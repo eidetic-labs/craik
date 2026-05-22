@@ -155,6 +155,23 @@ def test_stigmem_credential_source_resolves_fact_value() -> None:
         thread.join(timeout=2)
 
 
+def test_stigmem_credential_source_returns_gemini_header() -> None:
+    server, thread = _stigmem_credential_server("craik-test-not-a-real-stigmem-key")
+    try:
+        source = StigmemCredentialSource.from_config(
+            node_url=_server_url(server),
+            api_key="test-key",
+            entity="credential:gemini:work",
+        )
+
+        assert source.headers_for("gemini") == {
+            "x-goog-api-key": "craik-test-not-a-real-stigmem-key"
+        }
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 def test_stigmem_credential_source_fails_when_fact_is_revoked() -> None:
     server, thread = _stigmem_credential_server(None)
     try:

@@ -34,6 +34,15 @@ def test_cli_bridge_stdout_line_extracts_first_nonempty_line() -> None:
     assert source.headers_for("openai") == {"Authorization": "Bearer line-token"}
 
 
+def test_cli_bridge_returns_gemini_api_key_header() -> None:
+    source = CLIBridgeCredentialSource(
+        command=(sys.executable, "-c", "print('gemini-token')"),
+        token_extractor="stdout_line",
+    )
+
+    assert source.headers_for("gemini") == {"x-goog-api-key": "gemini-token"}
+
+
 def test_cli_bridge_credentials_file_extracts_nested_token(tmp_path: Path) -> None:
     credentials = tmp_path / "bridge.json"
     credentials.write_text(json.dumps({"auth": {"token": "file-token"}}), encoding="utf-8")

@@ -36,6 +36,16 @@ def test_anthropic_provider_certification_uses_same_mvp_bar() -> None:
     assert decision.missing_requirements == []
 
 
+def test_gemini_provider_certification_uses_same_mvp_bar() -> None:
+    certification = _certification(provider_family="gemini", provider_id="provider_gemini")
+
+    decision = provider_certification_decision(certification)
+
+    assert decision.status == "certified"
+    assert decision.provider_family == "gemini"
+    assert decision.missing_requirements == []
+
+
 def test_provider_certification_blocks_missing_or_blocked_requirements() -> None:
     certification = _certification(
         supported_requirements=["chat", "streaming", "redaction", "receipts"],

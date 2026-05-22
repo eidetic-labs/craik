@@ -29,6 +29,16 @@ def test_env_var_api_key_source_returns_bearer_header(
     assert headers == {"Authorization": "Bearer openai-secret"}
 
 
+def test_env_var_api_key_source_returns_gemini_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
+
+    headers = EnvVarApiKeySource("GEMINI_API_KEY").headers_for("gemini")
+
+    assert headers == {"x-goog-api-key": "gemini-secret"}
+
+
 def test_env_var_api_key_source_preserves_empty_local_provider_headers() -> None:
     assert EnvVarApiKeySource("").headers_for("chat_completions") == {}
     assert EnvVarApiKeySource("").headers_for("anthropic") == {

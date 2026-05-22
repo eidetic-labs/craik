@@ -55,6 +55,18 @@ def test_secret_ref_source_resolves_env_secret(monkeypatch: pytest.MonkeyPatch) 
     assert "env-secret" not in str(source.status())
 
 
+def test_secret_ref_source_returns_gemini_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CRAIK_PROVIDER_SECRET", "env-secret")
+    source = SecretRefCredentialSource(
+        ref="CRAIK_PROVIDER_SECRET",
+        manager=EnvVarSecretManager(),
+    )
+
+    headers = source.headers_for("gemini")
+
+    assert headers == {"x-goog-api-key": "env-secret"}
+
+
 def test_secret_ref_source_status_does_not_leak_missing_reference(tmp_path: Path) -> None:
     source = SecretRefCredentialSource(
         ref="missing-secret.txt",

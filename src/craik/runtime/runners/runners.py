@@ -88,6 +88,11 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
             provider_family="anthropic",
         ),
         _provider_matrix(
+            runner_id="provider_gemini",
+            name="Gemini Provider Runner",
+            provider_family="gemini",
+        ),
+        _provider_matrix(
             runner_id="provider_anthropic_messages",
             name="Anthropic Messages Provider Runner",
             provider_family="anthropic",
