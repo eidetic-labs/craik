@@ -75,6 +75,8 @@ Disclosure happens only after every gate below is green.
 <li>Install the patched package from PyPI in a clean environment.</li>
 <li>Run the relevant regression tests or smoke workflow.</li>
 <li>Confirm that docs and release notes point to the fixed version.</li>
+<li>Verify the signed tag with <code>git tag -v vX.Y.Z</code>.</li>
+<li>Confirm the GitHub Release includes <code>craik-release-signing-key.asc</code> and that its fingerprint matches the tag-signing key.</li>
 </ol>
 
 ## What's next
