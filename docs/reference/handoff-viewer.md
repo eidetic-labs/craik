@@ -1,13 +1,13 @@
 # Handoff viewer
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over `craik.handoff` records — what the
-v0.7.0 TUI surface formats and the redaction boundary it preserves.
+The read-only `craik operator handoff` view over `craik.handoff`
+records, what it formats, and the redaction boundary it preserves.
 
 </div>
 
@@ -45,6 +45,19 @@ logs or expand potentially sensitive command output.
 
 Missing sections render as `none` so operators can distinguish an
 empty section from a formatter failure.
+
+## Commands
+
+```bash
+craik operator handoff handoff_docs
+craik operator handoff task_docs
+craik operator handoff task_docs --json
+```
+
+The command accepts either a handoff id or a task id. The text view
+uses the operator formatter for terminal scanning. `--json` returns
+the persisted `craik.handoff` payload for tooling and exact contract
+inspection.
 
 ## What's next
 

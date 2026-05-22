@@ -13,6 +13,7 @@ from craik.contracts.models import (
     CapabilityReceipt,
     ContextDebtRecord,
     DistilledInstructionProposal,
+    Handoff,
     InstructionProvenance,
     IntentLock,
     ReceiptResult,
@@ -243,6 +244,55 @@ def test_operator_work_graph_cli_rejects_unknown_task(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "unknown task: task_missing" in result.output
+
+
+def test_operator_handoff_cli_renders_view(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_handoff(
+            Handoff.model_validate(
+                {
+                    "id": "handoff_docs",
+                    "task_id": "task_docs",
+                    "project_id": "project_docs",
+                    "agent": "agent:codex",
+                    "status": "completed",
+                    "summary": "Docs update completed.",
+                    "self_audit": {
+                        "schema_validated": True,
+                        "redaction_reviewed": True,
+                        "receipts_reviewed": True,
+                        "assumptions_reviewed": True,
+                        "validation_recorded": True,
+                        "policy_exceptions_disclosed": True,
+                        "notes": [],
+                    },
+                    "completed_actions": ["Updated docs."],
+                    "artifacts": ["docs/reference/handoff-viewer.md"],
+                    "files_changed": ["src/craik/cli_operator.py"],
+                    "risks": [],
+                    "next_steps": ["Open PR."],
+                    "receipt_ids": ["receipt_pytest"],
+                    "created_at": "2026-05-21T17:00:00Z",
+                }
+            )
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "handoff", "task_docs"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Handoff: handoff_docs" in result.output
+    assert "Summary: Docs update completed." in result.output
+    assert "- receipt_pytest" in result.output
 
 
 def test_schema_list_includes_task_request() -> None:
