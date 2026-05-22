@@ -68,6 +68,8 @@ within the `0.x.0` stability expectations described in
   operator session before returning local-store state.
 - Operator text and JSON renderers now sanitize runtime text and redact
   sensitive values before display.
+- Plugin receipt inspection now gets a structured store-layer HMAC
+  status, including explicit recomputation for tampered receipt display.
 
 ## 0.6.0 — 2026-05-21
 

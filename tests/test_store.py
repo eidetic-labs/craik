@@ -427,6 +427,10 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert stored_plugin_receipt is not None
     assert stored_plugin_receipt.receipt_hmac
     assert stored_plugin_receipt.model_copy(update={"receipt_hmac": None}) == plugin_receipt
+    plugin_receipt_read = store.get_plugin_receipt_with_verification(plugin_receipt.id)
+    assert plugin_receipt_read is not None
+    assert plugin_receipt_read.receipt == stored_plugin_receipt
+    assert plugin_receipt_read.hmac_status == "verified"
     assert store.get_instruction_source(instruction_source.id) == instruction_source
     assert store.get_instruction_source_registry(instruction_registry.id) == instruction_registry
     assert store.get_instruction_source_snapshot(instruction_snapshot.id) == instruction_snapshot

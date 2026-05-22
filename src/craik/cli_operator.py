@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 
@@ -39,7 +39,7 @@ from craik.runtime.companions.operator_views import (
     format_work_graph_explorer,
 )
 from craik.runtime.memory.contradictions import ContradictionManager
-from craik.runtime.store import LocalStore, LocalStoreCorruptError
+from craik.runtime.store import LocalStore
 from craik.runtime.work.graph import WorkGraphExporter, WorkGraphTaskNotFoundError
 from craik.runtime.work.handoffs import HandoffNotFoundError, HandoffWriter
 
@@ -152,15 +152,10 @@ def operator_receipt(
         receipt: CapabilityReceipt | PluginReceipt | None = store.get_receipt(receipt_id)
         hmac_status = receipt_hmac_status(receipt)
         if receipt is None:
-            try:
-                receipt = store.get_plugin_receipt(receipt_id)
-                hmac_status = receipt_hmac_status(receipt)
-            except LocalStoreCorruptError:
-                raw_receipt = store.get_contract("craik.plugin_receipt", receipt_id)
-                if raw_receipt is None:
-                    raise
-                receipt = cast(PluginReceipt, raw_receipt)
-                hmac_status = "tampered"
+            plugin_receipt = store.get_plugin_receipt_with_verification(receipt_id)
+            if plugin_receipt is not None:
+                receipt = plugin_receipt.receipt
+                hmac_status = plugin_receipt.hmac_status
     finally:
         store.close()
 

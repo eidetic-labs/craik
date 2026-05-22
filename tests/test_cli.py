@@ -21,6 +21,7 @@ from craik.contracts.models import (
     InstructionProvenance,
     IntentLock,
     MemoryImpactPreview,
+    PluginReceipt,
     ReceiptResult,
     RecoverySession,
     RunDelta,
@@ -347,6 +348,62 @@ def test_operator_receipt_cli_renders_capability_receipt(tmp_path: Path) -> None
     assert "Capability Receipt: receipt_docs" in result.output
     assert "Status: passed" in result.output
     assert "Redacted: True" in result.output
+
+
+def test_operator_receipt_cli_surfaces_tampered_plugin_receipt_json(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        receipt = PluginReceipt.model_validate(
+            {
+                "id": "plugin_receipt_docs",
+                "task_id": "task_docs",
+                "actor": "plugin:docs",
+                "plugin_descriptor_id": "plugin_docs",
+                "action": "docs.reconcile",
+                "capability_grant_ids": ["plugin_grant_docs"],
+                "trust_boundary": "project",
+                "result": {
+                    "status": "passed",
+                    "summary": "Plugin action completed.",
+                    "metadata": {"redacted": True},
+                },
+                "evidence_ids": ["evidence_docs"],
+                "handoff_ids": ["handoff_docs"],
+                "redacted": True,
+                "created_at": "2026-05-21T17:00:00Z",
+            }
+        )
+        store.put_plugin_receipt(receipt)
+        stored = store.get_plugin_receipt(receipt.id)
+        assert stored is not None
+        payload = stored.model_dump(mode="json", by_alias=True)
+        payload["actor"] = "plugin:tampered"
+        with store.transaction() as connection:
+            connection.execute(
+                "UPDATE records SET payload_json = ? WHERE kind = ? AND id = ?",
+                (
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    "plugin_receipts",
+                    receipt.id,
+                ),
+            )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "receipt", "plugin_receipt_docs", "--json"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["hmac_verification"] == "tampered"
+    assert payload["actor"] == "plugin:tampered"
 
 
 def test_operator_contradictions_cli_renders_inbox(tmp_path: Path) -> None:

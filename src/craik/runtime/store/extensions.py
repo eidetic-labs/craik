@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 from craik.runtime.store.integrity import contract_hmac, hmac_key_for_store, verify_contract_hmac
+from craik.runtime.store.receipt_integrity import PluginReceiptReadResult
+from craik.runtime.store.receipt_integrity import plugin_receipt_hmac_status
 
 from .base import *
 
@@ -149,6 +151,19 @@ class ExtensionStoreMixin(LocalStoreCore):
         receipt = _cast_optional(PluginReceipt, contract)
         _verify_plugin_receipt_hmac(self, receipt)
         return receipt
+
+    def get_plugin_receipt_with_verification(
+        self,
+        receipt_id: str,
+    ) -> PluginReceiptReadResult | None:
+        contract = self.get_contract("craik.plugin_receipt", receipt_id)
+        receipt = _cast_optional(PluginReceipt, contract)
+        if receipt is None:
+            return None
+        return PluginReceiptReadResult(
+            receipt=receipt,
+            hmac_status=plugin_receipt_hmac_status(self, receipt),
+        )
 
     def list_plugin_receipts(self) -> list[PluginReceipt]:
         receipts = _cast_list(PluginReceipt, self.list_contracts("craik.plugin_receipt"))
@@ -416,14 +431,10 @@ def _signed_plugin_receipt(
     return receipt.model_copy(update={"receipt_hmac": receipt_hmac})
 
 
-def _verify_plugin_receipt_hmac(
-    store: LocalStoreCore,
-    receipt: PluginReceipt | None,
-) -> None:
-    if receipt is None or receipt.receipt_hmac is None:
+def _verify_plugin_receipt_hmac(store: LocalStoreCore, receipt: PluginReceipt | None) -> None:
+    if receipt is None:
         return
-    payload = receipt.model_dump(mode="json", by_alias=True)
-    if not verify_contract_hmac(payload, hmac_key_for_store(store)):
+    if plugin_receipt_hmac_status(store, receipt) == "tampered":
         raise LocalStoreCorruptError(f"stored plugin receipt has invalid HMAC: {receipt.id}")
 
 

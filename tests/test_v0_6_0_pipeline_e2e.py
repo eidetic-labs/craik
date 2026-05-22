@@ -181,6 +181,10 @@ def test_plugin_probation_and_receipt_hmac_detect_tamper(tmp_path: Path) -> None
         _tamper_record(store, "plugin_receipts", receipt.id, "actor", "plugin:tampered")
         with pytest.raises(LocalStoreCorruptError, match="plugin receipt"):
             store.get_plugin_receipt(receipt.id)
+        read_result = store.get_plugin_receipt_with_verification(receipt.id)
+        assert read_result is not None
+        assert read_result.hmac_status == "tampered"
+        assert read_result.receipt.actor == "plugin:tampered"
     finally:
         store.close()
 
