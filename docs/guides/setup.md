@@ -139,7 +139,9 @@ inbound request.
 
 `craik setup` is idempotent. Re-running it doesn't blow away project
 registrations or receipts — it re-resolves paths and updates the gateway
-config when flags change.
+config when flags change. First-time setup can initialize a new home
+without authentication; reconfiguring an existing local store requires an
+active operator session.
 
 To start from a clean slate:
 

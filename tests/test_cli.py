@@ -794,6 +794,30 @@ def test_setup_wizard_writes_non_secret_gateway_config(tmp_path) -> None:
         store.close()
 
 
+def test_setup_wizard_reconfigure_requires_operator_session(tmp_path) -> None:
+    home = tmp_path / "craik-home"
+    initial = runner.invoke(app, ["setup"], env={"CRAIK_HOME": str(home)})
+
+    unauthenticated = runner.invoke(
+        app,
+        ["setup", "--project-id", "project_gateway"],
+        env={"CRAIK_HOME": str(home)},
+    )
+    _put_operator_session(home)
+    authenticated = runner.invoke(
+        app,
+        ["setup", "--project-id", "project_gateway"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert initial.exit_code == 0
+    assert unauthenticated.exit_code != 0
+    assert "active operator session required; run craik auth login" in unauthenticated.output
+    assert authenticated.exit_code == 0
+    payload = json.loads(authenticated.stdout)
+    assert payload["gateway_config"]["project_id"] == "project_gateway"
+
+
 def test_setup_wizard_rejects_public_gateway_bind_without_policy(tmp_path) -> None:
     result = runner.invoke(
         app,

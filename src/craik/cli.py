@@ -15,11 +15,17 @@ from craik import __version__
 from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
 from craik.contracts.registry import schema_model, schema_names
+from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.doctor import run_doctor
 from craik.runtime.gateway import default_gateway_config
-from craik.runtime.paths import CraikPaths, ensure_craik_home, resolve_craik_paths
+from craik.runtime.paths import (
+    CraikPaths,
+    ensure_craik_home,
+    resolve_craik_home,
+    resolve_craik_paths,
+)
 from craik.runtime.projects.update_guidance import update_guidance_payload
-from craik.runtime.store import LocalStore
+from craik.runtime.store import DATABASE_NAME, LocalStore
 
 PACKAGE_NAME = "craik"
 
@@ -148,6 +154,9 @@ def setup_command(
     ] = None,
 ) -> None:
     """Initialize local state and write non-secret gateway setup output."""
+    resolved_paths = resolve_craik_paths()
+    if (resolved_paths.state / DATABASE_NAME).exists():
+        _operator_identity()
     paths = ensure_craik_home()
     store = LocalStore.from_paths(paths)
     try:
@@ -186,6 +195,7 @@ def setup_command(
 @app.command("doctor")
 def doctor_command() -> None:
     """Run read-only diagnostics for local and gateway readiness."""
+    _operator_identity()
     paths = resolve_craik_paths()
     payload = run_doctor(paths, env=dict(os.environ))
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
@@ -232,6 +242,14 @@ def _paths_payload(paths: CraikPaths) -> dict[str, str]:
         "secrets": str(paths.secrets),
         "state": str(paths.state),
     }
+
+
+def _operator_identity() -> str:
+    try:
+        session = OperatorSessionStore(resolve_craik_home()).get()
+    except OperatorSessionNotFoundError:
+        raise typer.BadParameter("active operator session required; run craik auth login") from None
+    return session.subject
 
 
 def _load_cli_extensions() -> None:
