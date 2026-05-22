@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import Field
 
 from craik.contracts.models import CraikModel
+from craik.runtime.dashboard import DashboardConfig, dashboard_url
+from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.policy.redaction import redact
+from craik.runtime.policy.text import sanitize_runtime_text
+from craik.runtime.projects.update_guidance import update_guidance_payload
+from craik.runtime.shell.readiness import resolve_readiness
+from craik.runtime.store import DATABASE_NAME, LocalStore
 
 DesktopCompanionSupportLevel = Literal["supported", "experimental", "deferred"]
 DesktopCompanionStatus = Literal["allowed", "review_required", "deferred", "blocked"]
+DesktopCompanionActionKind = Literal["dashboard", "gateway", "doctor", "update", "approval"]
 
 
 class DesktopCompanionSurface(CraikModel):
@@ -36,6 +45,50 @@ class DesktopCompanionDecision(CraikModel):
     reason: str
     surface_id: str
     required_controls: list[str] = Field(default_factory=list)
+
+
+class DesktopCompanionAction(CraikModel):
+    """Menu-bar action exposed by the desktop companion MVP."""
+
+    id: str
+    label: str
+    kind: DesktopCompanionActionKind
+    command: str
+    local_only: bool = True
+    requires_confirmation: bool = False
+
+
+class DesktopApprovalNotification(CraikModel):
+    """Approval notification metadata with a local dashboard deep link."""
+
+    approval_id: str
+    title: str
+    body: str
+    deep_link: str
+    redacted: bool = True
+
+
+class DesktopCompanionSnapshot(CraikModel):
+    """Desktop companion MVP status payload."""
+
+    surface_id: str
+    status: DesktopCompanionStatus
+    local_dashboard_url: str
+    gateway_status: str
+    provider_auth_status: str
+    local_vs_remote: str
+    actions: list[DesktopCompanionAction]
+    approval_notifications: list[DesktopApprovalNotification] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    redacted: bool = True
+
+
+@dataclass(frozen=True)
+class DesktopCompanionConfig:
+    """Runtime options for desktop companion status rendering."""
+
+    dashboard_host: str = "127.0.0.1"
+    dashboard_port: int = 8787
 
 
 def desktop_companion_decision(surface: DesktopCompanionSurface) -> DesktopCompanionDecision:
@@ -85,6 +138,129 @@ def desktop_companion_decision(surface: DesktopCompanionSurface) -> DesktopCompa
     )
 
 
+def default_desktop_companion_surface() -> DesktopCompanionSurface:
+    """Return the supported desktop companion MVP surface."""
+    return DesktopCompanionSurface(
+        id="desktop_companion_mvp",
+        support_level="supported",
+        docs_ref="docs/reference/desktop-companion.md",
+    )
+
+
+def desktop_companion_snapshot(
+    *,
+    env: dict[str, str] | None = None,
+    config: DesktopCompanionConfig | None = None,
+) -> DesktopCompanionSnapshot:
+    """Build a redacted desktop companion status/menu snapshot."""
+    active_config = config or DesktopCompanionConfig()
+    surface = default_desktop_companion_surface()
+    decision = desktop_companion_decision(surface)
+    readiness = resolve_readiness(env)
+    gateway_status = _gateway_status(env)
+    dashboard = dashboard_url(
+        DashboardConfig(host=active_config.dashboard_host, port=active_config.dashboard_port)
+    )
+    warnings = list(readiness.warnings)
+    if not decision.allowed:
+        warnings.append(decision.reason)
+    if active_config.dashboard_host not in {"127.0.0.1", "localhost", "::1"}:
+        warnings.append("desktop companion dashboard target is not local-only")
+    return DesktopCompanionSnapshot(
+        surface_id=surface.id,
+        status=decision.status,
+        local_dashboard_url=_safe(dashboard),
+        gateway_status=_safe(gateway_status),
+        provider_auth_status=_safe(readiness.state),
+        local_vs_remote="local-only" if not warnings else "review",
+        actions=desktop_companion_actions(),
+        approval_notifications=[],
+        warnings=[_safe(warning) for warning in warnings],
+        redacted=True,
+    )
+
+
+def desktop_companion_actions() -> list[DesktopCompanionAction]:
+    """Return deterministic desktop menu/tray actions."""
+    return [
+        DesktopCompanionAction(
+            id="open_dashboard",
+            label="Open Dashboard",
+            kind="dashboard",
+            command="craik dashboard",
+        ),
+        DesktopCompanionAction(
+            id="gateway_status",
+            label="Gateway Status",
+            kind="gateway",
+            command="craik gateway status",
+        ),
+        DesktopCompanionAction(
+            id="gateway_start",
+            label="Start Gateway",
+            kind="gateway",
+            command="craik gateway start",
+            requires_confirmation=True,
+        ),
+        DesktopCompanionAction(
+            id="gateway_stop",
+            label="Stop Gateway",
+            kind="gateway",
+            command="craik gateway stop",
+            requires_confirmation=True,
+        ),
+        DesktopCompanionAction(
+            id="gateway_restart",
+            label="Restart Gateway",
+            kind="gateway",
+            command="craik gateway restart",
+            requires_confirmation=True,
+        ),
+        DesktopCompanionAction(
+            id="doctor",
+            label="Run Doctor",
+            kind="doctor",
+            command="craik doctor",
+        ),
+        DesktopCompanionAction(
+            id="update_check",
+            label="Check For Updates",
+            kind="update",
+            command="craik update --check",
+        ),
+    ]
+
+
+def desktop_companion_action(action_id: str) -> DesktopCompanionAction:
+    """Return one desktop companion action by id."""
+    for action in desktop_companion_actions():
+        if action.id == action_id:
+            return action
+    raise KeyError(action_id)
+
+
+def desktop_approval_notification(
+    approval_id: str,
+    *,
+    capability: str,
+    target: str,
+    dashboard_base_url: str = "http://127.0.0.1:8787",
+) -> DesktopApprovalNotification:
+    """Create a redacted approval notification with dashboard deep link."""
+    safe_id = _safe(approval_id)
+    return DesktopApprovalNotification(
+        approval_id=safe_id,
+        title="Craik approval required",
+        body=f"{_safe(capability)} requires review for {_safe(target)}",
+        deep_link=f"{dashboard_base_url.rstrip('/')}/approvals?approval={safe_id}",
+    )
+
+
+def desktop_update_check_payload(installed_version: str) -> dict[str, object]:
+    """Return the companion update-check payload."""
+    return update_guidance_payload(installed_version=installed_version)
+
+
 def _blocked(surface: DesktopCompanionSurface, reason: str) -> DesktopCompanionDecision:
     return DesktopCompanionDecision(
         status="blocked",
@@ -108,3 +284,23 @@ def _controls(surface: DesktopCompanionSurface) -> list[str]:
     if surface.docs_ref:
         controls.append("documented_decision")
     return controls
+
+
+def _gateway_status(env: dict[str, str] | None) -> str:
+    paths = resolve_craik_paths(env)
+    if not (paths.state / DATABASE_NAME).exists():
+        return "not configured"
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        states = store.list_gateway_runtime_states()
+    finally:
+        store.close()
+    if not states:
+        return "not configured"
+    latest = sorted(states, key=lambda state: state.updated_at)[-1]
+    return str(latest.status)
+
+
+def _safe(value: str) -> str:
+    return sanitize_runtime_text(str(redact(value).value))

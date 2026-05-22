@@ -1,13 +1,14 @@
-# Desktop companion app decision
+# Desktop Companion
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>Reference</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The `DesktopCompanionSurface` contract — required controls, decision
-rules, blocked behaviors, and the current shipped posture.
+The desktop companion MVP — required controls, local-vs-remote posture,
+menu actions, approval notification links, and the CLI surfaces that
+native tray/menu-bar shells can call.
 
 </div>
 
@@ -21,7 +22,7 @@ channel.
 
 </div>
 
-## What it records
+## What It Records
 
 <div className="craik-grid">
 
@@ -74,17 +75,59 @@ channel.
 Experimental surfaces require explicit review. Deferred surfaces are
 not available as product surfaces.
 
-## Current posture
+## MVP Surface
+
+`craik desktop status` returns the companion snapshot:
+
+```sh
+craik desktop status
+```
+
+The snapshot includes the governed surface status, local dashboard URL,
+latest gateway runtime state, provider/auth readiness, local-vs-remote
+posture, warnings, and deterministic menu actions.
+
+## Menu Actions
+
+```sh
+craik desktop menu
+craik desktop action open_dashboard
+craik desktop action gateway_status
+craik desktop action gateway_start
+craik desktop action gateway_stop
+craik desktop action gateway_restart
+craik desktop action doctor
+craik desktop action update_check
+```
+
+Gateway start, stop, and restart actions are marked as requiring
+confirmation. The MVP exposes commands and posture for a native wrapper
+to call; it does not silently execute background actions.
+
+## Approval Notifications
+
+Native notification wrappers can request a redacted approval
+notification fixture:
+
+```sh
+craik desktop notify-approval approval_123 model.chat "provider request"
+```
+
+The payload includes a local dashboard deep link to `/approvals` and
+redacts secret-like target text before it reaches notification logs or
+crash reports.
+
+## Current Posture
 
 <div className="craik-keypoint">
 
-**Governed extension point.**
+**Supported MVP surface.**
 
-Status panels, reviewable notifications, and explicit operator-triggered
-actions can be supported when they satisfy the controls above.
-Always-on automation, secret caching, uncontrolled background actions,
-and private local-state synchronization are deferred until a later
-roadmap gate adds stronger product and security requirements.
+The shipped MVP supports status panels, deterministic menu actions,
+local dashboard launch, gateway command surfacing, provider/auth health
+summary, approval notification deep links, doctor, and update-check
+payloads. Always-on automation, secret caching, uncontrolled background
+actions, and private local-state synchronization remain blocked.
 
 </div>
 
