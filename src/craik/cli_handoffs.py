@@ -10,13 +10,13 @@ import typer
 from craik.cli import handoff_app
 from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import RunStatus
+from craik.runtime.companions.handoff_markdown import render_markdown
 from craik.runtime.store import LocalStore
 from craik.runtime.work.handoffs import (
     HandoffBlockedByExitDisciplineError,
     HandoffContextError,
     HandoffNotFoundError,
     HandoffWriter,
-    render_markdown,
 )
 
 

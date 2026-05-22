@@ -10,12 +10,23 @@ from .base import *
 
 
 class _WorkStoreSurface(Protocol):
-    def put_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt: ...
-    def get_receipt(self, receipt_id: str) -> CapabilityReceipt | None: ...
-    def list_receipts(self) -> list[CapabilityReceipt]: ...
-    def put_policy_envelope(self, policy: PolicyEnvelope) -> None: ...
-    def get_policy_envelope(self, policy_id: str) -> PolicyEnvelope | None: ...
-    def list_policy_envelopes(self) -> list[PolicyEnvelope]: ...
+    def put_receipt(self, receipt: CapabilityReceipt) -> CapabilityReceipt:
+        raise NotImplementedError
+
+    def get_receipt(self, receipt_id: str) -> CapabilityReceipt | None:
+        raise NotImplementedError
+
+    def list_receipts(self) -> list[CapabilityReceipt]:
+        raise NotImplementedError
+
+    def put_policy_envelope(self, policy: PolicyEnvelope) -> None:
+        raise NotImplementedError
+
+    def get_policy_envelope(self, policy_id: str) -> PolicyEnvelope | None:
+        raise NotImplementedError
+
+    def list_policy_envelopes(self) -> list[PolicyEnvelope]:
+        raise NotImplementedError
 
 
 class GatewayStoreMixin(LocalStoreCore):
