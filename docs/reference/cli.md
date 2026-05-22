@@ -786,6 +786,20 @@ Inspect read-only operator surface state.
 craik operator COMMAND [ARGS]...
 ```
 
+## `craik operator contradictions`
+
+Print the read-only contradiction inbox.
+
+```text
+craik operator contradictions [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Only include reports for this task.
+- `--status`: Only include reports with status open, resolved, or ignored.
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator handoff`
 
 Print the read-only handoff viewer.
