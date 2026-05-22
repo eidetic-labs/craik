@@ -950,9 +950,9 @@ protected publication process when the maintainer is ready.
 <p className="craik-product-card__summary">
 The honest scope boundary. Lists the v0.1 end-to-end surfaces that
 work today (home init, project registration, case-file assembly, local
-state inspection, policy gates) and the deliberately post-MVP surfaces
-(gateway daemon, operator dashboards, multi-agent orchestration,
-broad live tool execution).
+state inspection, policy gates, foreground gateway health service)
+and the deliberately post-MVP surfaces (hosted gateway dispatch,
+operator dashboards, broad live tool execution).
 </p>
 <blockquote className="craik-product-card__quote">
 Several surfaces are not yet end-to-end production workflows.

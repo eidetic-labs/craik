@@ -172,6 +172,38 @@ an active local operator session before reading persisted state.
   trust anchors. Anyone with write access to Craik home can compromise
   audit integrity, so OS account isolation remains required.
 
+## v0.8.0 Gateway and Channel Trust Model
+
+Craik's gateway surface is a local-first operator service, not an
+open assistant endpoint. The foreground daemon is runnable with
+`craik gateway start`, serves a local `/health` endpoint, writes
+gateway runtime state, and uses a pid-file lock to prevent duplicate
+daemon processes.
+
+- `craik doctor`, re-running `craik setup` against existing state, and
+  `craik gateway start` require an active local operator session.
+- Public binds such as `0.0.0.0` and `::` require a policy envelope and
+  the explicit `--allow-insecure-public-gateway` acknowledgement.
+  Craik does not terminate TLS; public deployments must sit behind TLS
+  termination or stay on a private network.
+- Webhook ingress enforces HMAC signatures, a 1 MiB body cap, JSON
+  nesting limits, timestamp freshness, accepted event replay tracking,
+  and ambiguous duplicate-signature-header rejection before dispatch.
+- Channel identity pairings require expiry and audit links before
+  privileged ingress. Expired, revoked, unpaired, or allowlist-denied
+  senders do not receive channel policy authority.
+- Cron-like scheduled automations reject schedules that run more often
+  than every five minutes and require policy authority before task
+  creation.
+- Gateway/channel artifacts are persisted through typed local-store
+  helpers: adapter contracts, identity pairings, allowlists, gateway
+  receipts, schedules, scheduled automations, and channel policy
+  envelopes.
+- Residual limitations: Slack/Discord/email/SMS adapters, hosted
+  gateway deployment, production dispatch loops, and scheduler
+  supervision remain future work. Treat fixture adapters and local
+  webhook helpers as controlled integration surfaces.
+
 ## Safe Harbor
 
 Good-faith research that avoids privacy violations, data destruction, service disruption, and public disclosure before remediation will be treated as helpful security research.

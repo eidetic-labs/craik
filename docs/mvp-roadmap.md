@@ -229,7 +229,7 @@ Tracking issue: [#307](https://github.com/eidetic-labs/craik/issues/307).
 
 Tracking issue: [#309](https://github.com/eidetic-labs/craik/issues/309).
 
-- [x] Mark full gateway daemon as post-MVP unless required by the proof workflow.
+- [x] Mark hosted gateway dispatch and broad channel adapters as post-MVP.
 - [x] Mark full TUI/dashboard as post-MVP.
 - [x] Mark additional live runner adapters as post-MVP.
 - [x] Mark companion/mobile/visual surfaces as post-MVP.

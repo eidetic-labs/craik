@@ -26,12 +26,15 @@ documentation.
 
 ## Gateway Daemon
 
-Gateway contracts and deterministic lifecycle helpers may exist before
-MVP, but a full always-on daemon, inbound messaging loop, webhook
-dispatcher, scheduler, and externally reachable service are post-MVP.
-They must not be documented as operational support until they have
-policy checks, receipts, supervision, security review, and CI
-coverage.
+v0.8.0 ships a foreground local gateway daemon with `/health`,
+pid-file locking, persisted runtime state, webhook validation, channel
+contracts, scheduled automation helpers, and gateway receipts.
+Post-MVP gateway work is the broader production service: hosted/public
+deployment, TLS termination, always-on scheduler supervision, broad
+third-party adapters, inbound messaging loops, webhook dispatchers, and
+production dispatch orchestration. Those surfaces must not be
+documented as operational support until they have policy checks,
+receipts, supervision, security review, and CI coverage.
 
 ## Operator UI
 

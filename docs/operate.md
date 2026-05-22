@@ -821,11 +821,11 @@ externally-driven runs, webhook validation, scheduled task creation,
 scheduled automations, and gateway-specific receipts.
 </p>
 <p className="craik-section-banner__lede">
-<strong>Current scope:</strong> gateway daemon mode is
-<a href="../reference/post-mvp-scope/">post-MVP</a>. The current
-surface documents contracts and deterministic lifecycle pieces; the
-first messaging adapter is a fixture-only adapter (no Slack /
-Discord / email / SMS yet).
+<strong>Current scope:</strong> gateway daemon mode is a foreground
+local service with <code>/health</code>, pid-file locking, persisted
+runtime state, webhook validation, and policy-bound channel contracts.
+The first messaging adapter is still fixture-only (no Slack / Discord
+/ email / SMS yet), and hosted/public dispatch remains post-MVP.
 </p>
 </div>
 </header>
@@ -838,24 +838,23 @@ Discord / email / SMS yet).
 <h4 className="craik-product-feature__title">Gateway daemon mode</h4>
 <p className="craik-product-feature__summary">
 The always-on entry point — channels, webhooks, schedules, and policy
-ingress all hang off this surface. Contracts and deterministic
-lifecycle ship today; the live daemon is explicitly post-MVP until a
-later proof workflow pulls it forward.
+ingress all hang off this surface. The foreground daemon, health
+endpoint, pid-file lock, and persisted lifecycle state ship today;
+hosted dispatch and broad third-party adapters remain future work.
 </p>
 <ul className="craik-product-feature__topics">
-<li>contracts ship today</li>
-<li>deterministic lifecycle</li>
+<li>foreground daemon</li>
+<li>health endpoint</li>
 <li>policy ingress</li>
-<li>post-MVP daemon</li>
+<li>post-MVP hosted dispatch</li>
 </ul>
 <span className="craik-product-feature__cta">Read gateway mode</span>
 </div>
 <blockquote className="craik-product-feature__quote">
 <p className="craik-product-feature__quote-eyebrow">Scope today</p>
 <p className="craik-product-feature__quote-text">
-Gateway daemon mode is post-MVP unless a later proof workflow
-explicitly pulls it forward. The current surface documents contracts
-and deterministic lifecycle.
+Gateway daemon mode is foreground and local-first. The production
+dispatch loop and hosted operation remain post-MVP.
 </p>
 <p className="craik-product-feature__quote-attribution">— Gateway daemon · §Intro</p>
 </blockquote>

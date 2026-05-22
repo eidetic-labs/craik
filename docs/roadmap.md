@@ -795,7 +795,7 @@ Documentation requirements are part of the definition of done.
 
 **Scope:** gateway daemon mode · setup wizard · diagnostics command · update guidance · channel adapter contract · first messaging channel adapter · inbound identity and pairing model · channel allowlists · channel-scoped policy envelopes · webhook ingress · scheduled automations · gateway receipts.
 
-**Validation:** daemon lifecycle tests · setup wizard fixture tests · diagnostics failure-mode tests · webhook signature tests · channel identity mapping tests · scheduled task creation tests · gateway receipt tests.
+**Validation:** daemon lifecycle tests · setup wizard fixture tests · diagnostics failure-mode tests · webhook signature tests · channel identity mapping tests · scheduled task creation tests · gateway receipt tests · v0.8.0 gateway pipeline e2e test.
 
 **Docs:** gateway guide · setup guide · diagnostics guide · channel adapter reference · webhook reference · scheduler guide · gateway security guide.
 

@@ -20,6 +20,8 @@ within the `0.x.0` stability expectations described in
 - v0.8.0 gateway pipeline coverage that validates webhook ingress,
   channel admission, policy selection, receipts, scheduling, and
   persisted gateway artifacts together.
+- v0.8.0 release-readiness, roadmap, security, limitations, and
+  gateway documentation reconciliation.
 
 ## 0.7.0 — 2026-05-22
 
