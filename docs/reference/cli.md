@@ -66,6 +66,20 @@ Options:
 - `--allow-fixture-action, --no-allow-fixture-action`: Grant the deterministic fixture shell action used by provider tests.; default `true`
 - `--provider-token-budget`: Optional provider token budget.
 
+## `craik agent recover`
+
+Mark or perform a persistent agent recovery transition.
+
+```text
+craik agent recover [OPTIONS] SESSION_ID
+```
+
+Options:
+
+- `--reason`: Failure reason: auth_expired, provider_unavailable, sandbox_failed, stale_endpoint.
+- `--action`: Recovery action: reconnect or resume.
+- `--detail`: Redacted operator recovery detail.
+
 ## `craik agent restart`
 
 Restart a stopped or failed persistent agent session.

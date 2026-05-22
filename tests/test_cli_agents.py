@@ -141,6 +141,49 @@ def test_agent_cli_prompt_runs_provider_backed_session(tmp_path: Path) -> None:
     ]
 
 
+def test_agent_cli_recover_marks_failure_and_resume(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    _put_session(home)
+    launched = runner.invoke(
+        app,
+        ["agent", "launch", "--session-id", "agent_docs"],
+        env=env,
+    )
+    recovered = runner.invoke(
+        app,
+        [
+            "agent",
+            "recover",
+            "agent_docs",
+            "--reason",
+            "auth_expired",
+            "--detail",
+            "provider token=secret-token expired",
+        ],
+        env=env,
+    )
+    resumed = runner.invoke(
+        app,
+        ["agent", "recover", "agent_docs", "--action", "resume"],
+        env=env,
+    )
+
+    assert launched.exit_code == 0, launched.output
+    assert recovered.exit_code == 0, recovered.output
+    assert resumed.exit_code == 0, resumed.output
+    recovery_payload = json.loads(recovered.stdout)
+    resume_payload = json.loads(resumed.stdout)
+    assert recovery_payload["session"]["status"] == "auth_expired"
+    assert recovery_payload["session"]["recovery_metadata"]["recovery_reason"] == "auth_expired"
+    assert recovery_payload["session"]["recovery_metadata"]["recovery_detail"] == (
+        "provider token=[REDACTED] expired"
+    )
+    assert "secret-token" not in recovered.stdout
+    assert resume_payload["session"]["status"] == "idle"
+    assert resume_payload["session"]["recovery_metadata"]["recovery_action"] == "resume"
+
+
 def _put_session(home: Path) -> None:
     session = OperatorSession(
         subject="operator-123",

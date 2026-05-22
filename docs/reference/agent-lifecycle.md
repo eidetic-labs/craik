@@ -19,6 +19,7 @@ operator gating, and the relationship to one-shot task runs.
 | `craik run execute` | Execute one bounded task run. | `craik.task_run`, outputs, receipts, handoffs. |
 | `craik agent launch` | Create a persistent agent session. | `craik.agent_session_state`. |
 | `craik agent prompt` | Send one prompt through the session provider. | Task, run, outputs, receipts, handoff, session links, and `craik.agent_session_event`. |
+| `craik agent recover` | Mark a recoverable failure or perform reconnect/resume. | Updates session status and redacted recovery metadata. |
 | `craik agent status` | Inspect one persistent session. | May mark stale pid sessions failed. |
 | `craik agent stop` | Stop an active persistent session. | Clears pid and records `stopped_at`. |
 | `craik agent restart` | Restart a stopped or failed session. | Clears `stopped_at` and records a new start time. |
@@ -68,6 +69,12 @@ Restartable statuses are `stopped`, `failed`, `auth_expired`,
 <dt>Restart</dt>
 <dt><span className="craik-fields__type">recoverable to running</span></dt>
 <dd>Active sessions cannot restart. Restart clears `stopped_at`, refreshes lifecycle timestamps, and preserves provider references.</dd>
+</div>
+
+<div>
+<dt>Recover</dt>
+<dt><span className="craik-fields__type">failure to reconnect/resume</span></dt>
+<dd>Auth, provider, sandbox, stale pid, and stale endpoint failures record redacted recovery metadata before reconnect or resume.</dd>
 </div>
 
 </div>

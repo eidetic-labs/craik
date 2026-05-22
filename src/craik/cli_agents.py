@@ -12,9 +12,12 @@ from craik.contracts.models import AgentSessionState
 from craik.runtime.agents import (
     AgentPromptResult,
     AgentSessionLifecycleError,
+    AgentSessionRecoveryError,
     agent_session_id,
     execute_agent_prompt,
     get_agent_session_status,
+    mark_agent_session_failure_by_id,
+    recover_agent_session_by_id,
     restart_agent_session,
     start_agent_session,
     stop_agent_session,
@@ -232,6 +235,58 @@ def agent_prompt(
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 
+@agent_app.command("recover")
+def agent_recover(
+    session_id: Annotated[str, typer.Argument(help="Agent session id.")],
+    reason: Annotated[
+        str | None,
+        typer.Option(
+            "--reason",
+            help=(
+                "Failure reason: auth_expired, provider_unavailable, "
+                "sandbox_failed, stale_endpoint."
+            ),
+        ),
+    ] = None,
+    action: Annotated[
+        str | None,
+        typer.Option("--action", help="Recovery action: reconnect or resume."),
+    ] = None,
+    detail: Annotated[
+        str | None,
+        typer.Option("--detail", help="Redacted operator recovery detail."),
+    ] = None,
+) -> None:
+    """Mark or perform a persistent agent recovery transition."""
+    _operator_session()
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        if action is not None:
+            state = recover_agent_session_by_id(
+                store,
+                session_id,
+                action=_recovery_action(action),
+                supervision_note=f"Persistent agent recovery action: {action}.",
+            )
+        else:
+            if reason is None:
+                raise typer.BadParameter("reason is required when action is omitted")
+            state = mark_agent_session_failure_by_id(
+                store,
+                session_id,
+                reason=_recovery_reason(reason),
+                detail=detail,
+                source="operator",
+            )
+        payload = {"recovered": True, "session": _session_payload(state)}
+    except (AgentSessionLifecycleError, AgentSessionRecoveryError) as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
 def _operator_session() -> OperatorSession:
     try:
         return OperatorSessionStore.from_env().get()
@@ -268,3 +323,18 @@ def _agent_prompt_payload(result: AgentPromptResult) -> dict[str, Any]:
     if result.run_result is not None:
         payload["run"] = provider_run_payload(result.run_result)
     return payload
+
+
+def _recovery_reason(value: str) -> Any:
+    allowed = {"auth_expired", "provider_unavailable", "sandbox_failed", "stale_endpoint"}
+    if value not in allowed:
+        raise typer.BadParameter(
+            "reason must be auth_expired, provider_unavailable, sandbox_failed, or stale_endpoint"
+        )
+    return value
+
+
+def _recovery_action(value: str) -> Any:
+    if value not in {"reconnect", "resume"}:
+        raise typer.BadParameter("action must be reconnect or resume")
+    return value
