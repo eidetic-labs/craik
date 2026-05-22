@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.runtime.auth import AuthProfileStore
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.auth.pool import CredentialPool
 
 runner = CliRunner()
@@ -14,6 +16,7 @@ runner = CliRunner()
 
 def test_auth_setup_openai_writes_profile_and_pool(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_session(home)
     env = {"CRAIK_HOME": str(home), "CRAIK_OPENAI_API_KEY": "craik-test-not-a-real-key"}
 
     result = runner.invoke(app, ["auth", "setup", "openai"], env=env)
@@ -30,7 +33,9 @@ def test_auth_setup_openai_writes_profile_and_pool(tmp_path: Path) -> None:
 
 
 def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) -> None:
-    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    home = tmp_path / "home"
+    _put_session(home)
+    env = {"CRAIK_HOME": str(home)}
 
     anthropic = runner.invoke(app, ["auth", "setup", "anthropic", "--dry-run"], env=env)
     gemini = runner.invoke(app, ["auth", "setup", "gemini", "--dry-run"], env=env)
@@ -49,7 +54,9 @@ def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) 
 
 
 def test_auth_setup_secret_ref_output_is_redacted(tmp_path: Path) -> None:
-    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    home = tmp_path / "home"
+    _put_session(home)
+    env = {"CRAIK_HOME": str(home)}
 
     result = runner.invoke(
         app,
@@ -75,7 +82,9 @@ def test_auth_setup_secret_ref_output_is_redacted(tmp_path: Path) -> None:
 def test_auth_setup_rejects_unsafe_local_base_url_and_missing_file_secret_root(
     tmp_path: Path,
 ) -> None:
-    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    home = tmp_path / "home"
+    _put_session(home)
+    env = {"CRAIK_HOME": str(home)}
 
     unsafe = runner.invoke(
         app,
@@ -101,3 +110,17 @@ def test_auth_setup_rejects_unsafe_local_base_url_and_missing_file_secret_root(
     assert missing_root.exit_code == 2
     assert "secrets" in missing_root.output
     assert "required" in missing_root.output
+
+
+def _put_session(home: Path) -> None:
+    session = OperatorSession(
+        subject="operator-123",
+        email="operator@example.test",
+        display_name="Operator",
+        groups=["platform"],
+        issuer="https://issuer.example.test",
+        id_token_jti="token-1",
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+        refresh_token_ref="operator-session.refresh_token",
+    )
+    OperatorSessionStore(home).put(session, refresh_token="refresh-token")

@@ -20,6 +20,7 @@ from craik.cli import (
     runners_app,
     task_app,
 )
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import Priority, TaskMode
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.paths import CraikPaths, ensure_craik_home, resolve_craik_paths
@@ -148,6 +149,7 @@ def prompt_compile(
     ] = None,
 ) -> None:
     """Compile a deterministic policy-aware prompt for a task and runner."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -234,6 +236,7 @@ def project_add(
     ] = None,
 ) -> None:
     """Register a Git project."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -257,6 +260,7 @@ def project_add(
 @project_app.command("list")
 def project_list() -> None:
     """List registered projects."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -272,6 +276,7 @@ def project_list() -> None:
 @project_app.command("show")
 def project_show(project: str) -> None:
     """Show one registered project by id or name."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -336,6 +341,7 @@ def task_create(
     ] = None,
 ) -> None:
     """Create a task request for a registered project."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -376,6 +382,7 @@ def task_create(
 @intent_app.command("show")
 def intent_show(intent_or_task_id: str) -> None:
     """Show one persisted intent lock by intent lock id or task id."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -417,6 +424,7 @@ def case_build(
     ] = None,
 ) -> None:
     """Build and persist a deterministic case file for a task."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -448,6 +456,7 @@ def _github_adapter() -> GitHubReadAdapter:
 @case_app.command("show")
 def case_show(case_or_task_id: str) -> None:
     """Show one persisted case file by case id or task id."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

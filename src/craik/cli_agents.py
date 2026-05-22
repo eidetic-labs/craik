@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 import typer
 
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.cli_run_support import provider_run_payload
 from craik.contracts.models import AgentSessionState
 from craik.runtime.agents import (
@@ -22,11 +23,7 @@ from craik.runtime.agents import (
     start_agent_session,
     stop_agent_session,
 )
-from craik.runtime.auth.operator import (
-    OperatorSession,
-    OperatorSessionNotFoundError,
-    OperatorSessionStore,
-)
+from craik.runtime.auth.operator import OperatorSessionStore
 from craik.runtime.store import LocalStore
 
 agent_app = typer.Typer(help="Launch and manage persistent Craik agent sessions.")
@@ -67,7 +64,8 @@ def agent_launch(
     ] = None,
 ) -> None:
     """Launch a foreground persistent agent session control record."""
-    operator = _operator_session()
+    operator_subject = operator_identity_or_fail()
+    operator = OperatorSessionStore.from_env().get()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -79,7 +77,7 @@ def agent_launch(
             store,
             session_id=resolved_session_id,
             project_id=project_id,
-            operator_subject=operator.subject,
+            operator_subject=operator_subject,
             operator_issuer=operator.issuer,
             provider_id=provider_id,
             model_id=model_id,
@@ -104,7 +102,7 @@ def agent_launch(
 @agent_app.command("list")
 def agent_list() -> None:
     """List persisted persistent agent sessions."""
-    _operator_session()
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -122,7 +120,7 @@ def agent_list() -> None:
 @agent_app.command("status")
 def agent_status(session_id: Annotated[str, typer.Argument(help="Agent session id.")]) -> None:
     """Inspect one persistent agent session."""
-    _operator_session()
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -144,7 +142,7 @@ def agent_stop(
     ] = "stopped by operator",
 ) -> None:
     """Stop an active persistent agent session."""
-    _operator_session()
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -174,7 +172,7 @@ def agent_restart(
     ] = None,
 ) -> None:
     """Restart a stopped or failed persistent agent session."""
-    _operator_session()
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -213,14 +211,15 @@ def agent_prompt(
     ] = None,
 ) -> None:
     """Send one provider-backed prompt to an active persistent agent session."""
-    operator = _operator_session()
+    operator_subject = operator_identity_or_fail()
+    operator = OperatorSessionStore.from_env().get()
     store = LocalStore.from_env()
     try:
         store.initialize()
         result = execute_agent_prompt(
             store,
             session_id=session_id,
-            operator_subject=operator.subject,
+            operator_subject=operator_subject,
             operator_issuer=operator.issuer,
             prompt=prompt,
             allow_fixture_action=allow_fixture_action,
@@ -258,7 +257,7 @@ def agent_recover(
     ] = None,
 ) -> None:
     """Mark or perform a persistent agent recovery transition."""
-    _operator_session()
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -285,13 +284,6 @@ def agent_recover(
     finally:
         store.close()
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-
-
-def _operator_session() -> OperatorSession:
-    try:
-        return OperatorSessionStore.from_env().get()
-    except OperatorSessionNotFoundError:
-        raise typer.BadParameter("active operator session required; run craik auth login") from None
 
 
 def _session_payload(state: AgentSessionState) -> dict[str, Any]:

@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import agent_message_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import AgentMessageKind
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.store import LocalStore
@@ -53,6 +54,7 @@ def agent_message_send(
     ] = None,
 ) -> None:
     """Send a receipt-backed message from one authenticated run/role to another agent."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -87,6 +89,7 @@ def agent_message_receive(
     received_by: Annotated[str, typer.Option("--received-by", help="Receiving agent id.")],
 ) -> None:
     """Mark an agent mailbox message as received and append a receipt."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

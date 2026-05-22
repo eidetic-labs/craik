@@ -41,6 +41,7 @@ def skills_list(
     ] = None,
 ) -> None:
     """List installed skill packages."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -71,6 +72,7 @@ def skills_disable(
 @skills_app.command("show")
 def skills_show(package_id: Annotated[str, typer.Argument(help="Skill package id.")]) -> None:
     """Show one installed skill package."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()

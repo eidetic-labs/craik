@@ -12,6 +12,7 @@ import typer
 from pydantic import ValidationError
 
 from craik.cli import app, auth_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.auth import (
     AuthProfile,
     AuthProfileNotFoundError,
@@ -46,6 +47,7 @@ from craik.runtime.providers.provider_url_safety import (
 @auth_app.command("list")
 def auth_list() -> None:
     """List configured auth profiles."""
+    operator_identity_or_fail()
     store = AuthProfileStore.from_env()
     payload = [_profile_payload(profile) for profile in store.list()]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
@@ -100,6 +102,7 @@ def auth_add(
     ] = False,
 ) -> None:
     """Add or replace an auth profile."""
+    operator_identity_or_fail()
     try:
         credential_kind = CredentialKind(kind)
     except ValueError:
@@ -202,6 +205,7 @@ def auth_setup(
     ] = False,
 ) -> None:
     """Guided setup for provider authentication profiles."""
+    operator_identity_or_fail()
     try:
         resolved = guided_provider_defaults(provider)
         profile = build_guided_auth_profile(
@@ -241,6 +245,7 @@ def auth_setup(
 @auth_app.command("remove")
 def auth_remove(profile_id: str) -> None:
     """Remove an auth profile."""
+    operator_identity_or_fail()
     AuthProfileStore.from_env().delete(profile_id)
     typer.echo(json.dumps({"removed": profile_id}, indent=2, sort_keys=True))
 
@@ -248,6 +253,7 @@ def auth_remove(profile_id: str) -> None:
 @auth_app.command("test")
 def auth_test(profile_id: str) -> None:
     """Check whether an auth profile can resolve credential material."""
+    operator_identity_or_fail()
     store = AuthProfileStore.from_env()
     try:
         profile = store.get(profile_id)
@@ -277,6 +283,7 @@ def auth_approve(
     ] = "operator:local",
 ) -> None:
     """Approve first live use of an auth profile for a run."""
+    operator_identity_or_fail()
     try:
         profile = AuthProfileStore.from_env().approve(
             profile_id,
@@ -305,6 +312,7 @@ def auth_grant(
     ] = "operator:local",
 ) -> None:
     """Grant an operator subject or group access to an auth profile."""
+    operator_identity_or_fail()
     try:
         profile = AuthProfileStore.from_env().grant_authorization(
             profile_id,
@@ -320,6 +328,7 @@ def auth_grant(
 @auth_app.command("status")
 def auth_status() -> None:
     """Show auth profile health and last-use status."""
+    operator_identity_or_fail()
     store = AuthProfileStore.from_env()
     payload = [
         {
@@ -460,11 +469,8 @@ def _profile_payload(profile: AuthProfile) -> dict[str, Any]:
         "last_status": profile.last_status,
         "authorized_operators": profile.authorized_operators,
         "authorized_operator_groups": profile.authorized_operator_groups,
-        "authorization_receipt_ids": [
-            receipt.id for receipt in profile.authorization_provenance
-        ],
+        "authorization_receipt_ids": [receipt.id for receipt in profile.authorization_provenance],
     }
-
 
 def _masked_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     masked: dict[str, Any] = {}
@@ -475,7 +481,6 @@ def _masked_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         else:
             masked[key] = value
     return masked
-
 
 def _operator_session_payload(session: Any) -> dict[str, Any]:
     return {
@@ -488,7 +493,6 @@ def _operator_session_payload(session: Any) -> dict[str, Any]:
         "expires_at": session.expires_at.isoformat(),
         "refresh_token_ref": session.refresh_token_ref,
     }
-
 
 def _oidc_allow_loopback_http_from_env() -> bool:
     return os.environ.get("CRAIK_OIDC_ALLOW_LOOPBACK_HTTP") == "1"

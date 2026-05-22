@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import task_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import Priority, RunnerMode, TaskMode
 from craik.runtime.store import LocalStore
 from craik.runtime.work.coordination.handoff_consumption import (
@@ -79,6 +80,7 @@ def task_resume(
     ] = None,
 ) -> None:
     """Consume a handoff into a new task, case file, and pending run."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

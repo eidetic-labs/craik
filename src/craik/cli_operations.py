@@ -9,6 +9,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import contradictions_app, graph_app, memory_app, policy_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import (
     ContradictionStatus,
     MemoryScope,
@@ -71,6 +72,7 @@ def contradiction_open(
     ] = None,
 ) -> None:
     """Open and persist a local contradiction report."""
+    operator_identity_or_fail()
     if len(fact) < 2:
         raise typer.BadParameter("at least two --fact values are required")
     store = LocalStore.from_env()
@@ -104,6 +106,7 @@ def contradiction_list(
     ] = None,
 ) -> None:
     """List local contradiction reports."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -121,6 +124,7 @@ def contradiction_list(
 @contradictions_app.command("show")
 def contradiction_show(report_id: str) -> None:
     """Show one local contradiction report and linked evidence."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -147,6 +151,7 @@ def graph_export(
     ] = None,
 ) -> None:
     """Export the local work graph as deterministic JSON."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -199,6 +204,7 @@ def memory_propose(
     ] = "add",
 ) -> None:
     """Create a reviewable local memory proposal."""
+    operator_identity_or_fail()
     evidence = evidence_reference(
         task_id=task_id,
         source=evidence_source,
@@ -241,6 +247,7 @@ def memory_list(
     ] = None,
 ) -> None:
     """List local memory proposals."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -255,6 +262,7 @@ def memory_list(
 @memory_app.command("show")
 def memory_show(proposal_id: str) -> None:
     """Show one local memory proposal."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -282,6 +290,7 @@ def memory_approve(
     ] = "Evidence reviewed.",
 ) -> None:
     """Approve a local memory proposal for local search."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -313,6 +322,7 @@ def memory_reject(
     ] = "Rejected during review.",
 ) -> None:
     """Reject a local memory proposal."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -334,6 +344,7 @@ def memory_reject(
 @memory_app.command("search")
 def memory_search(query: str) -> None:
     """Search approved local memory facts."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -348,6 +359,7 @@ def memory_search(query: str) -> None:
 @memory_app.command("diff")
 def memory_diff(task_id: str) -> None:
     """Print a run-scoped memory diff for local proposal activity."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -363,6 +375,7 @@ def memory_diff(task_id: str) -> None:
 @memory_app.command("preview")
 def memory_preview(task_id: str) -> None:
     """Preview local memory impact before promotion or direct writes."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

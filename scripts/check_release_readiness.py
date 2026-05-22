@@ -45,6 +45,31 @@ STORE_WRITER_EXEMPTIONS = {
     },
 }
 
+AUTH_EXEMPT_CLI_COMMANDS = {
+    ("src/craik/cli_auth.py", "login"): (
+        "bootstrap command; it creates the operator session required by auth-gated commands"
+    ),
+    ("src/craik/cli_auth.py", "logout"): (
+        "bootstrap command; operators must be able to clear a stale or missing session"
+    ),
+    ("src/craik/cli_auth.py", "whoami"): (
+        "session introspection command; it reports missing sessions without requiring one first"
+    ),
+    ("src/craik/cli_demos.py", "demo_persistent_agent"): (
+        "deterministic demo uses fixture identity and is hardened separately "
+        "from real agent commands"
+    ),
+    ("src/craik/cli_demos.py", "demo_stigmem_docs"): (
+        "onboarding demo uses fixture-local state before an operator session exists"
+    ),
+    ("src/craik/cli_onboarding.py", "onboard"): (
+        "first-run bootstrap command that may execute before operator login is configured"
+    ),
+    ("src/craik/cli_operations.py", "policy_test"): (
+        "deterministic release/security baseline run by CI before operator login exists"
+    ),
+}
+
 
 def main() -> int:
     version = _project_version()
@@ -129,6 +154,8 @@ def _cli_auth_coverage_failures() -> list[str]:
                 continue
             if not _touches_local_store(node):
                 continue
+            if _is_auth_exempt(path, node.name):
+                continue
             if not _calls_operator_auth(node):
                 failures.append(
                     f"{path.relative_to(ROOT)}: command `{node.name}` touches LocalStore "
@@ -141,10 +168,14 @@ def _cli_command_paths() -> list[Path]:
     return sorted(
         {
             path
-            for pattern in ("cli.py", "cli_operator*.py")
+            for pattern in ("cli.py", "cli_*.py")
             for path in (ROOT / "src/craik").glob(pattern)
         }
     )
+
+
+def _is_auth_exempt(path: Path, command_name: str) -> bool:
+    return (path.relative_to(ROOT).as_posix(), command_name) in AUTH_EXEMPT_CLI_COMMANDS
 
 
 def _has_command_decorator(node: ast.FunctionDef) -> bool:

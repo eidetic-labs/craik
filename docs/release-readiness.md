@@ -43,6 +43,7 @@ milestone before release prep begins.
 <div><dt>Persistent launch demo</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/744">#744</a> · deterministic launch, prompt, receipts, handoff, and status demo</dd></div>
 <div><dt>Security and sandbox boundaries</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/745">#745</a> · persistent-agent state boundaries, redacted inspection surfaces, environment receipt links, and denied side-effect receipts</dd></div>
 <div><dt>Readiness docs reconciliation</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/756">#756</a> · roadmap and release-readiness docs reflect the closed v0.9.0 goal workflow</dd></div>
+<div><dt>CLI auth coverage remediation</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/759">#759</a> · release-readiness auth guard now scans every <code>cli_*.py</code> module and stateful CLI commands require the canonical operator session check, with explicit bootstrap/demo/CI policy-test exemptions</dd></div>
 
 </div>
 
@@ -91,7 +92,7 @@ uv run python scripts/check_doc_links.py
 uv run python scripts/check_public_docs_hygiene.py
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_changed_file_strictness.py
-uv run pytest tests/test_provider_setup.py tests/test_provider_gemini.py tests/test_local_model_presets.py tests/test_agent_sessions.py tests/test_provider_certification.py tests/test_cli_agents.py tests/test_agent_demo.py tests/test_environment_receipts.py tests/test_sandbox_policy_boundaries.py -q
+uv run pytest tests/test_provider_setup.py tests/test_provider_gemini.py tests/test_local_model_presets.py tests/test_agent_sessions.py tests/test_provider_certification.py tests/test_cli_agents.py tests/test_cli_operator_auth.py tests/test_release_readiness_guards.py tests/test_agent_demo.py tests/test_environment_receipts.py tests/test_sandbox_policy_boundaries.py -q
 uv run pytest
 ```
 

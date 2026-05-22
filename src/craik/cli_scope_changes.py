@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import scope_change_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import ScopeChangeProtocolDecision
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.store import LocalStore
@@ -40,6 +41,7 @@ def scope_change_decide(
     ] = None,
 ) -> None:
     """Resolve a pending scope-change request through the explicit protocol."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

@@ -119,6 +119,7 @@ def plugin_grants_list(
     plugin: Annotated[str | None, typer.Option("--plugin", help="Plugin descriptor id.")] = None,
 ) -> None:
     """List plugin capability grants."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -135,6 +136,7 @@ def plugin_receipts_list(
     plugin: Annotated[str | None, typer.Option("--plugin", help="Plugin descriptor id.")] = None,
 ) -> None:
     """List plugin receipts."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()
