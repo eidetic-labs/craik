@@ -1,21 +1,22 @@
 # Doctor Diagnostics
 
-<p className="craik-meta"><span>4 min read</span><span>For operators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For operators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
 **What you'll do**
 
 Run `craik doctor` to health-check your Craik home, identity, credentials,
-and gateway posture — without making a single live API call, writing a
-receipt, or starting a daemon. By the end, you'll know exactly what's
-configured, what's broken, and what to fix first.
+model selection, gateway posture, channel pairings, endpoint safety, and
+local file permissions — without making a live API call, writing a receipt,
+or starting a daemon. By the end, you'll know exactly what's configured,
+what's broken, and what to fix first.
 
 </div>
 
 <div className="craik-keypoint">
 
-**Doctor is read-only**
+**Doctor is read-only unless you ask for fixes**
 
 `craik doctor` inspects existing local state and environment variables.
 It does **not** create `CRAIK_HOME`, initialize a database, contact
@@ -23,6 +24,10 @@ Stigmem, start a gateway, or write receipts. Run it any time without
 worrying about side effects. Because those diagnostics read local
 operator state, the CLI requires an active operator session before it
 prints the report.
+
+`craik doctor --fix` still defaults to a dry run. Use `--apply` for safe
+supported fixes, and add `--yes` only when you intend to confirm an unsafe
+posture change such as rebinding a public gateway config to localhost.
 
 </div>
 
@@ -56,6 +61,14 @@ prints the report.
 
 ```bash title="One command, structured output"
 craik doctor
+```
+
+```bash title="Preview supported fixes"
+craik doctor --fix
+```
+
+```bash title="Apply safe fixes only"
+craik doctor --fix --apply
 ```
 
 Each check reports a status:
@@ -118,6 +131,21 @@ Each check reports a status:
 </div>
 
 <div>
+<h4><code>operator_session</code></h4>
+<p>Whether an active operator session exists for commands that inspect local runtime state.</p>
+</div>
+
+<div>
+<h4><code>provider_auth</code></h4>
+<p>Whether at least one provider auth profile is usable for live provider calls.</p>
+</div>
+
+<div>
+<h4><code>model_availability</code></h4>
+<p>Whether an active model is configured through the environment or model settings.</p>
+</div>
+
+<div>
 <h4><code>gateway_config</code></h4>
 <p>Whether a default gateway config is stored. Required before <code>craik setup --enable-gateway</code> can persist a public bind.</p>
 </div>
@@ -125,6 +153,41 @@ Each check reports a status:
 <div>
 <h4><code>gateway_prerequisites</code></h4>
 <p>Whether daemon-mode prerequisites are present (ports, binaries, dependencies).</p>
+</div>
+
+<div>
+<h4><code>gateway_status</code></h4>
+<p>Whether a recent gateway runtime state exists and whether it is running.</p>
+</div>
+
+<div>
+<h4><code>channel_pairing</code></h4>
+<p>Whether channel identity records exist and at least one external identity is paired.</p>
+</div>
+
+<div>
+<h4><code>local_endpoint_safety</code></h4>
+<p>Whether provider profile metadata points plaintext HTTP at a non-local endpoint.</p>
+</div>
+
+<div>
+<h4><code>secure_credential_store</code></h4>
+<p>Whether file-backed auth profile state is owner-only on POSIX systems.</p>
+</div>
+
+<div>
+<h4><code>file_permissions</code></h4>
+<p>Whether Craik home paths avoid group/world writable permissions.</p>
+</div>
+
+<div>
+<h4><code>public_bind_security</code></h4>
+<p>Whether gateway configs avoid public binds, or carry explicit policy when public ingress is configured.</p>
+</div>
+
+<div>
+<h4><code>stale_sessions_locks</code></h4>
+<p>Whether active agent sessions look stale and how many intent locks are recorded.</p>
 </div>
 
 <div>
@@ -206,6 +269,11 @@ craik doctor --json | jq -e 'all(.checks[]; .status != "fail")'
 
 The `--json` output is stable across releases — the keys are part of the
 public contract.
+
+`craik doctor --fix --dry-run` is the automation-friendly preflight for
+repair planning. It returns a `fix.actions[]` list with `planned`,
+`skipped`, or `requires_confirmation` status values and does not write
+state.
 
 ## What's next
 

@@ -39,6 +39,10 @@ within the `0.x.0` stability expectations described in
   `craik approvals list|show|approve|deny`, with dashboard queue
   payloads, TUI approval counts, desktop approval notification context,
   decision receipts, retry-path linkage, and approval guide docs.
+- v0.11.0 product-grade diagnostics and update workflow through
+  `craik doctor --fix`, explicit safe/unsafe fix planning, expanded
+  operator/provider/model/gateway/channel/security posture checks,
+  and `craik update --check` automation output.
 
 ### Changed
 

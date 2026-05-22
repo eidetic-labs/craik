@@ -15,6 +15,7 @@ from craik import __version__
 from craik.cli_agents import agent_app
 from craik.cli_approvals import approvals_app
 from craik.cli_channels import channels_app
+from craik.cli_diagnostics import doctor_command, update_command
 from craik.cli_gateway import gateway_app
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
@@ -34,7 +35,6 @@ from craik.runtime.dashboard import (
     dashboard_preview_payload,
     run_dashboard_server,
 )
-from craik.runtime.doctor import run_doctor
 from craik.runtime.gateway import (
     default_gateway_config,
     gateway_configured_state,
@@ -45,7 +45,6 @@ from craik.runtime.paths import (
     resolve_craik_home,
     resolve_craik_paths,
 )
-from craik.runtime.projects.update_guidance import update_guidance_payload
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
 from craik.runtime.shell.tui import run_tui
 from craik.runtime.store import DATABASE_NAME, LocalStore
@@ -117,6 +116,8 @@ app.add_typer(references_app, name="references")
 operator_app = typer.Typer(help="Inspect read-only operator surface state.")
 app.add_typer(operator_app, name="operator")
 app.add_typer(gateway_app, name="gateway")
+app.command("doctor")(doctor_command)
+app.command("update")(update_command)
 model_app = typer.Typer(help="Inspect and select active model routing.")
 app.add_typer(model_app, name="model")
 session_app = typer.Typer(help="Inspect and manage persistent Craik sessions.")
@@ -283,29 +284,6 @@ def setup_command(
     finally:
         store.close()
 
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-
-
-@app.command("doctor")
-def doctor_command() -> None:
-    """Run read-only diagnostics for local and gateway readiness."""
-    _operator_identity()
-    paths = resolve_craik_paths()
-    payload = run_doctor(paths, env=dict(os.environ))
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-
-
-@app.command("update")
-def update_command(
-    check: Annotated[
-        bool,
-        typer.Option("--check", help="Check for update guidance without changing installation."),
-    ] = False,
-) -> None:
-    """Print safe update guidance without modifying the installation."""
-    payload = update_guidance_payload(installed_version=package_version())
-    if check:
-        payload["mode"] = "check"
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 

@@ -31,7 +31,9 @@ def test_doctor_reports_missing_home_without_creating_it(tmp_path) -> None:
 
 
 def test_doctor_reports_pass_with_setup_and_memory_config(tmp_path) -> None:
-    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    _put_operator_session(home)
     store = LocalStore.from_paths(paths)
     try:
         store.initialize()
@@ -45,7 +47,7 @@ def test_doctor_reports_pass_with_setup_and_memory_config(tmp_path) -> None:
     finally:
         store.close()
 
-    assert payload["status"] == "pass"
+    assert payload["status"] == "warning"
     checks = {item["name"]: item for item in payload["checks"]}
     assert checks["local_home"]["status"] == "pass"
     assert checks["local_store"]["status"] == "pass"
@@ -54,6 +56,10 @@ def test_doctor_reports_pass_with_setup_and_memory_config(tmp_path) -> None:
     assert checks["gateway_prerequisites"]["status"] == "pass"
     assert checks["policy"]["status"] == "pass"
     assert checks["auth_profiles"]["status"] == "pass"
+    assert checks["operator_session"]["status"] == "pass"
+    assert checks["secure_credential_store"]["status"] == "pass"
+    assert checks["provider_auth"]["status"] == "warning"
+    assert checks["model_availability"]["status"] == "warning"
     assert payload["auth_profiles"] == []
 
 
@@ -89,6 +95,7 @@ def test_doctor_reports_auth_profile_health(tmp_path, monkeypatch) -> None:
             "last_used_at": None,
             "last_status": "unknown",
             "health": {"status": "ok", "detail": None, "expires_at": None},
+            "metadata": {"base_url": None},
         }
     ]
 
@@ -137,6 +144,81 @@ def test_doctor_cli_requires_operator_session_before_state_read(tmp_path) -> Non
     assert setup.exit_code == 0
     assert result.exit_code != 0
     assert "active operator session required; run craik auth login" in result.output
+
+
+def test_doctor_fixture_matrix_includes_v011_checks(tmp_path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    _put_operator_session(home)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(
+            default_gateway_config(
+                project_id="project_gateway",
+                policy_envelope_id="policy_gateway",
+            ).model_copy(update={"enabled": True})
+        )
+        payload = run_doctor(
+            paths,
+            env={"CRAIK_STIGMEM_URL": "http://127.0.0.1:18765", "CRAIK_MODEL": "openai/gpt-5"},
+        )
+    finally:
+        store.close()
+
+    checks = {item["name"]: item for item in payload["checks"]}
+
+    assert checks["operator_session"]["status"] == "pass"
+    assert checks["provider_auth"]["status"] == "warning"
+    assert checks["model_availability"]["status"] == "pass"
+    assert checks["gateway_status"]["status"] == "warning"
+    assert checks["channel_pairing"]["status"] == "warning"
+    assert checks["local_endpoint_safety"]["status"] == "pass"
+    assert checks["secure_credential_store"]["status"] == "pass"
+    assert checks["file_permissions"]["status"] == "pass"
+    assert checks["public_bind_security"]["status"] == "pass"
+    assert checks["stale_sessions_locks"]["status"] == "pass"
+
+
+def test_doctor_fix_dry_run_does_not_create_state(tmp_path) -> None:
+    home = tmp_path / "missing-home"
+
+    payload = run_doctor(
+        resolve_craik_paths({"CRAIK_HOME": str(home)}),
+        env={},
+        fix=True,
+        dry_run=True,
+    )
+
+    assert payload["fix"]["dry_run"] is True
+    assert {item["name"] for item in payload["fix"]["actions"]} >= {
+        "create_home",
+        "initialize_store",
+    }
+    assert not home.exists()
+
+
+def test_doctor_unsafe_fix_requires_confirmation(tmp_path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    _put_operator_session(home)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(
+            default_gateway_config(policy_envelope_id="policy_gateway").model_copy(
+                update={"bind_host": "0.0.0.0"}
+            )
+        )
+    finally:
+        store.close()
+
+    unconfirmed = run_doctor(paths, env={}, fix=True, dry_run=True)
+    confirmed = run_doctor(paths, env={}, fix=True, dry_run=True, confirm_unsafe=True)
+
+    assert unconfirmed["fix"]["actions"][-1]["status"] == "requires_confirmation"
+    assert unconfirmed["fix"]["actions"][-1]["unsafe"] is True
+    assert confirmed["fix"]["actions"][-1]["status"] == "planned"
 
 
 def _put_operator_session(home: Path) -> None:

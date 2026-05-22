@@ -685,11 +685,17 @@ craik desktop update-check
 
 ## `craik doctor`
 
-Run read-only diagnostics for local and gateway readiness.
+Run diagnostics for local and gateway readiness.
 
 ```text
-craik doctor
+craik doctor [OPTIONS]
 ```
+
+Options:
+
+- `--fix`: Plan or apply narrow supported fixes.; default `false`
+- `--dry-run, --apply`: Preview fixes without writing state, or apply supported safe fixes.; default `true`
+- `--yes`: Confirm unsafe fix actions such as public-bind rebinding.; default `false`
 
 ## `craik gateway`
 

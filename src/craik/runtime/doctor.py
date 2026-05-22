@@ -1,8 +1,7 @@
-"""Read-only diagnostics for Craik local and gateway readiness."""
+"""Diagnostics and narrow fix planning for Craik local readiness."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from craik.contracts.models import GatewayConfig
@@ -13,39 +12,50 @@ from craik.runtime.auth import (
     CredentialStatus,
 )
 from craik.runtime.auth.sources import source_for_auth_profile
+from craik.runtime.diagnostics.doctor_checks import (
+    channel_pairing_check,
+    file_permissions_check,
+    gateway_status_check,
+    local_endpoint_safety_check,
+    model_availability_check,
+    operator_session_check,
+    provider_auth_check,
+    public_bind_security_check,
+    secure_credential_store_check,
+    stale_sessions_locks_check,
+)
+from craik.runtime.diagnostics.doctor_fixes import doctor_fixes
+from craik.runtime.diagnostics.doctor_types import DiagnosticCheck, DiagnosticStatus
 from craik.runtime.paths import CraikPaths
 from craik.runtime.store import DATABASE_NAME, LocalStore, LocalStoreError
 
-DiagnosticStatus = str
 
-
-@dataclass(frozen=True)
-class DiagnosticCheck:
-    """One read-only diagnostic check result."""
-
-    name: str
-    status: DiagnosticStatus
-    summary: str
-    action: str | None = None
-
-    def to_payload(self) -> dict[str, str | None]:
-        """Return a JSON-ready diagnostic payload."""
-        return {
-            "name": self.name,
-            "status": self.status,
-            "summary": self.summary,
-            "action": self.action,
-        }
-
-
-def run_doctor(paths: CraikPaths, *, env: dict[str, str]) -> dict[str, object]:
-    """Run read-only diagnostics without creating local state."""
+def run_doctor(
+    paths: CraikPaths,
+    *,
+    env: dict[str, str],
+    fix: bool = False,
+    dry_run: bool = True,
+    confirm_unsafe: bool = False,
+) -> dict[str, object]:
+    """Run diagnostics and optionally execute narrow, explicit fixes."""
+    fixes = doctor_fixes(
+        paths,
+        dry_run=dry_run,
+        confirm_unsafe=confirm_unsafe,
+    ) if fix else []
     auth_profile_checks, auth_profile_payloads = _auth_profile_checks(paths)
     checks = [
         _home_check(paths),
         *_store_checks(paths),
+        operator_session_check(paths),
         _memory_backend_check(env),
+        model_availability_check(paths, env),
         *auth_profile_checks,
+        provider_auth_check(auth_profile_payloads),
+        secure_credential_store_check(paths),
+        file_permissions_check(paths),
+        local_endpoint_safety_check(auth_profile_payloads),
     ]
     store = _open_existing_store(paths)
     if store is None:
@@ -75,19 +85,54 @@ def run_doctor(paths: CraikPaths, *, env: dict[str, str]) -> dict[str, object]:
                     summary="Policy readiness cannot be checked without gateway configuration.",
                     action="Run craik setup or persist a gateway policy envelope.",
                 ),
+                DiagnosticCheck(
+                    name="gateway_status",
+                    status="warning",
+                    summary="Gateway status cannot be checked without the local store.",
+                    action="Run craik setup.",
+                ),
+                DiagnosticCheck(
+                    name="channel_pairing",
+                    status="warning",
+                    summary="Channel pairings cannot be checked without the local store.",
+                    action="Run craik setup before enabling channel adapters.",
+                ),
+                DiagnosticCheck(
+                    name="public_bind_security",
+                    status="warning",
+                    summary="Public bind posture cannot be checked without gateway config.",
+                    action="Run craik setup before exposing gateway ingress.",
+                ),
+                DiagnosticCheck(
+                    name="stale_sessions_locks",
+                    status="warning",
+                    summary="Session and lock state cannot be checked without the local store.",
+                    action="Run craik setup.",
+                ),
             ]
         )
     else:
         try:
             config = store.get_gateway_config("gateway_default")
             checks.extend(_gateway_checks(config))
+            checks.append(gateway_status_check(store))
+            checks.append(channel_pairing_check(store))
+            checks.append(public_bind_security_check(store))
+            checks.append(stale_sessions_locks_check(store))
         finally:
             store.close()
-    return {
+    payload: dict[str, object] = {
         "status": _overall_status(checks),
         "checks": [check.to_payload() for check in checks],
         "auth_profiles": auth_profile_payloads,
     }
+    if fix:
+        payload["fix"] = {
+            "dry_run": dry_run,
+            "unsafe_confirmed": confirm_unsafe,
+            "actions": [item.to_payload() for item in fixes],
+        }
+    return payload
 
 
 def _home_check(paths: CraikPaths) -> DiagnosticCheck:
@@ -220,6 +265,11 @@ def _auth_profile_payload(
         else None,
         "last_status": profile.last_status,
         "health": status.model_dump(mode="json"),
+        "metadata": {
+            "base_url": profile.metadata.get("base_url")
+            if isinstance(profile.metadata.get("base_url"), str)
+            else None,
+        },
     }
 
 

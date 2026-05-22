@@ -1,6 +1,6 @@
 # Updating Craik
 
-<p className="craik-meta"><span>2 min read</span><span>For operators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>2 min read</span><span>For operators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -28,6 +28,12 @@ itself or migrate local state.
 craik update
 ```
 
+For automation, use check mode:
+
+```sh
+craik update --check
+```
+
 Output covers:
 
 <div className="craik-grid">
@@ -37,6 +43,7 @@ Output covers:
 <div><h4>Local store migration compatibility</h4></div>
 <div><h4>Contract compatibility</h4></div>
 <div><h4>Manual update steps</h4></div>
+<div><h4>Mode</h4><p><code>check</code> for automation, <code>manual</code> for operator guidance.</p></div>
 <div><h4>Boundaries</h4><p>For what Craik will not do automatically.</p></div>
 
 </div>
