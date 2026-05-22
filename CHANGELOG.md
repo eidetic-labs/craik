@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.8.0 — 2026-05-22
+
 ### Added
 
 - v0.8.0 gateway/channel persistence helpers for adapter contracts,
