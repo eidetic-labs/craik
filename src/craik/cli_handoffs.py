@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import handoff_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import RunStatus
 from craik.runtime.store import LocalStore
 from craik.runtime.work.handoffs import (
@@ -81,6 +82,7 @@ def handoff_create(
     ] = None,
 ) -> None:
     """Create a structured handoff for a task."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -124,6 +126,7 @@ def handoff_show(
     ] = False,
 ) -> None:
     """Show one persisted handoff by handoff id or task id."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

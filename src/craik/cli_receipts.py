@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.store import LocalStore
 from craik.runtime.work.receipts import ReceiptNotFoundError, ReceiptStore
 
@@ -29,6 +30,7 @@ def receipts_list(
     ] = None,
 ) -> None:
     """Print persisted capability receipts as JSON."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -48,6 +50,7 @@ def receipts_list(
 @receipts_app.command("show")
 def receipts_show(receipt_id: str) -> None:
     """Print one capability receipt by id as JSON."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

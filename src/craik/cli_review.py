@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import review_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.reviewing.critics import record_red_team_finding, record_runtime_critic_finding
 from craik.runtime.store import LocalStore
 
@@ -34,6 +35,7 @@ def review_critic(
     ] = None,
 ) -> None:
     """Persist a reviewable runtime critic finding."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -80,6 +82,7 @@ def review_red_team(
     ] = False,
 ) -> None:
     """Persist a reviewable red-team finding."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

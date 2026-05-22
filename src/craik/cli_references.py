@@ -8,12 +8,14 @@ from typing import Annotated
 import typer
 
 from craik.cli import references_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.store import LocalStore
 
 
 @references_app.command("list")
 def references_list() -> None:
     """List reference integrations."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -28,6 +30,7 @@ def references_verify(
     integration_id: Annotated[str, typer.Argument(help="Reference integration id.")],
 ) -> None:
     """Verify that a reference integration is present and valid."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

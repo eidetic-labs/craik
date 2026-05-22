@@ -904,6 +904,7 @@ def test_project_commands_round_trip_registered_repo(tmp_path) -> None:
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-m", "initial")
     home = tmp_path / "home"
+    _put_operator_session(home)
 
     add = runner.invoke(
         app,
@@ -938,10 +939,12 @@ def test_project_commands_round_trip_registered_repo(tmp_path) -> None:
 
 
 def test_project_add_rejects_non_repo(tmp_path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["project", "add", str(tmp_path)],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -958,6 +961,7 @@ def test_task_and_case_commands_round_trip(tmp_path: Path) -> None:
     _run_git(repo, "add", "README.md", "docs")
     _run_git(repo, "commit", "-m", "initial")
     home = tmp_path / "home"
+    _put_operator_session(home)
 
     project = runner.invoke(
         app,
@@ -1025,6 +1029,7 @@ def test_task_and_case_commands_round_trip(tmp_path: Path) -> None:
 
 def test_contradiction_commands_open_list_show(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
 
     opened = runner.invoke(
         app,
@@ -1147,6 +1152,7 @@ def test_instruction_ingest_cli_runs_pipeline_and_is_idempotent(tmp_path: Path) 
 
 def test_instruction_list_cli_filters_and_prints_json(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     project_id = _seed_instruction_project(tmp_path, home).id
     _put_instruction_proposal(
         home,
@@ -1309,6 +1315,7 @@ def test_onboard_command_prints_runner_readable_project_context(tmp_path: Path) 
     _run_git(repo, "add", "README.md", "docs", "pyproject.toml")
     _run_git(repo, "commit", "-m", "initial")
     home = tmp_path / "home"
+    _put_operator_session(home)
 
     added = runner.invoke(
         app,
@@ -1442,6 +1449,7 @@ def test_intent_show_reports_task_intent_lock(tmp_path: Path) -> None:
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-m", "initial")
     home = tmp_path / "home"
+    _put_operator_session(home)
     runner.invoke(
         app,
         ["project", "add", str(repo), "--name", "Example"],
@@ -1480,10 +1488,12 @@ def test_intent_show_reports_task_intent_lock(tmp_path: Path) -> None:
 
 
 def test_case_build_reports_missing_task(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["case", "build", "task_missing"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -1498,6 +1508,7 @@ def test_handoff_commands_create_and_show_json_and_markdown(tmp_path: Path) -> N
     _run_git(repo, "add", "README.md")
     _run_git(repo, "commit", "-m", "initial")
     home = tmp_path / "home"
+    _put_operator_session(home)
     runner.invoke(
         app,
         ["project", "add", str(repo), "--name", "Example"],
@@ -1611,6 +1622,7 @@ def test_auth_commands_add_list_test_status_and_remove(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     env = {"CRAIK_HOME": str(home)}
     monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-secret")
 
@@ -1664,6 +1676,7 @@ def test_auth_commands_add_list_test_status_and_remove(
 
 def test_auth_oauth_local_cli_profile_tests_against_credentials_file(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     credentials = tmp_path / "credentials.json"
     credentials.write_text(
         json.dumps(
@@ -1707,6 +1720,7 @@ def test_auth_oauth_local_cli_profile_tests_against_credentials_file(tmp_path: P
 
 def test_auth_secret_ref_file_profile_uses_root_relative_secret(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
     secrets_root = tmp_path / "secrets"
     secrets_root.mkdir()
     secret = secrets_root / "anthropic.key"
@@ -1744,6 +1758,8 @@ def test_auth_secret_ref_file_profile_uses_root_relative_secret(tmp_path: Path) 
 
 
 def test_auth_secret_ref_file_profile_rejects_absolute_ref(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     added = runner.invoke(
         app,
         [
@@ -1757,7 +1773,7 @@ def test_auth_secret_ref_file_profile_rejects_absolute_ref(tmp_path: Path) -> No
             "--ref",
             str(tmp_path / "secret.txt"),
         ],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert added.exit_code != 0
@@ -1765,6 +1781,8 @@ def test_auth_secret_ref_file_profile_rejects_absolute_ref(tmp_path: Path) -> No
 
 
 def test_auth_profile_rejects_unsafe_provider_base_url(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     added = runner.invoke(
         app,
         [
@@ -1778,7 +1796,7 @@ def test_auth_profile_rejects_unsafe_provider_base_url(tmp_path: Path) -> None:
             "--base-url",
             "http://169.254.169.254/latest/meta-data/",
         ],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert added.exit_code != 0
@@ -1786,6 +1804,8 @@ def test_auth_profile_rejects_unsafe_provider_base_url(tmp_path: Path) -> None:
 
 
 def test_auth_profile_allows_explicit_local_provider_base_url(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     added = runner.invoke(
         app,
         [
@@ -1800,7 +1820,7 @@ def test_auth_profile_allows_explicit_local_provider_base_url(tmp_path: Path) ->
             "http://localhost:11434/v1",
             "--allow-local-base-url",
         ],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert added.exit_code == 0
@@ -1811,6 +1831,7 @@ def test_auth_profile_allows_explicit_local_provider_base_url(tmp_path: Path) ->
 
 def test_memory_commands_propose_approve_and_search(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    _put_operator_session(home)
 
     proposed = runner.invoke(
         app,
@@ -1908,10 +1929,12 @@ def test_policy_show_can_include_fail_open_receipt() -> None:
 
 
 def test_policy_test_command_prints_passing_report(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["policy", "test"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code == 0
@@ -1971,10 +1994,12 @@ def test_receipts_commands_list_and_show_persisted_receipts(tmp_path: Path) -> N
 
 
 def test_receipts_show_reports_missing_receipt(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["receipts", "show", "receipt_missing"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -2069,10 +2094,12 @@ def test_run_delta_json_resolves_latest_delta_by_run_or_task(tmp_path: Path) -> 
 
 
 def test_run_delta_reports_missing_delta(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
     result = runner.invoke(
         app,
         ["run", "delta", "run_delta_missing"],
-        env={"CRAIK_HOME": str(tmp_path / "home")},
+        env={"CRAIK_HOME": str(home)},
     )
 
     assert result.exit_code != 0
@@ -2398,6 +2425,7 @@ def _run_git(repo, *args: str) -> None:
 
 
 def _seed_receipt(home: Path, receipt: CapabilityReceipt) -> None:
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -2408,6 +2436,7 @@ def _seed_receipt(home: Path, receipt: CapabilityReceipt) -> None:
 
 
 def _seed_provider_task(home: Path, tmp_path: Path) -> str:
+    _put_operator_session(home)
     repo = tmp_path / "provider-repo"
     repo.mkdir()
     (repo / "README.md").write_text("# Provider Repo\n")
@@ -2433,6 +2462,7 @@ def _seed_provider_task(home: Path, tmp_path: Path) -> str:
 
 
 def _seed_run_state(home: Path, *, status: TaskRunStatus) -> None:
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -2477,6 +2507,7 @@ def _seed_run_state(home: Path, *, status: TaskRunStatus) -> None:
 
 
 def _seed_agent_message_state(home: Path) -> None:
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:
@@ -2501,6 +2532,7 @@ def _seed_agent_message_state(home: Path) -> None:
 
 
 def _seed_scope_change_state(home: Path) -> None:
+    _put_operator_session(home)
     paths = ensure_craik_home({"CRAIK_HOME": str(home)})
     store = LocalStore.from_paths(paths)
     try:

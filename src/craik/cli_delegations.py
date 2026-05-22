@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli import delegation_app
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import HumanDelegationKind
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.reviewing.delegations import (
@@ -37,6 +38,7 @@ def delegation_pause(
     owner: Annotated[str | None, typer.Option("--owner", help="Delegation owner.")] = None,
 ) -> None:
     """Pause a run by opening a receipted human delegation."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -87,6 +89,7 @@ def delegation_resolve(
     ] = "accepted",
 ) -> None:
     """Resolve or cancel a human delegation and link the decision receipt to its run."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()

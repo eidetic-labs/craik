@@ -8,13 +8,13 @@ from typing import Annotated, Any
 
 import typer
 
+from craik.cli_operator_auth import operator_identity_or_fail
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload, role_kind
 from craik.contracts.models import (
     RecoverySession,
     RunDelta,
     TaskRun,
 )
-from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.companions.operator_views import (
     RunDeltaSnapshot,
     format_run_delta_view,
@@ -65,6 +65,7 @@ def run_execute(
     ] = None,
 ) -> None:
     """Execute a deterministic provider-backed MVP runner path for a task."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -99,6 +100,7 @@ def run_list(
     ] = None,
 ) -> None:
     """List persisted task runs."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -123,6 +125,7 @@ def run_inspect(
     ] = False,
 ) -> None:
     """Inspect one persisted task run and linked local state."""
+    operator_identity_or_fail()
     _echo_run_inspection(run_id_or_task_id, include_outputs=include_outputs)
 
 
@@ -138,6 +141,7 @@ def run_show(
     ] = False,
 ) -> None:
     """Show one persisted task run and linked local state."""
+    operator_identity_or_fail()
     _echo_run_inspection(run_id_or_task_id, include_outputs=include_outputs)
 
 
@@ -164,6 +168,7 @@ def run_resume(
     ] = 5,
 ) -> None:
     """Resume an interrupted provider-backed run from durable phase boundaries."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -206,6 +211,7 @@ def run_cancel(
     ] = "cancelled by operator",
 ) -> None:
     """Cancel a non-terminal run by persisting an interrupted stop state."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -260,6 +266,7 @@ def run_recover(
     ] = None,
 ) -> None:
     """Print a deterministic recovery plan for an interrupted run."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -272,7 +279,6 @@ def run_recover(
                 err=True,
             )
             raise typer.Exit(1)
-        _operator_identity()
         payload = _run_recovery_payload(store, run, dry_run=dry_run, reason=reason)
     finally:
         store.close()
@@ -288,6 +294,7 @@ def run_delta(
     ] = False,
 ) -> None:
     """Show what changed since the previous usable handoff or resume point."""
+    operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -296,7 +303,6 @@ def run_delta(
             raise typer.BadParameter(
                 f"unknown run delta, run, or task: {delta_id_or_run_id_or_task_id}"
             )
-        _operator_identity()
         recovery_sessions = _recovery_sessions_for_delta(store, delta.id)
         payload = _run_delta_payload(delta, recovery_sessions)
     finally:
@@ -398,14 +404,6 @@ def _find_run_delta(store: LocalStore, delta_id_or_run_id_or_task_id: str) -> Ru
     if not candidates:
         return None
     return sorted(candidates, key=lambda item: (item.created_at, item.id))[-1]
-
-
-def _operator_identity() -> str:
-    try:
-        session = OperatorSessionStore.from_env().get()
-    except OperatorSessionNotFoundError:
-        raise typer.BadParameter("active operator session required; run craik auth login") from None
-    return session.subject
 
 
 def _recovery_sessions_for_delta(

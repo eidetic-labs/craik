@@ -77,3 +77,42 @@ def test_cli_auth_coverage_guard_includes_root_cli() -> None:
     paths = {path.name for path in check_release_readiness._cli_command_paths()}
 
     assert "cli.py" in paths
+
+
+def test_cli_auth_coverage_guard_includes_cli_module_glob() -> None:
+    paths = {path.name for path in check_release_readiness._cli_command_paths()}
+
+    assert "cli_agents.py" in paths
+
+
+def test_cli_auth_coverage_guard_scans_new_cli_modules(tmp_path, monkeypatch) -> None:
+    src = tmp_path / "src" / "craik"
+    src.mkdir(parents=True)
+    (src / "cli_widget.py").write_text(
+        textwrap.dedent(
+            """
+            import typer
+            from craik.runtime.store import LocalStore
+
+            app = typer.Typer()
+
+            @app.command("unsafe")
+            def unsafe() -> None:
+                store = LocalStore.from_env()
+                store.initialize()
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    failures = check_release_readiness._cli_auth_coverage_failures()
+
+    assert failures == [
+        "src/craik/cli_widget.py: command `unsafe` touches LocalStore "
+        "without operator_identity_or_fail()"
+    ]
+
+
+def test_cli_auth_exemption_surface_is_bounded() -> None:
+    assert len(check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS) <= 8

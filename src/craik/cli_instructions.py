@@ -144,6 +144,7 @@ def instructions_list(
     ] = False,
 ) -> None:
     """List distilled instruction proposals."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -241,6 +242,7 @@ def instructions_show(
     item_id: Annotated[str, typer.Argument(help="Distilled instruction proposal id.")],
 ) -> None:
     """Show one distilled instruction with provenance and freshness."""
+    _operator_identity()
     store = LocalStore.from_env()
     try:
         store.initialize()
