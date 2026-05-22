@@ -340,6 +340,8 @@ const sidebars = {
       items: [
         'reference/gateway-daemon',
         'guides/gateway-troubleshooting',
+        'guides/channel-adapters',
+        'security/channel-adapters',
         'reference/channel-adapter-contract',
         'reference/messaging-channel-adapter',
         'reference/channel-identity-pairing',
