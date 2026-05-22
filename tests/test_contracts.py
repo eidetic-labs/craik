@@ -39,6 +39,23 @@ def test_contract_fixtures_pin_schema_version(fixtures: dict[str, dict[str, Any]
         assert payload["version"] == SCHEMA_VERSION
 
 
+def test_agent_session_state_enforces_lifecycle_consistency(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.agent_session_state"])
+    payload["status"] = "running"
+    payload["started_at"] = None
+
+    with pytest.raises(ValidationError, match="requires started_at"):
+        CONTRACT_REGISTRY["craik.agent_session_state"].model_validate(payload)
+
+    failed = dict(fixtures["craik.agent_session_state"])
+    failed.update({"status": "provider_unavailable", "pid": None, "supervision_notes": []})
+
+    with pytest.raises(ValidationError, match="requires supervision_notes"):
+        CONTRACT_REGISTRY["craik.agent_session_state"].model_validate(failed)
+
+
 def test_capability_receipt_auth_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

@@ -44,6 +44,7 @@ craik schema show craik.task_request
 | `craik.adapter_package` | Defines runner adapter package metadata, compatibility, entrypoints, capability surfaces, provenance, and version constraints. |
 | `craik.agent_onboarding` | Summarizes runner-readable project context before an agent starts work. |
 | `craik.agent_role` | Defines a policy-aware orchestrator or specialist role for multi-agent coordination. |
+| `craik.agent_session_state` | Records persistent agent lifecycle, provider, model, operator, policy, recovery, and redacted process metadata. |
 | `craik.assumption` | Tracks unresolved assumptions that need evidence before promotion to fact. |
 | `craik.capability_grant` | Defines scoped permission for an action family. |
 | `craik.capability_receipt` | Records an auditable action result under a policy profile. |

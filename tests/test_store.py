@@ -8,6 +8,7 @@ import pytest
 from craik.contracts.models import (
     AdapterPackage,
     AdjudicationOutcome,
+    AgentSessionState,
     Assumption,
     CapabilityReceipt,
     CaseFile,
@@ -381,6 +382,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     )
     run_delta = RunDelta.model_validate(fixtures["craik.run_delta"])
     recovery_session = RecoverySession.model_validate(fixtures["craik.recovery_session"])
+    agent_session = AgentSessionState.model_validate(fixtures["craik.agent_session_state"])
     critic_finding = RuntimeCriticFinding.model_validate(
         fixtures["craik.runtime_critic_finding"]
     )
@@ -437,6 +439,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     store.put_reference_integration(reference_integration)
     store.put_run_delta(run_delta)
     store.put_recovery_session(recovery_session)
+    store.put_agent_session_state(agent_session)
     store.put_runtime_critic_finding(critic_finding)
     store.put_red_team_finding(red_team_finding)
     store.put_scratchpad_record(scratchpad)
@@ -522,6 +525,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert stored_recovery_session is not None
     assert stored_recovery_session.receipt_hmac
     assert stored_recovery_session.model_copy(update={"receipt_hmac": None}) == recovery_session
+    assert store.get_agent_session_state(agent_session.id) == agent_session
     assert store.get_runtime_critic_finding(critic_finding.id) == critic_finding
     assert store.get_red_team_finding(red_team_finding.id) == red_team_finding
     assert store.get_scratchpad_record(scratchpad.id) == scratchpad
@@ -571,6 +575,7 @@ def test_typed_store_helpers_round_trip_all_supported_contracts(
     assert store.list_reference_integrations() == [reference_integration]
     assert store.list_run_deltas() == [run_delta]
     assert store.list_recovery_sessions() == [stored_recovery_session]
+    assert store.list_agent_session_states() == [agent_session]
     assert store.list_runtime_critic_findings() == [critic_finding]
     assert store.list_red_team_findings() == [red_team_finding]
     assert store.list_scratchpad_records() == [scratchpad]
@@ -601,6 +606,7 @@ def test_persists_supported_contract_types(
         "craik.reference_integration",
         "craik.red_team_finding",
         "craik.recovery_session",
+        "craik.agent_session_state",
         "craik.review_request",
         "craik.review_result",
         "craik.run_delta",
