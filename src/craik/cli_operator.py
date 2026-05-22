@@ -14,6 +14,7 @@ from craik.runtime.companions.operator_views import (
     OperatorSurfaceSnapshot,
     build_operator_surface_snapshot,
     format_contradiction_inbox,
+    format_evidence_assumption_view,
     format_handoff_viewer,
     format_operator_surface_overview,
     format_receipt_viewer,
@@ -178,6 +179,45 @@ def operator_contradictions(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
     else:
         typer.echo("\n".join(format_contradiction_inbox(reports)))
+
+
+@operator_app.command("evidence")
+def operator_evidence(
+    task_id: Annotated[
+        str | None,
+        typer.Option(
+            "--task-id",
+            help="Only include assumptions and scoped evidence for this task.",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json/--view", help="Print JSON instead of the operator view."),
+    ] = False,
+) -> None:
+    """Print the read-only evidence and assumption view."""
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        evidence = store.list_evidence()
+        assumptions = store.list_assumptions()
+    finally:
+        store.close()
+
+    if task_id is not None:
+        evidence = [
+            item for item in evidence if item.metadata.get("task_id") in {None, task_id}
+        ]
+        assumptions = [item for item in assumptions if item.task_id == task_id]
+
+    if json_output:
+        payload = {
+            "evidence": [item.model_dump(mode="json", by_alias=True) for item in evidence],
+            "assumptions": [item.model_dump(mode="json", by_alias=True) for item in assumptions],
+        }
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        typer.echo("\n".join(format_evidence_assumption_view(evidence, assumptions)))
 
 
 def _require_section(

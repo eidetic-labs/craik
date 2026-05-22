@@ -25,6 +25,9 @@ within the `0.x.0` stability expectations described in
   capability and plugin receipt records with text and JSON output.
 - Read-only contradiction inbox through `craik operator contradictions`,
   with task and status filters plus text and JSON output.
+- Read-only evidence and assumption view through `craik operator
+  evidence`, keeping assumptions visually separate from evidence with
+  task filtering and JSON output.
 
 ## 0.6.0 — 2026-05-21
 
