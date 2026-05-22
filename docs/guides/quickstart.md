@@ -1,6 +1,6 @@
 # Quickstart
 
-<p className="craik-meta"><span>10 min · hands-on</span><span>For first-time operators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>10 min · hands-on</span><span>For first-time operators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -17,6 +17,24 @@ This tutorial uses the **fixture-backed provider path**, so it needs zero
 credentials and zero network access. When you're done, the same project,
 task, case file, receipts, and handoff can be re-run against live providers
 by adding a credential profile and flipping policy.
+
+## Start with the agent shell
+
+Craik can now launch before setup is complete:
+
+```bash title="First launch"
+craik
+```
+
+The shell prints a readiness card instead of failing when operator auth,
+provider credentials, or model selection are missing. Use it to discover
+next actions, then drop back to subsystem commands whenever you want
+stable JSON output.
+
+```bash title="Readiness and one-shot mode"
+craik status
+craik -z "Summarize readiness."
+```
 
 ## Before you start
 

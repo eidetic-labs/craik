@@ -1,6 +1,6 @@
 # Learning loops
 
-<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -40,6 +40,24 @@ Learning loops can also use
 [preference facts](../reference/preference-facts.md) when repeated
 behavior suggests a reviewable memory update or preference
 clarification.
+
+## Operator commands
+
+Craik exposes the learning-loop posture through guarded skill commands:
+
+```sh
+craik skills telemetry
+craik skills proposals
+craik skills eval
+craik skills promote skill_proposal_docs --dry-run
+craik skills rollback skill_docs --dry-run
+craik skills history
+```
+
+These commands require an active operator session. Promotion and rollback
+commands default to dry-run posture and do not silently change reusable
+guidance. They report the missing gates until approval, replay evidence,
+and receipts exist.
 
 ## Evidence boundary
 

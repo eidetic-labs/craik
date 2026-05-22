@@ -31,6 +31,7 @@ from craik.runtime.paths import (
     resolve_craik_paths,
 )
 from craik.runtime.projects.update_guidance import update_guidance_payload
+from craik.runtime.shell.agent_shell import one_shot_response, run_shell
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 PACKAGE_NAME = "craik"
@@ -38,7 +39,7 @@ PACKAGE_NAME = "craik"
 app = typer.Typer(
     add_completion=False,
     help="Governed agent-runtime substrate for case files, policy, receipts, and providers.",
-    no_args_is_help=True,
+    no_args_is_help=False,
 )
 schema_app = typer.Typer(help="Inspect Craik runtime contract schemas.")
 app.add_typer(schema_app, name="schema")
@@ -99,6 +100,12 @@ operator_app = typer.Typer(help="Inspect read-only operator surface state.")
 app.add_typer(operator_app, name="operator")
 gateway_app = typer.Typer(help="Run and inspect the local gateway daemon.")
 app.add_typer(gateway_app, name="gateway")
+model_app = typer.Typer(help="Inspect and select active model routing.")
+app.add_typer(model_app, name="model")
+session_app = typer.Typer(help="Inspect and manage persistent Craik sessions.")
+app.add_typer(session_app, name="session")
+profile_app = typer.Typer(help="Manage local Craik profiles and personas.")
+app.add_typer(profile_app, name="profile")
 
 
 def package_version() -> str:
@@ -119,6 +126,10 @@ def root(
             help="Print the installed Craik version and exit.",
         ),
     ] = False,
+    one_shot: Annotated[
+        str | None,
+        typer.Option("-z", "--one-shot", help="Run one quiet one-shot prompt and exit."),
+    ] = None,
 ) -> None:
     """Run Craik."""
     if version_requested:
@@ -126,8 +137,10 @@ def root(
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
-        raise typer.Exit()
+        if one_shot is not None:
+            typer.echo(one_shot_response(one_shot))
+            raise typer.Exit()
+        raise typer.Exit(run_shell())
 
 
 @app.command("version")
@@ -298,12 +311,16 @@ def _load_cli_extensions() -> None:
     for module_name in (
         "craik.cli_agent_messages",
         "craik.cli_auth",
+        "craik.cli_auth_login",
+        "craik.cli_shell",
         "craik.cli_delegations",
         "craik.cli_handoffs",
         "craik.cli_instructions",
         "craik.cli_knowledge",
         "craik.cli_operations",
         "craik.cli_project",
+        "craik.cli_provider_certification",
+        "craik.cli_provider_local",
         "craik.cli_review",
         "craik.cli_scope_changes",
         "craik.cli_skills",

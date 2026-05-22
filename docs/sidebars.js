@@ -104,6 +104,7 @@ const sidebars = {
       items: [
         'guides/installation',
         'guides/quickstart',
+        'guides/agent-shell',
         'guides/setup',
         'guides/configuring-craik-home',
       ],
@@ -153,6 +154,7 @@ const sidebars = {
         'reference/provider-budgets',
         'guides/authentication',
         'guides/local-model-setup',
+        'guides/model-session-profile-ux',
         'reference/prompt-compiler',
         'guides/managing-instructions',
       ],
@@ -177,6 +179,8 @@ const sidebars = {
       items: [
         'reference/cli',
         'reference/config',
+        'reference/readiness-states',
+        'reference/slash-commands',
         'reference/github-config',
         'reference/ci-cd',
       ],

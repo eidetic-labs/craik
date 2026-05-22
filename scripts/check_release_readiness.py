@@ -195,8 +195,6 @@ def _touches_local_store(node: ast.FunctionDef) -> bool:
         if isinstance(child, ast.Name) and child.id == "LocalStore":
             return True
         if isinstance(child, ast.Attribute) and child.attr in {
-            "from_env",
-            "from_paths",
             "initialize",
             "list_projects",
             "get_contract",
