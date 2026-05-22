@@ -135,7 +135,7 @@ is unknown.
 </div>
 
 <div>
-<dt><code>provider_openai</code>, <code>provider_openai_responses</code>, <code>provider_openai_chat</code>, <code>provider_local_openai_compatible</code></dt>
+<dt><code>provider_openai</code>, <code>provider_openai_responses</code>, <code>provider_openai_chat</code>, <code>provider_local_openai_compatible</code>, <code>provider_local_ollama</code>, <code>provider_local_lm_studio</code>, <code>provider_local_vllm</code></dt>
 <dt><span className="craik-fields__type">live</span></dt>
 <dd>Provider runtime; medium trust; prompts for approval. Network is supported; filesystem, shell, and memory are unsupported.</dd>
 </div>

@@ -116,6 +116,9 @@ def test_default_registry_includes_certified_mvp_provider_metadata() -> None:
     openai_responses = registry.require("provider_openai_responses")
     openai_chat = registry.require("provider_openai_chat")
     local_openai_compatible = registry.require("provider_local_openai_compatible")
+    local_ollama = registry.require("provider_local_ollama")
+    local_lm_studio = registry.require("provider_local_lm_studio")
+    local_vllm = registry.require("provider_local_vllm")
 
     assert openai.provider == "openai"
     assert openai.runtime_path == "craik.runtime.providers.provider_runtime.OpenAIProviderAdapter"
@@ -154,3 +157,8 @@ def test_default_registry_includes_certified_mvp_provider_metadata() -> None:
     assert local_openai_compatible.trust_boundary == "local"
     assert local_openai_compatible.metadata["base_url"] == "http://localhost:11434/v1"
     assert local_openai_compatible.secret_ref_names == []
+    assert local_ollama.provider == "chat_completions"
+    assert local_ollama.metadata["local_model_preset"] == "ollama"
+    assert local_ollama.secret_ref_names == []
+    assert local_lm_studio.metadata["base_url"] == "http://localhost:1234/v1"
+    assert local_vllm.metadata["base_url"] == "http://localhost:8000/v1"

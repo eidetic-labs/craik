@@ -1,6 +1,6 @@
 # Provider routing and sandboxes
 
-<p className="craik-meta"><span>5 min read</span><span>For operators &amp; integrators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For operators &amp; integrators</span><span>Updated 2026-05-22</span></p>
 
 <div className="craik-lead">
 
@@ -47,6 +47,26 @@ receipts, and redaction audit each boundary on its own terms.
 <div><h4>Docs links</h4></div>
 
 </div>
+
+## Local model routing
+
+Local model presets are provider records with a local trust boundary
+and no secret references by default. Use them when the model server is
+OpenAI-compatible and reachable on loopback:
+
+<div className="craik-grid">
+
+<div><h4><code>provider_local_openai_compatible</code></h4><p>Generic local OpenAI-compatible endpoint.</p></div>
+<div><h4><code>provider_local_ollama</code></h4><p>Ollama OpenAI-compatible endpoint.</p></div>
+<div><h4><code>provider_local_lm_studio</code></h4><p>LM Studio local server.</p></div>
+<div><h4><code>provider_local_vllm</code></h4><p>vLLM OpenAI-compatible server.</p></div>
+
+</div>
+
+Run `craik provider local-presets` to inspect preset metadata and
+`craik provider local-health <preset>` to check `/v1/models` before
+enabling live local routing. Local HTTP URLs must remain loopback
+unless a future sandbox policy explicitly allows a wider boundary.
 
 <div className="craik-keypoint">
 
