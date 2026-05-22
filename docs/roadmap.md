@@ -394,7 +394,7 @@ reading raw logs.
 <div><h4>Dashboard / TUI decision</h4><p>Ready in PR · CLI-first <code>craik operator overview</code> selected for v0.7.0.</p></div>
 <div><h4>Work graph explorer</h4><p>Ready in PR · <code>craik operator work-graph</code> renders terminal and JSON graph inspection.</p></div>
 <div><h4>Handoff viewer</h4><p>Ready in PR · <code>craik operator handoff</code> renders durable handoff summaries.</p></div>
-<div><h4>Receipt viewer</h4></div>
+<div><h4>Receipt viewer</h4><p>Ready in PR · <code>craik operator receipt</code> renders capability and plugin receipts.</p></div>
 <div><h4>Contradiction inbox</h4></div>
 <div><h4>Evidence &amp; assumption views</h4></div>
 <div><h4>Delegation queue</h4></div>

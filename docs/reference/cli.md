@@ -812,6 +812,18 @@ Options:
 - `--section`: Only print one operator surface section.
 - `--json, --view`: Print JSON instead of the operator view.; default `false`
 
+## `craik operator receipt`
+
+Print the read-only receipt viewer.
+
+```text
+craik operator receipt [OPTIONS] RECEIPT_ID
+```
+
+Options:
+
+- `--json, --view`: Print JSON instead of the operator view.; default `false`
+
 ## `craik operator work-graph`
 
 Print the read-only work graph explorer.

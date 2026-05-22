@@ -295,6 +295,47 @@ def test_operator_handoff_cli_renders_view(tmp_path: Path) -> None:
     assert "- receipt_pytest" in result.output
 
 
+def test_operator_receipt_cli_renders_capability_receipt(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_receipt(
+            CapabilityReceipt.model_validate(
+                {
+                    "id": "receipt_docs",
+                    "task_id": "task_docs",
+                    "actor": "agent:codex",
+                    "capability": "shell.test",
+                    "target": "uv run pytest",
+                    "policy_profile": "strict",
+                    "reason": "Validate docs.",
+                    "result": {
+                        "status": "passed",
+                        "summary": "Tests passed.",
+                        "metadata": {"redacted": True},
+                    },
+                    "redacted": True,
+                    "created_at": "2026-05-21T17:00:00Z",
+                }
+            )
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["operator", "receipt", "receipt_docs"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0
+    assert "Capability Receipt: receipt_docs" in result.output
+    assert "Status: passed" in result.output
+    assert "Redacted: True" in result.output
+
+
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 

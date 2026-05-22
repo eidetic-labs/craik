@@ -1,13 +1,13 @@
 # Receipt viewer
 
-<p className="craik-meta"><span>2 min read</span><span>Reference · preview</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-21</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
-The read-only operator view over capability and plugin receipts. What
-the v0.7.0 TUI surface formats, the supported outcomes, and the
+The read-only `craik operator receipt` view over capability and plugin
+receipts, what it formats, the supported outcomes, and the
 inspection-only boundary.
 
 </div>
@@ -65,6 +65,18 @@ The viewer does not approve grants, retry commands, rerun plugins, or
 mutate receipt records.
 
 </div>
+
+## Commands
+
+```bash
+craik operator receipt receipt_pytest
+craik operator receipt plugin_receipt_docs --json
+```
+
+The command accepts a capability receipt id or plugin receipt id. The
+text view uses the operator formatter for terminal scanning. `--json`
+returns the persisted receipt payload for tooling and exact contract
+inspection.
 
 ## What's next
 
