@@ -57,7 +57,9 @@ values.
 ## Actions
 
 The `/api/actions` route dispatches through the shared slash-command
-registry. Read-only command results are returned directly. Mutating
+registry. Browser POSTs with an `Origin` header must match the local
+dashboard origin, and read-only command results are returned directly.
+Mutating slash-command families are blocked from this route. Mutating
 dashboard actions must route through their owning runtime handlers and
 must keep receipt emission, operator identity, and policy checks in
 those handlers rather than bypassing them in the web surface.

@@ -68,9 +68,11 @@ Authorization: Bearer <dashboard-token>
 ```
 
 Read-only actions return the same slash-command result text as the
-agent shell and TUI. Mutating approval and configuration actions remain
-governed by their own CLI/runtime handlers and receipt requirements as
-those flows are added.
+agent shell and TUI. Browser-origin POSTs must come from the local
+dashboard origin, and mutating slash-command families such as auth,
+provider login, model selection, and session resume are rejected by the
+dashboard action route. Those flows stay governed by their own
+CLI/runtime handlers and receipt requirements.
 
 ## Binding
 

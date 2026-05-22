@@ -25,6 +25,7 @@ class SlashCommand:
     examples: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
     readiness: ReadinessRequirement = "none"
+    mutating: bool = False
 
 
 @dataclass(frozen=True)
@@ -39,18 +40,35 @@ class SlashCommandResult:
 COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand("help", "Show slash-command help.", "/help [command]", ("/help status",)),
     SlashCommand("setup", "Show progressive setup guidance.", "/setup"),
-    SlashCommand("auth", "Manage operator and provider auth.", "/auth [login]", ("/auth login",)),
+    SlashCommand(
+        "auth",
+        "Manage operator and provider auth.",
+        "/auth [login]",
+        ("/auth login",),
+        mutating=True,
+    ),
     SlashCommand(
         "provider",
         "Inspect or configure provider credentials.",
         "/provider [login <provider>]",
         ("/provider login openai", "/provider login local"),
+        mutating=True,
     ),
-    SlashCommand("model", "Inspect or select the active model.", "/model [set <provider/model>]"),
+    SlashCommand(
+        "model",
+        "Inspect or select the active model.",
+        "/model [set <provider/model>]",
+        mutating=True,
+    ),
     SlashCommand("status", "Show readiness state.", "/status"),
     SlashCommand("doctor", "Run diagnostics from the CLI.", "/doctor", readiness="operator"),
     SlashCommand("sessions", "List persistent sessions.", "/sessions"),
-    SlashCommand("resume", "Resume a persistent session.", "/resume <session-id>"),
+    SlashCommand(
+        "resume",
+        "Resume a persistent session.",
+        "/resume <session-id>",
+        mutating=True,
+    ),
     SlashCommand("approvals", "Inspect pending approvals.", "/approvals", readiness="operator"),
     SlashCommand("handoffs", "Inspect handoffs.", "/handoffs", readiness="operator"),
     SlashCommand("receipts", "Inspect receipts.", "/receipts", readiness="operator"),
@@ -78,6 +96,15 @@ def command_names() -> list[str]:
         values.append(command.name)
         values.extend(command.aliases)
     return values
+
+
+def slash_command_is_mutating(text: str) -> bool:
+    """Return whether a slash command family may change local runtime state."""
+    tokens = text.strip().split()
+    if not tokens or not tokens[0].startswith("/"):
+        return False
+    command = _command_for_name(tokens[0][1:])
+    return command.mutating if command is not None else False
 
 
 def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> SlashCommandResult:
