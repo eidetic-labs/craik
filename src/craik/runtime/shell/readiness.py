@@ -14,6 +14,7 @@ from craik.runtime.auth.operator import (
     OperatorSessionNotFoundError,
     OperatorSessionStore,
 )
+from craik.runtime.auth.operator_modes import operator_session_required
 from craik.runtime.auth.visibility import visible_auth_profiles
 from craik.runtime.paths import CraikPaths, resolve_craik_paths
 from craik.runtime.store import DATABASE_NAME
@@ -36,6 +37,7 @@ class ReadinessReport:
     state: ReadinessState
     home: Path
     initialized: bool
+    operator_required: bool
     operator_authenticated: bool
     provider_configured: bool
     local_model_configured: bool
@@ -51,6 +53,7 @@ class ReadinessReport:
             "state": self.state,
             "home": str(self.home),
             "initialized": self.initialized,
+            "operator_required": self.operator_required,
             "operator_authenticated": self.operator_authenticated,
             "provider_configured": self.provider_configured,
             "local_model_configured": self.local_model_configured,
@@ -68,6 +71,7 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
     paths = resolve_craik_paths(values)
     initialized = _home_initialized(paths)
     operator_session = _operator_session(values)
+    operator_required = operator_session_required(values)
     operator_authenticated = operator_session is not None
     auth_profiles = _auth_profile_ids(values, operator_session=operator_session)
     provider_configured = bool(auth_profiles)
@@ -81,9 +85,11 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
         state = "unconfigured"
     elif values.get("CRAIK_FIXTURE") == "1":
         state = "fixture"
-    elif local_model_configured and not operator_authenticated:
+    elif local_model_configured and not operator_authenticated and operator_required:
         state = "local-model"
-    elif operator_authenticated and provider_configured:
+    elif provider_configured and active_model is not None and (
+        operator_authenticated or not operator_required
+    ):
         state = "fully-ready"
     elif operator_authenticated:
         state = "operator-only"
@@ -93,7 +99,7 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
         state = "unconfigured"
 
     missing: list[str] = []
-    if not operator_authenticated:
+    if operator_required and not operator_authenticated:
         missing.append("operator session")
     if not provider_configured:
         missing.append("provider credentials")
@@ -102,6 +108,7 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
 
     next_actions = _next_actions(
         state,
+        operator_required=operator_required,
         operator_authenticated=operator_authenticated,
         provider_configured=provider_configured,
         active_model=active_model,
@@ -111,6 +118,7 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
         state=state,
         home=paths.home,
         initialized=initialized,
+        operator_required=operator_required,
         operator_authenticated=operator_authenticated,
         provider_configured=provider_configured,
         local_model_configured=local_model_configured,
@@ -186,6 +194,7 @@ def _active_model(paths: CraikPaths) -> str | None:
 def _next_actions(
     state: ReadinessState,
     *,
+    operator_required: bool,
     operator_authenticated: bool,
     provider_configured: bool,
     active_model: str | None,
@@ -193,10 +202,10 @@ def _next_actions(
     if state == "restricted/offline":
         return ["unset CRAIK_OFFLINE=1 to use remote providers", "run /status for local options"]
     actions: list[str] = []
-    if not operator_authenticated:
-        actions.append("run /auth login or craik auth login")
+    if operator_required and not operator_authenticated:
+        actions.append("run craik login")
     if not provider_configured:
-        actions.append("run /provider login openai, anthropic, gemini, or local")
+        actions.append("run craik auth login <provider>")
     if active_model is None:
         actions.append("run /model set <provider/model>")
     if not actions:

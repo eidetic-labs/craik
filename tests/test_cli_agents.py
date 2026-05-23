@@ -101,7 +101,7 @@ def test_agent_cli_requires_active_operator_session(tmp_path: Path) -> None:
     result = runner.invoke(app, ["agent", "launch", "--session-id", "agent_docs"], env=env)
 
     assert result.exit_code == 2
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output
 
 
 def test_agent_status_surfaces_tampered_session_hmac(tmp_path: Path) -> None:

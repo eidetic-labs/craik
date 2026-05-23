@@ -39,7 +39,7 @@ class MissingOperatorSessionError(InstructionApprovalError):
     """Raised when approval requires a bound operator session but none exists."""
 
     code = "operator.session.missing"
-    remediation = "run `craik auth login`, or pass allow_unbound=True for unattended use"
+    remediation = "run `craik login`, or pass allow_unbound=True for unattended use"
 
     def __init__(self) -> None:
         super().__init__("instruction approval rejected: active operator session is required")

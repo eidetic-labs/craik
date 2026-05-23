@@ -26,7 +26,7 @@ def operator_session_check(paths: CraikPaths) -> DiagnosticCheck:
             name="operator_session",
             status="fail",
             summary="No active operator session is available.",
-            action="Run craik auth login.",
+            action="Run craik login.",
         )
     try:
         session = store.get()
@@ -35,7 +35,7 @@ def operator_session_check(paths: CraikPaths) -> DiagnosticCheck:
             name="operator_session",
             status="fail",
             summary="No active operator session is available.",
-            action="Run craik auth login.",
+            action="Run craik login.",
         )
     return DiagnosticCheck(
         name="operator_session",

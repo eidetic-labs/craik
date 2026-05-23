@@ -14,7 +14,7 @@ def operator_identity_or_fail() -> str:
     try:
         session = OperatorSessionStore.from_env().get()
     except OperatorSessionNotFoundError:
-        _fail("active operator session required; run craik auth login")
+        _fail("active operator session required; run craik login")
     return session.subject
 
 

@@ -81,8 +81,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "es": "Lista de validacion",
     },
     "remediation.auth.login": {
-        "en": "run craik auth login",
-        "es": "ejecute craik auth login",
+        "en": "run craik login",
+        "es": "ejecute craik login",
     },
     "dashboard.auth.required": {
         "en": "Dashboard access requires an active operator session or token.",

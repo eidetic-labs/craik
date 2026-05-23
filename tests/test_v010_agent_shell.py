@@ -28,7 +28,7 @@ def test_default_craik_launches_shell_status_before_auth(tmp_path: Path) -> None
     assert result.exit_code == 0
     assert "Craik Agent Shell" in result.output
     assert "State: unconfigured" in result.output
-    assert "run /auth login or craik auth login" in result.output
+    assert "run craik auth login <provider>" in result.output
 
 
 def test_one_shot_is_quiet_and_reports_missing_readiness(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_one_shot_is_quiet_and_reports_missing_readiness(tmp_path: Path) -> None
 
     assert result.exit_code == 0
     assert "WARNING: prompt was supplied via argv" in result.output
-    assert "Craik is not fully ready" in result.output
+    assert "Craik is not ready" in result.output
     assert "Craik Agent Shell" not in result.output
 
 
@@ -65,7 +65,7 @@ def test_one_shot_reads_prompt_from_stdin_without_warning(tmp_path: Path) -> Non
     )
 
     assert result.exit_code == 0
-    assert result.output.startswith("Craik is not fully ready")
+    assert result.output.startswith("Craik is not ready")
     assert "argv-supplied prompts" not in result.output
     assert "WARNING: prompt was supplied via argv" not in result.output
 
@@ -130,6 +130,47 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(
     assert resolve_readiness(env).state == "fully-ready"
 
 
+def test_single_operator_mode_provider_and_model_are_ready(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home), "OPENAI_API_KEY": "openai-key"}
+    AuthProfileStore.from_env(env).put(_auth_profile("openai:default"))
+    model_set = runner.invoke(app, ["model", "set", "openai/gpt-5"], env=env)
+    chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
+
+    report = resolve_readiness(env)
+
+    assert model_set.exit_code == 0
+    assert report.operator_required is False
+    assert report.operator_authenticated is False
+    assert report.state == "fully-ready"
+    assert chat.exit_code == 0
+    assert "One-shot execution is queued for openai/gpt-5" in chat.output
+    assert "not ready" not in chat.output
+
+
+def test_audited_mode_requires_operator_session(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {
+        "CRAIK_HOME": str(home),
+        "CRAIK_OPERATOR_REQUIRED": "1",
+        "OPENAI_API_KEY": "openai-key",
+    }
+    AuthProfileStore.from_env(env).put(_auth_profile("openai:default"))
+    model_set = runner.invoke(app, ["model", "set", "openai/gpt-5"], env=env)
+    chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
+
+    report = resolve_readiness(env)
+
+    assert model_set.exit_code == 0
+    assert report.operator_required is True
+    assert report.state == "provider-only"
+    assert "operator session" in report.missing
+    assert report.next_actions[0] == "run craik login"
+    assert chat.exit_code == 0
+    assert "State: provider-only" in chat.output
+    assert "run craik login" in chat.output
+
+
 def test_readiness_filters_profiles_by_active_operator(tmp_path: Path) -> None:
     home = tmp_path / "home"
     env = {
@@ -143,6 +184,7 @@ def test_readiness_filters_profiles_by_active_operator(tmp_path: Path) -> None:
     profile_store.put(_auth_profile("openai:operator-b", authorized_operators=["operator:b"]))
     profile_store.put(_auth_profile("anthropic:legacy"))
 
+    model_set = runner.invoke(app, ["model", "set", "openai/gpt-5"], env=env)
     report = resolve_readiness(env)
     model_list = runner.invoke(app, ["model", "list"], env=env)
     auth_list = runner.invoke(app, ["auth", "list"], env=env)
@@ -153,6 +195,7 @@ def test_readiness_filters_profiles_by_active_operator(tmp_path: Path) -> None:
     auth_list_ids = {profile["id"] for profile in json.loads(auth_list.stdout)}
     auth_status_ids = {profile["id"] for profile in json.loads(auth_status.stdout)}
 
+    assert model_set.exit_code == 0
     assert report.state == "fully-ready"
     assert model_list.exit_code == 0
     assert configured_ids == {"anthropic:legacy", "openai:operator-a"}

@@ -125,5 +125,5 @@ def _operator_identity() -> str:
     try:
         session = OperatorSessionStore(resolve_craik_home()).get()
     except OperatorSessionNotFoundError:
-        raise typer.BadParameter("active operator session required; run craik auth login") from None
+        raise typer.BadParameter("active operator session required; run craik login") from None
     return session.subject

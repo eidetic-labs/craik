@@ -94,7 +94,7 @@ def test_knowledge_resolution_commands_require_operator_session(tmp_path: Path) 
     )
 
     assert result.exit_code != 0
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output
 
 
 def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
@@ -840,7 +840,7 @@ def test_setup_wizard_reconfigure_requires_operator_session(tmp_path) -> None:
 
     assert initial.exit_code == 0
     assert unauthenticated.exit_code != 0
-    assert "active operator session required; run craik auth login" in unauthenticated.output
+    assert "active operator session required; run craik login" in unauthenticated.output
     assert authenticated.exit_code == 0
     payload = json.loads(authenticated.stdout)
     assert payload["gateway_config"]["project_id"] == "project_gateway"
@@ -1427,7 +1427,7 @@ def test_demo_stigmem_docs_live_provider_requires_operator_session(tmp_path: Pat
     )
 
     assert result.exit_code == 2
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output
 
 
 def test_demo_persistent_agent_command_runs_fixture_path(tmp_path: Path) -> None:

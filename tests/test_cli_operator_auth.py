@@ -33,7 +33,7 @@ def test_operator_commands_require_active_session(
     result = runner.invoke(app, args, env={"CRAIK_HOME": str(tmp_path / "home")})
 
     assert result.exit_code == 2
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output
 
 
 @pytest.mark.parametrize(
@@ -184,4 +184,4 @@ def test_stateful_cli_commands_require_active_session(
     result = runner.invoke(app, args, env={"CRAIK_HOME": str(tmp_path / "home")})
 
     assert result.exit_code == 2
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output

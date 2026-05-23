@@ -347,6 +347,38 @@ def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> N
     }
 
 
+def test_operator_login_remediation_guard_rejects_bare_auth_login(
+    tmp_path, monkeypatch
+) -> None:
+    src = tmp_path / "src" / "craik"
+    src.mkdir(parents=True)
+    (src / "cli_widget.py").write_text(
+        'MESSAGE = "active operator session required; run craik auth login"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._operator_login_remediation_failures() == [
+        "src/craik/cli_widget.py:1: use `craik login` for "
+        "operator-session remediation; reserve `craik auth login <provider>` "
+        "for provider credentials"
+    ]
+
+
+def test_operator_login_remediation_guard_allows_provider_login(
+    tmp_path, monkeypatch
+) -> None:
+    src = tmp_path / "src" / "craik"
+    src.mkdir(parents=True)
+    (src / "cli_widget.py").write_text(
+        'MESSAGE = "run craik auth login <provider>"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._operator_login_remediation_failures() == []
+
+
 def test_store_writer_exemption_surface_matches_documented_legacy_writers() -> None:
     assert check_release_readiness.STORE_WRITER_EXEMPTIONS == {
         "src/craik/runtime/store/memory.py": {
