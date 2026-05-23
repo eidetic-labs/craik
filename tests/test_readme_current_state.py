@@ -23,6 +23,7 @@ def test_readme_stays_current_state_not_planning_doc() -> None:
 
     forbidden = [
         "## Planning Docs",
+        "## Documentation",
         "## Current Status",
         "## Initial Build Target",
         "## First Demo Target",
