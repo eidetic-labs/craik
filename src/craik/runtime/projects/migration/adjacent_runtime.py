@@ -25,6 +25,8 @@ from craik.runtime.projects.migration_maps import (
 )
 
 MigrationKind = Literal["agent-runtime"]
+_MAX_MIGRATION_FILES = 10_000
+_MAX_MIGRATION_DEPTH = 16
 
 SECRET_MARKERS = (
     "api_key",
@@ -52,6 +54,10 @@ TARGET_SCHEMA_BY_SOURCE_TYPE = {
     "session": "craik.agent_session",
     "skill": "craik.skill_package",
 }
+
+
+class MigrationSourceTooLarge(RuntimeError):
+    """Raised when an adjacent runtime source exceeds bounded scan limits."""
 
 
 @dataclass(frozen=True)
@@ -272,7 +278,18 @@ def format_dry_run_text(report: ImportDryRunReport) -> list[str]:
 def _json_source_files(source: Path) -> list[Path]:
     if source.is_file():
         return [source] if source.suffix.lower() == ".json" else []
-    return sorted(path for path in source.rglob("*.json") if path.is_file())
+    paths: list[Path] = []
+    for path in source.rglob("*.json"):
+        if not path.is_file():
+            continue
+        if len(path.relative_to(source).parts) > _MAX_MIGRATION_DEPTH:
+            continue
+        paths.append(path)
+        if len(paths) > _MAX_MIGRATION_FILES:
+            raise MigrationSourceTooLarge(
+                f"migration source contains more than {_MAX_MIGRATION_FILES} JSON files"
+            )
+    return sorted(paths)
 
 
 def _records_from_payload(

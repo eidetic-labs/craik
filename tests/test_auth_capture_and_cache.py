@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind
+from craik.runtime.auth import health_check as auth_health_check
 from craik.runtime.auth.login import profile_runtime_status
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.dashboard import DashboardConfig
@@ -19,9 +20,13 @@ from craik.runtime.shell.tui import build_tui_snapshot, render_tui_snapshot
 runner = CliRunner()
 
 
-def test_auth_login_captures_keyring_ref_without_leaking_secret(tmp_path: Path) -> None:
+def test_auth_login_captures_keyring_ref_without_leaking_secret(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home), "CRAIK_CREDENTIAL_BACKEND": "file"}
+    _allow_health_check(monkeypatch)
 
     result = runner.invoke(
         app,
@@ -61,9 +66,13 @@ def test_auth_login_rejected_key_uses_redacted_remediation(tmp_path: Path) -> No
     assert AuthProfileStore(tmp_path / "home").list() == []
 
 
-def test_auth_status_and_logout_require_operator_and_remove_cache(tmp_path: Path) -> None:
+def test_auth_status_and_logout_require_operator_and_remove_cache(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home), "CRAIK_CREDENTIAL_BACKEND": "file"}
+    _allow_health_check(monkeypatch)
     login = runner.invoke(
         app,
         ["auth", "login", "gemini", "--no-browser", "--json"],
@@ -84,6 +93,9 @@ def test_auth_status_and_logout_require_operator_and_remove_cache(tmp_path: Path
     assert status_payload[0]["kind"] == "keyring-ref"
     assert status_payload[0]["backend"] == "file"
     assert status_payload[0]["health_status"] == "ok"
+    assert status_payload[0]["warning"] == (
+        "file-backed secret references require owner-only filesystem permissions"
+    )
     assert json.loads(logout.stdout)["removed_keyring_ref"] is True
     assert AuthProfileStore(home).list() == []
     assert status_after.provider_configured is False
@@ -136,9 +148,10 @@ def test_readiness_uses_credential_resolvability(tmp_path: Path) -> None:
     assert resolve_readiness(env).provider_configured is False
 
 
-def test_slash_tui_and_dashboard_auth_status_surfaces(tmp_path: Path) -> None:
+def test_slash_tui_and_dashboard_auth_status_surfaces(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home), "CRAIK_CREDENTIAL_BACKEND": "file"}
+    _allow_health_check(monkeypatch)
     login = runner.invoke(
         app,
         ["auth", "login", "local", "--no-browser", "--json"],
@@ -181,6 +194,24 @@ def _put_session(home: Path) -> None:
         refresh_token_ref="operator-session.refresh_token",
     )
     OperatorSessionStore(home).put(session, refresh_token="refresh-token")
+
+
+class _FakeHealthResponse:
+    def __enter__(self) -> _FakeHealthResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    def getcode(self) -> int:
+        return 200
+
+
+def _allow_health_check(monkeypatch) -> None:
+    def _urlopen(request, *, timeout: float) -> _FakeHealthResponse:
+        return _FakeHealthResponse()
+
+    monkeypatch.setattr(auth_health_check, "_health_check_urlopen", _urlopen)
 
 
 def _json_payload(output: str) -> dict[str, object]:

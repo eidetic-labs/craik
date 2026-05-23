@@ -57,6 +57,22 @@ within the `0.x.0` stability expectations described in
   `auth migrate-from-env`, readiness based on credential resolvability,
   and shared slash/TUI/dashboard auth status surfaces.
 
+### Security
+
+- MCP client imports now reject URL schemes outside `http` and `https`
+  while preserving bare stdio command references, blocking local-file and
+  script-style endpoint references before routing.
+- Capture-and-cache auth login now verifies captured provider credentials
+  against provider model-list health endpoints with redacted failure
+  details before writing cached keyring references.
+- File-backed credential fallback warnings now propagate through auth
+  status and doctor payloads so operators see plaintext-at-rest posture
+  outside the initial login flow.
+- Adjacent runtime migration scanning now enforces bounded JSON file
+  counts and directory depth to avoid unbounded preflight walks.
+- Auth credential-source errors are sanitized before reaching status or
+  doctor output.
+
 ## 0.11.0 — 2026-05-23
 
 ### Added

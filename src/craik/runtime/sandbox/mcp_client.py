@@ -12,6 +12,7 @@ from craik.contracts.models import CraikModel
 MCPClientTransport = Literal["stdio", "http", "sse"]
 MCPRouteKind = Literal["provider", "tool"]
 MCPClientCompatibilityStatus = Literal["compatible", "blocked"]
+_ALLOWED_MCP_URL_SCHEMES = frozenset({"http", "https"})
 
 
 class MCPClientConfig(CraikModel):
@@ -121,6 +122,8 @@ def mcp_client_compatibility(
 
 def _reject_secret_like_values(value: str, field_name: str) -> None:
     split = urlsplit(value)
+    if split.scheme and split.scheme.lower() not in _ALLOWED_MCP_URL_SCHEMES:
+        raise ValueError(f"{field_name} must use http or https URL scheme")
     if split.username or split.password:
         raise ValueError(f"{field_name} must not contain credentials")
     secret_tokens = ("token=", "api_key=", "apikey=", "password=", "secret=")

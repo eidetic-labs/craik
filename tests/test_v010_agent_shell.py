@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,6 +10,7 @@ from typer.testing import CliRunner
 from craik.cli import app
 from craik.contracts.models import AgentSessionState
 from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind
+from craik.runtime.auth import health_check as auth_health_check
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.auth.redaction import masked_metadata
 from craik.runtime.paths import ensure_craik_home
@@ -95,10 +98,14 @@ def test_status_command_and_slash_status_share_readiness(tmp_path: Path) -> None
     assert json.loads(cli_status.stdout)["state"] == json.loads(slash_status.stdout)["state"]
 
 
-def test_readiness_transitions_from_operator_only_to_fully_ready(tmp_path: Path) -> None:
+def test_readiness_transitions_from_operator_only_to_fully_ready(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home)}
     _put_operator_session(home)
+    _allow_health_check(monkeypatch)
 
     assert resolve_readiness(env).state == "operator-only"
 
@@ -254,6 +261,24 @@ def _put_operator_session(
             expires_at=datetime(2026, 5, 22, 13, 0, tzinfo=UTC),
         )
     )
+
+
+class _FakeHealthResponse:
+    def __enter__(self) -> _FakeHealthResponse:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        return None
+
+    def getcode(self) -> int:
+        return 200
+
+
+def _allow_health_check(monkeypatch) -> None:
+    def _urlopen(request, *, timeout: float) -> _FakeHealthResponse:
+        return _FakeHealthResponse()
+
+    monkeypatch.setattr(auth_health_check, "_health_check_urlopen", _urlopen)
 
 
 def _auth_profile(
