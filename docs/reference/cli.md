@@ -1361,6 +1361,7 @@ Options:
 - `--source`: Adjacent runtime source path.
 - `--kind`: Migration source kind.; default `agent-runtime`
 - `--json`: Emit machine-readable JSON output.; default `false`
+- `--locale`: Locale for text output. Defaults to CRAIK_LOCALE.
 
 ## `craik model`
 

@@ -108,6 +108,10 @@ def migrate_report(
         bool,
         typer.Option("--json", help="Emit machine-readable JSON output."),
     ] = False,
+    locale: Annotated[
+        str | None,
+        typer.Option("--locale", help="Locale for text output. Defaults to CRAIK_LOCALE."),
+    ] = None,
 ) -> None:
     """Render a safe-to-share adjacent runtime migration report."""
     _validate_kind(kind)
@@ -118,7 +122,7 @@ def migrate_report(
     if json_output:
         typer.echo(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
         return
-    typer.echo("\n".join(format_migration_report(report)))
+    typer.echo("\n".join(format_migration_report(report, locale=locale)))
 
 
 def _validate_kind(kind: str) -> None:
