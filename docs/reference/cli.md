@@ -1275,6 +1275,20 @@ Options:
 - `--kind`: Migration source kind.; default `agent-runtime`
 - `--json`: Emit machine-readable JSON output.; default `false`
 
+## `craik migrate report`
+
+Render a safe-to-share adjacent runtime migration report.
+
+```text
+craik migrate report [OPTIONS]
+```
+
+Options:
+
+- `--source`: Adjacent runtime source path.
+- `--kind`: Migration source kind.; default `agent-runtime`
+- `--json`: Emit machine-readable JSON output.; default `false`
+
 ## `craik model`
 
 Inspect and select active model routing.

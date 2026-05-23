@@ -64,6 +64,19 @@ Explicit apply mode is reserved for later migration goals and is
 rejected until the full map, report, secret-migration, and fixture
 pipeline is complete.
 
+## Report
+
+Use `report` when the dry-run needs to be shared for review:
+
+```bash
+craik migrate report --source ./adjacent-runtime --kind agent-runtime
+```
+
+Reports group importable objects, manual actions, skipped secrets,
+security posture changes, unsupported capabilities, recommended next
+commands, and validation checklist items. JSON output is available with
+`--json`.
+
 ## Secret Handling
 
 Fields with names such as `api_key`, `token`, `password`, `secret`,
@@ -95,6 +108,12 @@ uv run python scripts/generate_cli_reference.py --check
 <strong>Reference</strong>
 <span>Migration maps</span>
 <small>How source fields map into Craik target surfaces.</small>
+</a>
+
+<a href="../../reference/migration-reports/">
+<strong>Reference</strong>
+<span>Migration reports</span>
+<small>The safe-to-share review artifact for a dry-run.</small>
 </a>
 
 <a href="../../reference/secret-migration-policy/">

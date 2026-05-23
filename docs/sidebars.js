@@ -241,6 +241,7 @@ const sidebars = {
         'reference/multi-agent-workflow-migration',
         'reference/import-dry-run',
         'reference/migration-maps',
+        'reference/migration-reports',
       ],
     },
     {

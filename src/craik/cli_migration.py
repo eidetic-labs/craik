@@ -16,7 +16,9 @@ from craik.runtime.projects.migration.adjacent_runtime import (
     inspect_adjacent_runtime_source,
     inspection_payload,
     plan_adjacent_runtime_migration,
+    report_adjacent_runtime_migration,
 )
+from craik.runtime.projects.migration.reports import format_migration_report
 
 
 @migrate_app.command("inspect")
@@ -94,6 +96,29 @@ def migrate_import(
         typer.echo(json.dumps(dry_run_payload(report), indent=2, sort_keys=True))
         return
     typer.echo("\n".join(format_dry_run_text(report)))
+
+
+@migrate_app.command("report")
+def migrate_report(
+    source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
+    kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (
+        "agent-runtime"
+    ),
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON output."),
+    ] = False,
+) -> None:
+    """Render a safe-to-share adjacent runtime migration report."""
+    _validate_kind(kind)
+    try:
+        report = report_adjacent_runtime_migration(source, kind="agent-runtime")
+    except (FileNotFoundError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from None
+    if json_output:
+        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
+        return
+    typer.echo("\n".join(format_migration_report(report)))
 
 
 def _validate_kind(kind: str) -> None:
