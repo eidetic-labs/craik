@@ -230,7 +230,8 @@ def test_gateway_service_install_generates_launchd_and_systemd_units(tmp_path: P
     assert f"{executable}</string><string>gateway</string><string>start" in launchd.content
     assert "<string>craik</string>" not in launchd.content
     assert systemd.backend == "systemd"
-    assert f"ExecStart={executable} gateway start" in systemd.content
+    assert f"Environment=CRAIK_EXEC={executable}" in systemd.content
+    assert "ExecStart=${CRAIK_EXEC} gateway start" in systemd.content
     assert "ExecStart=craik gateway start" not in systemd.content
     assert uninstall_gateway_service(paths)["installed"] is False
 

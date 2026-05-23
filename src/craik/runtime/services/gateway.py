@@ -248,7 +248,8 @@ After=network.target
 [Service]
 Type=simple
 Environment=CRAIK_HOME={paths.home}
-ExecStart={executable} gateway start
+Environment=CRAIK_EXEC={executable}
+ExecStart=${{CRAIK_EXEC}} gateway start
 Restart=on-failure
 StandardOutput=append:{log_path}
 StandardError=append:{log_path}

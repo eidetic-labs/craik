@@ -484,7 +484,6 @@ def _operator_session_payload(session: Any) -> dict[str, Any]:
         "display_name": session.display_name,
         "groups": session.groups,
         "issuer": session.issuer,
-        "id_token_jti": session.id_token_jti,
         "expires_at": session.expires_at.isoformat(),
         "refresh_token_ref": session.refresh_token_ref,
     }
