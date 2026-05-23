@@ -1,6 +1,6 @@
 # Adjacent runtime bridge
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
@@ -91,6 +91,23 @@ Runtime · route · policy envelope · evidence links · capability grant ·
 redaction outcome · operator approval (when a mutation is requested).
 
 </div>
+
+## v0.12.0 Agent/Client Bridge
+
+`craik.runtime.agents.protocol_bridge` implements the first local
+agent/client protocol bridge adapter. It is designed for editor and
+client smoke tests, not for granting ambient runtime authority.
+
+`AgentClientBridgeRequest` records the client name, requested tool,
+capability, operator subject, policy envelope, capability grant,
+evidence links, and redacted arguments. `decide_agent_client_bridge`
+blocks requests that lack operator auth, policy context, grants,
+receipts, or redaction. It also blocks client-provided authoritative
+instructions and unbounded tool access.
+
+`LocalAgentClientBridgeAdapter` emits a redacted
+`craik.capability_receipt` for allowed calls. Blocked calls return a
+structured decision and no receipt.
 
 ## What's next
 
