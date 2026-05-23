@@ -26,6 +26,7 @@ def test_migration_report_sections_are_deterministic_and_safe() -> None:
             migration_map_for_object(source_id="z_unknown", source_type="widget"),
             migration_map_for_object(source_id="a_agent", source_type="agent"),
             migration_map_for_object(source_id="m_model", source_type="model"),
+            migration_map_for_object(source_id="c_channel", source_type="channel"),
             migration_map_for_object(
                 source_id="s_secret",
                 source_type="model",
@@ -43,13 +44,22 @@ def test_migration_report_sections_are_deterministic_and_safe() -> None:
 
     assert report.summary == {
         "importable": 1,
-        "partial": 1,
+        "partial": 2,
         "manual": 1,
         "unsupported": 1,
         "skipped-secret": 1,
     }
     assert [item.source_id for item in report.importable_objects] == ["a_agent"]
-    assert [item.source_id for item in report.manual_actions] == ["g_gateway", "m_model"]
+    assert [item.source_id for item in report.manual_actions] == [
+        "c_channel",
+        "g_gateway",
+        "m_model",
+    ]
+    manual_actions_by_id = {item.source_id: item for item in report.manual_actions}
+    assert manual_actions_by_id["g_gateway"].status == "manual"
+    assert manual_actions_by_id["c_channel"].status == "partial"
+    assert manual_actions_by_id["m_model"].status == "partial"
+    assert sorted({item.status for item in report.manual_actions}) == ["manual", "partial"]
     assert report.skipped_secrets[0].secret_fields == ["api_key"]
     assert report.unsupported_capabilities[0].source_id == "z_unknown"
     assert any(
@@ -109,6 +119,7 @@ def test_adjacent_runtime_report_cli_is_redacted(tmp_path: Path) -> None:
     result = runner.invoke(app, ["migrate", "report", "--source", str(source), "--json"])
 
     assert report.skipped_secrets[0].secret_fields == ["api_key"]
+    assert result.exception is None, result.output
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["skipped_secrets"][0]["secret_fields"] == ["api_key"]

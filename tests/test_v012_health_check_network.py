@@ -111,7 +111,7 @@ def test_health_check_rejects_non_http_base_url_without_network(monkeypatch) -> 
     )
 
     assert status.status == "unknown"
-    assert "http or https" not in (status.detail or "")
+    assert "http or https" in (status.detail or "")
     assert "provider-secret" not in (status.detail or "")
 
 

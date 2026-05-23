@@ -412,10 +412,12 @@ def _discord_signature_valid(
         return True
     except ImportError:
         cryptography_unavailable = True
+        if nacl_unavailable:
+            raise _DiscordVerifierUnavailable from None
     except (InvalidSignature, ValueError):
         return False
-    if nacl_unavailable and cryptography_unavailable:
-        raise _DiscordVerifierUnavailable
+    if cryptography_unavailable:
+        return False
     return False
 
 

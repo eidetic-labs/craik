@@ -36,7 +36,12 @@ def health_check_profile_secret(
             status_code = response.getcode()
     except url_error.HTTPError as exc:
         status_code = exc.code
-    except (OSError, TimeoutError, ValueError):
+    except ValueError as exc:
+        return CredentialStatus(
+            status="unknown",
+            detail=_health_check_unknown_detail(profile, str(exc)),
+        )
+    except (OSError, TimeoutError):
         return CredentialStatus(
             status="unknown",
             detail=_health_check_unknown_detail(profile, "network error"),
@@ -74,10 +79,10 @@ def _health_check_url(profile: AuthProfile, provider: str) -> str:
     if not isinstance(base_url, str) or not base_url.strip():
         base_url = _default_health_check_base_url(provider)
     split = urlsplit(base_url)
+    if split.scheme and split.scheme.lower() not in _ALLOWED_AUTH_HEALTH_URL_SCHEMES:
+        raise ValueError("provider health-check base_url must use http or https")
     if not split.scheme or not split.netloc:
         raise ValueError("provider health-check base_url must be an absolute URL")
-    if split.scheme.lower() not in _ALLOWED_AUTH_HEALTH_URL_SCHEMES:
-        raise ValueError("provider health-check base_url must use http or https")
     path = split.path.rstrip("/")
     suffix = "/v1beta/models" if provider == "gemini" else "/v1/models"
     if path.endswith("/v1") or path.endswith("/v1beta"):
