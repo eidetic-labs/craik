@@ -123,7 +123,7 @@ def test_approval_requires_session_unless_unbound_explicit(tmp_path, monkeypatch
                 rationale="Instruction is valid.",
             )
         assert exc_info.value.code == "operator.session.missing"
-        assert "craik auth login" in exc_info.value.remediation
+        assert "craik login" in exc_info.value.remediation
         assert events == [
             (
                 "instruction_approval.operator_check_failed",

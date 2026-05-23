@@ -120,6 +120,7 @@ def main() -> int:
 
     failures.extend(_extension_writer_call_failures())
     failures.extend(_cli_auth_coverage_failures())
+    failures.extend(_operator_login_remediation_failures())
 
     if failures:
         print("Release readiness checks failed:", file=sys.stderr)
@@ -472,6 +473,42 @@ def _calls_operator_auth(node: ast.FunctionDef) -> bool:
             }:
                 return True
     return False
+
+
+def _operator_login_remediation_failures() -> list[str]:
+    """Fail on operator-login remediation that points to provider auth login."""
+    failures: list[str] = []
+    disallowed = (
+        "run craik auth login",
+        "Run craik auth login.",
+        "run `craik auth login`",
+        "run /auth login or craik auth login",
+    )
+    allowed_followups = (
+        " <provider>",
+        " {provider}",
+        " openai",
+        " anthropic",
+        " gemini",
+        " local",
+        " [provider]",
+    )
+    for path in sorted((ROOT / "src/craik").rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for token in disallowed:
+                index = line.find(token)
+                if index == -1:
+                    continue
+                suffix = line[index + len(token) :]
+                if any(suffix.startswith(allowed) for allowed in allowed_followups):
+                    continue
+                failures.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: use `craik login` for "
+                    "operator-session remediation; reserve `craik auth login <provider>` "
+                    "for provider credentials"
+                )
+    return failures
 
 
 if __name__ == "__main__":

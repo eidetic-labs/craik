@@ -33,7 +33,7 @@ def one_shot_response(prompt: str, *, env: dict[str, str] | None = None) -> str:
     report = resolve_readiness(env)
     if report.state != "fully-ready":
         return (
-            "Craik is not fully ready for one-shot model execution. "
+            "Craik is not ready for one-shot model execution. "
             f"State: {report.state}. Next: {report.next_actions[0]}"
         )
     return f"One-shot execution is queued for {report.active_model}: {prompt.strip()}"

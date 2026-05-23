@@ -165,7 +165,7 @@ def test_doctor_cli_requires_operator_session_before_state_read(tmp_path) -> Non
 
     assert setup.exit_code == 0
     assert result.exit_code != 0
-    assert "active operator session required; run craik auth login" in result.output
+    assert "active operator session required; run craik login" in result.output
 
 
 def test_doctor_fixture_matrix_includes_v011_checks(tmp_path) -> None:
