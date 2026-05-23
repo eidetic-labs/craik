@@ -1,0 +1,10 @@
+{
+  "channels": [
+    {
+      "id": "webchat_docs",
+      "type": "channel",
+      "adapter": "webchat",
+      "webhook_secret": "fixture-webhook-secret"
+    }
+  ]
+}

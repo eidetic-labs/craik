@@ -1,0 +1,9 @@
+{
+  "profiles": [
+    {
+      "id": "docs_persona",
+      "type": "profile",
+      "name": "Docs Persona"
+    }
+  ]
+}

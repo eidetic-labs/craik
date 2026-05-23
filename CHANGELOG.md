@@ -30,6 +30,10 @@ within the `0.x.0` stability expectations described in
 - v0.12.0 secret migration inventory and optional keyring import
   receipts, with no-copy dry-run defaults, redacted field fingerprints,
   explicit operator confirmation, and secure-backend enforcement.
+- v0.12.0 adjacent runtime compatibility fixture suite covering
+  provider config, model fallback, profiles/personas, channel bindings,
+  sessions, memory, skills, schedules, sandbox, gateway, approval
+  posture, invalid fixture handling, and secret-redaction assertions.
 
 ## 0.11.0 — 2026-05-23
 
