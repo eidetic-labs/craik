@@ -8,6 +8,7 @@ from pathlib import Path
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialSource
 from craik.runtime.auth.sources.api_key import EnvVarApiKeySource
 from craik.runtime.auth.sources.cli_bridge import CLIBridgeCredentialSource
+from craik.runtime.auth.sources.keyring_ref import KeyringRefCredentialSource
 from craik.runtime.auth.sources.local_cli_oauth import (
     DEFAULT_CLAUDE_CREDENTIALS_PATH,
     LocalCLICredentialSource,
@@ -34,6 +35,8 @@ def source_for_auth_profile(profile: AuthProfile) -> CredentialSource:
         return _local_cli_source(profile)
     if profile.kind is CredentialKind.SECRET_REF:
         return _secret_ref_source(profile)
+    if profile.kind is CredentialKind.KEYRING_REF:
+        return _keyring_ref_source(profile)
     if profile.kind is CredentialKind.STIGMEM_REF:
         return _stigmem_ref_source(profile)
     if profile.kind is CredentialKind.CLI_BRIDGE:
@@ -65,6 +68,13 @@ def _secret_ref_source(profile: AuthProfile) -> SecretRefCredentialSource:
         else EnvVarSecretManager()
     )
     return SecretRefCredentialSource(ref=ref, manager=secret_manager)
+
+
+def _keyring_ref_source(profile: AuthProfile) -> KeyringRefCredentialSource:
+    ref = profile.metadata.get("ref")
+    if not isinstance(ref, str):
+        raise AuthProfileSourceError("keyring-ref auth profile requires metadata.ref")
+    return KeyringRefCredentialSource(ref=ref)
 
 
 def _secrets_root(profile: AuthProfile) -> Path:

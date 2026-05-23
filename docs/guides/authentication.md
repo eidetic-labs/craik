@@ -81,12 +81,14 @@ craik auth setup openai --secret-ref OPENAI_API_KEY --dry-run
 Loopback HTTP base URLs are rejected unless the selected provider is
 `local` or `--allow-local-base-url` is passed explicitly.
 
-### Browser-assisted provider login
+### Capture-and-cache provider login
 
-Use `craik auth login` when you want the shell-style setup flow. It opens
-the provider's key or credential page when a browser is available, keeps
-copy/paste fallback available with `--no-browser`, writes a redacted auth
-profile, and reports credential storage posture.
+Use `craik auth login` for the default provider setup flow. Hosted
+providers open their API-key page when a browser is available, then
+Craik prompts for the key with hidden terminal input, validates the
+shape, stores the credential in the local credential backend, and
+writes a redacted `keyring-ref` profile. Copy/paste fallback remains
+available with `--no-browser`.
 
 ```sh
 craik auth login openai
@@ -95,10 +97,22 @@ craik auth login gemini
 craik auth login local --base-url http://localhost:11434/v1
 ```
 
-Preview the resulting profile without writing state:
+Use `--json` for automation-friendly redacted output. Preview the
+resulting profile without writing state:
 
 ```sh
-craik auth login openai --dry-run
+craik auth login openai --json
+craik auth login openai --dry-run --json
+```
+
+`craik auth status` shows the profile id, provider family, credential
+kind, credential backend, last validated timestamp, and current
+redacted health status. `craik auth logout <provider>` removes both the
+profile and cached credential reference.
+
+```sh
+craik auth status
+craik auth logout openai
 ```
 
 Provider login configures provider credentials. Operator identity remains
@@ -115,6 +129,27 @@ craik auth migrate-secrets --dry-run
 
 On platforms where a native keychain is not available, Craik reports the
 file-backed fallback explicitly and keeps outputs redacted.
+
+### Explicit env-var or secret-ref mode
+
+CI and unattended deployments can keep using explicit references instead
+of interactive capture:
+
+```sh
+craik auth login openai --env-var OPENAI_API_KEY
+craik auth login anthropic --secret-ref ANTHROPIC_API_KEY
+```
+
+Existing v0.10.0-style env-var profiles can be migrated into cached
+credential storage without modifying the source environment variables:
+
+```sh
+craik auth migrate-from-env --dry-run
+craik auth migrate-from-env --apply --yes
+```
+
+The migration is idempotent. Profiles already converted to
+`keyring-ref` are skipped on later runs.
 
 ### Env-var API key
 
@@ -163,6 +198,12 @@ can distinguish the credential path used by a run.
 <dt>Kind</dt>
 <dt><span className="craik-fields__type">When to use</span></dt>
 <dd>Notes</dd>
+</div>
+
+<div>
+<dt><code>keyring-ref</code></dt>
+<dt><span className="craik-fields__type">default interactive login</span></dt>
+<dd>Created by <code>craik auth login &lt;provider&gt;</code>. The profile stores an opaque reference and backend metadata; credential material resolves through the local credential backend at request time.</dd>
 </div>
 
 <div>

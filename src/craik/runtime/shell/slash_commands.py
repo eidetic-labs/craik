@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
+from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.reviewing.approvals import approval_queue_payload
@@ -104,6 +105,8 @@ def slash_command_is_mutating(text: str) -> bool:
     tokens = text.strip().split()
     if not tokens or not tokens[0].startswith("/"):
         return False
+    if tokens[0] == "/auth" and len(tokens) > 1 and tokens[1] == "status":
+        return False
     command = _command_for_name(tokens[0][1:])
     return command.mutating if command is not None else False
 
@@ -130,8 +133,16 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name in {"status", "setup"}:
         return SlashCommandResult(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if command.name == "auth":
+        if len(tokens) > 1 and tokens[1] == "status":
+            return SlashCommandResult(
+                json.dumps(auth_status_payload(env), indent=2, sort_keys=True)
+            )
+        if len(tokens) > 2 and tokens[1] == "login":
+            return SlashCommandResult(
+                f"Use `craik auth login {tokens[2]}` to start the secure credential prompt."
+            )
         return SlashCommandResult(
-            "Use `craik auth login [provider]` or `/provider login <provider>`."
+            "Use `craik auth login [provider]`, `/auth status`, or `/provider login <provider>`."
         )
     if command.name == "provider" and len(tokens) >= 3 and tokens[1] == "login":
         return SlashCommandResult(f"Use `craik auth login {tokens[2]}` to configure this provider.")

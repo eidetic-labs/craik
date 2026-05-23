@@ -6,6 +6,7 @@ from craik.runtime.auth.sources.cli_bridge import (
     CLIBridgeCredentialSource,
 )
 from craik.runtime.auth.sources.factory import AuthProfileSourceError, source_for_auth_profile
+from craik.runtime.auth.sources.keyring_ref import KeyringRefCredentialSource
 from craik.runtime.auth.sources.local_cli_oauth import (
     DEFAULT_CLAUDE_CREDENTIALS_PATH,
     LocalCLICredentialError,
@@ -33,6 +34,7 @@ __all__ = [
     "EnvVarSecretManager",
     "AuthProfileSourceError",
     "FileSecretManager",
+    "KeyringRefCredentialSource",
     "LocalCLICredentialError",
     "LocalCLICredentialSource",
     "OIDCTokenExchangeSecretManager",

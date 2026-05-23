@@ -252,15 +252,21 @@ operator-visible learning-loop controls. The trust boundary intent is:
   reports the active readiness state without reading or mutating
   durable store state.
 - `craik auth login <provider>` opens a browser to the provider's
-  API-key console where applicable. Craik stores credential references,
-  not credential values: an `AuthProfile` records an `env_var` name or a
-  `secret_ref` path owned by the operator. Copy/paste fallback via
-  `--no-browser` is supported.
+  API-key console where applicable, prompts for the key with hidden
+  terminal input, and stores the captured value in the local credential
+  backend. The `AuthProfile` stores a `keyring-ref` pointer and backend
+  metadata, not the credential value. Explicit `--env-var` and
+  `--secret-ref` modes remain available for CI and secret-manager
+  deployments.
 - Credential storage backends are detected locally. OS-native secret
   stores are preferred when available. File fallback paths use
   owner-only POSIX mode, but the file content is plaintext at rest.
   Treat file fallback secrets like private keys: keep them out of
   unencrypted backups and prefer OS-native backends when available.
+- `craik auth migrate-from-env` copies existing env-var profile values
+  into the credential backend only after explicit consent. It does not
+  mutate or unset source environment variables, and repeated runs skip
+  already migrated `keyring-ref` profiles.
 - v0.12.0 migration secret handling keeps adjacent-runtime secrets out
   of reports by default. Optional keyring import requires explicit
   operator confirmation and a secure OS credential backend; file

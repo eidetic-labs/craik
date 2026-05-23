@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
@@ -82,6 +83,7 @@ def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
     summary = _store_summary(env)
     panels = (
         _status_panel(readiness),
+        _auth_panel(env),
         _composer_panel(),
         _model_panel(readiness),
         _session_panel(summary),
@@ -230,6 +232,25 @@ def _composer_panel() -> TuiPanel:
             "Autocomplete source: shared slash-command registry.",
         ),
     )
+
+
+def _auth_panel(env: dict[str, str] | None) -> TuiPanel:
+    try:
+        rows = auth_status_payload(env)
+    except Exception:
+        rows = []
+    if not rows:
+        lines: tuple[str, ...] = (
+            "Providers: none configured",
+            "Commands: /auth login <provider>, /auth status, craik auth login <provider>",
+            "Shortcut: Ctrl-A opens auth capture in interactive frontends.",
+        )
+    else:
+        lines = tuple(
+            f"{row['id']}: {row['health_status']} via {row.get('backend') or row['kind']}"
+            for row in rows[:4]
+        )
+    return TuiPanel("Auth", lines)
 
 
 def _model_panel(readiness: ReadinessReport) -> TuiPanel:

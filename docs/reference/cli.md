@@ -278,7 +278,7 @@ craik auth list
 
 ## `craik auth login`
 
-Browser-assisted provider login with secure copy/paste fallback.
+Capture and cache provider credentials in local credential storage.
 
 ```text
 craik auth login [OPTIONS] PROVIDER
@@ -293,6 +293,32 @@ Options:
 - `--base-url`: Provider base URL for local-compatible providers.
 - `--allow-local-base-url`: Allow loopback HTTP provider URLs.; default `false`
 - `--dry-run`: Validate and print redacted setup without writing state.; default `false`
+- `--json`: Print a redacted JSON result.; default `false`
+
+## `craik auth logout`
+
+Remove a provider auth profile and cached credential.
+
+```text
+craik auth logout [OPTIONS] PROVIDER
+```
+
+Options:
+
+- `--profile`: Auth profile id to remove.
+
+## `craik auth migrate-from-env`
+
+Migrate env-var API-key profiles into cached credential storage.
+
+```text
+craik auth migrate-from-env [OPTIONS]
+```
+
+Options:
+
+- `--dry-run, --apply`: Preview migration by default.; default `true`
+- `-y, --yes`: Consent to all eligible profile migrations.; default `false`
 
 ## `craik auth migrate-secrets`
 

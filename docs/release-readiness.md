@@ -44,6 +44,7 @@ dead-code scan.
 <div><dt>G7 session export/import compatibility</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/830">#830</a> · portable session exports preserve source identity, redact session events, import adjacent transcript shapes as stopped imported sessions, and report unsupported tool calls as evidence instead of executable authority</dd></div>
 <div><dt>G8 agent/client protocol bridge</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/832">#832</a> · bridge decisions block missing operator auth, policy envelopes, capability grants, receipts, redaction, instruction elevation, and unbounded tools; the first local bridge adapter emits redacted receipts for allowed calls and no receipts for denials</dd></div>
 <div><dt>G9 i18n and localized operator surfaces</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/833">#833</a> · stable message ids back localized operator text, <code>CRAIK_LOCALE</code> and <code>--locale</code> configure text output, missing translations fall back predictably, slash help and migration report headings localize, and translation contribution rules preserve machine-readable semantics</dd></div>
+<div><dt>G10 capture-and-cache auth UX</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/834">#834</a> · <code>craik auth login</code> captures provider keys through hidden prompt, writes <code>keyring-ref</code> profiles, reports backend-aware health, removes cached credentials on logout, migrates env-var profiles with consent, and shares auth status across slash commands, TUI, dashboard, and readiness state</dd></div>
 
 </div>
 
@@ -55,7 +56,7 @@ functional v0.12.0 implementation goals:
 ```bash
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_dead_code.py
-uv run pytest tests/test_release_readiness_guards.py tests/test_dead_code_check.py -v
+uv run pytest tests/test_release_readiness_guards.py tests/test_dead_code_check.py tests/test_auth_capture_and_cache.py -v
 ```
 
 ## v0.11.0 Goal Workflow

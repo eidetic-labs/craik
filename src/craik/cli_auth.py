@@ -29,6 +29,7 @@ from craik.runtime.auth.guided_setup import (
     default_pool_for_profile,
     guided_provider_defaults,
 )
+from craik.runtime.auth.login import auth_status_rows
 from craik.runtime.auth.operator import (
     OIDCAuthenticator,
     OIDCConfig,
@@ -335,18 +336,8 @@ def auth_status() -> None:
     """Show auth profile health and last-use status."""
     operator_identity_or_fail()
     store = AuthProfileStore.from_env()
-    payload = [
-        {
-            "id": profile.id,
-            "kind": profile.kind,
-            "provider_family": profile.provider_family,
-            "last_used_at": profile.last_used_at.isoformat()
-            if profile.last_used_at is not None
-            else None,
-            "last_status": profile.last_status,
-        }
-        for profile in visible_auth_profiles(store.list(), active_operator_session_from_env())
-    ]
+    profiles = visible_auth_profiles(store.list(), active_operator_session_from_env())
+    payload = [row.as_dict() for row in auth_status_rows(profiles)]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 

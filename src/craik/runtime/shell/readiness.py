@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from craik.runtime.auth import AuthProfileStore, AuthProfileStoreError
+from craik.runtime.auth.login import profile_runtime_status
 from craik.runtime.auth.operator import (
     OperatorSession,
     OperatorSessionNotFoundError,
@@ -156,7 +157,12 @@ def _auth_profile_ids(
         profiles = AuthProfileStore.from_env(env).list()
     except AuthProfileStoreError:
         return []
-    return [profile.id for profile in visible_auth_profiles(profiles, operator_session)]
+    visible = visible_auth_profiles(profiles, operator_session)
+    return [
+        profile.id
+        for profile in visible
+        if profile_runtime_status(profile, env=env).status in {"ok", "unknown"}
+    ]
 
 
 def _is_local_profile(profile_id: str) -> bool:
