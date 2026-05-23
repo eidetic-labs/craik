@@ -164,7 +164,7 @@ Completions profiles send `Authorization: Bearer`.
 
 ### Local-CLI OAuth fallback
 
-Claude Code users can reuse the local CLI credential file.
+Anthropic local-CLI users can reuse the local credential file.
 
 ```sh
 craik auth add anthropic:claude-code --kind=oauth-token --source=local-cli
