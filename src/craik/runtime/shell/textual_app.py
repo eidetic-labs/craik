@@ -18,6 +18,12 @@ from craik.runtime.shell.slash_commands import (
     dispatch_slash_command,
 )
 from craik.runtime.shell.slash_completer import complete_slash_input
+from craik.runtime.shell.textual_modals import (
+    ApprovalDecisionModal,
+    AuthCaptureModal,
+    AuthLogoutModal,
+    ModalFlowResult,
+)
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput, cli_prefix_warning
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
@@ -81,6 +87,10 @@ class CraikApp(App[None]):
         transcript = self.query_one("#transcript", RichLog)
         transcript.write(f"> {text}")
         append_history(text, env=self.env)
+        if self._open_modal_flow(text):
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
         result = self._dispatch(text)
         transcript.write(linkify_text(result.text))
         input_widget.value = ""
@@ -95,6 +105,40 @@ class CraikApp(App[None]):
         if text.startswith("/"):
             return dispatch_slash_command(text, env=self.env)
         return dispatch_tui_input(text, env=self.env)
+
+    def _open_modal_flow(self, text: str) -> bool:
+        tokens = text.split()
+        if not tokens:
+            return False
+        if tokens[:2] in (["/auth", "login"], ["/provider", "login"]):
+            provider = tokens[2] if len(tokens) > 2 else "openai"
+            self.push_screen(AuthCaptureModal(provider, env=self.env), self._modal_complete)
+            return True
+        if tokens[:2] == ["/auth", "logout"]:
+            profile = tokens[2] if len(tokens) > 2 else self._active_profile()
+            self.push_screen(AuthLogoutModal(profile, env=self.env), self._modal_complete)
+            return True
+        if len(tokens) >= 3 and tokens[:2] == ["/approvals", "decide"]:
+            self.push_screen(
+                ApprovalDecisionModal(tokens[2], env=self.env),
+                self._modal_complete,
+            )
+            return True
+        return False
+
+    def _modal_complete(self, result: ModalFlowResult | None) -> None:
+        if result is None:
+            return
+        transcript = self.query_one("#transcript", RichLog)
+        transcript.write(linkify_text(result.message))
+        if result.severity != "information":
+            self.notify(result.message, severity=result.severity, timeout=8)
+
+    def _active_profile(self) -> str:
+        report = self.readiness
+        if report is not None:
+            return report.active_profile
+        return "openai:default"
 
     def _show_slash_popup(self, prefix: str) -> None:
         popup = self.query_one("#slash-popup", Container)

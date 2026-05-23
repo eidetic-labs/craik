@@ -28,3 +28,29 @@ Screen {
 #status {
     color: #A0A0A0;
 }
+
+.craik-modal {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    margin: 2 4;
+    padding: 1 2;
+    background: $surface;
+    border: round $craik-brand;
+}
+
+.modal-title {
+    text-style: bold;
+    color: $craik-brand;
+    margin-bottom: 1;
+}
+
+.modal-copy {
+    margin-bottom: 1;
+}
+
+.modal-actions {
+    height: auto;
+    align-horizontal: right;
+    margin-top: 1;
+}
