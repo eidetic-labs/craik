@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from craik.contracts.models import AgentSessionEvent, AgentSessionState, PluginReceipt
+from craik.contracts.models import (
+    AgentSessionEvent,
+    AgentSessionState,
+    PluginReceipt,
+    ShellInvocationReceipt,
+)
 from craik.runtime.store.integrity import (
     IntegrityStore,
     hmac_key_for_store,
@@ -33,9 +38,15 @@ class AgentSessionEventReadResult:
     hmac_status: ReceiptHmacStatus
 
 
+@dataclass(frozen=True)
+class ShellInvocationReceiptReadResult:
+    receipt: ShellInvocationReceipt
+    hmac_status: ReceiptHmacStatus
+
+
 def contract_receipt_hmac_status(
     store: IntegrityStore,
-    contract: PluginReceipt | AgentSessionState | AgentSessionEvent,
+    contract: PluginReceipt | AgentSessionState | AgentSessionEvent | ShellInvocationReceipt,
 ) -> ReceiptHmacStatus:
     if contract.receipt_hmac is None:
         return "unverified"
