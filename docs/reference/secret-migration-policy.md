@@ -1,6 +1,6 @@
 # Secret migration policy
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
@@ -14,12 +14,15 @@ and receipt expectations.
 
 <div className="craik-keypoint">
 
-**No copying. Ever.**
+**No implicit copying.**
 
 Migration workflows must never copy secret values from an adjacent
 tool, workflow engine, or configuration source into the target
 runtime. Unknown fields that contain secret material are blocked by
 default. A migration policy cannot authorize secret-value copying.
+Optional OS-keyring import is a separate, explicit operator-confirmed
+step that writes only to a secure credential backend and records a
+redacted receipt.
 
 </div>
 
@@ -113,6 +116,30 @@ the source value. Public docs and public receipts must not include
 local filesystem paths, credentials, private task names, or copied
 secret bytes.
 
+## Redacted Inventory
+
+`detect_secret_inventory` scans nested source payloads for secret-like
+field names such as `api_key`, `token`, `password`, `secret`, and
+`credential`. The inventory records:
+
+<div className="craik-grid">
+
+<div><h4>Source id</h4></div>
+<div><h4>Field path</h4><p>For example <code>provider.api_key</code>.</p></div>
+<div><h4>Value fingerprint</h4><p>A truncated hash for correlation, not the value.</p></div>
+<div><h4>Value length</h4><p>Enough for diagnostics without disclosure.</p></div>
+
+</div>
+
+## Optional keyring import
+
+`migrate_secret_inventory_to_keyring` can write detected values to a
+secure OS credential backend only when the operator explicitly confirms
+the operation. Without confirmation, the function returns dry-run
+receipts and writes nothing. If the current backend is the file
+fallback or otherwise not secure, the import is blocked and the
+operator must reconfigure credentials manually.
+
 ## Receipts
 
 Secret migration receipts record:
@@ -124,6 +151,8 @@ Secret migration receipts record:
 <div><h4>Safe handling outcome</h4></div>
 <div><h4>Required operator action</h4><p>When applicable.</p></div>
 <div><h4>Confirmation</h4><p>That no secret value was copied.</p></div>
+<div><h4>Keyring target</h4><p>When an explicit secure-backend import was confirmed.</p></div>
+<div><h4>Fingerprint</h4><p>For correlation without logging the value.</p></div>
 
 </div>
 

@@ -27,6 +27,9 @@ within the `0.x.0` stability expectations described in
   objects, manual actions, skipped secrets, security posture changes,
   unsupported capabilities, recommended next commands, and validation
   checklist items.
+- v0.12.0 secret migration inventory and optional keyring import
+  receipts, with no-copy dry-run defaults, redacted field fingerprints,
+  explicit operator confirmation, and secure-backend enforcement.
 
 ## 0.11.0 — 2026-05-23
 
