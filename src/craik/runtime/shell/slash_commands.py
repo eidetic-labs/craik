@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
+import tempfile
 from dataclasses import dataclass
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
+from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
@@ -63,7 +68,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
         mutating=True,
     ),
     SlashCommand("status", "Show readiness state.", "/status"),
-    SlashCommand("doctor", "Run diagnostics from the CLI.", "/doctor", readiness="operator"),
+    SlashCommand("doctor", "Run diagnostics inline.", "/doctor"),
     SlashCommand("sessions", "List persistent sessions.", "/sessions"),
     SlashCommand(
         "resume",
@@ -71,16 +76,15 @@ COMMANDS: tuple[SlashCommand, ...] = (
         "/resume <session-id>",
         mutating=True,
     ),
-    SlashCommand("approvals", "Inspect pending approvals.", "/approvals", readiness="operator"),
-    SlashCommand("handoffs", "Inspect handoffs.", "/handoffs", readiness="operator"),
-    SlashCommand("receipts", "Inspect receipts.", "/receipts", readiness="operator"),
+    SlashCommand("approvals", "Inspect pending approvals.", "/approvals"),
+    SlashCommand("handoffs", "Inspect handoffs.", "/handoffs"),
+    SlashCommand("receipts", "Inspect receipts.", "/receipts"),
     SlashCommand(
         "skills",
         "Inspect learning-loop skill controls.",
         "/skills",
-        readiness="operator",
     ),
-    SlashCommand("memory", "Inspect memory proposals and facts.", "/memory", readiness="operator"),
+    SlashCommand("memory", "Inspect memory proposals and facts.", "/memory"),
     SlashCommand("gateway", "Inspect gateway state.", "/gateway"),
     SlashCommand("exit", "Exit the shell.", "/exit", aliases=("quit",)),
 )
@@ -117,10 +121,12 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if not tokens or not tokens[0].startswith("/"):
         return SlashCommandResult("slash commands must start with /")
     name = tokens[0][1:]
+    if name == "craik":
+        return SlashCommandResult(_craik_prefix_recovery(tokens))
     command = _command_for_name(name)
     if command is None:
-        suggestion = _suggest(name)
-        suffix = f" Did you mean /{suggestion}?" if suggestion else ""
+        suggestion = suggest_close_command(tokens)
+        suffix = f" Did you mean `{suggestion}`?" if suggestion else ""
         return SlashCommandResult(f"unknown slash command: /{name}.{suffix}")
     if command.name == "exit":
         return SlashCommandResult("Session ended.", exit_shell=True)
@@ -133,30 +139,61 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name in {"status", "setup"}:
         return SlashCommandResult(json.dumps(report.as_dict(), indent=2, sort_keys=True))
     if command.name == "auth":
+        if len(tokens) > 1 and tokens[1] == "logout":
+            profile = tokens[2] if len(tokens) > 2 else report.active_profile
+            return SlashCommandResult(
+                f"Auth logout confirmation requested for `{profile}`. "
+                "The interactive TUI opens a confirmation modal for this action."
+            )
         if len(tokens) > 1 and tokens[1] == "status":
             return SlashCommandResult(
                 json.dumps(auth_status_payload(env), indent=2, sort_keys=True)
             )
         if len(tokens) > 2 and tokens[1] == "login":
             return SlashCommandResult(
-                f"Use `craik auth login {tokens[2]}` to start the secure credential prompt."
+                f"Auth capture requested for `{tokens[2]}`. "
+                "The interactive TUI opens the credential capture modal."
             )
-        return SlashCommandResult(
-            "Use `craik auth login [provider]`, `/auth status`, or `/provider login <provider>`."
-        )
+        return SlashCommandResult(json.dumps(_auth_summary_payload(env), indent=2, sort_keys=True))
     if command.name == "provider" and len(tokens) >= 3 and tokens[1] == "login":
-        return SlashCommandResult(f"Use `craik auth login {tokens[2]}` to configure this provider.")
+        return SlashCommandResult(
+            f"Provider auth capture requested for `{tokens[2]}`. "
+            "The interactive TUI opens the credential capture modal."
+        )
+    if command.name == "provider":
+        return SlashCommandResult(json.dumps(_provider_payload(), indent=2, sort_keys=True))
     if command.name == "model":
-        return SlashCommandResult(
-            "Use `craik model list`, `craik model status`, or `craik model set`."
-        )
+        if len(tokens) >= 3 and tokens[1] == "set":
+            return _set_active_model(tokens[2], env=env)
+        if len(tokens) >= 2 and tokens[1] == "list":
+            return SlashCommandResult(json.dumps(_model_list_payload(), indent=2, sort_keys=True))
+        return SlashCommandResult(json.dumps(_model_payload(env), indent=2, sort_keys=True))
     if command.name == "sessions":
-        return SlashCommandResult(
-            "Use `craik session list` or `craik session resume <session-id>`."
-        )
+        return SlashCommandResult(json.dumps(_sessions_payload(env), indent=2, sort_keys=True))
+    if command.name == "resume":
+        if len(tokens) < 2:
+            return SlashCommandResult("resume requires a session id")
+        return _resume_session(tokens[1], env=env)
     if command.name == "approvals":
+        if len(tokens) >= 3 and tokens[1] == "decide":
+            return SlashCommandResult(
+                f"Approval decision requested for `{tokens[2]}`. "
+                "The interactive TUI opens the approval decision modal."
+            )
         return SlashCommandResult(_approval_text(env))
-    return SlashCommandResult(f"Use `craik {command.name}` for the full command surface.")
+    if command.name == "handoffs":
+        return SlashCommandResult(json.dumps(_handoffs_payload(env), indent=2, sort_keys=True))
+    if command.name == "receipts":
+        return SlashCommandResult(json.dumps(_receipts_payload(env), indent=2, sort_keys=True))
+    if command.name == "skills":
+        return SlashCommandResult(json.dumps(_skills_payload(env), indent=2, sort_keys=True))
+    if command.name == "memory":
+        return SlashCommandResult(json.dumps(_memory_payload(env), indent=2, sort_keys=True))
+    if command.name == "gateway":
+        return SlashCommandResult(json.dumps(_gateway_payload(env), indent=2, sort_keys=True))
+    if command.name == "doctor":
+        return SlashCommandResult(json.dumps(_doctor_payload(report), indent=2, sort_keys=True))
+    return SlashCommandResult(f"`/{command.name}` is registered but has no inline handler yet.")
 
 
 def _command_for_name(name: str) -> SlashCommand | None:
@@ -193,7 +230,7 @@ def _localized_help_text(args: list[str], *, env: dict[str, str] | None) -> str:
 def _approval_text(env: dict[str, str] | None) -> str:
     paths = resolve_craik_paths(env)
     if not (paths.state / DATABASE_NAME).exists():
-        return "No approval queue is initialized. Use `craik approvals list` after setup."
+        return json.dumps({"count": 0, "approvals": []}, indent=2, sort_keys=True)
     store = LocalStore.from_paths(paths)
     try:
         store.initialize()
@@ -203,6 +240,219 @@ def _approval_text(env: dict[str, str] | None) -> str:
     return json.dumps(payload, indent=2, sort_keys=True)
 
 
+def _auth_summary_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    report = resolve_readiness(env)
+    return {
+        "operator_authenticated": report.operator_authenticated,
+        "operator_required": report.operator_required,
+        "profiles": auth_status_payload(env),
+    }
+
+
+def _provider_payload() -> list[dict[str, Any]]:
+    return [
+        provider.model_dump(mode="json", by_alias=True)
+        for provider in default_model_provider_registry().list()
+    ]
+
+
+def _model_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    settings = ModelSettingsStore.from_env(env).load()
+    return {
+        "active_model": settings.active_model,
+        "aliases": settings.aliases,
+        "fallbacks": settings.fallbacks,
+    }
+
+
+def _model_list_payload() -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for provider in default_model_provider_registry().list():
+        default_model = provider.metadata.get("default_model")
+        if isinstance(default_model, str):
+            payload.append(
+                {
+                    "provider": provider.provider,
+                    "provider_id": provider.id,
+                    "model": default_model,
+                    "selector": f"{provider.provider}/{default_model}",
+                }
+            )
+    return payload
+
+
+def _set_active_model(model: str, *, env: dict[str, str] | None) -> SlashCommandResult:
+    if "/" not in model or model.startswith("/") or model.endswith("/"):
+        return SlashCommandResult("model set requires a provider/model selector")
+    store = ModelSettingsStore.from_env(env)
+    settings = store.load()
+    updated = settings.__class__(
+        active_model=model,
+        aliases=settings.aliases,
+        fallbacks=settings.fallbacks,
+    )
+    store.save(updated)
+    return SlashCommandResult(f"Active model set to `{model}`.")
+
+
+def _sessions_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    sessions = _store_list(env, "list_agent_session_states")
+    return {
+        "active_session": _active_session_id(env),
+        "count": len(sessions),
+        "sessions": [_json_ready(item) for item in sessions],
+    }
+
+
+def _resume_session(session_id: str, *, env: dict[str, str] | None) -> SlashCommandResult:
+    sessions = _store_list(env, "list_agent_session_states")
+    if sessions and not any(getattr(session, "id", None) == session_id for session in sessions):
+        return SlashCommandResult(f"unknown session: {session_id}")
+    if not sessions and _database_exists(env):
+        return SlashCommandResult(f"unknown session: {session_id}")
+    _save_active_session(session_id, env)
+    return SlashCommandResult(f"Active session set to `{session_id}`.")
+
+
+def _handoffs_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    handoffs = _store_list(env, "list_handoffs")
+    return {"count": len(handoffs), "handoffs": [_json_ready(item) for item in handoffs]}
+
+
+def _receipts_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    receipts = [
+        *_store_list(env, "list_receipts"),
+        *_store_list(env, "list_plugin_receipts"),
+        *_store_list(env, "list_gateway_receipts"),
+    ]
+    return {"count": len(receipts), "receipts": [_json_ready(item) for item in receipts]}
+
+
+def _skills_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    packages = _store_list(env, "list_skill_packages")
+    registries = _store_list(env, "list_skill_registries")
+    proposals = _store_list(env, "list_distilled_instruction_proposals")
+    return {
+        "packages": [_json_ready(item) for item in packages],
+        "registries": [_json_ready(item) for item in registries],
+        "proposals": [_json_ready(item) for item in proposals],
+    }
+
+
+def _memory_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    proposals = _store_list(env, "list_proposals")
+    diffs = _store_list(env, "list_memory_diffs")
+    previews = _store_list(env, "list_memory_impact_previews")
+    return {
+        "proposals": [_json_ready(item) for item in proposals],
+        "diffs": [_json_ready(item) for item in diffs],
+        "impact_previews": [_json_ready(item) for item in previews],
+    }
+
+
+def _gateway_payload(env: dict[str, str] | None) -> dict[str, Any]:
+    configs = _store_list(env, "list_gateway_configs")
+    states = _store_list(env, "list_gateway_runtime_states")
+    schedules = _store_list(env, "list_gateway_schedules")
+    return {
+        "configs": [_json_ready(item) for item in configs],
+        "runtime_states": [_json_ready(item) for item in states],
+        "schedules": [_json_ready(item) for item in schedules],
+    }
+
+
+def _doctor_payload(report: Any) -> dict[str, Any]:
+    return {"readiness": report.as_dict()}
+
+
+def _store_list(env: dict[str, str] | None, method_name: str) -> list[Any]:
+    if not _database_exists(env):
+        return []
+    paths = resolve_craik_paths(env)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        method = getattr(store, method_name, None)
+        if method is None:
+            return []
+        return list(method())
+    except Exception:
+        return []
+    finally:
+        store.close()
+
+
+def _database_exists(env: dict[str, str] | None) -> bool:
+    paths = resolve_craik_paths(env)
+    return (paths.state / DATABASE_NAME).exists()
+
+
+def _json_ready(item: Any) -> Any:
+    if hasattr(item, "model_dump"):
+        return item.model_dump(mode="json", by_alias=True)
+    if hasattr(item, "as_dict"):
+        return item.as_dict()
+    if isinstance(item, dict):
+        return item
+    return str(item)
+
+
+def _shell_settings_path(env: dict[str, str] | None) -> Path:
+    return resolve_craik_paths(env).config / "shell-settings.json"
+
+
+def _active_session_id(env: dict[str, str] | None) -> str | None:
+    path = _shell_settings_path(env)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    value = payload.get("active_session")
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _save_active_session(session_id: str, env: dict[str, str] | None) -> None:
+    path = _shell_settings_path(env)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"active_session": session_id}
+    fd, temp_name = tempfile.mkstemp(
+        prefix=".shell-settings.",
+        suffix=".tmp",
+        dir=path.parent,
+        text=True,
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _craik_prefix_recovery(tokens: list[str]) -> str:
+    if len(tokens) == 1:
+        return "Drop the `craik` prefix. `/help` lists all slash commands."
+    rest = " ".join(tokens[1:])
+    return f"Drop the `craik` prefix — try `/{rest}` instead. `/help` lists all slash commands."
+
+
+def suggest_close_command(tokens: list[str]) -> str | None:
+    """Suggest a close slash command for an unknown token sequence."""
+    if not tokens:
+        return None
+    name = tokens[0].removeprefix("/")
+    suggestion = _suggest(name)
+    if suggestion is None:
+        return None
+    tail = " ".join(tokens[1:])
+    return f"/{suggestion} {tail}".strip()
+
+
 def _suggest(name: str) -> str | None:
-    matches = difflib.get_close_matches(name, command_names(), n=1, cutoff=0.5)
+    matches = difflib.get_close_matches(name, command_names(), n=1, cutoff=0.65)
     return matches[0] if matches else None
