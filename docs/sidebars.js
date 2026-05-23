@@ -233,6 +233,7 @@ const sidebars = {
         'guides/adjacent-runtime-migration',
         'guides/compatibility-fixtures',
         'guides/mcp-ecosystem-compatibility',
+        'guides/session-portability',
         'reference/mcp-client',
         'reference/mcp-export-boundary',
         'reference/reference-integrations',

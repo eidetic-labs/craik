@@ -37,6 +37,10 @@ within the `0.x.0` stability expectations described in
 - v0.12.0 MCP compatibility surfaces through `craik mcp server
   manifest`, JSON-RPC smoke handling, redacted MCP client config
   import/export, and auth/policy/receipt mapping for MCP tool calls.
+- v0.12.0 session portability through `craik session export-portable`
+  and `import-portable`, with redacted Craik session exports,
+  adjacent transcript parsing, source identity provenance, and
+  unsupported tool-call reports that remain non-executable.
 
 ## 0.11.0 — 2026-05-23
 

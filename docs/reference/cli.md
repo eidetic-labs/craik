@@ -2291,6 +2291,26 @@ Export one redacted persistent session.
 craik session export [OPTIONS] SESSION_ID
 ```
 
+## `craik session export-portable`
+
+Export one persistent session in portable v0.12.0 format.
+
+```text
+craik session export-portable [OPTIONS] SESSION_ID
+```
+
+## `craik session import-portable`
+
+Parse a portable session or adjacent transcript without executing tools.
+
+```text
+craik session import-portable [OPTIONS]
+```
+
+Options:
+
+- `--path`: Craik or adjacent transcript JSON path.
+
 ## `craik session list`
 
 List persistent agent sessions.
