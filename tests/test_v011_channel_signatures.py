@@ -176,6 +176,35 @@ def test_discord_verifier_unavailable_reports_correct_error(monkeypatch) -> None
     assert result.reason == "discord webhook signature verifier unavailable"
 
 
+def test_discord_signature_valid_raises_when_all_verifiers_are_unavailable(monkeypatch) -> None:
+    original_import = builtins.__import__
+
+    def import_without_verifiers(
+        name: str,
+        globals=None,
+        locals=None,
+        fromlist=(),
+        level: int = 0,
+    ):
+        if name.startswith(("nacl", "cryptography")):
+            raise ImportError(name)
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_verifiers)
+
+    try:
+        webhook_ingress._discord_signature_valid(
+            body=_body(),
+            public_key="00",
+            signature="00",
+            timestamp=str(int(NOW.timestamp())),
+        )
+    except webhook_ingress._DiscordVerifierUnavailable:
+        pass
+    else:
+        raise AssertionError("expected Discord verifier unavailable when no backend imports")
+
+
 def test_discord_invalid_signature_reports_correct_error(monkeypatch) -> None:
     monkeypatch.setattr(webhook_ingress, "discord_signature_verifier_available", lambda: True)
     monkeypatch.setattr(webhook_ingress, "_discord_signature_valid", lambda **_: False)
