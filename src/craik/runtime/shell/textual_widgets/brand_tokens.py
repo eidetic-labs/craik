@@ -1,0 +1,7 @@
+"""Craik brand color tokens used by terminal UI themes."""
+
+CRAIK_BRAND_LAVENDER = "#B4ACE6"
+CRAIK_BRAND_LAVENDER_DEEP = "#7C72C7"
+CRAIK_BRAND_LAVENDER_TINT = "#EAE6F8"
+CRAIK_GREY_400 = "#A0A0A0"
+CRAIK_GREY_700 = "#4A4A4A"

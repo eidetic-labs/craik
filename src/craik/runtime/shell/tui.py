@@ -164,9 +164,15 @@ def run_tui(
     lines: Iterable[str] | None = None,
 ) -> int:
     """Run the terminal UI, falling back to a single render in noninteractive mode."""
-    output_func(render_tui_snapshot(build_tui_snapshot(env)))
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
     scripted = iter(lines) if lines is not None else None
+    if interactive and scripted is None:
+        from craik.runtime.shell.textual_app import run_textual_tui, terminal_supports_textual
+
+        if terminal_supports_textual(env):
+            return run_textual_tui(env=env)
+
+    output_func(render_tui_snapshot(build_tui_snapshot(env)))
     if not interactive and scripted is None:
         return 0
 
