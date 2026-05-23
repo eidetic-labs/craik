@@ -2,11 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from craik.runtime.projects.secret_migration import (
+    InMemorySecretKeyring,
     SecretMigrationDecision,
     SecretMigrationPolicy,
     SecretMigrationPolicyRule,
+    detect_secret_inventory,
     evaluate_secret_migration,
+    migrate_secret_inventory_to_keyring,
 )
+from craik.runtime.shell.credential_storage import CredentialStorageStatus
 
 
 def test_secret_migration_policy_requires_operator_reconfiguration() -> None:
@@ -149,6 +153,84 @@ def test_secret_migration_decisions_reject_secret_allow_and_missing_receipts() -
             receipt_ids=["receipt_secret_migration"],
             contains_secret=True,
         )
+
+
+def test_secret_inventory_detects_secret_fields_without_values() -> None:
+    payload = {
+        "provider": {
+            "api_key": "sk_live_should_not_escape",
+            "nested": {"password": "also-hidden"},
+        }
+    }
+
+    inventory = detect_secret_inventory(payload, source_id="provider_openai")
+    dumped = [item.model_dump(mode="json") for item in inventory]
+
+    assert [item.field_path for item in inventory] == [
+        "provider.api_key",
+        "provider.nested.password",
+    ]
+    assert inventory[0].value_length == len("sk_live_should_not_escape")
+    assert "sk_live_should_not_escape" not in str(dumped)
+    assert "also-hidden" not in str(dumped)
+
+
+def test_secret_migration_keyring_import_requires_confirmation() -> None:
+    payload = {"api_key": "sk_live_should_not_escape"}
+    keyring = InMemorySecretKeyring()
+    backend = CredentialStorageStatus(
+        backend="test-keyring",
+        status="available",
+        secure=True,
+    )
+
+    receipts = migrate_secret_inventory_to_keyring(
+        payload,
+        source_id="provider_openai",
+        keyring=keyring,
+        backend=backend,
+        confirm=False,
+    )
+
+    assert receipts[0].status == "dry_run"
+    assert receipts[0].copied_secret_value is False
+    assert keyring.values == {}
+
+    applied = migrate_secret_inventory_to_keyring(
+        payload,
+        source_id="provider_openai",
+        keyring=keyring,
+        backend=backend,
+        confirm=True,
+    )
+
+    assert applied[0].status == "imported"
+    assert applied[0].operator_confirmed is True
+    assert keyring.values[applied[0].target_ref] == "sk_live_should_not_escape"
+    assert "sk_live_should_not_escape" not in str(applied[0].model_dump(mode="json"))
+
+
+def test_secret_migration_blocks_file_fallback_keyring_import() -> None:
+    payload = {"api_key": "sk_live_should_not_escape"}
+    keyring = InMemorySecretKeyring()
+    backend = CredentialStorageStatus(
+        backend="file",
+        status="fallback",
+        secure=False,
+        warning="plaintext at rest",
+    )
+
+    receipts = migrate_secret_inventory_to_keyring(
+        payload,
+        source_id="provider_openai",
+        keyring=keyring,
+        backend=backend,
+        confirm=True,
+    )
+
+    assert receipts[0].status == "blocked"
+    assert receipts[0].backend == "file"
+    assert keyring.values == {}
 
     with pytest.raises(ValidationError, match="require receipts"):
         SecretMigrationDecision(

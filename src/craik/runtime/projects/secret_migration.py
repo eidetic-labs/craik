@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import Field, model_validator
 
 from craik.contracts.models import CraikModel
+from craik.runtime.shell.credential_storage import CredentialStorageStatus
 
 SecretMigrationHandling = Literal["redact", "reference", "reconfigure", "block"]
 SecretMigrationDecisionStatus = Literal[
@@ -17,6 +19,7 @@ SecretMigrationDecisionStatus = Literal[
     "operator_reconfiguration_required",
     "blocked",
 ]
+SECRET_FIELD_MARKERS = ("secret", "token", "password", "api_key", "apikey", "credential")
 
 
 class SecretMigrationPolicyRule(CraikModel):
@@ -96,6 +99,134 @@ class SecretMigrationDecision(CraikModel):
         return self
 
 
+class SecretInventoryItem(CraikModel):
+    """One redacted secret-like field discovered in source state."""
+
+    source_id: str
+    field_path: str
+    value_fingerprint: str
+    value_length: int
+    handling: SecretMigrationDecisionStatus = "blocked"
+
+    @model_validator(mode="after")
+    def validate_inventory_item(self) -> SecretInventoryItem:
+        """Ensure inventory entries do not carry secret values."""
+        if not self.source_id:
+            raise ValueError("secret inventory items require source_id")
+        if not self.field_path:
+            raise ValueError("secret inventory items require field_path")
+        if len(self.value_fingerprint) != 16:
+            raise ValueError("secret inventory fingerprints must be truncated hashes")
+        return self
+
+
+class SecretMigrationReceipt(CraikModel):
+    """Receipt for an optional keyring secret migration action."""
+
+    id: str
+    source_id: str
+    field_path: str
+    target_ref: str
+    backend: str
+    status: Literal["dry_run", "imported", "blocked"]
+    copied_secret_value: Literal[False] = False
+    operator_confirmed: bool = False
+    value_fingerprint: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @model_validator(mode="after")
+    def validate_receipt(self) -> SecretMigrationReceipt:
+        """Keep receipts redacted and confirmation-bound."""
+        if self.status == "imported" and not self.operator_confirmed:
+            raise ValueError("imported secret migrations require operator confirmation")
+        if any(marker in self.target_ref.lower() for marker in ("sk-", "password=", "token=")):
+            raise ValueError("secret migration target_ref must not contain secret material")
+        return self
+
+
+class SecretKeyringWriter(Protocol):
+    """Minimal keyring writer used by secret migration."""
+
+    def set_secret(self, target_ref: str, value: str) -> None: ...
+
+
+class InMemorySecretKeyring:
+    """Test keyring backend for secret migration flows."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def set_secret(self, target_ref: str, value: str) -> None:
+        self.values[target_ref] = value
+
+
+def detect_secret_inventory(
+    payload: Any,
+    *,
+    source_id: str,
+) -> list[SecretInventoryItem]:
+    """Return a redacted inventory of secret-like source fields."""
+    return [
+        SecretInventoryItem(
+            source_id=source_id,
+            field_path=field_path,
+            value_fingerprint=_fingerprint(str(value)),
+            value_length=len(str(value)),
+            handling="blocked",
+        )
+        for field_path, value in sorted(_secret_values(payload))
+    ]
+
+
+def migrate_secret_inventory_to_keyring(
+    payload: Any,
+    *,
+    source_id: str,
+    keyring: SecretKeyringWriter,
+    backend: CredentialStorageStatus,
+    confirm: bool,
+    target_prefix: str = "craik/migration",
+) -> list[SecretMigrationReceipt]:
+    """Optionally write detected source secrets into a keyring backend."""
+    receipts: list[SecretMigrationReceipt] = []
+    for item in detect_secret_inventory(payload, source_id=source_id):
+        target_ref = f"{target_prefix}/{_safe_ref(source_id)}/{_safe_ref(item.field_path)}"
+        if not confirm:
+            receipts.append(
+                _receipt(
+                    item,
+                    target_ref=target_ref,
+                    backend=backend.backend,
+                    status="dry_run",
+                    operator_confirmed=False,
+                )
+            )
+            continue
+        if not backend.secure:
+            receipts.append(
+                _receipt(
+                    item,
+                    target_ref=target_ref,
+                    backend=backend.backend,
+                    status="blocked",
+                    operator_confirmed=True,
+                )
+            )
+            continue
+        value = _value_at_path(payload, item.field_path)
+        keyring.set_secret(target_ref, str(value))
+        receipts.append(
+            _receipt(
+                item,
+                target_ref=target_ref,
+                backend=backend.backend,
+                status="imported",
+                operator_confirmed=True,
+            )
+        )
+    return receipts
+
+
 def evaluate_secret_migration(
     *,
     source_field: str,
@@ -150,3 +281,65 @@ def _decision_status(handling: SecretMigrationHandling) -> SecretMigrationDecisi
     if handling == "reconfigure":
         return "operator_reconfiguration_required"
     return "blocked"
+
+
+def _secret_values(payload: Any, prefix: str = "") -> list[tuple[str, str]]:
+    values: list[tuple[str, str]] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            field = f"{prefix}.{key}" if prefix else str(key)
+            if _is_secret_field(str(key)) and isinstance(value, str) and value:
+                values.append((field, value))
+                continue
+            values.extend(_secret_values(value, field))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            values.extend(_secret_values(value, f"{prefix}[{index}]"))
+    return values
+
+
+def _is_secret_field(key: str) -> bool:
+    lowered = key.lower()
+    return any(marker in lowered for marker in SECRET_FIELD_MARKERS)
+
+
+def _value_at_path(payload: Any, path: str) -> Any:
+    current = payload
+    for segment in path.replace("]", "").split("."):
+        if "[" in segment:
+            key, index = segment.split("[", 1)
+            if key:
+                current = current[key]
+            current = current[int(index)]
+        else:
+            current = current[segment]
+    return current
+
+
+def _receipt(
+    item: SecretInventoryItem,
+    *,
+    target_ref: str,
+    backend: str,
+    status: Literal["dry_run", "imported", "blocked"],
+    operator_confirmed: bool,
+) -> SecretMigrationReceipt:
+    return SecretMigrationReceipt(
+        id=f"secret_migration_{_safe_ref(item.source_id)}_{_safe_ref(item.field_path)}",
+        source_id=item.source_id,
+        field_path=item.field_path,
+        target_ref=target_ref,
+        backend=backend,
+        status=status,
+        operator_confirmed=operator_confirmed,
+        value_fingerprint=item.value_fingerprint,
+    )
+
+
+def _fingerprint(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def _safe_ref(value: str) -> str:
+    normalized = "".join(character if character.isalnum() else "-" for character in value.lower())
+    return "-".join(part for part in normalized.split("-") if part) or "secret"

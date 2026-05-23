@@ -261,6 +261,10 @@ operator-visible learning-loop controls. The trust boundary intent is:
   owner-only POSIX mode, but the file content is plaintext at rest.
   Treat file fallback secrets like private keys: keep them out of
   unencrypted backups and prefer OS-native backends when available.
+- v0.12.0 migration secret handling keeps adjacent-runtime secrets out
+  of reports by default. Optional keyring import requires explicit
+  operator confirmation and a secure OS credential backend; file
+  fallback backends block import and require manual reconfiguration.
 - One-shot prompts require explicit operator acknowledgment when
   supplied through argv. Prompts in argv are visible to local process
   listings and shell history. Use `craik -z -` or `craik chat -q -` to
