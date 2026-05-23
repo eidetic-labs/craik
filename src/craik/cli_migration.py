@@ -10,16 +10,18 @@ import typer
 
 from craik.cli import migrate_app
 from craik.runtime.projects.migration.adjacent_runtime import (
-    apply_adjacent_runtime_migration,
-    apply_payload,
     dry_run_payload,
-    format_apply_text,
     format_dry_run_text,
     format_inspection_text,
     inspect_adjacent_runtime_source,
     inspection_payload,
     plan_adjacent_runtime_migration,
     report_adjacent_runtime_migration,
+)
+from craik.runtime.projects.migration.apply import (
+    apply_adjacent_runtime_migration,
+    apply_payload,
+    format_apply_text,
 )
 from craik.runtime.projects.migration.reports import format_migration_report
 
