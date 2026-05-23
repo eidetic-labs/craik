@@ -102,13 +102,18 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(tmp_path: Path)
 
     assert resolve_readiness(env).state == "operator-only"
 
-    login = runner.invoke(app, ["auth", "login", "openai", "--dry-run"], env=env)
+    login = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--env-var", "OPENAI_API_KEY", "--dry-run"],
+        env=env,
+    )
     assert login.exit_code == 0
     assert json.loads(login.stdout)["dry_run"] is True
 
     login_write = runner.invoke(
         app,
         ["auth", "login", "openai", "--no-browser"],
+        input="openai-test-key\n",
         env=env,
     )
     model_set = runner.invoke(app, ["model", "set", "openai/gpt-5"], env=env)
@@ -120,7 +125,11 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(tmp_path: Path)
 
 def test_readiness_filters_profiles_by_active_operator(tmp_path: Path) -> None:
     home = tmp_path / "home"
-    env = {"CRAIK_HOME": str(home)}
+    env = {
+        "CRAIK_HOME": str(home),
+        "OPENAI_API_KEY": "openai-key",
+        "ANTHROPIC_API_KEY": "anthropic-key",
+    }
     _put_operator_session(home, subject="operator:a", groups=["team-a"])
     profile_store = AuthProfileStore.from_env(env)
     profile_store.put(_auth_profile("openai:operator-a", authorized_operators=["operator:a"]))

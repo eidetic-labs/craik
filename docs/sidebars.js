@@ -153,6 +153,7 @@ const sidebars = {
         'reference/provider-certification',
         'reference/provider-budgets',
         'guides/authentication',
+        'reference/credential-storage',
         'guides/local-model-setup',
         'guides/model-session-profile-ux',
         'reference/prompt-compiler',

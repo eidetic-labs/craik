@@ -12,10 +12,10 @@ from craik.runtime.auth.operator import (
 from craik.runtime.auth.profile import AuthProfile
 
 
-def active_operator_session_from_env() -> OperatorSession | None:
+def active_operator_session_from_env(env: dict[str, str] | None = None) -> OperatorSession | None:
     """Return the active operator session, or None when unauthenticated."""
     try:
-        return OperatorSessionStore.from_env().get()
+        return OperatorSessionStore.from_env(env).get()
     except OperatorSessionNotFoundError:
         return None
 

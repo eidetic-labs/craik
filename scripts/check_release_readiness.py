@@ -76,6 +76,13 @@ AUTH_EXEMPT_CLI_COMMANDS = {
     ("src/craik/cli_auth.py", "whoami"): (
         "session introspection command; it reports missing sessions without requiring one first"
     ),
+    ("src/craik/cli_auth_login.py", "auth_login_provider"): (
+        "provider credential bootstrap command; it captures provider credentials before "
+        "an operator session may exist"
+    ),
+    ("src/craik/cli_auth_login.py", "auth_migrate_from_env"): (
+        "one-time provider credential migration command; it runs during auth bootstrap"
+    ),
     ("src/craik/cli_demos.py", "demo_persistent_agent"): (
         "deterministic demo uses fixture identity and is hardened separately "
         "from real agent commands"

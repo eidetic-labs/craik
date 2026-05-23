@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from craik.runtime.auth import AuthProfileStore
+from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.auth.visibility import visible_auth_profiles
 from craik.runtime.dashboard.auth import (
     active_operator_session,
@@ -127,11 +128,23 @@ def handle_dashboard_request(
     if method == "GET":
         if parsed.path == "/api/approvals":
             return _api_approvals(env)
+        if parsed.path == "/api/auth":
+            return _json_response(HTTPStatus.OK, {"auth": auth_status_payload(env)})
         return _get(parsed.path, config=config, env=env)
     if method == "POST" and parsed.path == "/api/actions":
         if not _origin_allowed(headers, config):
             return _json_response(HTTPStatus.FORBIDDEN, {"error": "dashboard origin not allowed"})
         return _post_action(body, env=env)
+    if method == "POST" and parsed.path == "/api/auth/login":
+        if not _is_local_bind(config.host):
+            return _json_response(
+                HTTPStatus.FORBIDDEN,
+                {"error": "auth capture requires localhost"},
+            )
+        return _json_response(
+            HTTPStatus.OK,
+            {"status": "prompt-required", "command": "craik auth login <provider>"},
+        )
     return _json_response(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
 
@@ -251,6 +264,7 @@ def _dashboard_snapshot(env: dict[str, str] | None) -> dict[str, object]:
             "readiness": readiness,
             "counts": counts,
             "providers": providers,
+            "auth": auth_status_payload(env),
             "gateway_logs": gateway_logs,
             "model_picker": readiness.get("active_model") or "not selected",
             "redacted": True,
@@ -266,7 +280,7 @@ def _page_for_path(path: str, snapshot: dict[str, object]) -> DashboardPage | No
         "/status": ("Status", _status_items(snapshot)),
         "/config": ("Config", [f"home: {snapshot['readiness']}"]),
         "/providers": ("Providers", _provider_items(snapshot)),
-        "/auth": ("Auth", ["operator session or dashboard token required"]),
+        "/auth": ("Auth", _auth_items(snapshot)),
         "/sessions": ("Sessions", [f"sessions: {counts.get('sessions', 0)}"]),
         "/runs": ("Runs", [f"runs: {counts.get('runs', 0)}"]),
         "/handoffs": ("Handoffs", [f"handoffs: {counts.get('handoffs', 0)}"]),
@@ -324,6 +338,20 @@ def _provider_items(snapshot: dict[str, object]) -> list[str]:
     if not isinstance(providers, list) or not providers:
         return ["providers: none configured or visible"]
     return [str(provider) for provider in providers]
+
+
+def _auth_items(snapshot: dict[str, object]) -> list[str]:
+    rows = snapshot.get("auth")
+    if not isinstance(rows, list) or not rows:
+        return [
+            "providers: none configured",
+            "reauthenticate: localhost-only POST /api/auth/login",
+        ]
+    return [
+        f"{row.get('id')}: {row.get('health_status')} via {row.get('backend') or row.get('kind')}"
+        for row in rows
+        if isinstance(row, dict)
+    ]
 
 
 def _approval_items(snapshot: dict[str, object]) -> list[str]:

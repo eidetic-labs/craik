@@ -1697,7 +1697,7 @@ def test_auth_commands_add_list_test_status_and_remove(
     assert granted_payload["authorized_operators"] == ["operator-123"]
     assert granted_payload["authorized_operator_groups"] == ["prod-deploy"]
     assert granted_payload["authorization_receipt_ids"]
-    assert json.loads(status.stdout)[0]["last_status"] == "ok"
+    assert json.loads(status.stdout)[0]["health_status"] == "ok"
     assert json.loads(removed.stdout) == {"removed": "anthropic:work"}
     assert json.loads(listed_after_remove.stdout) == []
 

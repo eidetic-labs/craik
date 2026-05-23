@@ -49,6 +49,11 @@ within the `0.x.0` stability expectations described in
   `CRAIK_LOCALE`/`--locale` text output, predictable English fallback,
   localized slash help, localized migration report headings, and
   translation contribution docs.
+- v0.12.0 capture-and-cache provider auth through `craik auth login`,
+  with hidden API-key prompt, `keyring-ref` profiles, backend-aware
+  `auth status`, cached-credential `auth logout`, idempotent
+  `auth migrate-from-env`, readiness based on credential resolvability,
+  and shared slash/TUI/dashboard auth status surfaces.
 
 ## 0.11.0 — 2026-05-23
 
