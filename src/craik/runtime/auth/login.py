@@ -6,7 +6,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from craik.runtime.auth.guided_setup import (
     DEFAULT_REF_MANAGER,
@@ -14,13 +14,16 @@ from craik.runtime.auth.guided_setup import (
     default_pool_for_profile,
     guided_provider_defaults,
 )
+from craik.runtime.auth.health_check import health_check_profile_secret
 from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
+from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.auth.store import AuthProfileStore, AuthProfileStoreError
 from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.shell.credential_storage import (
+    FILE_BACKED_CREDENTIAL_WARNING,
     CredentialStorageError,
     CredentialStorageStatus,
     credential_storage_status,
@@ -31,7 +34,6 @@ from craik.runtime.shell.credential_storage import (
 
 CredentialPrompt = Callable[[str], str]
 ConfirmPrompt = Callable[[str], bool]
-HealthCheckStatus = Literal["ok", "rejected", "network_error"]
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,7 @@ class AuthStatusRow:
     last_validated_at: str | None
     health_status: str
     detail: str | None = None
+    warning: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-safe auth status row."""
@@ -84,6 +87,7 @@ class AuthStatusRow:
             "last_validated_at": self.last_validated_at,
             "health_status": self.health_status,
             "detail": self.detail,
+            "warning": self.warning,
             "redacted": True,
         }
 
@@ -107,7 +111,7 @@ def capture_and_cache_login(
         base_url=base_url,
         allow_local_base_url=allow_local_base_url,
     )
-    status = health_check_profile_secret(profile, credential)
+    status = health_check_profile_secret(profile, credential, env=env)
     if status.status != "ok":
         return AuthCaptureResult(
             provider=provider,
@@ -190,7 +194,7 @@ def profile_runtime_status(
         try:
             get_cached_credential(ref, env=env)
         except CredentialStorageError as exc:
-            return CredentialStatus(status="rejected", detail=str(exc))
+            return CredentialStatus(status="rejected", detail=sanitize_credential_error(exc))
         return CredentialStatus(status="ok")
     if profile.kind is CredentialKind.API_KEY and env is not None:
         env_var = profile.metadata.get("env_var")
@@ -203,16 +207,7 @@ def profile_runtime_status(
     try:
         return source_for_auth_profile(profile).status()
     except (RuntimeError, ValueError) as exc:
-        return CredentialStatus(status="rejected", detail=str(exc))
-
-
-def health_check_profile_secret(profile: AuthProfile, secret: str) -> CredentialStatus:
-    """Run a redacted lightweight health check for captured credential material."""
-    if not secret.strip():
-        return _rejected(profile)
-    if any(char.isspace() for char in secret):
-        return _rejected(profile)
-    return CredentialStatus(status="ok")
+        return CredentialStatus(status="rejected", detail=sanitize_credential_error(exc))
 
 
 def auth_status_rows(
@@ -238,6 +233,7 @@ def auth_status_rows(
                 last_validated_at=_last_validated_at(profile),
                 health_status=status.status,
                 detail=status.detail,
+                warning=_profile_warning(profile),
             )
         )
     return rows
@@ -387,18 +383,15 @@ def _profile_backend(profile: AuthProfile) -> str | None:
     return backend if isinstance(backend, str) else None
 
 
+def _profile_warning(profile: AuthProfile) -> str | None:
+    if _profile_backend(profile) == "file":
+        return FILE_BACKED_CREDENTIAL_WARNING
+    return None
+
+
 def _last_validated_at(profile: AuthProfile) -> str | None:
     value = profile.metadata.get("last_validated_at")
     return value if isinstance(value, str) else None
-
-
-def _rejected(profile: AuthProfile) -> CredentialStatus:
-    provider = str(profile.metadata.get("provider") or profile.provider_family)
-    family = provider.replace("_", " ").title()
-    return CredentialStatus(
-        status="rejected",
-        detail=f"Your {family} key was rejected. Re-run craik auth login {provider}.",
-    )
 
 
 __all__ = [

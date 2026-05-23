@@ -92,12 +92,34 @@ def test_doctor_reports_auth_profile_health(tmp_path, monkeypatch) -> None:
             "id": "anthropic:work",
             "kind": "api-key",
             "provider_family": "anthropic",
+            "credential_backend": None,
+            "warning": None,
             "last_used_at": None,
             "last_status": "unknown",
             "health": {"status": "ok", "detail": None, "expires_at": None},
             "metadata": {"base_url": None},
         }
     ]
+
+
+def test_doctor_reports_file_credential_backend_warning(tmp_path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    AuthProfileStore(paths.home).put(
+        AuthProfile(
+            id="openai:default",
+            kind=CredentialKind.KEYRING_REF,
+            provider_family="openai",
+            metadata={"ref": "openai:default:api-key", "credential_backend": "file"},
+            created_at=datetime(2026, 5, 17, tzinfo=UTC),
+        )
+    )
+
+    payload = run_doctor(paths, env={})
+
+    assert payload["auth_profiles"][0]["credential_backend"] == "file"
+    assert payload["auth_profiles"][0]["warning"] == (
+        "file-backed secret references require owner-only filesystem permissions"
+    )
 
 
 def test_doctor_warns_for_rejected_auth_profile(tmp_path) -> None:

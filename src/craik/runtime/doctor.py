@@ -11,6 +11,7 @@ from craik.runtime.auth import (
     AuthProfileStoreError,
     CredentialStatus,
 )
+from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.diagnostics.doctor_checks import (
     channel_pairing_check,
@@ -27,6 +28,7 @@ from craik.runtime.diagnostics.doctor_checks import (
 from craik.runtime.diagnostics.doctor_fixes import doctor_fixes
 from craik.runtime.diagnostics.doctor_types import DiagnosticCheck, DiagnosticStatus
 from craik.runtime.paths import CraikPaths
+from craik.runtime.shell.credential_storage import FILE_BACKED_CREDENTIAL_WARNING
 from craik.runtime.store import DATABASE_NAME, LocalStore, LocalStoreError
 
 
@@ -249,17 +251,22 @@ def _auth_profile_status(profile: AuthProfile) -> CredentialStatus:
     try:
         return source_for_auth_profile(profile).status()
     except ValueError as error:
-        return CredentialStatus(status="rejected", detail=str(error))
+        return CredentialStatus(status="rejected", detail=sanitize_credential_error(error))
 
 
 def _auth_profile_payload(
     profile: AuthProfile,
     status: CredentialStatus,
 ) -> dict[str, Any]:
+    backend = profile.metadata.get("credential_backend")
+    backend_name = backend if isinstance(backend, str) else None
+    warning = FILE_BACKED_CREDENTIAL_WARNING if backend_name == "file" else None
     return {
         "id": profile.id,
         "kind": profile.kind,
         "provider_family": profile.provider_family,
+        "credential_backend": backend_name,
+        "warning": warning,
         "last_used_at": profile.last_used_at.isoformat()
         if profile.last_used_at is not None
         else None,

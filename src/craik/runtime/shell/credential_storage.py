@@ -19,6 +19,9 @@ from craik.runtime.paths import resolve_craik_home
 
 CredentialBackendStatus = Literal["available", "unavailable", "fallback"]
 OWNER_ONLY_FILE_MODE = 0o600
+FILE_BACKED_CREDENTIAL_WARNING = (
+    "file-backed secret references require owner-only filesystem permissions"
+)
 
 
 @dataclass(frozen=True)
@@ -151,7 +154,7 @@ def _file_fallback() -> CredentialStorageStatus:
         backend="file",
         status="fallback",
         secure=False,
-        warning="file-backed secret references require owner-only filesystem permissions",
+        warning=FILE_BACKED_CREDENTIAL_WARNING,
     )
 
 
