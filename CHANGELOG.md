@@ -10,6 +10,14 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- v0.12.0 adjacent runtime migration CLI through `craik migrate inspect`,
+  `craik migrate plan`, and dry-run `craik migrate import`, with
+  read-only JSON source discovery, text/JSON output, proposed Craik
+  target mappings, and skipped secret-like field reporting that does
+  not copy raw secret values.
+
 ## 0.11.0 — 2026-05-23
 
 ### Added

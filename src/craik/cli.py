@@ -126,6 +126,8 @@ profile_app = typer.Typer(help="Manage local Craik profiles and personas.")
 app.add_typer(profile_app, name="profile")
 desktop_app = typer.Typer(help="Inspect and launch desktop companion MVP actions.")
 app.add_typer(desktop_app, name="desktop")
+migrate_app = typer.Typer(help="Inspect and dry-run adjacent runtime migrations.")
+app.add_typer(migrate_app, name="migrate")
 
 
 def package_version() -> str:
@@ -443,6 +445,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_handoffs",
         "craik.cli_instructions",
         "craik.cli_knowledge",
+        "craik.cli_migration",
         "craik.cli_operations",
         "craik.cli_project",
         "craik.cli_provider_certification",

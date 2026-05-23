@@ -230,6 +230,7 @@ const sidebars = {
       collapsed: true,
       items: [
         'guides/github-adapter',
+        'guides/adjacent-runtime-migration',
         'guides/mcp-ecosystem-compatibility',
         'reference/mcp-client',
         'reference/mcp-export-boundary',

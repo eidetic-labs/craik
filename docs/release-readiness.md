@@ -35,6 +35,7 @@ dead-code scan.
 </div>
 
 <div><dt>G0 structural CI guard generalization</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/819">#819</a> · release-readiness writer coverage resolves calls through qualified function paths and import maps, registry-dispatched callables use a capped documented allowlist, and <code>scripts/check_dead_code.py</code> runs vulture at confidence 80 as a complementary dead-code gate</dd></div>
+<div><dt>G1 adjacent runtime migration CLI</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/827">#827</a> · <code>craik migrate inspect</code>, <code>plan</code>, and dry-run <code>import</code> inspect adjacent agent-runtime JSON exports, map source records to proposed Craik target schemas, preserve source files, support text/JSON output, and report skipped secret-like fields without copying values</dd></div>
 
 </div>
 
