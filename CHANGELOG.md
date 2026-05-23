@@ -17,6 +17,11 @@ within the `0.x.0` stability expectations described in
   read-only JSON source discovery, text/JSON output, proposed Craik
   target mappings, and skipped secret-like field reporting that does
   not copy raw secret values.
+- v0.12.0 object-level migration maps with importable, partial,
+  manual, unsupported, and skipped-secret statuses for agents,
+  profiles/personas, provider/model config, aliases, fallback chains,
+  channels, skills, memory, sessions, schedules, sandbox, gateway, and
+  approval/security posture surfaces.
 
 ## 0.11.0 — 2026-05-23
 

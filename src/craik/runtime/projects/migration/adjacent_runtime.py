@@ -14,6 +14,7 @@ from craik.runtime.projects.import_dry_run import (
     ImportMappedRecord,
     import_dry_run_report,
 )
+from craik.runtime.projects.migration_maps import migration_map_for_object
 
 MigrationKind = Literal["agent-runtime"]
 
@@ -295,26 +296,31 @@ def _record_from_mapping(
 
 
 def _mapped_record(record: AdjacentRuntimeSourceRecord) -> ImportMappedRecord:
-    target_schema = _target_schema(record.source_type)
-    if target_schema is None:
+    object_map = migration_map_for_object(
+        source_id=record.source_id,
+        source_type=record.source_type,
+        secret_fields=list(record.secret_fields),
+    )
+    if object_map.status == "unsupported":
+        error = object_map.unsupported_reason or f"unsupported source type {record.source_type}"
         return ImportMappedRecord(
             source_id=record.source_id,
-            target_schema="manual.review",
+            target_schema=object_map.target_schema,
             target_id=f"manual_{_stable_id(record.source_id)}",
             status="unsupported",
-            errors=[f"unsupported source type {record.source_type}"],
+            errors=[error],
         )
-    if record.secret_fields:
+    if object_map.status in {"partial", "manual", "skipped-secret"}:
         return ImportMappedRecord(
             source_id=record.source_id,
-            target_schema=target_schema,
+            target_schema=object_map.target_schema,
             target_id=f"migrated_{_stable_id(record.source_id)}",
             status="warning",
-            warnings=["secret-like fields were detected and skipped"],
+            warnings=object_map.warnings or object_map.required_actions,
         )
     return ImportMappedRecord(
         source_id=record.source_id,
-        target_schema=target_schema,
+        target_schema=object_map.target_schema,
         target_id=f"migrated_{_stable_id(record.source_id)}",
         status="mapped",
     )
