@@ -20,6 +20,7 @@ Options:
 - `-z, --one-shot`: Run one quiet one-shot prompt and exit. Pass '-' to read the prompt from stdin.
 - `--allow-argv-prompt`: Acknowledge that argv prompts are visible in local process listings and shell history.; default `false`
 - `--tui`: Launch the keyboard-first terminal UI.; default `false`
+- `--no-tui`: Force the plain shell even when running in an interactive terminal.; default `false`
 
 ## `craik agent`
 

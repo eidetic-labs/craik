@@ -178,6 +178,13 @@ def root(
             help="Launch the keyboard-first terminal UI.",
         ),
     ] = False,
+    no_tui: Annotated[
+        bool,
+        typer.Option(
+            "--no-tui",
+            help="Force the plain shell even when running in an interactive terminal.",
+        ),
+    ] = False,
 ) -> None:
     """Run Craik."""
     if version_requested:
@@ -191,6 +198,14 @@ def root(
             prompt = resolve_cli_prompt(one_shot, allow_argv=allow_argv_prompt)
             typer.echo(one_shot_response(prompt))
             raise typer.Exit()
+        if (
+            not no_tui
+            and os.environ.get("CRAIK_NO_TUI") != "1"
+            and os.environ.get("TERM") != "dumb"
+            and os.isatty(0)
+            and os.isatty(1)
+        ):
+            raise typer.Exit(run_tui())
         raise typer.Exit(run_shell())
 
 

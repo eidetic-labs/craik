@@ -1,0 +1,30 @@
+$craik-brand: #B4ACE6;
+
+Screen {
+    background: $background;
+}
+
+#transcript {
+    height: 1fr;
+    padding: 1 1;
+}
+
+#slash-popup {
+    dock: bottom;
+    margin: 0 2 1 2;
+    border: round #A0A0A0;
+    height: auto;
+    max-height: 12;
+}
+
+#working {
+    color: $craik-brand;
+}
+
+#input {
+    border: round $craik-brand;
+}
+
+#status {
+    color: #A0A0A0;
+}
