@@ -18,6 +18,11 @@ from craik.runtime.projects.migration.adjacent_runtime import (
     plan_adjacent_runtime_migration,
     report_adjacent_runtime_migration,
 )
+from craik.runtime.projects.migration.apply import (
+    apply_adjacent_runtime_migration,
+    apply_payload,
+    format_apply_text,
+)
 from craik.runtime.projects.migration.reports import format_migration_report
 
 
@@ -81,15 +86,48 @@ def migrate_import(
         bool,
         typer.Option("--json", help="Emit machine-readable JSON output."),
     ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Apply without an interactive confirmation prompt."),
+    ] = False,
+    include_records: Annotated[
+        str | None,
+        typer.Option(
+            "--include-records",
+            help="Comma-separated source record ids to apply; defaults to all importable records.",
+        ),
+    ] = None,
+    include_secrets: Annotated[
+        bool,
+        typer.Option(
+            "--include-secrets",
+            help="Acknowledge secret-bearing records; secret values are still not copied.",
+        ),
+    ] = False,
 ) -> None:
-    """Run an adjacent runtime import dry-run. Apply mode is intentionally explicit."""
+    """Run an adjacent runtime import dry-run or explicitly apply importable records."""
     _validate_kind(kind)
-    if not dry_run:
-        raise typer.BadParameter(
-            "adjacent runtime apply mode is not enabled in G1; rerun with --dry-run"
-        )
     try:
-        report = plan_adjacent_runtime_migration(source, kind="agent-runtime")
+        if dry_run:
+            report = plan_adjacent_runtime_migration(source, kind="agent-runtime")
+        else:
+            selected = _parse_include_records(include_records)
+            if not yes and not typer.confirm(
+                "Apply importable adjacent-runtime records into Craik state?",
+                default=False,
+            ):
+                raise typer.Abort()
+            result = apply_adjacent_runtime_migration(
+                source,
+                kind="agent-runtime",
+                include_records=selected,
+                include_secrets=include_secrets,
+            )
+            if json_output:
+                typer.echo(json.dumps(apply_payload(result), indent=2, sort_keys=True))
+                return
+            typer.echo("\n".join(format_apply_text(result)))
+            return
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
     if json_output:
@@ -128,3 +166,10 @@ def migrate_report(
 def _validate_kind(kind: str) -> None:
     if kind != "agent-runtime":
         raise typer.BadParameter(f"unsupported migration kind: {kind}")
+
+
+def _parse_include_records(value: str | None) -> set[str] | None:
+    if value is None:
+        return None
+    records = {item.strip() for item in value.split(",") if item.strip()}
+    return records or None
