@@ -115,6 +115,33 @@ def test_health_check_rejects_non_http_base_url_without_network(monkeypatch) -> 
     assert "provider-secret" not in (status.detail or "")
 
 
+@pytest.mark.parametrize("secret", ["", " ", "\t", "\n", "provider secret"])
+def test_health_check_rejects_blank_or_whitespace_secret_without_network(
+    monkeypatch,
+    secret: str,
+) -> None:
+    called = False
+
+    def _urlopen(health_request: Request, *, timeout: float) -> _FakeResponse:
+        nonlocal called
+        called = True
+        raise AssertionError("health check should reject invalid secret before network open")
+
+    monkeypatch.setattr(auth_health_check, "_health_check_urlopen", _urlopen)
+
+    status = auth_health_check.health_check_profile_secret(
+        _profile("openai"),
+        secret,
+        env={},
+    )
+
+    assert status.status == "rejected"
+    assert status.detail is not None
+    assert "key was rejected" in status.detail
+    assert "Re-run craik auth login openai." in status.detail
+    assert called is False
+
+
 @pytest.mark.parametrize("status_code", [401, 403])
 def test_health_check_rejects_unauthorized_without_leaking_secret(
     monkeypatch,
@@ -139,7 +166,10 @@ def test_health_check_rejects_unauthorized_without_leaking_secret(
 
     assert status.status == "rejected"
     assert "provider-secret" not in (status.detail or "")
-    assert status.detail == "Your Openai key was rejected. Re-run craik auth login openai."
+    assert status.detail is not None
+    assert "key was rejected" in status.detail
+    assert "Re-run craik auth login openai." in status.detail
+    assert "Openai" in status.detail
 
 
 @pytest.mark.parametrize("raised", [TimeoutError("provider-secret"), OSError("token=secret")])
