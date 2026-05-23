@@ -88,8 +88,59 @@ closed.
 <div><dt>Approval UX</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/793">#793</a> · <code>/approvals</code>, <code>craik approvals list</code>, <code>show</code>, <code>approve</code>, and <code>deny</code>, dashboard queue payloads, TUI approval modal/counts, desktop notifications, decision receipts, retry-path linkage, and lifecycle tests</dd></div>
 <div><dt>Doctor, fix, and update</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/794">#794</a> · <code>craik doctor</code>, <code>craik doctor --fix</code>, <code>craik update --check</code>, expanded operator/provider/model/gateway/channel/security diagnostics, explicit dry-run fix plans, unsafe fix confirmation, JSON output, and fixture tests</dd></div>
 <div><dt>Multimodal and companion contracts</dt><dt><span className="craik-fields__type">ready</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/795">#795</a> · voice posture, speech-to-text and text-to-speech adapter contracts, multimodal artifact references, mobile/desktop/visual companion decisions, work-graph visual bridge, accessibility requirements, transcript/media metadata redaction, and fixture tests</dd></div>
+<div><dt>Release prep</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/823">#823</a> · version declarations, changelog promotion, roadmap/readiness documentation, package-lock metadata, and release validation gate before maintainer signing</dd></div>
 
 </div>
+
+## v0.11.0 Release Readiness
+
+<div className="craik-keypoint">
+
+**Status: ready for maintainer signing after release-prep PR lands.**
+
+The v0.11.0 milestone contains the TUI, authenticated dashboard,
+desktop companion, gateway service lifecycle, real channel adapters,
+approval UX, doctor/update workflow, multimodal companion contracts,
+and all follow-up remediation. Tagging remains gated on the final
+release-prep validation and maintainer-managed GPG signing.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Gate</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Evidence</dd>
+</div>
+
+<div><dt>Implementation</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Operator-facing TUI, dashboard, desktop, gateway, channel, approval, diagnostic, update, and multimodal surfaces landed through issue-linked PRs and follow-up remediation.</dd></div>
+<div><dt>Security</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Dashboard session binding uses a random per-session token, dashboard actions reject mutating slash commands and enforce local Origin checks, gateway service units use absolute executable paths, channel signatures verify platform-specific boundaries, and release key asset rules are documented.</dd></div>
+<div><dt>Structural guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Release readiness resolves writer reachability through qualified import-aware call graphs and the complementary dead-code check runs vulture at confidence 80.</dd></div>
+<div><dt>Known blockers</dt><dt><span className="craik-fields__type">none known</span></dt><dd>No open v0.11.0 milestone issue remains. Tagging is gated on the release-prep PR, signed annotated tag creation, GitHub Release publication, and signing-key asset verification.</dd></div>
+
+</div>
+
+### v0.11.0 Validation Commands
+
+Run the full release gate from a clean checkout before tagging
+`0.11.0`:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run ruff check
+uv run mypy
+uv run python scripts/generate_cli_reference.py --check
+uv run python scripts/check_doc_links.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_max_file_lines.py
+uv run python scripts/quickstart_smoke.py
+uv run pytest
+```
 
 ## v0.10.0 Goal Workflow
 

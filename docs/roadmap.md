@@ -620,6 +620,12 @@ This phase turns the governed runtime into a usable local agent product.
 The companion surfaces must share the same command/action registry,
 auth model, policy gates, and receipt boundaries as the CLI.
 
+The v0.11.0 goal workflow is complete. Release prep is tracked in
+<a href="https://github.com/eidetic-labs/craik/issues/823">#823</a>
+and remains responsible for the final version bump, changelog, signed
+tag, package publication, docs publication, and post-release
+verification.
+
 </div>
 
 ### v0.12.0 · Migration, ecosystem compatibility, and i18n
