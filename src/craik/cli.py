@@ -455,6 +455,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_provider_local",
         "craik.cli_review",
         "craik.cli_scope_changes",
+        "craik.cli_session_portability",
         "craik.cli_skills",
         "craik.cli_plugins",
         "craik.cli_references",
