@@ -1,0 +1,10 @@
+{
+  "memory": [
+    {
+      "id": "memory_docs",
+      "type": "memory",
+      "subject": "docs",
+      "fact": "Migration fixtures are public safe."
+    }
+  ]
+}

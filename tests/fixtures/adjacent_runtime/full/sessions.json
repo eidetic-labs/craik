@@ -1,0 +1,14 @@
+{
+  "sessions": [
+    {
+      "id": "session_docs",
+      "type": "session",
+      "transcript": [
+        {
+          "role": "user",
+          "content": "Summarize migration fixtures."
+        }
+      ]
+    }
+  ]
+}

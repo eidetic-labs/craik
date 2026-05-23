@@ -231,6 +231,7 @@ const sidebars = {
       items: [
         'guides/github-adapter',
         'guides/adjacent-runtime-migration',
+        'guides/compatibility-fixtures',
         'guides/mcp-ecosystem-compatibility',
         'reference/mcp-client',
         'reference/mcp-export-boundary',

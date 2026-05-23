@@ -1,0 +1,7 @@
+{
+  "agents": [
+    {
+      "id": "broken",
+      "type": "agent"
+    }
+  ]

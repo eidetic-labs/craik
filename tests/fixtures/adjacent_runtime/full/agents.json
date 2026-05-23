@@ -1,0 +1,16 @@
+{
+  "agents": [
+    {
+      "id": "reviewer",
+      "type": "agent",
+      "name": "Reviewer",
+      "model": "openai_primary"
+    },
+    {
+      "id": "builder",
+      "type": "agent",
+      "name": "Builder",
+      "model": "local_fast"
+    }
+  ]
+}

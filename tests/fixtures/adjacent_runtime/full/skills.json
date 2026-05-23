@@ -1,0 +1,9 @@
+{
+  "skills": [
+    {
+      "id": "skill_docs_reconcile",
+      "type": "skill",
+      "version": "0.1.0"
+    }
+  ]
+}

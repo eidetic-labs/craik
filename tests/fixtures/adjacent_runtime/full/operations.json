@@ -1,0 +1,30 @@
+{
+  "schedules": [
+    {
+      "id": "nightly_docs",
+      "type": "schedule",
+      "cron": "0 4 * * *"
+    }
+  ],
+  "sandboxes": [
+    {
+      "id": "docker_docs",
+      "type": "sandbox",
+      "backend": "docker"
+    }
+  ],
+  "gateways": [
+    {
+      "id": "gateway_local",
+      "type": "gateway",
+      "bind_host": "127.0.0.1"
+    }
+  ],
+  "approvals": [
+    {
+      "id": "approval_strict",
+      "type": "approval",
+      "mode": "strict"
+    }
+  ]
+}
