@@ -83,8 +83,12 @@ def gateway_status_payload(paths: CraikPaths) -> dict[str, object]:
 def install_gateway_service(
     paths: CraikPaths,
     *,
+    backend: str | None = None,
     target_platform: str | None = None,
     executable_path: str | Path | None = None,
+    log_path: str | Path | None = None,
+    dry_run: bool = False,
+    output_path: str | Path | None = None,
 ) -> GatewayServiceInstall:
     """Generate and write a user-service definition for the gateway."""
     store = LocalStore.from_paths(paths)
@@ -95,24 +99,31 @@ def install_gateway_service(
         store.close()
     if config is None:
         raise GatewayDaemonConfigError("gateway configuration missing; run craik setup first")
-    backend = _service_backend(target_platform or platform.system())
+    resolved_backend = _normalize_service_backend(
+        backend or _service_backend(target_platform or platform.system())
+    )
     executable = _resolve_craik_executable(executable_path)
+    if log_path is not None:
+        config = config.model_copy(update={"log_file": str(log_path)})
     service_dir = paths.config / "services"
-    service_dir.mkdir(parents=True, exist_ok=True)
-    if backend == "launchd":
-        path = service_dir / "com.eidetic-labs.craik.gateway.plist"
+    if resolved_backend == "launchd":
+        default_path = service_dir / "com.eidetic-labs.craik.gateway.plist"
         content = _launchd_plist(paths, config, executable)
         notes = ("Copy to ~/Library/LaunchAgents and run launchctl bootstrap gui/$UID.",)
-    elif backend == "systemd":
-        path = service_dir / "craik-gateway.service"
+    elif resolved_backend == "systemd":
+        default_path = service_dir / "craik-gateway.service"
         content = _systemd_unit(paths, config, executable)
         notes = ("Copy to ~/.config/systemd/user and run systemctl --user enable --now.",)
     else:
-        path = service_dir / "craik-gateway.windows.txt"
+        default_path = service_dir / "craik-gateway.windows.txt"
         content = _windows_service_plan(paths, config, executable)
         notes = ("Windows service installation is documented as a manual plan for this release.",)
-    path.write_text(content, encoding="utf-8")
-    return GatewayServiceInstall(backend, path, True, content, notes)
+    path = default_path if output_path is None or str(output_path) == "-" else Path(output_path)
+    installed = not dry_run and str(output_path or "") != "-"
+    if installed:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    return GatewayServiceInstall(resolved_backend, path, installed, content, notes)
 
 
 def uninstall_gateway_service(paths: CraikPaths) -> dict[str, object]:
@@ -201,6 +212,15 @@ def _service_backend(system_name: str) -> str:
     if lowered == "linux":
         return "systemd"
     return "windows-plan"
+
+
+def _normalize_service_backend(backend: str) -> str:
+    normalized = backend.strip().lower()
+    if normalized in {"launchd", "systemd", "windows-plan"}:
+        return normalized
+    raise GatewayDaemonConfigError(
+        "unsupported gateway service backend; expected launchd, systemd, or windows-plan"
+    )
 
 
 def _resolve_craik_executable(executable_path: str | Path | None = None) -> Path:

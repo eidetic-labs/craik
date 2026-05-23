@@ -8,7 +8,6 @@ from typing import Annotated
 
 import typer
 
-from craik.cli_operator_auth import operator_identity_or_fail
 from craik.runtime.doctor import run_doctor
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.projects.update_guidance import update_guidance_payload
@@ -30,9 +29,12 @@ def doctor_command(
         bool,
         typer.Option("--yes", help="Confirm unsafe fix actions such as public-bind rebinding."),
     ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the diagnostic report as JSON."),
+    ] = False,
 ) -> None:
     """Run diagnostics for local and gateway readiness."""
-    operator_identity_or_fail()
     payload = run_doctor(
         resolve_craik_paths(),
         env=dict(os.environ),
@@ -40,6 +42,7 @@ def doctor_command(
         dry_run=dry_run,
         confirm_unsafe=yes,
     )
+    _ = json_output
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 
 

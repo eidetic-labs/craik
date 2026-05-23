@@ -277,7 +277,7 @@ def test_cli_auth_coverage_guard_scans_new_cli_modules(tmp_path, monkeypatch) ->
 
 
 def test_cli_auth_exemption_surface_is_bounded() -> None:
-    assert len(check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS) <= 10
+    assert len(check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS) <= 15
 
 
 def test_registry_dispatched_allowlist_cap_enforced() -> None:
@@ -330,6 +330,12 @@ def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> N
         ("src/craik/cli_auth_login.py", "auth_migrate_from_env"): (
             "one-time provider credential migration command; it runs during auth bootstrap"
         ),
+        ("src/craik/cli_auth.py", "auth_list"): (
+            "read-only provider credential diagnostic; usable before operator login"
+        ),
+        ("src/craik/cli_auth.py", "auth_status"): (
+            "read-only provider credential diagnostic; usable before operator login"
+        ),
         ("src/craik/cli_demos.py", "demo_persistent_agent"): (
             "deterministic demo uses fixture identity and is hardened separately "
             "from real agent commands"
@@ -343,6 +349,18 @@ def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> N
         ),
         ("src/craik/cli_operations.py", "policy_test"): (
             "deterministic release/security baseline run by CI before operator login exists"
+        ),
+        ("src/craik/cli_gateway.py", "gateway_install_command"): (
+            "service-unit generation is offline preparation; no operator context required"
+        ),
+        ("src/craik/cli_gateway.py", "gateway_uninstall_command"): (
+            "service-unit removal is offline preparation; no operator context required"
+        ),
+        ("src/craik/cli_gateway.py", "gateway_status_command"): (
+            "service status inspection is read-only diagnostic; usable before operator login"
+        ),
+        ("src/craik/cli_gateway.py", "gateway_doctor_command"): (
+            "gateway diagnostic is usable before operator login"
         ),
     }
 

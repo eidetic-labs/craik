@@ -147,7 +147,7 @@ def test_doctor_cli_outputs_json(tmp_path) -> None:
     setup = runner.invoke(app, ["setup"], env={"CRAIK_HOME": str(home)})
     _put_operator_session(home)
 
-    result = runner.invoke(app, ["doctor"], env={"CRAIK_HOME": str(home)})
+    result = runner.invoke(app, ["doctor", "--json"], env={"CRAIK_HOME": str(home)})
 
     assert setup.exit_code == 0
     assert result.exit_code == 0
@@ -157,15 +157,17 @@ def test_doctor_cli_outputs_json(tmp_path) -> None:
     assert "auth_profiles" in payload
 
 
-def test_doctor_cli_requires_operator_session_before_state_read(tmp_path) -> None:
+def test_doctor_cli_does_not_require_operator_session_before_state_read(tmp_path) -> None:
     home = tmp_path / "home"
     setup = runner.invoke(app, ["setup"], env={"CRAIK_HOME": str(home)})
 
     result = runner.invoke(app, ["doctor"], env={"CRAIK_HOME": str(home)})
 
     assert setup.exit_code == 0
-    assert result.exit_code != 0
-    assert "active operator session required; run craik login" in result.output
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] in {"fail", "warning"}
+    assert any(item["name"] == "operator_session" for item in payload["checks"])
 
 
 def test_doctor_fixture_matrix_includes_v011_checks(tmp_path) -> None:

@@ -280,6 +280,9 @@ def test_gateway_lifecycle_cli_commands(tmp_path: Path) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home)}
     _put_operator_session(home)
+    executable = tmp_path / "bin" / "craik"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
     paths = ensure_craik_home(env)
     store = LocalStore.from_paths(paths)
     try:
@@ -293,7 +296,11 @@ def test_gateway_lifecycle_cli_commands(tmp_path: Path) -> None:
 
     status = runner.invoke(app, ["gateway", "status"], env=env)
     logs = runner.invoke(app, ["gateway", "logs", "--tail", "1"], env=env)
-    install = runner.invoke(app, ["gateway", "install"], env=env)
+    install = runner.invoke(
+        app,
+        ["gateway", "install", "--executable-path", str(executable)],
+        env=env,
+    )
     stop = runner.invoke(app, ["gateway", "stop"], env=env)
     restart = runner.invoke(app, ["gateway", "restart"], env=env)
     doctor = runner.invoke(app, ["gateway", "doctor"], env=env)
@@ -310,6 +317,119 @@ def test_gateway_lifecycle_cli_commands(tmp_path: Path) -> None:
     assert _json_payload(restart)["status"] == "restart_requested"
     assert doctor.exit_code == 0
     assert any(check["name"] == "gateway_config" for check in _json_payload(doctor)["gateway"])
+
+
+def test_gateway_offline_prep_commands_do_not_require_operator_session(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    executable = tmp_path / "bin" / "craik"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    paths = ensure_craik_home(env)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(
+            default_gateway_config(project_id="project_gateway", created_at=NOW)
+        )
+    finally:
+        store.close()
+
+    status = runner.invoke(app, ["gateway", "status"], env=env)
+    install = runner.invoke(
+        app,
+        [
+            "gateway",
+            "install",
+            "--backend",
+            "systemd",
+            "--executable-path",
+            str(executable),
+        ],
+        env=env,
+    )
+    doctor = runner.invoke(app, ["gateway", "doctor"], env=env)
+    uninstall = runner.invoke(app, ["gateway", "uninstall"], env=env)
+
+    assert status.exit_code == 0
+    assert install.exit_code == 0
+    assert _json_payload(install)["backend"] == "systemd"
+    assert doctor.exit_code == 0
+    assert uninstall.exit_code == 0
+
+
+def test_gateway_install_dry_run_and_output_options(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    executable = tmp_path / "bin" / "craik"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    output_path = tmp_path / "unit" / "craik-gateway.service"
+    paths = ensure_craik_home(env)
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(
+            default_gateway_config(project_id="project_gateway", created_at=NOW)
+        )
+    finally:
+        store.close()
+
+    dry_run = runner.invoke(
+        app,
+        [
+            "gateway",
+            "install",
+            "--backend",
+            "systemd",
+            "--executable-path",
+            str(executable),
+            "--log-path",
+            str(tmp_path / "logs" / "gateway.log"),
+            "--dry-run",
+        ],
+        env=env,
+    )
+    stdout = runner.invoke(
+        app,
+        [
+            "gateway",
+            "install",
+            "--backend",
+            "systemd",
+            "--executable-path",
+            str(executable),
+            "--output",
+            "-",
+        ],
+        env=env,
+    )
+    custom_output = runner.invoke(
+        app,
+        [
+            "gateway",
+            "install",
+            "--backend",
+            "systemd",
+            "--executable-path",
+            str(executable),
+            "--output",
+            str(output_path),
+        ],
+        env=env,
+    )
+
+    default_path = paths.config / "services" / "craik-gateway.service"
+    assert dry_run.exit_code == 0
+    assert "ExecStart=${CRAIK_EXEC} gateway start" in dry_run.stdout
+    assert str(tmp_path / "logs" / "gateway.log") in dry_run.stdout
+    assert not default_path.exists()
+    assert stdout.exit_code == 0
+    assert stdout.stdout.startswith("[Unit]")
+    assert not default_path.exists()
+    assert custom_output.exit_code == 0
+    assert output_path.exists()
+    assert _json_payload(custom_output)["path"] == str(output_path)
 
 
 def _json_payload(result) -> dict[str, object]:
