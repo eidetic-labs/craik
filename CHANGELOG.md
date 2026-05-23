@@ -56,6 +56,15 @@ within the `0.x.0` stability expectations described in
 - `craik channels setup` now persists adapter contracts, identity
   pairings, allowlists, and policy envelopes; channel diagnostics now
   report persisted setup state.
+- Release-readiness writer-coverage CI guard now resolves calls through
+  per-module import maps using qualified function paths, eliminating
+  name-collision false-greens and catching dead wrappers regardless of
+  alias path. Dynamically dispatched callables use a capped
+  `REGISTRY_DISPATCHED_CALLABLES` allowlist with documented rationale.
+- Added complementary `scripts/check_dead_code.py` running vulture at
+  confidence 80 against `src/craik`, with a curated whitelist capped at
+  20 entries. It catches broader dead-code shapes the structural guard
+  does not model.
 
 ### Security
 
