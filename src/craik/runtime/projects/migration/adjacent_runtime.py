@@ -14,7 +14,15 @@ from craik.runtime.projects.import_dry_run import (
     ImportMappedRecord,
     import_dry_run_report,
 )
-from craik.runtime.projects.migration_maps import migration_map_for_object
+from craik.runtime.projects.migration.reports import (
+    MigrationReport,
+    build_migration_report,
+)
+from craik.runtime.projects.migration_maps import (
+    MigrationPlanMap,
+    migration_map_for_object,
+    migration_plan_map,
+)
 
 MigrationKind = Literal["agent-runtime"]
 
@@ -149,6 +157,37 @@ def plan_adjacent_runtime_migration(
         evidence_ids=["evidence_adjacent_runtime_source"],
         receipt_ids=["receipt_adjacent_runtime_dry_run"],
     )
+
+
+def plan_adjacent_runtime_object_map(
+    source: Path,
+    *,
+    kind: MigrationKind = "agent-runtime",
+) -> MigrationPlanMap:
+    """Create an object-level migration map for an adjacent runtime source."""
+    inspection = inspect_adjacent_runtime_source(source, kind=kind)
+    objects = [
+        migration_map_for_object(
+            source_id=record.source_id,
+            source_type=record.source_type,
+            secret_fields=list(record.secret_fields),
+        )
+        for record in inspection.records
+    ]
+    return migration_plan_map(
+        plan_id=f"migration_plan_map_{_stable_id(inspection.source)}",
+        source_name=Path(inspection.source).name,
+        objects=objects,
+    )
+
+
+def report_adjacent_runtime_migration(
+    source: Path,
+    *,
+    kind: MigrationKind = "agent-runtime",
+) -> MigrationReport:
+    """Create a safe-to-share migration report for an adjacent runtime source."""
+    return build_migration_report(plan_adjacent_runtime_object_map(source, kind=kind))
 
 
 def inspection_payload(inspection: AdjacentRuntimeInspection) -> dict[str, Any]:

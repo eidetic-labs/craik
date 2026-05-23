@@ -22,6 +22,11 @@ within the `0.x.0` stability expectations described in
   profiles/personas, provider/model config, aliases, fallback chains,
   channels, skills, memory, sessions, schedules, sandbox, gateway, and
   approval/security posture surfaces.
+- v0.12.0 migration reports through `craik migrate report`, with
+  deterministic safe-to-share sections for summary counts, importable
+  objects, manual actions, skipped secrets, security posture changes,
+  unsupported capabilities, recommended next commands, and validation
+  checklist items.
 
 ## 0.11.0 — 2026-05-23
 
