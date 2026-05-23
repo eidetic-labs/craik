@@ -1,6 +1,6 @@
 # MCP client
 
-<p className="craik-meta"><span>2 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
@@ -87,6 +87,24 @@ route.
 
 Routes are compatible only when they belong to the selected client and
 remain grant- and receipt-required.
+
+## Import/export
+
+`craik mcp client import --path ./mcp.json` accepts either a
+Craik-shaped `MCPClientConfig` object or an external `mcpServers`
+object. Imported config is redacted before printing:
+
+<div className="craik-grid">
+
+<div><h4>Command transport</h4><p><code>command</code> becomes <code>command_ref</code>; non-secret args become <code>config_refs</code>.</p></div>
+<div><h4>HTTP transport</h4><p><code>url</code> becomes <code>endpoint_ref</code>.</p></div>
+<div><h4>Environment secrets</h4><p>Secret-like env var names become <code>secret_ref_names</code>; values are not copied.</p></div>
+<div><h4>Metadata</h4><p>Secret-like metadata values are replaced before export.</p></div>
+
+</div>
+
+`craik mcp client export --path ./mcp.json` emits redacted client
+metadata for review or migration evidence.
 
 ## Audit boundary
 

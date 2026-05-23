@@ -1123,6 +1123,79 @@ Options:
 - `--issuer`: OIDC issuer URL for best-effort revocation.
 - `--client-id`: OIDC client id for best-effort revocation.; default ``
 
+## `craik mcp`
+
+Inspect MCP server and client compatibility.
+
+```text
+craik mcp COMMAND [ARGS]...
+```
+
+## `craik mcp client`
+
+Import and export redacted MCP client config.
+
+```text
+craik mcp client COMMAND [ARGS]...
+```
+
+## `craik mcp client export`
+
+Export MCP client config in redacted JSON form.
+
+```text
+craik mcp client export [OPTIONS]
+```
+
+Options:
+
+- `--path`: Craik MCP client config JSON path.
+
+## `craik mcp client import`
+
+Import MCP client config and print redacted Craik metadata.
+
+```text
+craik mcp client import [OPTIONS]
+```
+
+Options:
+
+- `--path`: MCP client config JSON path.
+
+## `craik mcp server`
+
+Expose Craik MCP server compatibility surfaces.
+
+```text
+craik mcp server COMMAND [ARGS]...
+```
+
+## `craik mcp server handle`
+
+Handle MCP JSON-RPC compatibility requests over JSON lines.
+
+```text
+craik mcp server handle [OPTIONS]
+```
+
+Options:
+
+- `--request-json`: Single JSON-RPC request. Defaults to newline-delimited JSON on stdin.
+- `--include-write-tools`: Enable gated write tools for this request.; default `false`
+
+## `craik mcp server manifest`
+
+Print the Craik MCP server compatibility manifest.
+
+```text
+craik mcp server manifest [OPTIONS]
+```
+
+Options:
+
+- `--include-write-tools`: Include gated write tools in the manifest.; default `false`
+
 ## `craik memory`
 
 Create and review local memory proposals.
