@@ -390,15 +390,13 @@ def _discord_signature_valid(
     timestamp: str,
 ) -> bool:
     message = timestamp.encode("utf-8") + body
-    nacl_unavailable = False
-    cryptography_unavailable = False
     try:
         from nacl.signing import VerifyKey  # type: ignore[import-not-found]
 
         VerifyKey(bytes.fromhex(public_key)).verify(message, bytes.fromhex(signature))
         return True
     except ImportError:
-        nacl_unavailable = True
+        pass
     except Exception:
         return False
     try:
@@ -411,14 +409,9 @@ def _discord_signature_valid(
         key.verify(bytes.fromhex(signature), message)
         return True
     except ImportError:
-        cryptography_unavailable = True
-        if nacl_unavailable:
-            raise _DiscordVerifierUnavailable from None
+        raise _DiscordVerifierUnavailable from None
     except (InvalidSignature, ValueError):
         return False
-    if cryptography_unavailable:
-        return False
-    return False
 
 
 def _signature_valid(*, body: bytes, secret: str, signature: str) -> bool:
