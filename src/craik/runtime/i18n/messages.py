@@ -84,13 +84,107 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "run craik login",
         "es": "ejecute craik login",
     },
+    "shell.title": {
+        "en": "Craik Agent Shell",
+        "es": "Shell de agente Craik",
+    },
+    "shell.state": {
+        "en": "State",
+        "es": "Estado",
+    },
+    "shell.home": {
+        "en": "Home",
+        "es": "Inicio",
+    },
+    "shell.profile": {
+        "en": "Profile",
+        "es": "Perfil",
+    },
+    "shell.model": {
+        "en": "Model",
+        "es": "Modelo",
+    },
+    "shell.not_selected": {
+        "en": "not selected",
+        "es": "no seleccionado",
+    },
+    "shell.missing": {
+        "en": "Missing",
+        "es": "Falta",
+    },
+    "shell.warning": {
+        "en": "Warning",
+        "es": "Advertencia",
+    },
+    "shell.next_actions": {
+        "en": "Next actions",
+        "es": "Acciones siguientes",
+    },
+    "shell.help_hint": {
+        "en": "Type /help for commands or /exit to quit.",
+        "es": "Escriba /help para comandos o /exit para salir.",
+    },
+    "shell.one_shot.not_ready": {
+        "en": (
+            "Craik is not ready for one-shot model execution. "
+            "State: {state}. Next: {next_action}"
+        ),
+        "es": (
+            "Craik no esta listo para ejecucion de modelo de una sola vez. "
+            "Estado: {state}. Siguiente: {next_action}"
+        ),
+    },
+    "shell.one_shot.queued": {
+        "en": "One-shot execution is queued for {model}: {prompt}",
+        "es": "La ejecucion de una sola vez esta en cola para {model}: {prompt}",
+    },
     "dashboard.auth.required": {
         "en": "Dashboard access requires an active operator session or token.",
         "es": "El panel requiere una sesion de operador activa o token.",
     },
+    "dashboard.title": {
+        "en": "Craik Dashboard",
+        "es": "Panel de Craik",
+    },
+    "dashboard.status": {
+        "en": "Status",
+        "es": "Estado",
+    },
+    "dashboard.not_found": {
+        "en": "not found",
+        "es": "no encontrado",
+    },
+    "dashboard.invalid_json": {
+        "en": "invalid JSON",
+        "es": "JSON invalido",
+    },
+    "dashboard.command_required": {
+        "en": "command must be a slash command",
+        "es": "el comando debe ser un comando slash",
+    },
     "tui.help": {
         "en": "Use /help for slash commands, /redraw to refresh, /exit to quit.",
         "es": "Use /help para comandos slash, /redraw para actualizar, /exit para salir.",
+    },
+    "tui.title": {
+        "en": "Craik TUI",
+        "es": "TUI de Craik",
+    },
+    "tui.status": {
+        "en": "Provider/Auth Status",
+        "es": "Estado de proveedor/autenticacion",
+    },
+    "tui.auth": {
+        "en": "Auth",
+        "es": "Autenticacion",
+    },
+    "tui.model_picker": {
+        "en": "Model Picker",
+        "es": "Selector de modelo",
+    },
+    "tui.composer": {
+        "en": "Composer",
+        "es": "Compositor",
     },
 }
 

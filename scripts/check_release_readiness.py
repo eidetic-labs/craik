@@ -139,6 +139,7 @@ def main() -> int:
     failures.extend(_extension_writer_call_failures())
     failures.extend(_cli_auth_coverage_failures())
     failures.extend(_operator_login_remediation_failures())
+    failures.extend(_i18n_consumption_failures())
 
     if failures:
         print("Release readiness checks failed:", file=sys.stderr)
@@ -526,6 +527,28 @@ def _operator_login_remediation_failures() -> list[str]:
                     "operator-session remediation; reserve `craik auth login <provider>` "
                     "for provider credentials"
                 )
+    return failures
+
+
+I18N_REQUIRED_SURFACES = {
+    "src/craik/runtime/shell/agent_shell.py": "shell readiness and one-shot messages",
+    "src/craik/runtime/shell/tui.py": "terminal UI panels",
+    "src/craik/runtime/dashboard/server.py": "dashboard status and errors",
+    "src/craik/runtime/shell/slash_commands.py": "slash command help",
+    "src/craik/runtime/projects/migration/reports.py": "migration reports",
+}
+
+
+def _i18n_consumption_failures() -> list[str]:
+    failures: list[str] = []
+    for relative_path, rationale in I18N_REQUIRED_SURFACES.items():
+        path = ROOT / relative_path
+        if not path.exists():
+            failures.append(f"{relative_path}: missing i18n surface ({rationale})")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "localize(" not in text and "localize_text(" not in text and "text(" not in text:
+            failures.append(f"{relative_path}: does not consume localize() for {rationale}")
     return failures
 
 

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -206,6 +207,12 @@ def test_channels_cli_exposes_setup_and_fixture_paths(tmp_path: Path) -> None:
     )
     assert normalized.exit_code == 0
     assert "webchat:u1" in normalized.stdout
+
+    schema = runner.invoke(app, ["channels", "fixture-schema", "webchat"])
+    assert schema.exit_code == 0
+    payload = json.loads(schema.stdout)
+    assert payload["service"] == "webchat"
+    assert "message_id" in payload["schema"]["required"]
 
 
 def _put_operator_session(home: Path) -> None:

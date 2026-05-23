@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 
 from craik.cli import mcp_app
 from craik.runtime.sandbox.mcp_compat import (
@@ -76,6 +77,8 @@ def client_import_command(
     """Import MCP client config and print redacted Craik metadata."""
     try:
         result = import_mcp_client_config(path)
+    except ValidationError as error:
+        raise typer.BadParameter(_validation_error_message(error)) from None
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise typer.BadParameter(str(error)) from None
     typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
@@ -88,7 +91,17 @@ def client_export_command(
     """Export MCP client config in redacted JSON form."""
     try:
         result = import_mcp_client_config(path)
+    except ValidationError as error:
+        raise typer.BadParameter(_validation_error_message(error)) from None
     except (OSError, ValueError, json.JSONDecodeError) as error:
         raise typer.BadParameter(str(error)) from None
     payload = [export_mcp_client_config(client) for client in result.clients]
     typer.echo(json.dumps({"clients": payload}, indent=2, sort_keys=True))
+
+
+def _validation_error_message(error: ValidationError) -> str:
+    lines = ["MCP config validation failed:"]
+    for item in error.errors(include_url=False, include_input=False):
+        location = ".".join(str(part) for part in item.get("loc", ())) or "config"
+        lines.append(f"- {location}: {item.get('msg', 'invalid value')}")
+    return "\n".join(lines)

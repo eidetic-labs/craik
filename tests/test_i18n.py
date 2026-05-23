@@ -1,6 +1,9 @@
+from craik.runtime.dashboard import DashboardConfig, handle_dashboard_request
 from craik.runtime.i18n import localize, resolve_locale, stable_message_ids, text
 from craik.runtime.projects.migration.reports import MigrationReport, format_migration_report
+from craik.runtime.shell.agent_shell import run_shell
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.tui import build_tui_snapshot, render_tui_snapshot
 
 
 def test_locale_resolution_and_missing_translation_fallback() -> None:
@@ -44,3 +47,40 @@ def test_i18n_text_helper_formats_values() -> None:
     assert text("slash.unknown", locale="es", name="ayuda") == (
         "comando slash desconocido: /ayuda."
     )
+
+
+def test_shell_readiness_card_localizes_status(tmp_path) -> None:
+    output: list[str] = []
+
+    run_shell(
+        env={"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_LOCALE": "es"},
+        output_func=output.append,
+        stdin_isatty=False,
+    )
+
+    assert output
+    assert "Shell de agente Craik" in output[0]
+    assert "Estado: unconfigured" in output[0]
+
+
+def test_tui_snapshot_localizes_panel_headers(tmp_path) -> None:
+    rendered = render_tui_snapshot(
+        build_tui_snapshot({"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_LOCALE": "es"})
+    )
+
+    assert "Estado de proveedor/autenticacion" in rendered
+    assert "Compositor" in rendered
+
+
+def test_dashboard_status_localizes_accept_language(tmp_path) -> None:
+    response = handle_dashboard_request(
+        "GET",
+        "/api/status?token=dashboard-token",
+        {"Accept-Language": "es", "X-Craik-Dashboard-Token": "dashboard-token"},
+        b"",
+        DashboardConfig(auth_token="dashboard-token"),
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert response.status == 200
+    assert '"message": "Estado"' in response.body.decode("utf-8")
