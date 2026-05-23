@@ -182,6 +182,7 @@ const sidebars = {
         'guides/terminal-ui',
         'guides/dashboard',
         'guides/approvals',
+        'guides/privacy',
         'reference/config',
         'reference/readiness-states',
         'reference/slash-commands',
@@ -429,6 +430,7 @@ const sidebars = {
       items: [
         'guides/authentication',
         'guides/local-model-setup',
+        'guides/privacy',
         'adr/credential-and-identity-architecture',
       ],
     },

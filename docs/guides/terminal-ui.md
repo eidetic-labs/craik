@@ -1,14 +1,14 @@
 # Terminal UI
 
-<p className="craik-meta"><span>4 min read</span><span>For operators</span><span>Updated 2026-05-22</span></p>
+<p className="craik-meta"><span>6 min read</span><span>For operators</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
 **What you'll do**
 
-Launch Craik's keyboard-first terminal UI, inspect setup status, route
-slash commands, and keep model, session, approval, gateway, and skill
-proposal context visible while working from a terminal.
+Launch Craik's canonical interactive runtime, work from a chat-first
+terminal surface, use slash commands without leaving the TUI, and review
+auth or approval decisions in inline modal flows.
 
 </div>
 
@@ -16,100 +16,180 @@ proposal context visible while working from a terminal.
 
 **Starts before setup.**
 
-The TUI is an operator shell, not an auth gate. It can open before a
-provider, model, or operator session is configured, then uses readiness
-panels to show the next action instead of failing at launch.
+The TUI is an operator shell, not an auth gate. It opens before a provider,
+model, or operator session is configured, then shows readiness state and
+next actions from inside the same interface.
 
 </div>
 
 ## Launch
 
-Use either entrypoint:
+Use `craik` in an interactive terminal. Craik detects the TTY and launches
+the Textual TUI by default:
+
+```sh
+craik
+```
+
+The explicit TUI entrypoints still work:
 
 ```sh
 craik --tui
 craik tui
 ```
 
-The first render shows provider/auth status, the multiline composer,
-model and session pickers, approval status, runs, handoffs, receipts,
-gateway state, and skill proposal counts. The frame is intentionally
-text-native so it works in local terminals, CI smoke tests, and remote
-shells without a graphics stack.
+Use `--no-tui` or `CRAIK_NO_TUI=1` when you need the plain shell path for
+debugging, scripts, or terminal compatibility checks:
+
+```sh
+craik --no-tui
+CRAIK_NO_TUI=1 craik
+```
+
+Non-TTY use stays plain-output by design. Piped commands, CI jobs, and
+scripted invocations do not open the TUI.
+
+## Layout
+
+<div className="craik-grid">
+
+<div><h4>Transcript</h4><p>Scrollable prompt, response, link, and audit-trail output.</p></div>
+<div><h4>Slash Popup</h4><p>Command and argument completions while typing <code>/</code>.</p></div>
+<div><h4>Working Indicator</h4><p>Elapsed-time status while an agent task is in flight.</p></div>
+<div><h4>Input</h4><p>Bordered prompt region with CLI-prefix detection and paste collapse.</p></div>
+<div><h4>Status Bar</h4><p><code>Craik · model · state · mode · cwd</code> at the bottom edge.</p></div>
+<div><h4>Modals</h4><p>Focused auth, logout, and approval decisions without leaving the runtime.</p></div>
+
+</div>
+
+The bottom status bar uses the Craik brand accent for the wordmark and
+subdued terminal colors for model, readiness, mode, and working directory.
+`CRAIK_THEME=dark|light|monochrome` overrides auto-detection. `NO_COLOR=1`
+uses the monochrome path.
 
 ## Commands
 
-The TUI uses the same slash-command registry as the agent shell:
+The TUI uses slash commands as the primary operator control surface:
 
 ```text
 /help
 /status
-/provider login openai
-/model
+/auth login openai
+/auth status
+/provider
+/model list
+/model set openai/gpt-4o-mini
 /sessions
+/resume <session-id>
 /approvals
+/approvals decide <approval-id>
 /gateway
 /skills
+/exit
 ```
 
-Use `/compose` to enter multiline input. Finish the message with a
-single `.` line. Use `/redraw` to refresh the panels and `/exit` to
-leave the TUI.
+Commands either execute inline, print structured status into the transcript,
+or open a modal. They do not route you back to shell commands while you are
+inside the TUI.
 
-## What the Panels Show
+If you accidentally type a shell command shape such as
+`craik auth login openai` into the TUI prompt, Craik leaves your input in
+place and shows a warning with the matching slash-command path. Press
+`Ctrl-D` to exit if you intended to run a command from your operator shell.
+
+## Completion
+
+Slash completion starts when you type `/`. Completion is context-aware:
 
 <div className="craik-grid">
 
-<div><h4>Provider/Auth Status</h4><p>Readiness state, home path, active profile, active model, missing setup, warnings, and next action.</p></div>
-<div><h4>Composer</h4><p>Slash-command and multiline-input hints.</p></div>
-<div><h4>Model Picker</h4><p>The active model plus commands for model list and selection.</p></div>
-<div><h4>Session Picker</h4><p>Persistent session and run counts with resume guidance.</p></div>
-<div><h4>Approvals</h4><p>The approval queue surface used by later approval lifecycle flows.</p></div>
-<div><h4>Runs / Handoffs / Receipts</h4><p>Read-only artifact counts and redaction posture.</p></div>
-<div><h4>Gateway</h4><p>Configured gateway runtime states and gateway status command hints.</p></div>
-<div><h4>Skill Proposals</h4><p>Learning-loop proposal counts and governed promotion commands.</p></div>
+<div><h4><code>/auth login </code></h4><p>Lists configured provider families.</p></div>
+<div><h4><code>/model set </code></h4><p>Lists aliases and provider default model selectors.</p></div>
+<div><h4><code>/resume </code></h4><p>Lists persistent sessions sorted by recent activity.</p></div>
+<div><h4><code>/approvals decide </code></h4><p>Lists open approval ids.</p></div>
 
 </div>
 
+Typing `@` opens file mention completion for paths under the current working
+directory. Selected paths are inserted as `@path` tokens and resolved by the
+runtime when the prompt is submitted.
+
+## History
+
+The TUI persists prompt and slash-command history locally:
+
+| Mode | History file |
+|---|---|
+| Single-operator local | `~/.craik/state/shell-history.jsonl` |
+| Audited operator mode | `~/.craik/state/shell-history-<subject-hash>.jsonl` |
+| Audited mode without a session yet | `~/.craik/state/shell-history-anonymous.jsonl` |
+
+History files use owner-only permissions on POSIX systems. The default cap is
+10,000 entries. Set `CRAIK_HISTORY_MAX_ENTRIES=0` to disable persistence.
+
+## Modal Flows
+
+`/auth login [provider]` opens a credential capture modal with a provider
+picker and password-masked credential input. The modal verifies the credential
+before writing the cached profile and never writes credential material to the
+transcript.
+
+`/auth logout [profile]` opens a confirmation modal before removing a cached
+profile or keyring reference.
+
+`/approvals decide <approval-id>` opens an approval decision modal with the
+capability, target, risk, policy, and retry path. Approve or deny with a
+reason; Craik records a redacted decision receipt.
+
+## Transcript Signals
+
+Craik uses transcript widgets to keep runtime state visible:
+
+- Action markers show tool actions, waiting states, approvals, and review
+  events tied back to receipt ids.
+- Section dividers separate turns.
+- Long output collapses after three lines and can expand inline.
+- URLs render as terminal links where supported.
+- Pasted content with three or more lines collapses to `[N lines of text]`
+  in the input while preserving the full submitted content.
+
 ## Security and Redaction
 
-The TUI renders from existing readiness and local-store surfaces. It
-does not bypass operator auth checks for commands that already require
-an active operator session, and it keeps redaction on for dynamic text.
-Panels show status, IDs, counts, and summaries rather than raw secrets.
+The TUI renders from the same readiness, auth, policy, receipt, and local-store
+surfaces used by the CLI and dashboard. It does not bypass operator gates for
+mutating actions. Read-only diagnostics are available before auth so operators
+can understand setup state and fix configuration without leaving the runtime.
 
-The approval modal fixture follows the same rule: it shows capability,
-target, risk, policy, and available actions while redacting secret-like
-target text before it reaches the terminal.
+Credential input is masked and redacted. Approval modals show bounded context:
+capability, target, risk, policy, retry path, and decision receipt ids.
 
 ## Accessibility
 
-The first TUI implementation is keyboard-first and text-native. It
-avoids mouse-only controls, preserves readable labels for every panel,
-and keeps output deterministic for screen readers, terminal capture,
-and snapshot tests. The `/help` command remains the canonical command
-index for users who prefer linear navigation.
+The TUI is keyboard-first and text-native. It avoids mouse-only controls,
+keeps labels visible, and leaves `/help` as the linear command index. The
+footer displays active key bindings. Fixed bindings keep behavior predictable
+across macOS Terminal, iTerm, Linux terminals, and Windows Terminal.
 
-## What's next
+## Related Guides
 
 <div className="craik-next">
 
 <a href="../agent-shell/">
 <strong>Guide</strong>
 <span>Agent shell</span>
-<small>The command shell that shares the TUI slash-command registry.</small>
+<small>The plain shell path used for non-TTY and compatibility fallback.</small>
 </a>
 
-<a href="../../reference/slash-commands/">
-<strong>Reference</strong>
-<span>Slash commands</span>
-<small>The shared command registry used by shell, TUI, dashboard, and tests.</small>
+<a href="../authentication/">
+<strong>Guide</strong>
+<span>Authentication</span>
+<small>Provider credential capture, cached profiles, and operator sessions.</small>
 </a>
 
-<a href="../../reference/operator-surface/">
-<strong>Reference</strong>
-<span>Operator surface</span>
-<small>The read-only runtime views the TUI builds on.</small>
+<a href="../privacy/">
+<strong>Guide</strong>
+<span>Privacy</span>
+<small>Where prompts, receipts, logs, and history go.</small>
 </a>
 
 </div>

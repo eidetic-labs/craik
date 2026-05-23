@@ -10,6 +10,21 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- Added the v0.12.2 canonical Textual TUI docs, covering bare `craik`
+  interactive launch, slash-command completion, shell history scoping,
+  modal auth and approval flows, transcript widgets, theme handling, and
+  plain-shell fallback behavior.
+- Added `docs/guides/privacy.md` with Craik's four-part data-flow model:
+  zero Craik telemetry, zero third-party analytics, provider-bound prompt
+  traffic, and local-only receipts, logs, and shell history.
+
+### Changed
+
+- Updated terminal UI documentation to reflect the current chat-first
+  runtime rather than the older ASCII status display.
+
 ## 0.12.1 — 2026-05-23
 
 ### Changed
