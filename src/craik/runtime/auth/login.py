@@ -32,7 +32,6 @@ from craik.runtime.shell.credential_storage import (
     put_cached_credential,
 )
 
-CredentialPrompt = Callable[[str], str]
 ConfirmPrompt = Callable[[str], bool]
 
 

@@ -147,7 +147,9 @@ class SecretMigrationReceipt(CraikModel):
 class SecretKeyringWriter(Protocol):
     """Minimal keyring writer used by secret migration."""
 
-    def set_secret(self, target_ref: str, value: str) -> None: ...
+    def set_secret(self, target_ref: str, value: str) -> None:
+        """Write one secret value to the target keyring reference."""
+        raise NotImplementedError
 
 
 class InMemorySecretKeyring:
