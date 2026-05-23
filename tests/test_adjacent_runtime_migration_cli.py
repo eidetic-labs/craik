@@ -1,9 +1,11 @@
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from craik.cli import app
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.projects.migration.adjacent_runtime import (
     inspect_adjacent_runtime_source,
     plan_adjacent_runtime_migration,
@@ -68,19 +70,85 @@ def test_migrate_plan_text_cli(tmp_path: Path) -> None:
     assert "sk_live" not in result.stdout
 
 
-def test_migrate_import_defaults_to_dry_run_and_rejects_apply(tmp_path: Path) -> None:
+def test_migrate_import_defaults_to_dry_run_and_applies_with_yes(tmp_path: Path) -> None:
     source = _fixture_source(tmp_path)
+    home = tmp_path / "home"
     before = sorted(path.read_text(encoding="utf-8") for path in source.rglob("*.json"))
 
-    dry_run = runner.invoke(app, ["migrate", "import", "--source", str(source), "--json"])
-    apply = runner.invoke(app, ["migrate", "import", "--source", str(source), "--apply"])
+    dry_run = runner.invoke(
+        app,
+        ["migrate", "import", "--source", str(source), "--json"],
+        env={"CRAIK_HOME": str(home)},
+    )
+    apply = runner.invoke(
+        app,
+        ["migrate", "import", "--source", str(source), "--apply", "--yes", "--json"],
+        env={"CRAIK_HOME": str(home)},
+    )
+    _put_operator_session(home)
+    agents = runner.invoke(app, ["agent", "list"], env={"CRAIK_HOME": str(home)})
 
     after = sorted(path.read_text(encoding="utf-8") for path in source.rglob("*.json"))
     assert dry_run.exit_code == 0
     assert json.loads(dry_run.stdout)["mutated_state"] is False
-    assert apply.exit_code != 0
-    assert "apply mode is not enabled" in apply.stdout
+    assert apply.exit_code == 0, apply.output
+    apply_payload = json.loads(apply.stdout)
+    assert apply_payload["mutated_state"] is True
+    assert apply_payload["mutated_source"] is False
+    assert any(
+        record["target_schema"] == "craik.agent_profile"
+        for record in apply_payload["applied_records"]
+    )
+    assert agents.exit_code == 0
+    assert any(
+        session["id"].startswith("migrated_") for session in json.loads(agents.stdout)
+    )
     assert after == before
+
+
+def test_migrate_import_apply_prompts_without_yes(tmp_path: Path) -> None:
+    source = _fixture_source(tmp_path)
+
+    result = runner.invoke(
+        app,
+        ["migrate", "import", "--source", str(source), "--apply"],
+        input="n\n",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    assert "Apply importable adjacent-runtime records" in result.output
+
+
+def test_migrate_import_apply_include_records_filter(tmp_path: Path) -> None:
+    source = _fixture_source(tmp_path)
+    home = tmp_path / "home"
+    plan = plan_adjacent_runtime_migration(source)
+    selected = next(
+        record.source_id
+        for record in plan.mapped_records
+        if record.target_schema == "craik.agent_profile"
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "import",
+            "--source",
+            str(source),
+            "--apply",
+            "--yes",
+            "--include-records",
+            selected,
+            "--json",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert [record["source_id"] for record in payload["applied_records"]] == [selected]
 
 
 def test_migrate_rejects_unsupported_kind(tmp_path: Path) -> None:
@@ -123,3 +191,15 @@ def _fixture_source(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return source
+
+
+def _put_operator_session(home: Path) -> None:
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator:test",
+            issuer="issuer",
+            groups=["operators"],
+            id_token_jti="jti",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )

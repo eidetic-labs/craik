@@ -13,6 +13,7 @@ from craik.runtime.auth.login import profile_runtime_status
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.dashboard import DashboardConfig
 from craik.runtime.dashboard.server import handle_dashboard_request, validate_dashboard_config
+from craik.runtime.shell import credential_storage
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command, slash_command_is_mutating
 from craik.runtime.shell.tui import build_tui_snapshot, render_tui_snapshot
@@ -44,6 +45,73 @@ def test_auth_login_captures_keyring_ref_without_leaking_secret(
     assert profile.kind is CredentialKind.KEYRING_REF
     assert profile.metadata["ref"] == "openai:default:api-key"
     assert profile_runtime_status(profile, env=env).status == "ok"
+
+
+def test_auth_login_success_message_reflects_storage_and_model_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home), "CRAIK_CREDENTIAL_BACKEND": "file"}
+    _allow_health_check(monkeypatch)
+
+    login = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--no-browser"],
+        input="sk-test-captured\n",
+        env=env,
+    )
+    model = runner.invoke(app, ["model", "set", "openai/gpt-4o-mini"], env=env)
+    relogin = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--no-browser"],
+        input="y\nsk-test-captured\n",
+        env=env,
+    )
+
+    assert login.exit_code == 0, login.output
+    assert "Cached in file." in login.output
+    assert "Set an active model with `craik model set <provider/model>`." in login.output
+    assert "Ready to chat." not in login.output
+    assert model.exit_code == 0
+    assert relogin.exit_code == 0, relogin.output
+    assert "Ready to chat." in relogin.output
+
+
+def test_auth_login_env_var_message_does_not_claim_cached_or_ready(tmp_path: Path) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home"), "OPENAI_API_KEY": "openai-key"}
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--env-var", "OPENAI_API_KEY"],
+        env=env,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Using environment variable OPENAI_API_KEY." in result.output
+    assert "Cached in" not in result.output
+    assert "Ready to chat." not in result.output
+
+
+def test_auth_login_fails_closed_when_keyring_is_unavailable(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    _allow_health_check(monkeypatch)
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage.platform, "system", lambda: "Darwin")
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--no-browser"],
+        input="sk-test-captured\n",
+        env=env,
+    )
+
+    assert result.exit_code != 0
+    assert "credential storage unavailable" in result.output
+    assert AuthProfileStore(tmp_path / "home").list() == []
 
 
 def test_auth_login_rejected_key_uses_redacted_remediation(tmp_path: Path) -> None:

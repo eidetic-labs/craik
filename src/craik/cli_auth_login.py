@@ -10,8 +10,9 @@ import click
 import typer
 
 from craik.cli import auth_app
-from craik.runtime.auth import AuthProfileNotFoundError, AuthProfileStore
+from craik.runtime.auth import AuthProfileNotFoundError, AuthProfileStore, CredentialKind
 from craik.runtime.auth.login import (
+    AuthCaptureResult,
     capture_and_cache_login,
     explicit_reference_login,
     logout_provider,
@@ -19,6 +20,7 @@ from craik.runtime.auth.login import (
 )
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
+from craik.runtime.shell.readiness import resolve_readiness
 
 storage_app = typer.Typer(help="Inspect and migrate credential storage posture.")
 auth_app.add_typer(storage_app, name="storage")
@@ -102,10 +104,11 @@ def auth_login_provider(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
     provider_name = provider.title()
-    typer.echo(
-        f"Logged into {provider_name}. Cached in "
-        f"{result.credential_storage.backend}. Ready to chat."
-    )
+    typer.echo(f"Logged into {provider_name}. {_credential_location_message(result)}")
+    if resolve_readiness().active_model is not None:
+        typer.echo("Ready to chat.")
+    else:
+        typer.echo("Set an active model with `craik model set <provider/model>`.")
     if result.warning:
         typer.echo(f"Warning: {result.warning}")
 
@@ -214,3 +217,13 @@ def _default_profile_id(provider: str) -> str:
     if normalized == "local":
         return "chat_completions:local"
     return f"{normalized}:default"
+
+
+def _credential_location_message(result: AuthCaptureResult) -> str:
+    if result.profile.kind is CredentialKind.API_KEY:
+        env_var = result.profile.metadata.get("env_var")
+        return f"Using environment variable {env_var}." if env_var else "Using API-key profile."
+    if result.profile.kind is CredentialKind.SECRET_REF:
+        secret_ref = result.profile.metadata.get("secret_ref") or result.profile.metadata.get("ref")
+        return f"Using secret reference {secret_ref}." if secret_ref else "Using secret reference."
+    return f"Cached in {result.credential_storage.backend}."

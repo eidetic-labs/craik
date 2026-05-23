@@ -108,6 +108,9 @@ def put_cached_credential(
     if not value:
         raise CredentialStorageError("credential value is required")
     status = credential_storage_status(env)
+    if status.status == "unavailable":
+        detail = status.warning or f"{status.backend} is unavailable"
+        raise CredentialStorageError(detail)
     if status.secure and _python_keyring_available():
         _keyring_set(ref, value)
         return status

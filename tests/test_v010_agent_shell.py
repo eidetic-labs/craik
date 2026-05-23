@@ -103,7 +103,7 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(
     monkeypatch,
 ) -> None:
     home = tmp_path / "home"
-    env = {"CRAIK_HOME": str(home)}
+    env = {"CRAIK_HOME": str(home), "CRAIK_CREDENTIAL_BACKEND": "file"}
     _put_operator_session(home)
     _allow_health_check(monkeypatch)
 

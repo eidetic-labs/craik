@@ -123,11 +123,16 @@ def capture_and_cache_login(
     storage_status = credential_storage_status(env)
     warning = storage_status.warning
     if not dry_run:
-        storage_status = put_cached_credential(
-            _credential_ref(profile),
-            credential,
-            env=env,
-        )
+        try:
+            storage_status = put_cached_credential(
+                _credential_ref(profile),
+                credential,
+                env=env,
+            )
+        except CredentialStorageError as exc:
+            raise ValueError(
+                f"credential storage unavailable: {sanitize_credential_error(exc)}"
+            ) from None
         metadata = dict(profile.metadata)
         metadata["last_validated_at"] = datetime.now(UTC).isoformat()
         metadata["credential_backend"] = storage_status.backend
