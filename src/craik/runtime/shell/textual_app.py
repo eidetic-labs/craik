@@ -12,12 +12,14 @@ from textual.widgets import Footer, OptionList, RichLog
 
 from craik import __version__
 from craik.runtime.shell.readiness import ReadinessReport
+from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.slash_commands import (
     SlashCommandResult,
-    command_names,
     dispatch_slash_command,
 )
+from craik.runtime.shell.slash_completer import complete_slash_input
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput, cli_prefix_warning
+from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
@@ -78,8 +80,9 @@ class CraikApp(App[None]):
             return
         transcript = self.query_one("#transcript", RichLog)
         transcript.write(f"> {text}")
+        append_history(text, env=self.env)
         result = self._dispatch(text)
-        transcript.write(result.text)
+        transcript.write(linkify_text(result.text))
         input_widget.value = ""
         self.query_one("#slash-popup", Container).display = False
         if result.exit_shell:
@@ -97,12 +100,11 @@ class CraikApp(App[None]):
         popup = self.query_one("#slash-popup", Container)
         options = self.query_one("#slash-options", OptionList)
         options.clear_options()
-        normalized = prefix.removeprefix("/")
-        matches = [
-            name for name in command_names() if name.startswith(normalized) or not normalized
-        ][:12]
-        for name in matches:
-            options.add_option(f"/{name}")
+        for candidate in complete_slash_input(prefix, env=self.env)[:12]:
+            label = candidate.value
+            if candidate.description:
+                label = f"{candidate.value}  {candidate.description}"
+            options.add_option(label)
         popup.display = True
 
 
