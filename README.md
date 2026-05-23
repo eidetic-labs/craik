@@ -28,9 +28,8 @@ provider requests through OpenAI Responses, Anthropic Messages, and
 OpenAI-compatible Chat Completions adapters, persist receipts/handoffs/work
 graphs, consume completed handoffs into follow-up governed runs, and propose
 memory updates for review.
-Provider-backed runs can also be dispatched through v0.3.0 specialist roles
-such as verifier, docs reviewer, policy reviewer, memory curator, and
-adjudicator.
+Provider-backed runs can also be dispatched through specialist roles such as
+verifier, docs reviewer, policy reviewer, memory curator, and adjudicator.
 Multi-agent coordination now has a typed, receipt-backed mailbox contract for
 agent-to-agent messages linked to task, run, handoff, and role identities.
 Concurrent runs against the same project are checked against active intent-lock
@@ -48,9 +47,9 @@ run boundary.
 Scope-change handling now prevents silent expansion: discovered work outside the
 active intent lock interrupts the run, persists the proposed scope change, and
 requires an explicit expand, sibling-work, handoff, or denial decision.
-The work graph is also becoming live coordination state: v0.3.0 mailbox,
-review, debate, delegation, and scope-change artifacts persist graph events that
-operators can query before a final export.
+The work graph also acts as live coordination state: mailbox, review, debate,
+delegation, and scope-change artifacts persist graph events that operators can
+query before a final export.
 Handoff consumers must now make their credential and operator assignment
 explicit. Craik rejects accidental producer-identity reuse unless the caller
 passes an explicit continuation flag, and the assignment is recorded as a
@@ -125,9 +124,8 @@ Craik is not yet a fully autonomous release-quality agent. It does not claim
 unbounded tool execution, unattended file edits, broad remote Stigmem writes, or
 production multi-agent orchestration. Tool execution is policy-bound and
 currently limited to configured local-process sandbox execution for registered
-command references; container, remote-shell, browser, and MCP execution
-backends remain future work. Live provider calls remain opt-in rather than
-hidden CI behavior.
+command references. Live provider calls remain opt-in rather than hidden CI
+behavior.
 
 ## Vision
 
@@ -146,9 +144,9 @@ Craik can run in degraded local mode without Stigmem for demos and development, 
 
 ## Agent Integration Model
 
-Craik core is runner-agnostic. The current MVP path provides deterministic
-OpenAI- and Anthropic-shaped provider runner execution for certification and
-offline validation. Preview prompt-handoff adapters are also available for:
+Craik core is runner-agnostic. It provides deterministic OpenAI- and
+Anthropic-shaped provider runner execution for certification and offline
+validation. Prompt-handoff adapters are also available for:
 
 - Codex
 - Claude
@@ -170,12 +168,11 @@ Craik is not built as a dependency layer on another agent framework. It borrows 
 - **Contradiction handling:** Conflicting facts are surfaced for resolution instead of silently overwritten.
 - **Work graph:** Tasks, PRs, issues, facts, decisions, docs, tools, agents, and artifacts are modeled as connected state.
 
-## Planning Docs
+## Documentation
 
 - [Documentation Index](docs/index.md)
 - [Vision](docs/vision.md)
-- [Architecture Decisions](docs/adr/0001-record-mvp-runner-scope.md)
-- [Product Strategy](docs/product-strategy.md)
+- [Architecture Decisions](docs/adr/index.md)
 - [Differentiators](docs/differentiators.md)
 - [Architecture](docs/architecture.md)
 - [Runtime Contracts](docs/runtime-contracts.md)
@@ -186,9 +183,6 @@ Craik is not built as a dependency layer on another agent framework. It borrows 
 - [Handoffs](docs/concepts/handoffs.md)
 - [Receipts](docs/concepts/receipts.md)
 - [Feature Specification](docs/features.md)
-- [MVP Plan](docs/mvp.md)
-- [Implementation Plan](docs/implementation-plan.md)
-- [Roadmap](docs/roadmap.md)
 - [Governance Model](docs/governance.md)
 - [Stigmem Integration](docs/stigmem-integration.md)
 - [Installation](docs/guides/installation.md)
@@ -231,34 +225,10 @@ Craik is not built as a dependency layer on another agent framework. It borrows 
 - [Secrets](docs/security/secrets.md)
 - [Limitations](docs/limitations.md)
 
-## Current Status
-
-Craik is moving toward a robust `0.x.0` MVP release. `1.0.0` is a later
-stability signal, not the first release target.
-
-The repository now includes the CLI package, strict runtime contracts, local
-SQLite state, project/task/case-file workflows, policy and receipt primitives,
-runner preview contracts, governed provider-backed loops, durable run
-continuity, budget enforcement, local-process sandboxed shell dispatch,
-multi-agent review contracts, instruction distillation, quality/recovery
-helpers, skills/plugins foundations, operator view formatters,
-gateway/channel contracts, sandbox/provider routing contracts, learning-loop
-helpers, multimodal decisions, migration/i18n contracts, and broad docs/tests
-through the v0.12 roadmap.
-
-The remaining MVP work is to harden these contract and helper surfaces into one
-complete release-quality workflow: remote Stigmem write promotion,
-God-file/runtime package cleanup, ADR-backed design decisions, and docs/test
-depth comparable to Stigmem. Package version `0.4.0` marks the runtime
-instruction distillation gate after declared instruction sources, stale
-invalidation, contradiction surfacing, approval receipts, and prompt/case-file
-integration shipped; roadmap sections remain implementation gates, not `1.0.0`
-readiness claims. See
-[Robust MVP Roadmap](docs/mvp-roadmap.md).
-
 ## Implementation Stack
 
-Craik core is implemented in Python 3.12+ with a CLI-first package shape. The initial stack is:
+Craik core is implemented in Python 3.12+ with a CLI-first package shape. The
+stack is:
 
 - Python 3.12+
 - Typer for CLI
@@ -268,8 +238,6 @@ Craik core is implemented in Python 3.12+ with a CLI-first package shape. The in
 - `pytest` for tests
 - `ruff` and `mypy` for quality gates
 
-TypeScript remains appropriate for future UI, gateway adapters, and channel integrations, but it is not the initial core runtime stack.
-
 ## Package and CLI Naming
 
 Craik uses the same name across the public repository, Python package, import module, and CLI command:
@@ -278,9 +246,6 @@ Craik uses the same name across the public repository, Python package, import mo
 - PyPI distribution: `craik`
 - Python module: `craik`
 - CLI command: `craik`
-- Future npm package, if needed: `craik`
-
-Live registry checks on 2026-05-15 showed `craik` available on both PyPI and npm. If a registry race occurs before publication, `craik-runtime` is the fallback distribution name while preserving `craik` as the CLI command and Python module.
 
 ## Local State
 
@@ -324,36 +289,3 @@ Craik is released under the [MIT License](LICENSE). The license choice is intend
 - Security disclosure: [SECURITY.md](SECURITY.md)
 - Trademark and brand usage: [TRADEMARKS.md](TRADEMARKS.md)
 - Maintainer and release policy: [MAINTAINERS.md](MAINTAINERS.md)
-
-## Initial Build Target
-
-The first implementation should focus on a repository-aware CLI runtime:
-
-1. Create a project profile for a local Git repository.
-2. Connect optional Stigmem memory.
-3. Assemble a task case file from repository state, docs, issues, policies, and facts.
-4. Execute a governed single-agent task with scoped capabilities.
-5. Record capability receipts.
-6. Produce a structured handoff.
-7. Propose fact updates for future agents.
-
-Multi-agent orchestration, work graph visualization, contradiction inbox, and plugin probation should be layered on after the single-agent durable workflow is working end to end.
-
-## First Demo Target
-
-Craik's first real demo target is Stigmem documentation and state reconciliation. The initial runnable version is exposed through `craik demo stigmem-docs`.
-
-The demo should:
-
-1. Register the Stigmem repository as a Craik project.
-2. Connect to a local Stigmem node.
-3. Create a docs reconciliation task.
-4. Assemble a case file from repository state, ADRs, public docs, GitHub issues/PRs, recent Stigmem facts, and prior handoffs.
-5. Identify stale or contradictory documentation.
-6. Produce proposed documentation updates.
-7. Record capability receipts for important actions.
-8. Generate a durable handoff.
-9. Propose or write new Stigmem facts.
-10. Export a work graph for the task.
-
-This target is intentionally based on a real workflow that already exposed the need for durable memory, public/internal doc boundaries, ADR constraints, and agent handoffs.
