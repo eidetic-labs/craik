@@ -10,6 +10,30 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.1 — 2026-05-23
+
+### Changed
+
+- Refined the README into a current-state product overview by removing
+  planning-document inventory, MVP framing, and future-scope content.
+- Hardened v0.12.1 operator UX surfaces for provider login, default
+  model selection, chat readiness, gateway checks, doctor output, MCP
+  config validation, and migration apply flow.
+- Expanded localized shell, TUI, dashboard, and migration text coverage
+  while keeping fixture schema validation stable for channel surfaces.
+
+### Fixed
+
+- Addressed CodeQL findings for protocol method bodies, unused auth
+  aliases, Discord webhook verifier control flow, and unreachable
+  verifier branches.
+- Strengthened auth health-check coverage for blank secrets,
+  provider-specific HTTP success paths, non-HTTP URL rejection, and
+  redacted provider rejection messages.
+- Migration apply now reports records without writers as skipped with
+  explicit warnings instead of silently marking non-agent records as
+  applied.
+
 ## 0.12.0 — 2026-05-23
 
 ### Added
