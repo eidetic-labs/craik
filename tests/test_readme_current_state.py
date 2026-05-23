@@ -15,3 +15,23 @@ def test_readme_getting_started_and_operator_modes_match_v0121() -> None:
     assert 'echo "summarize the README" | craik chat -q -' in content
     assert "Single-operator local (default)" in content
     assert "CRAIK_OPERATOR_REQUIRED=1" in content
+
+
+def test_readme_stays_current_state_not_planning_doc() -> None:
+    readme = Path(__file__).resolve().parents[1] / "README.md"
+    content = readme.read_text(encoding="utf-8")
+
+    forbidden = [
+        "## Planning Docs",
+        "## Current Status",
+        "## Initial Build Target",
+        "## First Demo Target",
+        "MVP",
+        "mvp",
+        "Roadmap",
+        "roadmap",
+        "Implementation Plan",
+        "implementation-plan",
+    ]
+    for phrase in forbidden:
+        assert phrase not in content
