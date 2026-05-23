@@ -95,13 +95,28 @@ def apply_adjacent_runtime_migration(
             candidate = candidates.get(record.source_id)
             if candidate and candidate.source_type == "agent":
                 _put_migrated_agent_session(store, record)
+                applied.append(
+                    AppliedMigrationRecord(
+                        source_id=record.source_id,
+                        target_schema=record.target_schema,
+                        target_id=record.target_id,
+                        status="applied",
+                        warnings=tuple(record.warnings),
+                    )
+                )
+                continue
+            source_type = candidate.source_type if candidate else "unknown"
+            skipped_warning = (
+                f"migration apply does not yet support source_type={source_type!r}; "
+                "record was not written to Craik state"
+            )
             applied.append(
                 AppliedMigrationRecord(
                     source_id=record.source_id,
                     target_schema=record.target_schema,
                     target_id=record.target_id,
-                    status="applied",
-                    warnings=tuple(record.warnings),
+                    status="skipped",
+                    warnings=(*record.warnings, skipped_warning),
                 )
             )
     finally:
@@ -130,7 +145,7 @@ def format_apply_text(result: AppliedMigration) -> list[str]:
     lines = [
         f"Migration applied: {result.id}",
         f"Source: {result.source_name}",
-        f"Applied records: {len(result.applied_records)}",
+        f"Processed records: {len(result.applied_records)}",
         "Mutated source: no",
         "Mutated Craik state: yes",
     ]
@@ -138,9 +153,9 @@ def format_apply_text(result: AppliedMigration) -> list[str]:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in result.warnings)
     if result.applied_records:
-        lines.append("Applied records:")
+        lines.append("Processed records:")
         lines.extend(
-            f"- {record.source_id} -> {record.target_schema}/{record.target_id}"
+            f"- {record.source_id} [{record.status}] -> {record.target_schema}/{record.target_id}"
             for record in result.applied_records
         )
     return lines
