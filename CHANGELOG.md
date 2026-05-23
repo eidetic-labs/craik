@@ -34,6 +34,9 @@ within the `0.x.0` stability expectations described in
   provider config, model fallback, profiles/personas, channel bindings,
   sessions, memory, skills, schedules, sandbox, gateway, approval
   posture, invalid fixture handling, and secret-redaction assertions.
+- v0.12.0 MCP compatibility surfaces through `craik mcp server
+  manifest`, JSON-RPC smoke handling, redacted MCP client config
+  import/export, and auth/policy/receipt mapping for MCP tool calls.
 
 ## 0.11.0 — 2026-05-23
 

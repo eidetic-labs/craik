@@ -1,6 +1,6 @@
 # MCP ecosystem compatibility
 
-<p className="craik-meta"><span>4 min read</span><span>For integrators</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For integrators</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
@@ -65,6 +65,52 @@ MCP servers are compatible when their advertised tools or resources
 can be mapped to explicit Craik capabilities. A compatible server
 still needs a capability grant before execution, and calls that affect
 external systems produce receipts.
+
+## Craik server mode
+
+v0.12.0 adds a compatibility server surface for MCP smoke tests and
+client integration. It exposes safe read surfaces first:
+
+```bash
+craik mcp server manifest
+```
+
+The manifest advertises read-only tools for case summaries, approved
+memory search, and receipt metadata. Gated write tools are hidden by
+default and only appear when explicitly requested:
+
+```bash
+craik mcp server manifest --include-write-tools
+```
+
+JSON-RPC compatibility handling is available for local integration
+tests:
+
+```bash
+craik mcp server handle --request-json '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Tool calls map to Craik controls before execution. Read calls require
+operator authentication. Write calls also require an approved policy
+gate and receipt id. Denials are structured JSON-RPC errors with the
+missing control listed in `error.data.required_controls`.
+
+## Client config import/export
+
+Import external MCP client config as redacted Craik metadata:
+
+```bash
+craik mcp client import --path ./mcp.json
+```
+
+The importer accepts both Craik-shaped `MCPClientConfig` JSON and
+common `mcpServers` config objects. Environment variable names such as
+`MCP_TOKEN` become `secret_ref_names`; raw values are not copied into
+Craik config. Export prints the same clients in redacted form:
+
+```bash
+craik mcp client export --path ./mcp.json
+```
 
 ## Tools
 

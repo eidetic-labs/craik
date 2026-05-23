@@ -1,6 +1,6 @@
 # MCP export boundary
 
-<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-19</span></p>
+<p className="craik-meta"><span>3 min read</span><span>Reference</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
@@ -99,8 +99,11 @@ review and documentation updates.
 </div>
 
 The `craik.runtime.mcp_export` helper records the decision status,
-reason, and required controls for a candidate surface. It does not
-start an MCP server or grant runtime authority by itself.
+reason, and required controls for a candidate surface. The v0.12.0
+`craik.runtime.sandbox.mcp_compat` helper applies those decisions to
+the MCP compatibility manifest and JSON-RPC smoke handler. It does not
+grant runtime authority by itself; tool calls still pass through
+operator auth, policy gates, and receipt requirements.
 
 ## What's next
 
