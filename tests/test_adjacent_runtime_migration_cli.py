@@ -99,6 +99,19 @@ def test_migrate_import_defaults_to_dry_run_and_applies_with_yes(tmp_path: Path)
         record["target_schema"] == "craik.agent_profile"
         for record in apply_payload["applied_records"]
     )
+    skipped_records = [
+        record for record in apply_payload["applied_records"] if record["status"] == "skipped"
+    ]
+    assert skipped_records
+    assert all(
+        "record was not written to Craik state" in " ".join(record["warnings"])
+        for record in skipped_records
+    )
+    assert any(
+        record["status"] == "skipped"
+        and record["target_schema"] in {"craik.model_provider", "craik.memory_record"}
+        for record in apply_payload["applied_records"]
+    )
     assert agents.exit_code == 0
     assert any(
         session["id"].startswith("migrated_") for session in json.loads(agents.stdout)
@@ -149,6 +162,44 @@ def test_migrate_import_apply_include_records_filter(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert [record["source_id"] for record in payload["applied_records"]] == [selected]
+    assert payload["applied_records"][0]["status"] == "applied"
+
+
+def test_migrate_import_apply_include_non_agent_record_is_explicitly_skipped(
+    tmp_path: Path,
+) -> None:
+    source = _fixture_source(tmp_path)
+    home = tmp_path / "home"
+    plan = plan_adjacent_runtime_migration(source)
+    selected = next(
+        record.source_id
+        for record in plan.mapped_records
+        if record.target_schema == "craik.model_provider"
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "import",
+            "--source",
+            str(source),
+            "--apply",
+            "--yes",
+            "--include-records",
+            selected,
+            "--json",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert [record["source_id"] for record in payload["applied_records"]] == [selected]
+    record = payload["applied_records"][0]
+    assert record["status"] == "skipped"
+    assert record["target_schema"] == "craik.model_provider"
+    assert "record was not written to Craik state" in " ".join(record["warnings"])
 
 
 def test_migrate_rejects_unsupported_kind(tmp_path: Path) -> None:
