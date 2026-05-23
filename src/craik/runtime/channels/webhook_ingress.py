@@ -75,6 +75,10 @@ class WebhookIngressResult(CraikModel):
     dispatch_payload: dict[str, Any] = {}
 
 
+class _DiscordVerifierUnavailable(Exception):
+    """Raised when no optional Discord Ed25519 verifier can be imported."""
+
+
 def validate_webhook_request(
     *,
     body: bytes,
@@ -365,13 +369,16 @@ def _discord_signature_failure(
         return "webhook signature header is ambiguous"
     if not discord_signature_verifier_available():
         return "discord webhook signature verifier unavailable"
-    if _discord_signature_valid(
-        body=body,
-        public_key=public_key,
-        signature=signature or "",
-        timestamp=timestamp or "",
-    ):
-        return None
+    try:
+        if _discord_signature_valid(
+            body=body,
+            public_key=public_key,
+            signature=signature or "",
+            timestamp=timestamp or "",
+        ):
+            return None
+    except _DiscordVerifierUnavailable:
+        return "discord webhook signature verifier unavailable"
     return "webhook signature is missing or invalid"
 
 
@@ -383,13 +390,15 @@ def _discord_signature_valid(
     timestamp: str,
 ) -> bool:
     message = timestamp.encode("utf-8") + body
+    nacl_unavailable = False
+    cryptography_unavailable = False
     try:
         from nacl.signing import VerifyKey  # type: ignore[import-not-found]
 
         VerifyKey(bytes.fromhex(public_key)).verify(message, bytes.fromhex(signature))
         return True
     except ImportError:
-        pass
+        nacl_unavailable = True
     except Exception:
         return False
     try:
@@ -402,9 +411,12 @@ def _discord_signature_valid(
         key.verify(bytes.fromhex(signature), message)
         return True
     except ImportError:
-        return False
+        cryptography_unavailable = True
     except (InvalidSignature, ValueError):
         return False
+    if nacl_unavailable and cryptography_unavailable:
+        raise _DiscordVerifierUnavailable
+    return False
 
 
 def _signature_valid(*, body: bytes, secret: str, signature: str) -> bool:

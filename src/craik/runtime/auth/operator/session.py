@@ -20,3 +20,4 @@ class OperatorSession(CraikModel):
     id_token_jti: str
     expires_at: datetime
     refresh_token_ref: str | None = None
+    dashboard_binding_token: str | None = None

@@ -1,6 +1,8 @@
+import builtins
 import json
 from datetime import UTC, datetime, timedelta
 
+from craik.runtime.channels import webhook_ingress
 from craik.runtime.channels.real_adapters import diagnose_channel_adapter
 from craik.runtime.channels.webhook_ingress import (
     slack_webhook_signature,
@@ -138,6 +140,61 @@ def test_discord_native_headers_fail_closed_when_verifier_unavailable() -> None:
         "discord webhook signature verifier unavailable",
         "webhook signature is missing or invalid",
     }
+
+
+def test_discord_verifier_unavailable_reports_correct_error(monkeypatch) -> None:
+    original_import = builtins.__import__
+
+    def import_without_verifiers(
+        name: str,
+        globals=None,
+        locals=None,
+        fromlist=(),
+        level: int = 0,
+    ):
+        if name.startswith(("nacl", "cryptography")):
+            raise ImportError(name)
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(webhook_ingress, "discord_signature_verifier_available", lambda: True)
+    monkeypatch.setattr(builtins, "__import__", import_without_verifiers)
+
+    result = validate_webhook_request(
+        body=_body(),
+        headers={
+            "X-Signature-Ed25519": "00",
+            "X-Signature-Timestamp": str(int(NOW.timestamp())),
+        },
+        secret="00",
+        allowed_event_types={"channel.message"},
+        seen_event_ids=set(),
+        signature_platform="discord",
+        now=NOW,
+    )
+
+    assert result.status == "invalid"
+    assert result.reason == "discord webhook signature verifier unavailable"
+
+
+def test_discord_invalid_signature_reports_correct_error(monkeypatch) -> None:
+    monkeypatch.setattr(webhook_ingress, "discord_signature_verifier_available", lambda: True)
+    monkeypatch.setattr(webhook_ingress, "_discord_signature_valid", lambda **_: False)
+
+    result = validate_webhook_request(
+        body=_body(),
+        headers={
+            "X-Signature-Ed25519": "00",
+            "X-Signature-Timestamp": str(int(NOW.timestamp())),
+        },
+        secret="00",
+        allowed_event_types={"channel.message"},
+        seen_event_ids=set(),
+        signature_platform="discord",
+        now=NOW,
+    )
+
+    assert result.status == "invalid"
+    assert result.reason == "webhook signature is missing or invalid"
 
 
 def test_channel_doctor_warns_when_discord_signature_verifier_unavailable() -> None:

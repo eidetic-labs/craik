@@ -212,6 +212,7 @@ class OIDCAuthenticator:
             id_token_jti=_token_identifier(claims),
             expires_at=_timestamp_claim(claims, "exp"),
             refresh_token_ref="operator-session.refresh_token" if refresh_token else None,
+            dashboard_binding_token=secrets.token_urlsafe(32),
         )
         return session, refresh_token
 

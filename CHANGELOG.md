@@ -86,6 +86,20 @@ within the `0.x.0` stability expectations described in
 - Local release signing-key exports are ignored by default, and
   desktop `craik://` URL-scheme guidance now requires review-only
   routing with no direct approval or mutating side effects.
+- Dashboard session binding now uses a per-session random
+  `dashboard_binding_token` minted at OIDC session creation, not the
+  JWT `jti` claim. The JWT `jti` is no longer exposed in operator-facing
+  `craik auth whoami` payloads. Existing sessions without a binding
+  token must re-authenticate to use the dashboard.
+
+### Fixed
+
+- Gateway systemd unit generation now uses `Environment=CRAIK_EXEC=...`
+  plus `ExecStart=${CRAIK_EXEC} gateway start` so resolved executable
+  paths containing spaces install cleanly.
+- Discord webhook signature handling now distinguishes verifier
+  unavailability from invalid signatures when optional Ed25519 verifier
+  libraries cannot be imported.
 
 ## 0.10.0 — 2026-05-22
 

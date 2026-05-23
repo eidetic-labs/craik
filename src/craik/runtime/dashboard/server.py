@@ -12,12 +12,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from craik.runtime.auth import AuthProfileStore
-from craik.runtime.auth.operator import (
-    OperatorSession,
-    OperatorSessionNotFoundError,
-    OperatorSessionStore,
-)
 from craik.runtime.auth.visibility import visible_auth_profiles
+from craik.runtime.dashboard.auth import (
+    active_operator_session,
+    dashboard_auth_failure_payload,
+    dashboard_authorized,
+    has_operator_session,
+)
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
@@ -80,7 +81,7 @@ def validate_dashboard_config(
         warnings.append(
             "Dashboard is bound outside localhost; place it behind local-only access controls."
         )
-    if config.auth_token is None and not _has_operator_session(env):
+    if config.auth_token is None and not has_operator_session(env):
         raise DashboardConfigError(
             "dashboard requires an active operator session or --auth-token"
         )
@@ -118,10 +119,10 @@ def handle_dashboard_request(
     """Handle one dashboard request without binding a socket."""
     parsed = urlparse(path)
     query = parse_qs(parsed.query)
-    if not _authorized(headers, query, config, env=env):
+    if not dashboard_authorized(headers, query, config.auth_token, env=env):
         return _json_response(
             HTTPStatus.UNAUTHORIZED,
-            {"error": "dashboard authentication required"},
+            dashboard_auth_failure_payload(headers, query, config.auth_token, env=env),
         )
     if method == "GET":
         if parsed.path == "/api/approvals":
@@ -233,7 +234,7 @@ def _dashboard_snapshot(env: dict[str, str] | None) -> dict[str, object]:
     try:
         visible = visible_auth_profiles(
             AuthProfileStore.from_env(env).list(),
-            _active_operator_session(env),
+            active_operator_session(env),
         )
         providers = [
             {
@@ -381,34 +382,6 @@ def _handler(
     return DashboardRequestHandler
 
 
-def _authorized(
-    headers: Any,
-    query: dict[str, list[str]],
-    config: DashboardConfig,
-    *,
-    env: dict[str, str] | None,
-) -> bool:
-    supplied = headers.get("X-Craik-Dashboard-Token")
-    auth = headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        supplied = auth.removeprefix("Bearer ")
-    if query.get("token"):
-        supplied = query["token"][0]
-    if config.auth_token and secrets.compare_digest(supplied or "", config.auth_token):
-        return True
-    if config.auth_token is None:
-        return _operator_session_authorized(headers, env)
-    return False
-
-
-def _operator_session_authorized(headers: Any, env: dict[str, str] | None) -> bool:
-    session = _active_operator_session(env)
-    if session is None:
-        return False
-    supplied = headers.get("X-Craik-Operator-Session")
-    return secrets.compare_digest(supplied or "", session.id_token_jti)
-
-
 def _origin_allowed(headers: Any, config: DashboardConfig) -> bool:
     origin = headers.get("Origin")
     if not origin:
@@ -426,17 +399,6 @@ def _allowed_origins(config: DashboardConfig) -> set[str]:
     else:
         origins.add(f"http://{config.host}:{config.port}")
     return origins
-
-
-def _has_operator_session(env: dict[str, str] | None) -> bool:
-    return _active_operator_session(env) is not None
-
-
-def _active_operator_session(env: dict[str, str] | None) -> OperatorSession | None:
-    try:
-        return OperatorSessionStore.from_env(env).get()
-    except OperatorSessionNotFoundError:
-        return None
 
 
 def _is_local_bind(host: str) -> bool:

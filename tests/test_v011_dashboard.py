@@ -80,7 +80,7 @@ def test_dashboard_active_operator_session_authorizes_without_token(tmp_path: Pa
     response = handle_dashboard_request(
         "GET",
         "/api/status",
-        {"X-Craik-Operator-Session": "jti-dashboard"},
+        {"X-Craik-Operator-Session": "dashboard-binding-token"},
         b"",
         config,
         env=env,
@@ -186,5 +186,6 @@ def _put_operator_session(home: Path) -> None:
             issuer="https://issuer.example.invalid",
             id_token_jti="jti-dashboard",
             expires_at=datetime.now(UTC) + timedelta(hours=1),
+            dashboard_binding_token="dashboard-binding-token",
         )
     )

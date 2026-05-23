@@ -1,3 +1,4 @@
+import plistlib
 from pathlib import Path
 
 import pytest
@@ -33,8 +34,54 @@ def test_gateway_service_units_use_absolute_craik_executable(tmp_path: Path) -> 
 
     assert f"<string>{executable}</string><string>gateway</string>" in launchd.content
     assert "<string>craik</string><string>gateway</string>" not in launchd.content
-    assert f"ExecStart={executable} gateway start" in systemd.content
+    assert f"Environment=CRAIK_EXEC={executable}" in systemd.content
+    assert "ExecStart=${CRAIK_EXEC} gateway start" in systemd.content
     assert "ExecStart=craik gateway start" not in systemd.content
+
+
+def test_systemd_unit_with_spaces_in_path(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    executable = tmp_path / "Foo Bar" / ".venv" / "bin" / "craik"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(default_gateway_config(project_id="project_gateway"))
+    finally:
+        store.close()
+
+    systemd = install_gateway_service(
+        paths,
+        target_platform="Linux",
+        executable_path=executable,
+    )
+
+    assert f"Environment=CRAIK_EXEC={executable}" in systemd.content
+    assert "ExecStart=${CRAIK_EXEC} gateway start" in systemd.content
+
+
+def test_launchd_plist_with_spaces_in_path(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    executable = tmp_path / "Foo Bar" / ".venv" / "bin" / "craik"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    store = LocalStore.from_paths(paths)
+    try:
+        store.initialize()
+        store.put_gateway_config(default_gateway_config(project_id="project_gateway"))
+    finally:
+        store.close()
+
+    launchd = install_gateway_service(
+        paths,
+        target_platform="Darwin",
+        executable_path=executable,
+    )
+    payload = plistlib.loads(launchd.content.encode("utf-8"))
+
+    assert payload["ProgramArguments"][0] == str(executable)
+    assert payload["ProgramArguments"][1:] == ["gateway", "start"]
 
 
 def test_gateway_service_rejects_relative_executable_path(tmp_path: Path) -> None:

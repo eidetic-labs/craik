@@ -291,6 +291,27 @@ def test_registry_dispatched_allowlist_targets_real_functions() -> None:
         assert qualname in source_functions
 
 
+def test_dashboard_binding_token_not_emitted() -> None:
+    root = Path(__file__).resolve().parents[1]
+    scanned_paths = [
+        root / "src" / "craik" / "cli_auth.py",
+        *(root / "src" / "craik" / "runtime" / "companions").glob("*.py"),
+    ]
+    forbidden_keys = {"dashboard_binding_token"}
+
+    for path in scanned_paths:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            literal_keys = {
+                key.value
+                for key in node.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+            assert literal_keys.isdisjoint(forbidden_keys), path
+
+
 def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> None:
     assert check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS == {
         ("src/craik/cli_auth.py", "login"): (
