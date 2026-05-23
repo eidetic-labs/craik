@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from craik.runtime.auth.login import auth_status_payload
+from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
@@ -82,10 +83,10 @@ def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
     readiness = resolve_readiness(env)
     summary = _store_summary(env)
     panels = (
-        _status_panel(readiness),
+        _status_panel(readiness, env),
         _auth_panel(env),
-        _composer_panel(),
-        _model_panel(readiness),
+        _composer_panel(env),
+        _model_panel(readiness, env),
         _session_panel(summary),
         _approval_panel(summary),
         _artifact_panel(summary),
@@ -102,7 +103,7 @@ def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
 def render_tui_snapshot(snapshot: TuiSnapshot, *, width: int = 88) -> str:
     """Render a nonblank ASCII TUI frame for terminals and snapshot tests."""
     safe_width = max(40, min(width, 120))
-    title = " Craik TUI "
+    title = f" {localize_text('tui.title')} "
     border = "+" + "-" * (safe_width - 2) + "+"
     lines = [
         border,
@@ -208,7 +209,7 @@ def dispatch_tui_input(text: str, *, env: dict[str, str] | None = None) -> Slash
     return SlashCommandResult("Streaming output\n" + one_shot_response(text, env=env))
 
 
-def _status_panel(readiness: ReadinessReport) -> TuiPanel:
+def _status_panel(readiness: ReadinessReport, env: dict[str, str] | None) -> TuiPanel:
     lines = [
         f"State: {readiness.state}",
         f"Home: {_safe(str(readiness.home))}",
@@ -220,15 +221,15 @@ def _status_panel(readiness: ReadinessReport) -> TuiPanel:
     if readiness.warnings:
         lines.extend(f"Warning: {_safe(warning)}" for warning in readiness.warnings)
     lines.append("Next: " + _safe(readiness.next_actions[0]))
-    return TuiPanel("Provider/Auth Status", tuple(lines))
+    return TuiPanel(localize_text("tui.status", env=env), tuple(lines))
 
 
-def _composer_panel() -> TuiPanel:
+def _composer_panel(env: dict[str, str] | None) -> TuiPanel:
     return TuiPanel(
-        "Composer",
+        localize_text("tui.composer", env=env),
         (
             "Use /compose for multiline input; finish with '.'.",
-            "Use /help for slash commands, /redraw to refresh, /exit to quit.",
+            localize_text("tui.help", env=env),
             "Autocomplete source: shared slash-command registry.",
         ),
     )
@@ -250,12 +251,12 @@ def _auth_panel(env: dict[str, str] | None) -> TuiPanel:
             f"{row['id']}: {row['health_status']} via {row.get('backend') or row['kind']}"
             for row in rows[:4]
         )
-    return TuiPanel("Auth", lines)
+    return TuiPanel(localize_text("tui.auth", env=env), lines)
 
 
-def _model_panel(readiness: ReadinessReport) -> TuiPanel:
+def _model_panel(readiness: ReadinessReport, env: dict[str, str] | None) -> TuiPanel:
     return TuiPanel(
-        "Model Picker",
+        localize_text("tui.model_picker", env=env),
         (
             f"Active: {_safe(readiness.active_model or 'not selected')}",
             "Commands: /model, craik model list, craik model set <provider/model>",

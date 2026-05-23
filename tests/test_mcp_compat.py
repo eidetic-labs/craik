@@ -121,3 +121,19 @@ def test_mcp_cli_manifest_and_client_import(tmp_path) -> None:
     assert json.loads(import_result.stdout)["clients"][0]["endpoint_ref"] == (
         "https://example.invalid/mcp"
     )
+
+
+def test_mcp_cli_import_validation_error_is_operator_readable(tmp_path) -> None:
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps({"mcpServers": {"bad": {"url": "file:///tmp/socket"}}}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["mcp", "client", "import", "--path", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "MCP config validation failed:" in result.output
+    assert "endpoint_ref" in result.output
+    assert "input_value=" not in result.output
+    assert "pydantic.dev" not in result.output

@@ -20,6 +20,7 @@ from craik.runtime.dashboard.auth import (
     dashboard_authorized,
     has_operator_session,
 )
+from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
@@ -120,17 +121,17 @@ def handle_dashboard_request(
     """Handle one dashboard request without binding a socket."""
     parsed = urlparse(path)
     query = parse_qs(parsed.query)
+    locale = _locale_from_headers(headers, env)
     if not dashboard_authorized(headers, query, config.auth_token, env=env):
-        return _json_response(
-            HTTPStatus.UNAUTHORIZED,
-            dashboard_auth_failure_payload(headers, query, config.auth_token, env=env),
-        )
+        payload = dashboard_auth_failure_payload(headers, query, config.auth_token, env=env)
+        payload["message"] = localize_text("dashboard.auth.required", locale=locale)
+        return _json_response(HTTPStatus.UNAUTHORIZED, payload)
     if method == "GET":
         if parsed.path == "/api/approvals":
             return _api_approvals(env)
         if parsed.path == "/api/auth":
             return _json_response(HTTPStatus.OK, {"auth": auth_status_payload(env)})
-        return _get(parsed.path, config=config, env=env)
+        return _get(parsed.path, config=config, env=env, locale=locale)
     if method == "POST" and parsed.path == "/api/actions":
         if not _origin_allowed(headers, config):
             return _json_response(HTTPStatus.FORBIDDEN, {"error": "dashboard origin not allowed"})
@@ -169,15 +170,25 @@ def dashboard_preview_payload(
     }
 
 
-def _get(path: str, *, config: DashboardConfig, env: dict[str, str] | None) -> DashboardResponse:
-    snapshot = _dashboard_snapshot(env)
+def _get(
+    path: str,
+    *,
+    config: DashboardConfig,
+    env: dict[str, str] | None,
+    locale: str | None = None,
+) -> DashboardResponse:
+    snapshot = _dashboard_snapshot(env, locale=locale)
     if path in {"", "/"}:
-        return _html_response("Craik Dashboard", _index_html(snapshot))
+        title = localize_text("dashboard.title", locale=locale)
+        return _html_response(title, _index_html(snapshot))
     if path == "/api/status":
         return _json_response(HTTPStatus.OK, snapshot)
     page = _page_for_path(path, snapshot)
     if page is None:
-        return _json_response(HTTPStatus.NOT_FOUND, {"error": "not found"})
+        return _json_response(
+            HTTPStatus.NOT_FOUND,
+            {"error": localize_text("dashboard.not_found", locale=locale)},
+        )
     return _html_response(page.title, _page_html(page.items, config))
 
 
@@ -206,7 +217,11 @@ def _post_action(body: bytes, *, env: dict[str, str] | None) -> DashboardRespons
     )
 
 
-def _dashboard_snapshot(env: dict[str, str] | None) -> dict[str, object]:
+def _dashboard_snapshot(
+    env: dict[str, str] | None,
+    *,
+    locale: str | None = None,
+) -> dict[str, object]:
     readiness = resolve_readiness(env).as_dict()
     paths = resolve_craik_paths(env)
     counts: dict[str, int] = {
@@ -267,6 +282,7 @@ def _dashboard_snapshot(env: dict[str, str] | None) -> dict[str, object]:
             "auth": auth_status_payload(env),
             "gateway_logs": gateway_logs,
             "model_picker": readiness.get("active_model") or "not selected",
+            "message": localize_text("dashboard.status", locale=locale, env=env),
             "redacted": True,
         }
     )
@@ -324,9 +340,12 @@ def _page_html(items: list[str], config: DashboardConfig) -> str:
 
 def _status_items(snapshot: dict[str, object]) -> list[str]:
     readiness = snapshot["readiness"]
+    state_label = str(snapshot.get("message") or "state")
+    if state_label == "Status":
+        state_label = "state"
     if isinstance(readiness, dict):
         return [
-            f"state: {readiness.get('state', 'unknown')}",
+            f"{state_label}: {readiness.get('state', 'unknown')}",
             f"active model: {readiness.get('active_model') or 'not selected'}",
             f"missing: {', '.join(readiness.get('missing', []))}",
         ]
@@ -461,3 +480,10 @@ def _redacted(payload: dict[str, object]) -> dict[str, object]:
 
 def _safe(value: str) -> str:
     return sanitize_runtime_text(str(redact(value).value))
+
+
+def _locale_from_headers(headers: Any, env: dict[str, str] | None) -> str | None:
+    value = headers.get("Accept-Language") if hasattr(headers, "get") else None
+    if isinstance(value, str) and value.strip():
+        return value.split(",", 1)[0].strip()
+    return (env or {}).get("CRAIK_LOCALE")

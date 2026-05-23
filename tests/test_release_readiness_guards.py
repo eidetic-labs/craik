@@ -397,6 +397,23 @@ def test_operator_login_remediation_guard_allows_provider_login(
     assert check_release_readiness._operator_login_remediation_failures() == []
 
 
+def test_i18n_consumption_guard_rejects_unwired_surface(tmp_path, monkeypatch) -> None:
+    surface = tmp_path / "src" / "craik" / "runtime" / "shell"
+    surface.mkdir(parents=True)
+    (surface / "agent_shell.py").write_text('MESSAGE = "Ready"\n', encoding="utf-8")
+    monkeypatch.setattr(
+        check_release_readiness,
+        "I18N_REQUIRED_SURFACES",
+        {"src/craik/runtime/shell/agent_shell.py": "shell messages"},
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._i18n_consumption_failures() == [
+        "src/craik/runtime/shell/agent_shell.py: "
+        "does not consume localize() for shell messages"
+    ]
+
+
 def test_store_writer_exemption_surface_matches_documented_legacy_writers() -> None:
     assert check_release_readiness.STORE_WRITER_EXEMPTIONS == {
         "src/craik/runtime/store/memory.py": {

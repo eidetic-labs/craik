@@ -18,6 +18,10 @@ Craik treats memory, provenance, policy, and work state as runtime concerns rath
 
 ## What Works Today
 
+Note: v0.12.1 supersedes v0.12.0. Operators on v0.12.0 should upgrade;
+v0.12.0 shipped with an auth-UX gap that prevented `craik chat` from working
+in default installs.
+
 Craik can assemble local repository context, read optional GitHub and Stigmem
 state, compile governed runner prompts, execute fixture-backed and live-shaped
 provider requests through OpenAI Responses, Anthropic Messages, and
@@ -58,19 +62,45 @@ credential pools. The local OpenAI-compatible provider path can target a
 localhost `/v1` server such as Ollama for optional live validation without paid
 API keys.
 
+## Getting Started
+
+```bash
+pip install craik
+craik auth login openai
+craik model set openai/gpt-4o-mini
+echo "summarize the README" | craik chat -q -
+```
+
+That is the single-operator happy path. Use `anthropic`, `gemini`, or `local`
+instead of `openai` when configuring another provider. See
+[installation](docs/guides/installation.md) and
+[quickstart](docs/guides/quickstart.md) for the full operator walkthrough.
+
+## Operator Modes
+
+Craik runs in one of two modes:
+
+**Single-operator local (default).** Provider credentials plus an active model
+unlock the chat surface. Run `craik auth login <provider>`, then
+`craik model set <provider/model>`, then `craik chat`. No OIDC identity
+provider is required.
+
+**Audited multi-operator (opt-in).** Set `CRAIK_OPERATOR_REQUIRED=1` to require
+an OIDC-attested operator session in addition to provider credentials.
+`craik login` starts the device-code or loopback+PKCE flow; `craik whoami`
+reports the active operator; `craik logout` revokes the session. This mode is
+for teams, regulated deployments, and workload-identity CI.
+
 Craik authenticates to provider APIs through typed credential profiles. Profile
 kinds include env-var API keys, local-CLI OAuth fallback (e.g. reading
 `~/.claude/.credentials.json`), vendor CLI subprocess bridges, external secret
 manager references, and Stigmem-backed credential references. A credential pool
 supports rotation and failover across multiple profiles.
 
-Craik authenticates the operator via OIDC against any compliant IdP. Device-code
-and loopback+PKCE flows are both supported; `craik login` initiates the flow,
-`craik whoami` reports the active operator, `craik logout` revokes the session.
-Every provider call is bound to both an operator identity and a credential
-identity; every receipt names both. Workload-identity providers (GitHub Actions,
-Kubernetes projected tokens, generic file/env-var) plus RFC 8693 token exchange
-enable credential-less deployment in CI and cloud.
+In audited multi-operator mode, provider calls are bound to both an operator
+identity and a credential identity; receipts name both. Workload-identity
+providers (GitHub Actions, Kubernetes projected tokens, generic file/env-var)
+plus RFC 8693 token exchange enable credential-less deployment in CI and cloud.
 
 Policy envelopes can constrain which operators and which credentials a task may
 use. First-time use of a credential profile is approval-gated and produces a

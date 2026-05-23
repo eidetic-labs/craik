@@ -112,7 +112,12 @@ def channel_doctor_command(service: ChannelService) -> None:
 @channels_app.command("normalize-fixture")
 def channel_normalize_fixture_command(
     service: ChannelService,
-    raw_json: Annotated[str, typer.Argument(help="Provider event JSON object.")],
+    raw_json: Annotated[
+        str,
+        typer.Argument(
+            help="Provider event JSON object. Run `craik channels fixture-schema SERVICE` first."
+        ),
+    ],
 ) -> None:
     """Normalize a provider event fixture without contacting the provider."""
     raw = json.loads(raw_json)
@@ -120,6 +125,12 @@ def channel_normalize_fixture_command(
         raise typer.BadParameter("raw_json must be a JSON object")
     event = normalize_real_channel_inbound(_service_value(service), raw)
     typer.echo(json.dumps(event, indent=2, sort_keys=True))
+
+
+@channels_app.command("fixture-schema")
+def channel_fixture_schema_command(service: ChannelService) -> None:
+    """Print the expected inbound fixture JSON shape for a channel service."""
+    typer.echo(json.dumps(_fixture_schema(_service_value(service)), indent=2, sort_keys=True))
 
 
 @channels_app.command("respond-fixture")
@@ -156,3 +167,58 @@ def channel_respond_fixture_command(
 
 def _service_value(service: ChannelService) -> RealChannelService:
     return cast(RealChannelService, service.value)
+
+
+def _fixture_schema(service: RealChannelService) -> dict[str, object]:
+    examples: dict[RealChannelService, dict[str, object]] = {
+        "webchat": {
+            "required": ["message_id", "user_id", "text"],
+            "optional": ["session_id", "origin"],
+            "example": {
+                "message_id": "m1",
+                "user_id": "u1",
+                "text": "hello",
+                "session_id": "browser-session",
+                "origin": "localhost",
+            },
+        },
+        "telegram": {
+            "required": ["update_id", "message.message_id", "message.from.id", "message.text"],
+            "optional": ["message.chat.id", "message.chat.type"],
+            "example": {
+                "update_id": 10,
+                "message": {
+                    "message_id": 10,
+                    "from": {"id": 42},
+                    "chat": {"id": 42, "type": "private"},
+                    "text": "hello",
+                },
+            },
+        },
+        "discord": {
+            "required": ["id", "content", "author.id"],
+            "optional": ["channel_id", "guild_id"],
+            "example": {
+                "id": "msg1",
+                "content": "hello",
+                "author": {"id": "user1"},
+                "channel_id": "channel1",
+                "guild_id": "guild1",
+            },
+        },
+        "slack": {
+            "required": ["event.user", "event.text"],
+            "optional": ["event_id", "event.client_msg_id", "event.ts", "event.channel", "team_id"],
+            "example": {
+                "team_id": "T1",
+                "event_id": "Ev123",
+                "event": {
+                    "user": "U1",
+                    "text": "hello",
+                    "channel": "C1",
+                    "client_msg_id": "m1",
+                },
+            },
+        },
+    }
+    return {"service": service, "schema": examples[service]}
