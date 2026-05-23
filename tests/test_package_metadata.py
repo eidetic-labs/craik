@@ -36,6 +36,18 @@ def test_docs_package_version_matches_project_metadata() -> None:
     assert package_lock["packages"][""]["version"] == pyproject["project"]["version"]
 
 
+def test_uv_lock_editable_package_version_matches_project_metadata() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+
+    craik_package = next(
+        package
+        for package in uv_lock["package"]
+        if package["name"] == "craik" and package.get("source") == {"editable": "."}
+    )
+    assert craik_package["version"] == pyproject["project"]["version"]
+
+
 def test_package_uses_pydantic_with_python_314_wheel_support() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 

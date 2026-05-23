@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.11.0 — 2026-05-23
+
 ### Added
 
 - v0.11.0 terminal UI entrypoints through `craik --tui` and
