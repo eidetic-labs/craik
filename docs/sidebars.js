@@ -234,6 +234,7 @@ const sidebars = {
         'guides/compatibility-fixtures',
         'guides/mcp-ecosystem-compatibility',
         'guides/session-portability',
+        'guides/agent-client-protocol-bridge',
         'reference/mcp-client',
         'reference/mcp-export-boundary',
         'reference/reference-integrations',

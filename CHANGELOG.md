@@ -41,6 +41,10 @@ within the `0.x.0` stability expectations described in
   and `import-portable`, with redacted Craik session exports,
   adjacent transcript parsing, source identity provenance, and
   unsupported tool-call reports that remain non-executable.
+- v0.12.0 agent/client protocol bridge decision and first local
+  adapter, with operator-auth, policy-envelope, capability-grant,
+  receipt, redaction, and write-approval controls before bridged tool
+  calls can execute.
 
 ## 0.11.0 — 2026-05-23
 
