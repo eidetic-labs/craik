@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import sys
 import tomllib
 from pathlib import Path
@@ -140,6 +141,7 @@ def main() -> int:
     failures.extend(_cli_auth_coverage_failures())
     failures.extend(_operator_login_remediation_failures())
     failures.extend(_i18n_consumption_failures())
+    failures.extend(_codebase_brand_hygiene_failures())
 
     if failures:
         print("Release readiness checks failed:", file=sys.stderr)
@@ -550,6 +552,17 @@ def _i18n_consumption_failures() -> list[str]:
         if "localize(" not in text and "localize_text(" not in text and "text(" not in text:
             failures.append(f"{relative_path}: does not consume localize() for {rationale}")
     return failures
+
+
+def _codebase_brand_hygiene_failures() -> list[str]:
+    script = ROOT / "scripts" / "check_codebase_brand_hygiene.py"
+    spec = importlib.util.spec_from_file_location("check_codebase_brand_hygiene", script)
+    if spec is None or spec.loader is None:
+        return [f"{script.relative_to(ROOT)}: unable to load brand hygiene guard"]
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return list(module.codebase_brand_hygiene_failures(ROOT))
 
 
 if __name__ == "__main__":
