@@ -1224,6 +1224,57 @@ Show one local memory proposal.
 craik memory show [OPTIONS] PROPOSAL_ID
 ```
 
+## `craik migrate`
+
+Inspect and dry-run adjacent runtime migrations.
+
+```text
+craik migrate COMMAND [ARGS]...
+```
+
+## `craik migrate import`
+
+Run an adjacent runtime import dry-run. Apply mode is intentionally explicit.
+
+```text
+craik migrate import [OPTIONS]
+```
+
+Options:
+
+- `--source`: Adjacent runtime source path.
+- `--kind`: Migration source kind.; default `agent-runtime`
+- `--dry-run, --apply`: Preview import actions without writing state.; default `true`
+- `--json`: Emit machine-readable JSON output.; default `false`
+
+## `craik migrate inspect`
+
+Inspect an adjacent runtime source without mutating it.
+
+```text
+craik migrate inspect [OPTIONS]
+```
+
+Options:
+
+- `--source`: Adjacent runtime source path.
+- `--kind`: Migration source kind.; default `agent-runtime`
+- `--json`: Emit machine-readable JSON output.; default `false`
+
+## `craik migrate plan`
+
+Plan an adjacent runtime migration without mutating source or Craik state.
+
+```text
+craik migrate plan [OPTIONS]
+```
+
+Options:
+
+- `--source`: Adjacent runtime source path.
+- `--kind`: Migration source kind.; default `agent-runtime`
+- `--json`: Emit machine-readable JSON output.; default `false`
+
 ## `craik model`
 
 Inspect and select active model routing.
