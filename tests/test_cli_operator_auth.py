@@ -56,14 +56,12 @@ def test_operator_commands_require_active_session(
             "run_1",
         ],
         ["agent-message", "receive", "message_1", "--received-by", "agent:b"],
-        ["auth", "list"],
         ["auth", "add", "openai:work", "--kind", "api-key", "--env-var", "OPENAI_API_KEY"],
         ["auth", "setup", "local"],
         ["auth", "remove", "openai:work"],
         ["auth", "test", "openai:work"],
         ["auth", "approve", "openai:work", "--run", "run_1"],
         ["auth", "grant", "openai:work", "--to-subject", "operator-123"],
-        ["auth", "status"],
         ["delegation", "pause", "run_1", "--summary", "s", "--decision", "d"],
         [
             "delegation",
@@ -185,3 +183,13 @@ def test_stateful_cli_commands_require_active_session(
 
     assert result.exit_code == 2
     assert "active operator session required; run craik login" in result.output
+
+
+@pytest.mark.parametrize("args", [["auth", "list"], ["auth", "status"]])
+def test_auth_read_only_commands_do_not_require_active_session(
+    tmp_path: Path,
+    args: list[str],
+) -> None:
+    result = runner.invoke(app, args, env={"CRAIK_HOME": str(tmp_path / "home")})
+
+    assert result.exit_code == 0

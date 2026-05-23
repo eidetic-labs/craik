@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -73,7 +74,6 @@ def gateway_restart_command() -> None:
 @gateway_app.command("status")
 def gateway_status_command() -> None:
     """Show gateway config, runtime state, pid, bind, and stale-pid status."""
-    _operator_identity()
     typer.echo(json.dumps(gateway_status_payload(resolve_craik_paths()), indent=2, sort_keys=True))
 
 
@@ -91,19 +91,51 @@ def gateway_logs_command(
 @gateway_app.command("doctor")
 def gateway_doctor_command() -> None:
     """Run gateway-focused diagnostics."""
-    _operator_identity()
     payload = run_doctor(resolve_craik_paths(), env=dict(os.environ))
     typer.echo(json.dumps({"gateway": payload["checks"]}, indent=2, sort_keys=True))
 
 
 @gateway_app.command("install")
-def gateway_install_command() -> None:
+def gateway_install_command(
+    backend: Annotated[
+        str | None,
+        typer.Option("--backend", help="Service backend: systemd, launchd, or windows-plan."),
+    ] = None,
+    executable_path: Annotated[
+        Path | None,
+        typer.Option("--executable-path", help="Override resolved craik binary path."),
+    ] = None,
+    log_path: Annotated[
+        Path | None,
+        typer.Option("--log-path", help="Override gateway log path in generated service unit."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Print generated service unit without writing it."),
+    ] = False,
+    output: Annotated[
+        str | None,
+        typer.Option(
+            "--output",
+            help="Write unit to PATH instead of default location; '-' for stdout.",
+        ),
+    ] = None,
+) -> None:
     """Generate a user-service definition for the local gateway."""
-    _operator_identity()
     try:
-        install = install_gateway_service(resolve_craik_paths())
+        install = install_gateway_service(
+            resolve_craik_paths(),
+            backend=backend,
+            executable_path=executable_path,
+            log_path=log_path,
+            dry_run=dry_run,
+            output_path=output,
+        )
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
+    if dry_run or output == "-":
+        typer.echo(install.content, nl=False)
+        return
     payload = {
         "backend": install.backend,
         "path": str(install.path),
@@ -116,7 +148,6 @@ def gateway_install_command() -> None:
 @gateway_app.command("uninstall")
 def gateway_uninstall_command() -> None:
     """Remove generated gateway service definitions."""
-    _operator_identity()
     payload = uninstall_gateway_service(resolve_craik_paths())
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
 

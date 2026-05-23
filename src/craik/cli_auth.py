@@ -50,7 +50,6 @@ from craik.runtime.providers.provider_url_safety import (
 @auth_app.command("list")
 def auth_list() -> None:
     """List configured auth profiles."""
-    operator_identity_or_fail()
     store = AuthProfileStore.from_env()
     payload = [
         _profile_payload(profile)
@@ -334,7 +333,6 @@ def auth_grant(
 @auth_app.command("status")
 def auth_status() -> None:
     """Show auth profile health and last-use status."""
-    operator_identity_or_fail()
     store = AuthProfileStore.from_env()
     profiles = visible_auth_profiles(store.list(), active_operator_session_from_env())
     payload = [row.as_dict() for row in auth_status_rows(profiles)]
