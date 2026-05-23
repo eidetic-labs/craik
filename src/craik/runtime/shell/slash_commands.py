@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Literal
 
+from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
@@ -121,7 +122,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "exit":
         return SlashCommandResult("Session ended.", exit_shell=True)
     if command.name == "help":
-        return SlashCommandResult(_help_text(tokens[1:]))
+        return SlashCommandResult(_localized_help_text(tokens[1:], env=env))
     report = resolve_readiness(env)
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
@@ -155,19 +156,27 @@ def _command_for_name(name: str) -> SlashCommand | None:
 
 
 def _help_text(args: list[str]) -> str:
+    return _localized_help_text(args, env=None)
+
+
+def _localized_help_text(args: list[str], *, env: dict[str, str] | None) -> str:
     if args:
         command = _command_for_name(args[0].removeprefix("/"))
         if command is None:
             suggestion = _suggest(args[0].removeprefix("/"))
-            return f"unknown slash command: /{args[0]}. Did you mean /{suggestion}?"
+            unknown = localized_text("slash.unknown", env=env, name=args[0])
+            suffix = localized_text("slash.suggestion", env=env, suggestion=suggestion)
+            return f"{unknown}{suffix}"
         examples = "\n".join(f"  {example}" for example in command.examples)
         example_block = f"\nExamples:\n{examples}" if examples else ""
+        usage = localized_text("slash.help.usage", env=env)
+        requires = localized_text("slash.help.requires", env=env)
         return (
-            f"/{command.name}\n{command.summary}\nUsage: {command.usage}\n"
-            f"Requires: {command.readiness}{example_block}"
+            f"/{command.name}\n{command.summary}\n{usage}: {command.usage}\n"
+            f"{requires}: {command.readiness}{example_block}"
         )
     rows = [f"/{command.name:<10} {command.summary}" for command in COMMANDS]
-    return "Craik slash commands\n" + "\n".join(rows)
+    return localized_text("slash.help.title", env=env) + "\n" + "\n".join(rows)
 
 
 def _approval_text(env: dict[str, str] | None) -> str:

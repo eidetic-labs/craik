@@ -235,6 +235,8 @@ const sidebars = {
         'guides/mcp-ecosystem-compatibility',
         'guides/session-portability',
         'guides/agent-client-protocol-bridge',
+        'guides/i18n',
+        'guides/translation-contribution',
         'reference/mcp-client',
         'reference/mcp-export-boundary',
         'reference/reference-integrations',

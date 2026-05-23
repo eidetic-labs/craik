@@ -45,6 +45,10 @@ within the `0.x.0` stability expectations described in
   adapter, with operator-auth, policy-envelope, capability-grant,
   receipt, redaction, and write-approval controls before bridged tool
   calls can execute.
+- v0.12.0 i18n framework with stable message ids, configurable
+  `CRAIK_LOCALE`/`--locale` text output, predictable English fallback,
+  localized slash help, localized migration report headings, and
+  translation contribution docs.
 
 ## 0.11.0 — 2026-05-23
 

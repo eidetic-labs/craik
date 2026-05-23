@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from craik.contracts.models import CraikModel
+from craik.runtime.i18n import text as localized_text
 from craik.runtime.projects.migration_maps import MigrationObjectMap, MigrationPlanMap
 
 MigrationReportSection = Literal[
@@ -114,26 +115,50 @@ def build_migration_report(
     )
 
 
-def format_migration_report(report: MigrationReport) -> list[str]:
+def format_migration_report(
+    report: MigrationReport,
+    *,
+    locale: str | None = None,
+) -> list[str]:
     """Render a migration report for text output."""
     lines = [
-        f"Migration report: {report.id}",
-        f"Source: {report.source_name}",
-        "Summary:",
+        f"{localized_text('migration.report.title', locale=locale)}: {report.id}",
+        f"{localized_text('migration.report.source', locale=locale)}: {report.source_name}",
+        f"{localized_text('migration.report.summary', locale=locale)}:",
     ]
     lines.extend(f"- {status}: {count}" for status, count in sorted(report.summary.items()))
-    lines.extend(_section_lines("Importable objects", report.importable_objects))
-    lines.extend(_section_lines("Manual actions", report.manual_actions))
-    lines.extend(_section_lines("Skipped secrets", report.skipped_secrets))
+    lines.extend(
+        _section_lines(
+            localized_text("migration.report.importable", locale=locale),
+            report.importable_objects,
+        )
+    )
+    lines.extend(
+        _section_lines(
+            localized_text("migration.report.manual", locale=locale),
+            report.manual_actions,
+        )
+    )
+    lines.extend(
+        _section_lines(
+            localized_text("migration.report.skipped_secrets", locale=locale),
+            report.skipped_secrets,
+        )
+    )
     if report.security_posture_changes:
-        lines.append("Security posture changes:")
+        lines.append(f"{localized_text('migration.report.security', locale=locale)}:")
         lines.extend(f"- {item}" for item in report.security_posture_changes)
-    lines.extend(_section_lines("Unsupported capabilities", report.unsupported_capabilities))
+    lines.extend(
+        _section_lines(
+            localized_text("migration.report.unsupported", locale=locale),
+            report.unsupported_capabilities,
+        )
+    )
     if report.recommended_next_commands:
-        lines.append("Recommended next commands:")
+        lines.append(f"{localized_text('migration.report.next', locale=locale)}:")
         lines.extend(f"- {command}" for command in report.recommended_next_commands)
     if report.validation_checklist:
-        lines.append("Validation checklist:")
+        lines.append(f"{localized_text('migration.report.validation', locale=locale)}:")
         lines.extend(f"- {item}" for item in report.validation_checklist)
     return lines
 
