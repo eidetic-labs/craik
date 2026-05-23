@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.2 — 2026-05-23
+
 ### Added
 
 - Added the v0.12.2 canonical Textual TUI docs, covering bare `craik`
