@@ -1,7 +1,7 @@
 {
   "name": "@eidetic-labs/craik-docs",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.12.1",
   "scripts": {
     "build": "docusaurus build",
     "clear": "docusaurus clear",

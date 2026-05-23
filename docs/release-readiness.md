@@ -7,10 +7,38 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.0`; historical sign-offs remain below for
+pre-release gate is `0.12.1`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.1 Patch Release
+
+<div className="craik-keypoint">
+
+**v0.12.1 is a patch-readiness release for the v0.12 train.**
+
+`0.12.1` incorporates the post-release remediation PRs for README
+current-state accuracy, provider auth and health-check UX, gateway and
+doctor readiness, MCP validation, migration apply reporting,
+localization polish, and CodeQL cleanup.
+
+</div>
+
+### v0.12.1 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run ruff check
+uv run mypy src
+uv run pytest -q
+```
 
 ## v0.12.0 Goal Workflow
 

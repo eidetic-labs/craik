@@ -439,6 +439,14 @@ Show redacted channel adapter diagnostics.
 craik channels doctor [OPTIONS] SERVICE
 ```
 
+## `craik channels fixture-schema`
+
+Print the expected inbound fixture JSON shape for a channel service.
+
+```text
+craik channels fixture-schema [OPTIONS] SERVICE
+```
+
 ## `craik channels list`
 
 List supported real channel adapters.
@@ -722,6 +730,7 @@ Options:
 - `--fix`: Plan or apply narrow supported fixes.; default `false`
 - `--dry-run, --apply`: Preview fixes without writing state, or apply supported safe fixes.; default `true`
 - `--yes`: Confirm unsafe fix actions such as public-bind rebinding.; default `false`
+- `--json`: Print the diagnostic report as JSON.; default `false`
 
 ## `craik gateway`
 
@@ -744,8 +753,16 @@ craik gateway doctor
 Generate a user-service definition for the local gateway.
 
 ```text
-craik gateway install
+craik gateway install [OPTIONS]
 ```
+
+Options:
+
+- `--backend`: Service backend: systemd, launchd, or windows-plan.
+- `--executable-path`: Override resolved craik binary path.
+- `--log-path`: Override gateway log path in generated service unit.
+- `--dry-run`: Print generated service unit without writing it.; default `false`
+- `--output`: Write unit to PATH instead of default location; '-' for stdout.
 
 ## `craik gateway logs`
 
@@ -1333,7 +1350,7 @@ craik migrate COMMAND [ARGS]...
 
 ## `craik migrate import`
 
-Run an adjacent runtime import dry-run. Apply mode is intentionally explicit.
+Run an adjacent runtime import dry-run or explicitly apply importable records.
 
 ```text
 craik migrate import [OPTIONS]
@@ -1345,6 +1362,9 @@ Options:
 - `--kind`: Migration source kind.; default `agent-runtime`
 - `--dry-run, --apply`: Preview import actions without writing state.; default `true`
 - `--json`: Emit machine-readable JSON output.; default `false`
+- `--yes`: Apply without an interactive confirmation prompt.; default `false`
+- `--include-records`: Comma-separated source record ids to apply; defaults to all importable records.
+- `--include-secrets`: Acknowledge secret-bearing records; secret values are still not copied.; default `false`
 
 ## `craik migrate inspect`
 

@@ -71,3 +71,13 @@ def test_changelog_has_section_for_current_package_version() -> None:
     assert versions[0] == expected, (
         f"CHANGELOG.md top dated section is {versions[0]} but pyproject.toml declares {expected}"
     )
+
+
+def test_release_readiness_current_gate_matches_project_metadata() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    expected = pyproject["project"]["version"]
+
+    readiness = (ROOT / "docs" / "release-readiness.md").read_text(encoding="utf-8")
+
+    assert f"pre-release gate is `{expected}`" in readiness
+    assert f"## v{expected} " in readiness
