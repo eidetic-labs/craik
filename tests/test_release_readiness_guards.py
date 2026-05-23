@@ -155,8 +155,84 @@ def test_writer_coverage_guard_rejects_unreachable_wrapper(tmp_path, monkeypatch
     monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
 
     assert check_release_readiness._extension_writer_call_failures() == [
-        "src/craik/runtime/store/example.py: put_dead has no production caller"
+        "src/craik/runtime/store/example.py: "
+        "craik.runtime.store.example.put_dead has no production caller"
     ]
+
+
+def test_qualified_name_collision_detected(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "src" / "craik" / "runtime" / "store"
+    store_dir.mkdir(parents=True)
+    (store_dir / "alpha.py").write_text(
+        textwrap.dedent(
+            """
+            def put_foo(value): ...
+            """
+        ),
+        encoding="utf-8",
+    )
+    (store_dir / "beta.py").write_text(
+        textwrap.dedent(
+            """
+            def put_foo(value): ...
+            """
+        ),
+        encoding="utf-8",
+    )
+    src = tmp_path / "src" / "craik"
+    (src / "cli_widget.py").write_text(
+        textwrap.dedent(
+            """
+            import typer
+            from craik.runtime.store.alpha import put_foo
+
+            app = typer.Typer()
+
+            @app.command("setup")
+            def setup() -> None:
+                put_foo("value")
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._extension_writer_call_failures() == [
+        "src/craik/runtime/store/beta.py: "
+        "craik.runtime.store.beta.put_foo has no production caller"
+    ]
+
+
+def test_import_alias_resolves_to_qualified_target(tmp_path, monkeypatch) -> None:
+    store_dir = tmp_path / "src" / "craik" / "runtime" / "store"
+    store_dir.mkdir(parents=True)
+    (store_dir / "example.py").write_text(
+        textwrap.dedent(
+            """
+            def put_alias(value): ...
+            """
+        ),
+        encoding="utf-8",
+    )
+    src = tmp_path / "src" / "craik"
+    (src / "cli_widget.py").write_text(
+        textwrap.dedent(
+            """
+            import typer
+            from craik.runtime.store.example import put_alias as write_alias
+
+            app = typer.Typer()
+
+            @app.command("setup")
+            def setup() -> None:
+                write_alias("value")
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._extension_writer_call_failures() == []
 
 
 def test_cli_auth_coverage_guard_includes_root_cli() -> None:
@@ -202,6 +278,17 @@ def test_cli_auth_coverage_guard_scans_new_cli_modules(tmp_path, monkeypatch) ->
 
 def test_cli_auth_exemption_surface_is_bounded() -> None:
     assert len(check_release_readiness.AUTH_EXEMPT_CLI_COMMANDS) <= 8
+
+
+def test_registry_dispatched_allowlist_cap_enforced() -> None:
+    assert len(check_release_readiness.REGISTRY_DISPATCHED_CALLABLES) <= 8
+
+
+def test_registry_dispatched_allowlist_targets_real_functions() -> None:
+    source_functions = check_release_readiness._source_function_qualnames()
+
+    for qualname in check_release_readiness.REGISTRY_DISPATCHED_CALLABLES:
+        assert qualname in source_functions
 
 
 def test_cli_auth_exemption_surface_matches_documented_bootstrap_commands() -> None:

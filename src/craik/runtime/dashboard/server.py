@@ -368,7 +368,7 @@ def _handler(
                 handle_dashboard_request("POST", self.path, self.headers, body, config, env=env)
             )
 
-        def log_message(self, format: str, *args: object) -> None:
+        def log_message(self, _format: str, *args: object) -> None:
             return
 
         def _write(self, response: DashboardResponse) -> None:

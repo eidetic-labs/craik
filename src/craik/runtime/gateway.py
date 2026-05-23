@@ -35,7 +35,7 @@ class GatewayDaemonConfigError(GatewayDaemonError):
 class GatewayServer(Protocol):
     server_address: tuple[str | bytes | bytearray, int]
 
-    def serve_forever(self, poll_interval: float = 0.5) -> None:
+    def serve_forever(self, _poll_interval: float = 0.5) -> None:
         raise NotImplementedError
 
     def shutdown(self) -> None:
@@ -303,5 +303,5 @@ class _GatewayRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, format: str, *args: object) -> None:
+    def log_message(self, _format: str, *args: object) -> None:
         return

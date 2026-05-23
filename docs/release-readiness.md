@@ -7,10 +7,47 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.11.0`; historical sign-offs remain below for
+pre-release gate is `0.12.0`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.0 Goal Workflow
+
+<div className="craik-keypoint">
+
+**Structural CI guard generalization starts the v0.12.0 release train.**
+
+`0.12.0` begins with G0 before functional migration,
+internationalization, and compatibility work. G0 strengthens the
+release-readiness writer-coverage guard with qualified call
+resolution, explicit dynamic-dispatch allowlisting, and a complementary
+dead-code scan.
+
+</div>
+
+<div className="craik-fields">
+
+<div>
+<dt>Area</dt>
+<dt><span className="craik-fields__type">Status</span></dt>
+<dd>Goal issue</dd>
+</div>
+
+<div><dt>G0 structural CI guard generalization</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><a href="https://github.com/eidetic-labs/craik/issues/819">#819</a> · release-readiness writer coverage resolves calls through qualified function paths and import maps, registry-dispatched callables use a capped documented allowlist, and <code>scripts/check_dead_code.py</code> runs vulture at confidence 80 as a complementary dead-code gate</dd></div>
+
+</div>
+
+### v0.12.0 Validation Commands
+
+Run the structural gate from a clean checkout before starting
+functional v0.12.0 implementation goals:
+
+```bash
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run pytest tests/test_release_readiness_guards.py tests/test_dead_code_check.py -v
+```
 
 ## v0.11.0 Goal Workflow
 
@@ -127,6 +164,7 @@ uv run python scripts/generate_cli_reference.py --check
 uv run python scripts/check_doc_links.py
 uv run python scripts/check_public_docs_hygiene.py
 uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
 uv run python scripts/check_changed_file_strictness.py
 uv run python scripts/check_max_file_lines.py
 uv run python scripts/quickstart_smoke.py
