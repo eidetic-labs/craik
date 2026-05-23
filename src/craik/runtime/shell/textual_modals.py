@@ -1,0 +1,240 @@
+"""Modal screens for interactive Craik TUI flows."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from textual.app import ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Button, Input, Label, Select, Static
+
+from craik.runtime.auth.guided_setup import GUIDED_PROVIDER_DEFAULTS
+from craik.runtime.auth.login import capture_and_cache_login, logout_provider
+from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.reviewing.approvals import (
+    ApprovalDecision,
+    ApprovalNotFoundError,
+    ApprovalStateError,
+    approval_view,
+    decide_approval,
+)
+from craik.runtime.store import LocalStore
+
+
+@dataclass(frozen=True)
+class ModalFlowResult:
+    """Redacted completion result from an interactive modal flow."""
+
+    message: str
+    severity: Literal["information", "warning", "error"] = "information"
+
+
+class AuthCaptureModal(ModalScreen[ModalFlowResult | None]):
+    """Capture a provider credential without echoing secret material."""
+
+    def __init__(self, provider: str = "openai", *, env: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.provider = provider
+        self.env = env
+
+    def compose(self) -> ComposeResult:
+        providers = [(name, name) for name in sorted(GUIDED_PROVIDER_DEFAULTS)]
+        yield Vertical(
+            Label("Provider credential", classes="modal-title"),
+            Static("Credential material is redacted from the transcript.", classes="modal-copy"),
+            Select[str](
+                providers,
+                value=self.provider if self.provider in GUIDED_PROVIDER_DEFAULTS else "openai",
+                allow_blank=False,
+                id="auth-provider",
+            ),
+            Input(placeholder="API key", password=True, id="auth-secret"),
+            Horizontal(
+                Button("Cancel", id="auth-cancel"),
+                Button("Save", id="auth-save", variant="primary"),
+                classes="modal-actions",
+            ),
+            id="auth-capture-modal",
+            classes="craik-modal",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "auth-cancel":
+            self.dismiss(None)
+            return
+        if event.button.id == "auth-save":
+            self._save()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "auth-secret":
+            self._save()
+
+    def _save(self) -> None:
+        provider = str(self.query_one("#auth-provider", Select).value)
+        secret = self.query_one("#auth-secret", Input).value
+        if not secret.strip():
+            self.dismiss(ModalFlowResult("Auth capture cancelled: credential is blank.", "warning"))
+            return
+        try:
+            result = capture_and_cache_login(
+                provider,
+                credential=secret,
+                allow_local_base_url=provider == "local",
+                env=self.env,
+            )
+        except ValueError as exc:
+            self.dismiss(ModalFlowResult(f"Auth capture failed for {provider}: {exc}", "error"))
+            return
+        if result.status.status != "ok":
+            detail = f": {result.status.detail}" if result.status.detail else ""
+            self.dismiss(
+                ModalFlowResult(
+                    f"Auth capture rejected for {provider}{detail}",
+                    "warning",
+                )
+            )
+            return
+        warning = f" Warning: {result.warning}" if result.warning else ""
+        self.dismiss(
+            ModalFlowResult(
+                f"Auth profile `{result.profile.id}` saved for {provider}.{warning}",
+            )
+        )
+
+
+class AuthLogoutModal(ModalScreen[ModalFlowResult | None]):
+    """Confirm auth profile logout before removing cached credentials."""
+
+    def __init__(self, profile_id: str, *, env: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.profile_id = profile_id
+        self.env = env
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Remove credential profile?", classes="modal-title"),
+            Static(f"Profile: {self.profile_id}", classes="modal-copy"),
+            Horizontal(
+                Button("Cancel", id="logout-cancel"),
+                Button("Remove", id="logout-confirm", variant="error"),
+                classes="modal-actions",
+            ),
+            id="auth-logout-modal",
+            classes="craik-modal",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "logout-cancel":
+            self.dismiss(None)
+            return
+        if event.button.id == "logout-confirm":
+            provider = _provider_from_profile_id(self.profile_id)
+            result = logout_provider(provider, profile_id=self.profile_id, env=self.env)
+            removed = "removed" if result["removed_profile"] else "not found"
+            self.dismiss(ModalFlowResult(f"Auth profile `{self.profile_id}` {removed}."))
+
+
+class ApprovalDecisionModal(ModalScreen[ModalFlowResult | None]):
+    """Review and resolve one open approval request."""
+
+    def __init__(self, approval_id: str, *, env: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.approval_id = approval_id
+        self.env = env
+
+    def compose(self) -> ComposeResult:
+        summary = self._approval_summary()
+        yield Vertical(
+            Label("Approval decision", classes="modal-title"),
+            Static(summary, id="approval-summary", classes="modal-copy"),
+            Input(placeholder="Reason", id="approval-reason"),
+            Horizontal(
+                Button("Cancel", id="approval-cancel"),
+                Button("Deny", id="approval-deny", variant="error"),
+                Button("Approve", id="approval-approve", variant="success"),
+                classes="modal-actions",
+            ),
+            id="approval-decision-modal",
+            classes="craik-modal",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "approval-cancel":
+            self.dismiss(None)
+            return
+        if event.button.id == "approval-deny":
+            self._decide("denied")
+            return
+        if event.button.id == "approval-approve":
+            self._decide("approved")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "approval-reason":
+            self._decide("approved")
+
+    def _approval_summary(self) -> str:
+        store = _open_store(self.env)
+        try:
+            delegation = store.get_human_delegation(self.approval_id)
+            if delegation is None or delegation.kind != "approval":
+                return f"Approval `{self.approval_id}` was not found."
+            view = approval_view(delegation)
+        finally:
+            store.close()
+        return (
+            f"ID: {view.id}\n"
+            f"Capability: {view.capability}\n"
+            f"Target: {view.target}\n"
+            f"Risk: {view.risk}\n"
+            f"Policy: {view.policy}\n"
+            f"Retry: {view.retry_path}"
+        )
+
+    def _decide(self, decision: ApprovalDecision) -> None:
+        reason = self.query_one("#approval-reason", Input).value.strip()
+        if not reason:
+            self.dismiss(ModalFlowResult("Approval decision requires a reason.", "warning"))
+            return
+        store = _open_store(self.env)
+        try:
+            operator = _operator_subject(self.env)
+            result = decide_approval(
+                store,
+                self.approval_id,
+                decision=decision,
+                operator=operator,
+                reason=reason,
+            )
+        except (ApprovalNotFoundError, ApprovalStateError) as exc:
+            self.dismiss(ModalFlowResult(f"Approval decision failed: {exc}", "error"))
+            return
+        finally:
+            store.close()
+        self.dismiss(
+            ModalFlowResult(
+                f"Approval `{result.approval.id}` {decision}; "
+                f"receipt `{result.receipt.id}` recorded."
+            )
+        )
+
+
+def _open_store(env: dict[str, str] | None) -> LocalStore:
+    paths = resolve_craik_paths(env)
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    return store
+
+
+def _operator_subject(env: dict[str, str] | None) -> str:
+    try:
+        return OperatorSessionStore.from_env(env).get().subject
+    except OperatorSessionNotFoundError:
+        return "operator:local"
+
+
+def _provider_from_profile_id(profile_id: str) -> str:
+    provider = profile_id.split(":", 1)[0].strip().lower()
+    return provider if provider in GUIDED_PROVIDER_DEFAULTS else "openai"
