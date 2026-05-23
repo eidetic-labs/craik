@@ -18,39 +18,25 @@ Craik treats memory, provenance, policy, and work state as runtime concerns rath
 
 ## What Works Today
 
-Craik can assemble local repository context, read optional GitHub and Stigmem
-state, compile governed runner prompts, execute fixture-backed and live-shaped
-provider requests through OpenAI Responses, Anthropic Messages, and
-OpenAI-compatible Chat Completions adapters, persist receipts/handoffs/work
-graphs, consume completed handoffs into follow-up governed runs, and propose
-memory updates for review.
-Provider-backed runs can also be dispatched through v0.3.0 specialist roles
-such as verifier, docs reviewer, policy reviewer, memory curator, and
-adjudicator.
-Multi-agent coordination now has a typed, receipt-backed mailbox contract for
-agent-to-agent messages linked to task, run, handoff, and role identities.
-Concurrent runs against the same project are checked against active intent-lock
-scopes before new loop phases or tool dispatch, with overlaps recorded as
-coordination denial receipts.
-Structured debates can now capture role-linked positions, preserve minority
-claims and evidence, and resolve through an adjudication receipt or human
-delegation receipt.
-Cross-agent reviews can request bounded review of another agent's worker
-result, handoff, or debate summary and complete with typed findings without
-mutating the reviewed artifact.
-Human delegation can pause a run with a receipted request, record an accepted,
-rejected, or cancelled operator response, and then resume from the interrupted
-run boundary.
-Scope-change handling now prevents silent expansion: discovered work outside the
-active intent lock interrupts the run, persists the proposed scope change, and
-requires an explicit expand, sibling-work, handoff, or denial decision.
-The work graph is also becoming live coordination state: v0.3.0 mailbox,
-review, debate, delegation, and scope-change artifacts persist graph events that
-operators can query before a final export.
-Handoff consumers must now make their credential and operator assignment
-explicit. Craik rejects accidental producer-identity reuse unless the caller
-passes an explicit continuation flag, and the assignment is recorded as a
-receipt on the follow-up run.
+As of `0.12.0`, Craik is a CLI-first local runtime with broad MVP surfaces in
+place. It can initialize local state, register projects, assemble repository and
+GitHub context into case files, compile governed runner prompts, execute
+fixture-backed and live-shaped provider requests, persist receipts, handoffs,
+work graphs, tasks, approvals, and migration artifacts, and consume completed
+handoffs into follow-up governed runs.
+
+Provider-backed runs can be dispatched through specialist roles such as
+verifier, docs reviewer, policy reviewer, memory curator, and adjudicator.
+Multi-agent coordination includes typed mailbox, review, debate, delegation,
+scope-change, and intent-lock contracts. Concurrent work against the same
+project is checked against active intent-lock scopes before new loop phases or
+tool dispatch, and overlap denials are recorded as receipts.
+
+Operator-facing workflows now include slash commands, a terminal UI, a local
+dashboard, desktop companion metadata, doctor/update checks, approval queues,
+gateway lifecycle commands, channel setup/doctor flows, MCP compatibility
+surfaces, session portability, adjacent-runtime migration inspection and
+dry-run planning, i18n message contracts, and capture-and-cache provider auth.
 
 The live provider path is explicit. Runtime callers opt into live access, supply
 provider metadata, and resolve credentials through typed credential profiles or
@@ -59,10 +45,13 @@ localhost `/v1` server such as Ollama for optional live validation without paid
 API keys.
 
 Craik authenticates to provider APIs through typed credential profiles. Profile
-kinds include env-var API keys, local-CLI OAuth fallback (e.g. reading
-`~/.claude/.credentials.json`), vendor CLI subprocess bridges, external secret
-manager references, and Stigmem-backed credential references. A credential pool
-supports rotation and failover across multiple profiles.
+kinds include env-var API keys, captured keyring references, local-CLI OAuth
+fallbacks, vendor CLI subprocess bridges, external secret manager references,
+and Stigmem-backed credential references. A credential pool supports rotation
+and failover across multiple profiles. `craik auth login` can capture provider
+keys, verify them against provider health endpoints, cache them in a secure
+backend when available, and surface file-backed fallback warnings in auth status
+and doctor output.
 
 Craik authenticates the operator via OIDC against any compliant IdP. Device-code
 and loopback+PKCE flows are both supported; `craik login` initiates the flow,
@@ -91,13 +80,13 @@ forward-only migration framework.
 
 ## What Does Not Work Yet
 
-Craik is not yet a fully autonomous release-quality agent. It does not claim
-unbounded tool execution, unattended file edits, broad remote Stigmem writes, or
-production multi-agent orchestration. Tool execution is policy-bound and
-currently limited to configured local-process sandbox execution for registered
-command references; container, remote-shell, browser, and MCP execution
-backends remain future work. Live provider calls remain opt-in rather than
-hidden CI behavior.
+Craik is still pre-`1.0.0`. It does not claim unbounded autonomous execution,
+unattended broad file edits, production remote Stigmem write promotion, or
+general-purpose multi-tenant deployment. Tool execution is policy-bound and
+currently centered on configured local-process sandbox execution and
+compatibility contracts; container, remote-shell, full browser automation, and
+production MCP execution backends remain future work. Live provider calls remain
+explicit opt-in behavior rather than hidden CI behavior.
 
 ## Vision
 
@@ -203,27 +192,25 @@ Craik is not built as a dependency layer on another agent framework. It borrows 
 
 ## Current Status
 
-Craik is moving toward a robust `0.x.0` MVP release. `1.0.0` is a later
-stability signal, not the first release target.
+Craik is at the `0.12.0` release-prep point. `1.0.0` remains a later stability
+signal, not the current release target.
 
-The repository now includes the CLI package, strict runtime contracts, local
-SQLite state, project/task/case-file workflows, policy and receipt primitives,
-runner preview contracts, governed provider-backed loops, durable run
-continuity, budget enforcement, local-process sandboxed shell dispatch,
-multi-agent review contracts, instruction distillation, quality/recovery
-helpers, skills/plugins foundations, operator view formatters,
-gateway/channel contracts, sandbox/provider routing contracts, learning-loop
-helpers, multimodal decisions, migration/i18n contracts, and broad docs/tests
-through the v0.12 roadmap.
+The repository now includes the Python package and CLI, strict runtime
+contracts, local SQLite state, project/task/case-file workflows, policy and
+receipt primitives, governed provider-backed loops, durable run continuity,
+budget enforcement, local-process sandboxed shell dispatch, multi-agent
+coordination contracts, instruction distillation, quality/recovery helpers,
+skills/plugins foundations, operator view formatters, gateway/channel
+contracts, sandbox/provider routing contracts, learning-loop helpers,
+multimodal decisions, migration/i18n contracts, capture-and-cache auth, and
+broad docs/tests through the v0.12 roadmap.
 
-The remaining MVP work is to harden these contract and helper surfaces into one
-complete release-quality workflow: remote Stigmem write promotion,
-God-file/runtime package cleanup, ADR-backed design decisions, and docs/test
-depth comparable to Stigmem. Package version `0.4.0` marks the runtime
-instruction distillation gate after declared instruction sources, stale
-invalidation, contradiction surfacing, approval receipts, and prompt/case-file
-integration shipped; roadmap sections remain implementation gates, not `1.0.0`
-readiness claims. See
+The remaining pre-`1.0.0` work is to harden these surfaces into a polished,
+release-quality workflow: simpler first-run agent launch, browser-based
+provider auth, stronger persistent agent UX, production-grade gateway/channel
+operation, remote Stigmem write promotion, additional execution backends, and
+continued runtime package cleanup. Roadmap sections remain implementation
+gates, not `1.0.0` readiness claims. See
 [Robust MVP Roadmap](docs/mvp-roadmap.md).
 
 ## Implementation Stack
@@ -295,9 +282,9 @@ Craik is released under the [MIT License](LICENSE). The license choice is intend
 - Trademark and brand usage: [TRADEMARKS.md](TRADEMARKS.md)
 - Maintainer and release policy: [MAINTAINERS.md](MAINTAINERS.md)
 
-## Initial Build Target
+## Current Build Target
 
-The first implementation should focus on a repository-aware CLI runtime:
+The current build target is a repository-aware local agent runtime:
 
 1. Create a project profile for a local Git repository.
 2. Connect optional Stigmem memory.
@@ -307,13 +294,18 @@ The first implementation should focus on a repository-aware CLI runtime:
 6. Produce a structured handoff.
 7. Propose fact updates for future agents.
 
-Multi-agent orchestration, work graph visualization, contradiction inbox, and plugin probation should be layered on after the single-agent durable workflow is working end to end.
+Craik has implemented many supporting contracts around that target. The next
+step is product hardening: make the default `craik` launch path easier to use,
+reduce auth/setup friction, and turn the broad runtime surfaces into a coherent
+day-to-day operator experience.
 
-## First Demo Target
+## Demo Target
 
-Craik's first real demo target is Stigmem documentation and state reconciliation. The initial runnable version is exposed through `craik demo stigmem-docs`.
+Craik's reference demo target is Stigmem documentation and state
+reconciliation. The runnable fixture is exposed through `craik demo
+stigmem-docs`.
 
-The demo should:
+The demo flow:
 
 1. Register the Stigmem repository as a Craik project.
 2. Connect to a local Stigmem node.
@@ -326,4 +318,6 @@ The demo should:
 9. Propose or write new Stigmem facts.
 10. Export a work graph for the task.
 
-This target is intentionally based on a real workflow that already exposed the need for durable memory, public/internal doc boundaries, ADR constraints, and agent handoffs.
+This target is intentionally based on a real workflow that exposed the need for
+durable memory, public/internal doc boundaries, ADR constraints, and agent
+handoffs.
