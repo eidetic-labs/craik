@@ -16,9 +16,33 @@ def test_terminal_ui_docs_describe_current_textual_runtime() -> None:
         "/approvals decide <approval-id>",
         "CRAIK_HISTORY_MAX_ENTRIES=0",
         "CRAIK_NO_TUI=1",
+        "Ctrl+F",
+        "/receipts detail <receipt-id>",
+        "slash.confirmation",
     ]
     for phrase in required:
         assert phrase in content, f"terminal UI guide is missing {phrase!r}"
+
+
+def test_slash_command_docs_describe_v0124_command_surface() -> None:
+    content = (ROOT / "docs/guides/slash-commands.md").read_text(encoding="utf-8")
+
+    required = [
+        "/help <command>",
+        "/receipts detail <receipt-id>",
+        "Ctrl+F",
+        "slash.confirmation",
+        "Tab to convert",
+        "Structured Output",
+    ]
+    for phrase in required:
+        assert phrase in content, f"slash-command guide is missing {phrase!r}"
+
+
+def test_slash_command_guide_is_reachable_from_sidebars() -> None:
+    content = (ROOT / "docs/sidebars.js").read_text(encoding="utf-8")
+
+    assert content.count("'guides/slash-commands'") >= 2
 
 
 def test_privacy_docs_capture_data_flow_model() -> None:
