@@ -118,6 +118,21 @@ def test_capability_receipt_integrity_fields_round_trip(
         CONTRACT_REGISTRY["craik.capability_receipt"].model_validate(dumped)
 
 
+def test_shell_invocation_receipt_contract_round_trip(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    receipt = CONTRACT_REGISTRY["craik.shell_invocation_receipt"].model_validate(
+        fixtures["craik.shell_invocation_receipt"]
+    )
+    dumped = receipt.model_dump(mode="json", by_alias=True)
+
+    assert dumped["schema"] == "craik.shell_invocation_receipt"
+    assert dumped["kind"] == "shell_invocation"
+    assert dumped["command"] == "pytest tests/test_contracts.py"
+    assert dumped["redactions_applied"] == []
+    assert dumped["receipt_hmac"] is None
+
+
 def test_capability_receipt_operator_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:

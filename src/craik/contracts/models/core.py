@@ -239,6 +239,30 @@ def _capability_receipt_hash(receipt: CapabilityReceipt) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class ShellInvocationReceipt(CraikModel):
+    """HMAC-signable receipt for an operator-triggered local shell command."""
+
+    schema_: Literal["craik.shell_invocation_receipt"] = Field(
+        default="craik.shell_invocation_receipt",
+        alias="schema",
+    )
+    version: Literal["0.1.0"] = "0.1.0"
+    kind: Literal["shell_invocation"] = "shell_invocation"
+    receipt_id: str
+    timestamp: datetime
+    operator_subject: str
+    command: str
+    exit_code: int
+    stdout_preview: str = ""
+    stderr_preview: str = ""
+    stdout_sha256: str
+    stderr_sha256: str
+    working_directory: str
+    duration_ms: int
+    redactions_applied: list[str] = Field(default_factory=list)
+    receipt_hmac: str | None = None
+
+
 class AgentRole(CraikModel):
     """Policy-aware role definition for multi-agent coordination."""
 
