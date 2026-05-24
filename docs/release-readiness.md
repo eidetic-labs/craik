@@ -37,6 +37,7 @@ uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_version.py
 uv run python scripts/check_release_readiness.py
 uv run python scripts/check_dead_code.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
 python3 scripts/check_codebase_brand_hygiene.py
 uv run python scripts/check_slash_command_registry.py
 uv run python scripts/check_changed_file_strictness.py
