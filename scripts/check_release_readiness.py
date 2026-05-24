@@ -505,6 +505,10 @@ def _operator_login_remediation_failures() -> list[str]:
         "run `craik auth login`",
         "run /auth login or craik auth login",
     )
+    disallowed_tui_login = (
+        "exit and run craik login",
+        "exit and run `craik login`",
+    )
     allowed_followups = (
         " <provider>",
         " {provider}",
@@ -517,6 +521,12 @@ def _operator_login_remediation_failures() -> list[str]:
     for path in sorted((ROOT / "src/craik").rglob("*.py")):
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), start=1):
+            for token in disallowed_tui_login:
+                if token in line:
+                    failures.append(
+                        f"{path.relative_to(ROOT)}:{lineno}: use `/login` for "
+                        "operator-session remediation inside TUI surfaces"
+                    )
             for token in disallowed:
                 index = line.find(token)
                 if index == -1:

@@ -397,6 +397,23 @@ def test_operator_login_remediation_guard_allows_provider_login(
     assert check_release_readiness._operator_login_remediation_failures() == []
 
 
+def test_operator_login_remediation_guard_rejects_tui_cli_login(
+    tmp_path, monkeypatch
+) -> None:
+    src = tmp_path / "src" / "craik" / "runtime" / "shell"
+    src.mkdir(parents=True)
+    (src / "readiness.py").write_text(
+        'MESSAGE = "exit and run craik login"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(check_release_readiness, "ROOT", tmp_path)
+
+    assert check_release_readiness._operator_login_remediation_failures() == [
+        "src/craik/runtime/shell/readiness.py:1: use `/login` for "
+        "operator-session remediation inside TUI surfaces"
+    ]
+
+
 def test_i18n_consumption_guard_rejects_unwired_surface(tmp_path, monkeypatch) -> None:
     surface = tmp_path / "src" / "craik" / "runtime" / "shell"
     surface.mkdir(parents=True)

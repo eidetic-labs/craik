@@ -10,6 +10,19 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Fixed
+
+- TUI readiness next-action hints now use `/login` for operator-session
+  authentication while keeping `craik login` guidance on CLI surfaces.
+- Release-readiness checks now reject TUI operator-login remediation that
+  tells operators to exit and run `craik login`.
+- Receipt verification now uses constant-time HMAC comparison and validates
+  side-log digest fields as lowercase SHA-256 hex before constructing side-log
+  paths.
+- Slash-command error messages escape operator-supplied command names before
+  rendering through the markup-enabled transcript.
+- The first-launch TUI text-selection marker uses owner-only POSIX permissions.
+
 ## 0.12.4 — 2026-05-24
 
 ### Added
