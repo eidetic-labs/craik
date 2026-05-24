@@ -24,6 +24,17 @@ def test_readme_getting_started_and_operator_modes_match_v0121(
     assert "CRAIK_OPERATOR_REQUIRED=1" in readme_content
 
 
+def test_readme_coverage_badge_uses_published_shields_endpoint(
+    readme_content: str,
+) -> None:
+    assert (
+        "[![Coverage](https://img.shields.io/endpoint?url="
+        "https%3A%2F%2Feidetic-labs.github.io%2Fcraik%2Fcoverage-badge.json)]"
+        "(https://eidetic-labs.github.io/craik/)"
+    ) in readme_content
+    assert "coverage-badge.svg)]" not in readme_content
+
+
 def test_readme_stays_current_state_not_planning_doc(readme_content: str) -> None:
     forbidden = [
         "## Planning Docs",
