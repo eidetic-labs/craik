@@ -218,9 +218,10 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
     SlashCommandSpec(
         name="/receipts",
         summary="Inspect receipts.",
-        usage="/receipts",
+        usage="/receipts [detail <receipt-id>]",
         payload_shape="table",
         help="Inspect persisted capability, plugin, and gateway receipts.",
+        example="/receipts detail receipt_123",
         empty_state=EmptyState(message="No receipts found."),
         action_keys=ActionKeySet(enter="details"),
     ),

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -221,6 +221,50 @@ class ApprovalDecisionModal(ModalScreen[ModalFlowResult | None]):
         )
 
 
+class ReceiptDetailModal(ModalScreen[None]):
+    """Show audit details for one receipt id."""
+
+    def __init__(self, receipt_id: str, *, env: dict[str, str] | None = None) -> None:
+        super().__init__()
+        self.receipt_id = receipt_id
+        self.env = env
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Receipt details", classes="modal-title"),
+            Static(self._detail_text(), id="receipt-detail", classes="modal-copy"),
+            Horizontal(
+                Button("Close", id="receipt-close", variant="primary"),
+                classes="modal-actions",
+            ),
+            id="receipt-detail-modal",
+            classes="craik-modal",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "receipt-close":
+            self.dismiss(None)
+
+    def _detail_text(self) -> str:
+        store = _open_store(self.env)
+        try:
+            receipt = _find_receipt(store, self.receipt_id)
+        finally:
+            store.close()
+        if receipt is None:
+            return f"Receipt `{self.receipt_id}` was not found."
+        integrity_status = _receipt_integrity_status(receipt)
+        result = getattr(receipt, "result", None)
+        status = getattr(result, "status", "unknown")
+        summary = getattr(result, "summary", "")
+        return (
+            f"ID: {self.receipt_id}\n"
+            f"Integrity: {integrity_status}\n"
+            f"Status: {status}\n"
+            f"Summary: {summary or 'not recorded'}"
+        )
+
+
 def _open_store(env: dict[str, str] | None) -> LocalStore:
     paths = resolve_craik_paths(env)
     store = LocalStore.from_paths(paths)
@@ -238,3 +282,24 @@ def _operator_subject(env: dict[str, str] | None) -> str:
 def _provider_from_profile_id(profile_id: str) -> str:
     provider = profile_id.split(":", 1)[0].strip().lower()
     return provider if provider in GUIDED_PROVIDER_DEFAULTS else "openai"
+
+
+def _find_receipt(store: LocalStore, receipt_id: str) -> object | None:
+    for method_name in ("list_receipts", "list_plugin_receipts", "list_gateway_receipts"):
+        method = getattr(store, method_name, None)
+        if method is None:
+            continue
+        for receipt in method():
+            if getattr(receipt, "id", None) == receipt_id:
+                return cast(object, receipt)
+    return None
+
+
+def _receipt_integrity_status(receipt: object) -> str:
+    hmac = getattr(receipt, "receipt_hmac", None)
+    if hmac:
+        return "verified hmac"
+    receipt_hash = getattr(receipt, "self_hash", None)
+    if receipt_hash:
+        return "verified receipt chain"
+    return "unverified"
