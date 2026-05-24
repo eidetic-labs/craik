@@ -18,7 +18,7 @@ class SlashCommandSurface(Protocol):
     @property
     def name(self) -> str:
         """Return the bare slash-command name."""
-        ...
+        raise NotImplementedError
 
 
 def argument_validation_error(command: SlashCommandSurface, args: list[str]) -> str | None:
