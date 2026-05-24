@@ -178,6 +178,8 @@ jobs:
         run: craik policy test
       - name: Check release readiness
         run: python scripts/check_release_readiness.py
+      - name: Check slash command registry
+        run: python scripts/check_slash_command_registry.py
       - name: Check dead code
         run: python scripts/check_dead_code.py
       - name: Check release version consistency
