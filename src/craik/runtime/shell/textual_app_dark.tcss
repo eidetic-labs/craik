@@ -17,6 +17,14 @@ Screen {
     max-height: 12;
 }
 
+#history-search {
+    dock: bottom;
+    margin: 0 2 4 2;
+    border: round #A0A0A0;
+    height: auto;
+    max-height: 8;
+}
+
 #working {
     color: $craik-brand;
 }

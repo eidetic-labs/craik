@@ -15,6 +15,8 @@ within the `0.x.0` stability expectations described in
 - Added v0.12.3 terminal status-bar usage, provider quota, and
   auto-approve indicators, plus `/status` policy warning payloads for
   active auto-approve envelopes.
+- Added v0.12.3 TUI input ergonomics for reverse history search, external
+  editor round-trips, and multi-line input alternatives.
 
 ## 0.12.2 — 2026-05-23
 

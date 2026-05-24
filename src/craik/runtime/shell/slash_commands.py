@@ -18,6 +18,7 @@ from craik.runtime.providers.model_providers import default_model_provider_regis
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
+from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
@@ -227,7 +228,13 @@ def _localized_help_text(args: list[str], *, env: dict[str, str] | None) -> str:
             f"{requires}: {command.readiness}{example_block}"
         )
     rows = [f"/{command.name:<10} {command.summary}" for command in COMMANDS]
-    return localized_text("slash.help.title", env=env) + "\n" + "\n".join(rows)
+    return (
+        localized_text("slash.help.title", env=env)
+        + "\n"
+        + "\n".join(rows)
+        + "\n\n"
+        + MULTILINE_HELP_TEXT
+    )
 
 
 def _approval_text(env: dict[str, str] | None) -> str:

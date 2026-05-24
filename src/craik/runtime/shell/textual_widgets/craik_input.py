@@ -7,6 +7,10 @@ import re
 from textual.widgets import Input
 
 PASTE_COLLAPSE_THRESHOLD = 3
+MULTILINE_HELP_TEXT = (
+    "Multi-line: Shift+Enter (native), `\\`+Enter (universal), Ctrl+J "
+    "(any terminal), Option/Alt+Enter (macOS Meta)."
+)
 
 _CLI_PREFIX_RE = re.compile(
     r"^craik\s+"
@@ -50,3 +54,15 @@ def collapse_paste_placeholder(text: str) -> str | None:
     if line_count < PASTE_COLLAPSE_THRESHOLD:
         return None
     return f"[{line_count} lines of text]"
+
+
+def continue_multiline_value(text: str) -> str:
+    """Return ``text`` with a trailing continuation marker converted to newline."""
+    if text.endswith("\\"):
+        return text[:-1] + "\n"
+    return text + "\n"
+
+
+def should_continue_on_submit(text: str) -> bool:
+    """Return whether plain Enter should continue instead of submit."""
+    return text.endswith("\\")
