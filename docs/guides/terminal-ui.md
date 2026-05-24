@@ -102,12 +102,18 @@ The TUI uses slash commands as the primary operator control surface:
 /approvals decide <approval-id>
 /gateway
 /skills
+/mcp
+/mcp verbose
 /exit
 ```
 
 Commands either execute inline, print structured status into the transcript,
 or open a modal. They do not route you back to shell commands while you are
 inside the TUI.
+
+`/mcp` summarizes configured MCP clients from Craik local state. Use
+`/mcp verbose` to inspect policy, receipt, redaction, and advertised tool
+metadata, or add `--json` when another tool needs structured output.
 
 Prefix a line with `!` to run a local command without model involvement:
 

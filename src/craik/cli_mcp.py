@@ -11,6 +11,7 @@ import typer
 from pydantic import ValidationError
 
 from craik.cli import mcp_app
+from craik.cli_typer import craik_typer
 from craik.runtime.sandbox.mcp_compat import (
     export_mcp_client_config,
     handle_mcp_jsonrpc_lines,
@@ -19,8 +20,8 @@ from craik.runtime.sandbox.mcp_compat import (
     mcp_server_manifest,
 )
 
-server_app = typer.Typer(help="Expose Craik MCP server compatibility surfaces.")
-client_app = typer.Typer(help="Import and export redacted MCP client config.")
+server_app = craik_typer(help="Expose Craik MCP server compatibility surfaces.")
+client_app = craik_typer(help="Import and export redacted MCP client config.")
 mcp_app.add_typer(server_app, name="server")
 mcp_app.add_typer(client_app, name="client")
 
