@@ -5,7 +5,7 @@ from __future__ import annotations
 import difflib
 import json
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.login import auth_status_payload
@@ -23,11 +23,13 @@ from craik.runtime.shell.session_settings import (
     save_shell_settings,
     shell_session_name,
 )
+from craik.runtime.shell.slash_command_schema import (
+    ReadinessRequirement,
+    slash_command_specs,
+)
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
 from craik.runtime.store import DATABASE_NAME, LocalStore
-
-ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
 
 
 @dataclass(frozen=True)
@@ -52,52 +54,17 @@ class SlashCommandResult:
     exit_code: int = 0
 
 
-COMMANDS: tuple[SlashCommand, ...] = (
-    SlashCommand("help", "Show slash-command help.", "/help [command]", ("/help status",)),
-    SlashCommand("setup", "Show progressive setup guidance.", "/setup"),
+COMMANDS: tuple[SlashCommand, ...] = tuple(
     SlashCommand(
-        "auth",
-        "Manage operator and provider auth.",
-        "/auth [login]",
-        ("/auth login",),
-        mutating=True,
-    ),
-    SlashCommand(
-        "provider",
-        "Inspect or configure provider credentials.",
-        "/provider [login <provider>]",
-        ("/provider login openai", "/provider login local"),
-        mutating=True,
-    ),
-    SlashCommand(
-        "model",
-        "Inspect or select the active model.",
-        "/model [set <provider/model>]",
-        mutating=True,
-    ),
-    SlashCommand("status", "Show readiness state.", "/status"),
-    SlashCommand("doctor", "Run diagnostics inline.", "/doctor"),
-    SlashCommand("sessions", "List persistent sessions.", "/sessions"),
-    SlashCommand("rename", "Rename the current shell session.", "/rename <name>", mutating=True),
-    SlashCommand("theme", "Inspect or switch the TUI theme.", "/theme [dark|light|monochrome]"),
-    SlashCommand(
-        "resume",
-        "Resume a persistent session.",
-        "/resume <session-id>",
-        mutating=True,
-    ),
-    SlashCommand("approvals", "Inspect pending approvals.", "/approvals"),
-    SlashCommand("handoffs", "Inspect handoffs.", "/handoffs"),
-    SlashCommand("receipts", "Inspect receipts.", "/receipts"),
-    SlashCommand(
-        "skills",
-        "Inspect learning-loop skill controls.",
-        "/skills",
-    ),
-    SlashCommand("memory", "Inspect memory proposals and facts.", "/memory"),
-    SlashCommand("mcp", "Inspect configured MCP clients.", "/mcp [verbose] [--json]"),
-    SlashCommand("gateway", "Inspect gateway state.", "/gateway"),
-    SlashCommand("exit", "Exit the shell.", "/exit", aliases=("quit",)),
+        spec.command_name,
+        spec.summary,
+        spec.usage,
+        spec.examples,
+        aliases=spec.aliases,
+        readiness=spec.readiness,
+        mutating=spec.mutating,
+    )
+    for spec in slash_command_specs()
 )
 
 
