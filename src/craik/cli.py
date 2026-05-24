@@ -1,5 +1,4 @@
 """Command-line interface for Craik."""
-
 from __future__ import annotations
 
 import json
@@ -97,6 +96,7 @@ app.add_typer(memory_app, name="memory")
 policy_app = craik_typer(help="Inspect Craik policy profiles.")
 app.add_typer(policy_app, name="policy")
 app.add_typer(receipts_app, name="receipts")
+app.add_typer(receipts_app, name="receipt")
 app.add_typer(run_app, name="run")
 runners_app = craik_typer(help="Inspect runner capabilities and trust profiles.")
 app.add_typer(runners_app, name="runners")

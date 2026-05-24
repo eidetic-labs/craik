@@ -2040,6 +2040,50 @@ Print one model provider as JSON.
 craik provider show [OPTIONS] PROVIDER_ID
 ```
 
+## `craik receipt`
+
+Inspect persisted capability receipts.
+
+```text
+craik receipt COMMAND [ARGS]...
+```
+
+## `craik receipt list`
+
+Print persisted capability receipts as JSON.
+
+```text
+craik receipt list [OPTIONS]
+```
+
+Options:
+
+- `--task-id`: Only include receipts for this task id.
+- `--policy-id`: Only include receipts linked to this policy envelope.
+- `--handoff-id`: Only include receipts linked to this handoff.
+
+## `craik receipt show`
+
+Print one capability receipt by id as JSON.
+
+```text
+craik receipt show [OPTIONS] RECEIPT_ID
+```
+
+## `craik receipt verify`
+
+Verify a receipt JSON file without trusting the producing runtime.
+
+```text
+craik receipt verify [OPTIONS] PATH
+```
+
+Options:
+
+- `--public-key`: HMAC key material path for verification.
+- `--auto-discover`: Discover the local Craik HMAC key from CRAIK_HOME.; default `false`
+- `--side-log-base`: Directory containing shell side-log files.
+
 ## `craik receipts`
 
 Inspect persisted capability receipts.
@@ -2069,6 +2113,20 @@ Print one capability receipt by id as JSON.
 ```text
 craik receipts show [OPTIONS] RECEIPT_ID
 ```
+
+## `craik receipts verify`
+
+Verify a receipt JSON file without trusting the producing runtime.
+
+```text
+craik receipts verify [OPTIONS] PATH
+```
+
+Options:
+
+- `--public-key`: HMAC key material path for verification.
+- `--auto-discover`: Discover the local Craik HMAC key from CRAIK_HOME.; default `false`
+- `--side-log-base`: Directory containing shell side-log files.
 
 ## `craik references`
 
