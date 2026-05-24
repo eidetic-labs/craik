@@ -41,6 +41,7 @@ from craik.runtime.shell.textual_widgets.craik_input import (
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
+from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
@@ -145,7 +146,10 @@ class CraikApp(App[None]):
             self.query_one("#slash-popup", Container).display = False
             return
         result = self._dispatch(text)
-        transcript.write(linkify_text(result.text))
+        if text.startswith("/"):
+            write_slash_command_result(transcript, result)
+        else:
+            transcript.write(linkify_text(result.text))
         input_widget.value = ""
         self.query_one("#slash-popup", Container).display = False
         if result.exit_shell:
