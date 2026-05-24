@@ -65,7 +65,11 @@ class ReadinessReport:
         }
 
 
-def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
+def resolve_readiness(
+    env: dict[str, str] | None = None,
+    *,
+    in_tui: bool = False,
+) -> ReadinessReport:
     """Resolve Craik's progressive setup state without requiring authentication."""
     values = dict(os.environ) if env is None else env
     paths = resolve_craik_paths(values)
@@ -106,12 +110,13 @@ def resolve_readiness(env: dict[str, str] | None = None) -> ReadinessReport:
     if active_model is None:
         missing.append("active model")
 
-    next_actions = _next_actions(
+    next_actions = _next_actions_for_state(
         state,
         operator_required=operator_required,
         operator_authenticated=operator_authenticated,
         provider_configured=provider_configured,
         active_model=active_model,
+        in_tui=in_tui,
     )
     warnings = ["restricted/offline mode is active"] if state == "restricted/offline" else []
     return ReadinessReport(
@@ -143,6 +148,18 @@ def readiness_allows_action(report: ReadinessReport, requirement: str) -> tuple[
     if requirement == "ready" and report.state == "fully-ready":
         return True, None
     return False, f"blocked: requires {requirement}; missing {', '.join(report.missing) or 'setup'}"
+
+
+def next_actions(report: ReadinessReport, *, in_tui: bool) -> list[str]:
+    """Return setup actions rendered for the TUI or outer CLI context."""
+    return _next_actions_for_state(
+        report.state,
+        operator_required=report.operator_required,
+        operator_authenticated=report.operator_authenticated,
+        provider_configured=report.provider_configured,
+        active_model=report.active_model,
+        in_tui=in_tui,
+    )
 
 
 def _home_initialized(paths: CraikPaths) -> bool:
@@ -191,23 +208,35 @@ def _active_model(paths: CraikPaths) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
-def _next_actions(
+def _next_actions_for_state(
     state: ReadinessState,
     *,
     operator_required: bool,
     operator_authenticated: bool,
     provider_configured: bool,
     active_model: str | None,
+    in_tui: bool,
 ) -> list[str]:
     if state == "restricted/offline":
-        return ["unset CRAIK_OFFLINE=1 to use remote providers", "run /status for local options"]
+        return [
+            "unset CRAIK_OFFLINE=1 to use remote providers",
+            "use `/status` for local options" if in_tui else "run `craik status` for local options",
+        ]
     actions: list[str] = []
     if operator_required and not operator_authenticated:
-        actions.append("run craik login")
+        actions.append("exit and run craik login" if in_tui else "run craik login")
     if not provider_configured:
-        actions.append("run craik auth login <provider>")
+        actions.append(
+            "use `/auth login <provider>`"
+            if in_tui
+            else "run craik auth login <provider>"
+        )
     if active_model is None:
-        actions.append("run /model set <provider/model>")
+        actions.append(
+            "use `/model set <provider/model>`"
+            if in_tui
+            else "run craik model set <provider/model>"
+        )
     if not actions:
-        actions.append("start with a prompt or run /help")
+        actions.append("start with a prompt or use `/help`" if in_tui else "run `craik --help`")
     return actions

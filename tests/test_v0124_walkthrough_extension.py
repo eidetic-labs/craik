@@ -29,6 +29,7 @@ print(json.dumps({{
     "help_clear": help_clear.text,
     "help_receipts": help_receipts.text,
     "clear": clear.text,
+    "receipts": receipts.text,
     "receipts_empty": receipts.empty_state_message,
     "receipts_remediation": receipts.empty_state_remediation,
 }}, sort_keys=True))
@@ -51,4 +52,5 @@ print(json.dumps({{
     assert "Confirmation: required" in str(data["help_clear"])
     assert "/receipts [detail <receipt-id>]" in str(data["help_receipts"])
     assert "confirmation modal" in str(data["clear"])
-    assert data["receipts_empty"] == "No receipts found."
+    assert "requires a subcommand" in str(data["receipts"])
+    assert data["receipts_empty"] is None

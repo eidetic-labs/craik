@@ -26,28 +26,41 @@ Screen {
 }
 
 #working {
+    dock: bottom;
+    margin-bottom: 7;
+    height: 1;
     color: $craik-brand;
 }
 
 #toast-queue {
     dock: bottom;
-    margin: 0 2 4 2;
+    margin: 0 2 6 2;
     color: #A0A0A0;
 }
 
 #accent-emission {
+    dock: bottom;
+    margin-bottom: 2;
+    height: 1;
     color: $craik-brand;
 }
 
 #input {
+    dock: bottom;
     border: round $craik-brand;
+    margin-bottom: 3;
+    height: 3;
 }
 
 .status-bar {
+    dock: bottom;
+    margin-bottom: 1;
+    height: 1;
     color: #A0A0A0;
 }
 
 #footer-safe-area {
+    dock: bottom;
     height: 1;
 }
 

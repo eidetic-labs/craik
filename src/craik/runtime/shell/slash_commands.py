@@ -68,6 +68,12 @@ COMMANDS: tuple[SlashCommand, ...] = tuple(
     for spec in slash_command_specs()
 )
 
+SUBCOMMAND_LISTINGS: dict[str, tuple[str, ...]] = {
+    "agent": ("list", "launch", "rename", "delete"),
+    "session": ("list", "rename", "delete"),
+    "receipts": ("list", "detail", "verify"),
+}
+
 
 def list_slash_commands() -> list[SlashCommand]:
     """Return registered slash commands in stable order."""
@@ -111,6 +117,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult("Session ended.", exit_shell=True)
     if command.name == "help":
         return _payload_result(command.name, _localized_help_text(tokens[1:], env=env))
+    listing = _subcommand_listing_response(command.name, tokens)
+    if listing is not None:
+        return SlashCommandResult(listing)
     if command.name == "clear":
         return SlashCommandResult(
             "Transcript clear confirmation requested. "
@@ -191,6 +200,17 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "doctor":
         return _payload_result(command.name, _doctor_payload(report))
     return SlashCommandResult(f"`/{command.name}` is registered but has no inline handler yet.")
+
+
+def _subcommand_listing_response(command_name: str, tokens: list[str]) -> str | None:
+    subcommands = SUBCOMMAND_LISTINGS.get(command_name)
+    if subcommands is None or len(tokens) > 1:
+        return None
+    rendered = ", ".join(f"`/{command_name} {subcommand}`" for subcommand in subcommands)
+    return (
+        f"`/{command_name}` requires a subcommand: {rendered}. "
+        f"See `/help {command_name}` for details."
+    )
 
 
 def _command_for_name(name: str) -> SlashCommand | None:

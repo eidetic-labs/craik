@@ -52,6 +52,7 @@ from craik.runtime.shell.textual_widgets.inline_action_table import InlineAction
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
+from craik.runtime.shell.textual_widgets.text_selection_hint import first_launch_selection_hint
 from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
@@ -63,6 +64,7 @@ class CraikApp(App[None]):
     """Chat-first terminal UI with transcript, input, and bottom status bar."""
 
     CSS_PATH = "textual_app_dark.tcss"
+    ALLOW_SELECT = True
     BINDINGS = [
         ("ctrl+d", "quit", "Exit"),
         ("ctrl+f", "transcript_search", "Find"),
@@ -90,17 +92,17 @@ class CraikApp(App[None]):
             yield OptionList(id="slash-options")
         yield HistorySearchOverlay(env=self.env, id="history-search")
         yield TranscriptSearchOverlay(id="transcript-search")
-        yield WorkingIndicator("", id="working")
-        yield ToastQueue(id="toast-queue")
-        yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield FooterSafeArea("", id="footer-safe-area")
         yield StatusBar(id="status", classes="status-bar")
         yield AccentEmission("", id="accent-emission")
+        yield CraikInput(placeholder="Type a prompt or /help", id="input")
+        yield ToastQueue(id="toast-queue")
+        yield WorkingIndicator("", id="working")
 
     def on_mount(self) -> None:
         from craik.runtime.shell.readiness import resolve_readiness
 
-        report = resolve_readiness(self.env)
+        report = resolve_readiness(self.env, in_tui=True)
         self.readiness = report
         mode = "audited" if report.operator_required else "single-operator"
         self._write_transcript(
@@ -119,6 +121,8 @@ class CraikApp(App[None]):
         self.query_one("#toast-queue", ToastQueue).display = False
         if auto_approve_status_payload(self.env) is not None:
             self._flash_accent("state")
+        if selection_hint := first_launch_selection_hint(self.env):
+            self._toast(selection_hint)
         self.query_one("#input", CraikInput).focus()
 
     def on_input_changed(self, event: CraikInput.Changed) -> None:

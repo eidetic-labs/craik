@@ -212,6 +212,21 @@ Press `Ctrl+F` to search the current transcript. Typing filters visible
 session output, `Enter` moves to the next match, `Backspace` edits the query,
 and `Esc` returns focus to the prompt. Search is current-session only.
 
+## Text Selection
+
+Craik enables terminal text selection while keeping clickable and keyboard
+controls active. Most terminals require a modifier when an application is
+running in alternate-screen mode:
+
+| Terminal family | Selection modifier |
+|---|---|
+| macOS Terminal and iTerm2 | Hold Option while dragging. |
+| Linux terminal emulators | Hold Ctrl+Shift while dragging. |
+| Windows Terminal | Hold Shift while dragging when mouse reporting is active. |
+
+The first TUI launch shows a short toast with the platform hints. Set
+`CRAIK_TUI_SELECTION_HINT=0` to suppress the hint in scripted demos.
+
 Press `Ctrl+G` to open the current input buffer in an external editor. Craik
 uses `$EDITOR`, then `$VISUAL`, then `vi` when available. The temporary file is
 created under `~/.craik/state/external-editor/` with owner-only POSIX
