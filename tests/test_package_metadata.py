@@ -81,3 +81,4 @@ def test_release_readiness_current_gate_matches_project_metadata() -> None:
 
     assert f"pre-release gate is `{expected}`" in readiness
     assert f"## v{expected} " in readiness
+    assert f"### v{expected} Validation Commands" in readiness

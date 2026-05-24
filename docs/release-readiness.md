@@ -1,16 +1,46 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>4 min read</span><span>For maintainers</span><span>Updated 2026-05-23</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-23</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.2`; historical sign-offs remain below for
+pre-release gate is `0.12.3`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.3 Interactive Shell Refinement
+
+<div className="craik-keypoint">
+
+**v0.12.3 completes the interactive shell refinement pass for the v0.12 train.**
+
+`0.12.3` ships terminal status-bar usage and quota indicators, reverse history
+search, multi-line input alternatives, audited `!` shell invocations,
+session naming, theme controls, MCP discovery, CLI mistype recovery, and
+TUI aesthetic polish.
+
+</div>
+
+### v0.12.3 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run ruff check
+uv run mypy
+uv run pytest
+(cd docs && npm run build)
+```
 
 ## v0.12.2 Canonical TUI Release
 
