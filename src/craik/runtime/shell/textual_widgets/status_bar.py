@@ -8,6 +8,10 @@ from textual.widgets import Static
 
 from craik.runtime.auth.usage import ProviderQuotaStatus, TokenUsageStatus, UsageTier
 from craik.runtime.shell.readiness import ReadinessReport
+from craik.runtime.shell.textual_widgets.glyph_palette import (
+    AUTO_APPROVE_GLYPH,
+    BULLET_SEPARATOR,
+)
 
 
 class StatusBar(Static):
@@ -48,12 +52,13 @@ class StatusBar(Static):
             plain_segments.append(quota.display)
             rich_segments.append(_tier_markup(quota.display, quota.tier))
         if auto_approve:
-            plain_segments.append("auto-approve")
-            rich_segments.append("[yellow]auto-approve[/yellow]")
+            plain_segments.append(f"{AUTO_APPROVE_GLYPH} auto-approve")
+            rich_segments.append(f"[yellow]{AUTO_APPROVE_GLYPH} auto-approve[/yellow]")
         plain_segments.append(display_cwd)
         rich_segments.append(display_cwd)
-        self.current_status = " · ".join(plain_segments)
-        self.update(" · ".join(rich_segments))
+        separator = f" {BULLET_SEPARATOR} "
+        self.current_status = separator.join(plain_segments)
+        self.update(separator.join(rich_segments))
 
 
 def _tilde_path(path: Path) -> str:

@@ -66,6 +66,9 @@ _SCAN_FILES = (
     Path("SECURITY.md"),
 )
 _SCAN_SUFFIXES = {".py", ".tcss", ".md", ".js", ".jsx", ".ts", ".tsx"}
+_TEXTUAL_WIDGET_ROOT = Path("src/craik/runtime/shell/textual_widgets")
+_GLYPH_PALETTE_PATH = _TEXTUAL_WIDGET_ROOT / "glyph_palette.py"
+_DISALLOWED_WIDGET_GLYPHS = frozenset("●○⚠✓✗▲└›─│═║╔╗╚╝")
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
 def codebase_brand_hygiene_failures(root: Path = ROOT) -> list[str]:
     """Return public-artifact brand-hygiene failures under ``root``."""
     failures = _allowlist_contract_failures(root)
+    failures.extend(_raw_widget_glyph_failures(root))
     allowlist = _brand_hygiene_allowlist(root)
     allowed_locations = {(entry.path, entry.line_number) for entry in allowlist}
     for path in _iter_scanned_paths(root):
@@ -112,6 +116,27 @@ def codebase_brand_hygiene_failures(root: Path = ROOT) -> list[str]:
                 failures.append(
                     f"{relative_path}:{line_number}: forbidden brand reference "
                     f"{match.group()!r} ({description})"
+                )
+    return failures
+
+
+def _raw_widget_glyph_failures(root: Path = ROOT) -> list[str]:
+    failures: list[str] = []
+    widget_root = root / _TEXTUAL_WIDGET_ROOT
+    if not widget_root.exists():
+        return failures
+    for path in sorted(widget_root.rglob("*.py")):
+        relative_path = path.relative_to(root)
+        if relative_path == _GLYPH_PALETTE_PATH:
+            continue
+        content = path.read_text(encoding="utf-8")
+        for line_number, line in enumerate(content.splitlines(), start=1):
+            found = sorted(set(line) & _DISALLOWED_WIDGET_GLYPHS)
+            if found:
+                glyphs = "".join(found)
+                failures.append(
+                    f"{relative_path.as_posix()}:{line_number}: raw TUI glyph "
+                    f"{glyphs!r}; import from glyph_palette.py"
                 )
     return failures
 

@@ -28,6 +28,9 @@ within the `0.x.0` stability expectations described in
 - Added v0.12.3 walkthrough and security documentation for the interactive TUI
   surface, session naming, MCP discovery, mistype recovery, and audited shell
   invocation receipts.
+- Added v0.12.3 TUI aesthetic refinements: centralized glyph palette, low-
+  contrast bottom hint bar, footer safe area, transient accent emission, and
+  dot-leader transcript dividers.
 
 ## 0.12.2 — 2026-05-23
 
