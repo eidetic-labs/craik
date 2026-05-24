@@ -7,14 +7,22 @@ from typing import Any, Literal
 
 from textual.widgets import Static
 
+from craik.runtime.shell.textual_widgets.glyph_palette import (
+    CHEVRON_TURN,
+    RECEIPT_OK,
+    RECEIPT_PENDING,
+    REVIEW_GLYPH,
+    STATE_INFLIGHT,
+)
+
 ActionMarkerKind = Literal["tool", "waiting", "approved", "review", "continuation"]
 
 _GLYPHS: dict[ActionMarkerKind, str] = {
-    "tool": "●",
-    "waiting": "○",
-    "approved": "✓",
-    "review": "▲",
-    "continuation": "└",
+    "tool": STATE_INFLIGHT,
+    "waiting": RECEIPT_PENDING,
+    "approved": RECEIPT_OK,
+    "review": REVIEW_GLYPH,
+    "continuation": CHEVRON_TURN,
 }
 
 

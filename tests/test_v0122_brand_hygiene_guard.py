@@ -16,10 +16,11 @@ _SPEC.loader.exec_module(brand_hygiene)
 
 def _write_clean_tree(root: Path) -> None:
     src = root / "src" / "craik"
+    widgets = src / "runtime" / "shell" / "textual_widgets"
     tests = root / "tests"
     docs = root / "docs"
     scripts = root / "scripts"
-    for path in (src, tests, docs, scripts):
+    for path in (src, widgets, tests, docs, scripts):
         path.mkdir(parents=True)
     (scripts / "_brand_hygiene_allowlist.txt").write_text(
         "# path:line | reason: ...\n",
@@ -27,6 +28,14 @@ def _write_clean_tree(root: Path) -> None:
     )
     (src / "runtime.py").write_text(
         'MESSAGE = "persistent bottom status bar"\n',
+        encoding="utf-8",
+    )
+    (widgets / "glyph_palette.py").write_text(
+        'STATE_INFLIGHT = "●"\n',
+        encoding="utf-8",
+    )
+    (widgets / "status_bar.py").write_text(
+        "from .glyph_palette import STATE_INFLIGHT\n",
         encoding="utf-8",
     )
     (tests / "test_runtime.py").write_text(
@@ -110,4 +119,23 @@ def test_brand_hygiene_guard_enforces_allowlist_cap(tmp_path: Path) -> None:
 
     assert failures == [
         "scripts/_brand_hygiene_allowlist.txt: allowlist has 6 entries; cap is 5"
+    ]
+
+
+def test_brand_hygiene_guard_rejects_raw_widget_glyphs(tmp_path: Path) -> None:
+    _write_clean_tree(tmp_path)
+    widget = (
+        tmp_path
+        / "src"
+        / "craik"
+        / "runtime"
+        / "shell"
+        / "textual_widgets"
+        / "status_bar.py"
+    )
+    widget.write_text('STATUS = "● ready"\n', encoding="utf-8")
+
+    assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == [
+        "src/craik/runtime/shell/textual_widgets/status_bar.py:1: "
+        "raw TUI glyph '●'; import from glyph_palette.py"
     ]

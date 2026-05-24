@@ -21,12 +21,20 @@ Screen {
     color: $craik-brand;
 }
 
+#accent-emission {
+    color: $craik-brand;
+}
+
 #input {
     border: round $craik-brand;
 }
 
 #status {
     color: #4A4A4A;
+}
+
+#footer-safe-area {
+    height: 1;
 }
 
 .craik-modal {

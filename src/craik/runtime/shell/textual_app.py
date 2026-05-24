@@ -9,7 +9,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.reactive import reactive
-from textual.widgets import Footer, OptionList, RichLog
+from textual.widgets import OptionList, RichLog
 
 from craik import __version__
 from craik.runtime.shell.external_editor import edit_text_externally
@@ -31,12 +31,14 @@ from craik.runtime.shell.textual_modals import (
     AuthLogoutModal,
     ModalFlowResult,
 )
+from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.craik_input import (
     CraikInput,
     cli_prefix_warning,
     continue_multiline_value,
     should_continue_on_submit,
 )
+from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
@@ -72,8 +74,9 @@ class CraikApp(App[None]):
         yield HistorySearchOverlay(env=self.env, id="history-search")
         yield WorkingIndicator("", id="working")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
+        yield AccentEmission("", id="accent-emission")
         yield StatusBar(id="status")
-        yield Footer()
+        yield FooterSafeArea("", id="footer-safe-area")
 
     def on_mount(self) -> None:
         from craik.runtime.shell.readiness import resolve_readiness
@@ -92,6 +95,8 @@ class CraikApp(App[None]):
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
+        if auto_approve_status_payload(self.env) is not None:
+            self._flash_accent("state")
         self.query_one("#input", CraikInput).focus()
 
     def on_input_changed(self, event: CraikInput.Changed) -> None:
@@ -128,6 +133,7 @@ class CraikApp(App[None]):
                 transcript.write(str(error))
             else:
                 transcript.write(shell_result.transcript_text)
+                self._flash_accent("receipt")
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
@@ -229,7 +235,11 @@ class CraikApp(App[None]):
             result = dispatch_tui_input(text, env=self.env)
         if text.startswith("/rename") or text.startswith("/theme"):
             self._refresh_status_bar()
+            self._flash_accent("state")
         return result
+
+    def _flash_accent(self, kind: str) -> None:
+        self.query_one("#accent-emission", AccentEmission).flash(kind)
 
     def _refresh_status_bar(self) -> None:
         report = self.readiness

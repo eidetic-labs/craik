@@ -82,6 +82,11 @@ operator-review warning.
 uses the monochrome path. Use `/theme dark`, `/theme light`, or
 `/theme monochrome` to persist a theme without restarting the TUI.
 
+The status bar is deliberately quiet: dim text, no highlighted background,
+and one blank footer row below it so the runtime state does not read as a
+banner. Transcript dividers use a small centered dot leader, while transient
+receipt and state changes use a brief lavender accent glyph.
+
 ## Commands
 
 The TUI uses slash commands as the primary operator control surface:
@@ -257,8 +262,9 @@ capability, target, risk, policy, retry path, and decision receipt ids.
 
 The TUI is keyboard-first and text-native. It avoids mouse-only controls,
 keeps labels visible, and leaves `/help` as the linear command index. The
-footer displays active key bindings. Fixed bindings keep behavior predictable
-across macOS Terminal, iTerm, Linux terminals, and Windows Terminal.
+bottom hint bar keeps runtime state visible without hiding transcript content.
+Fixed bindings keep behavior predictable across macOS Terminal, iTerm, Linux
+terminals, and Windows Terminal.
 
 ## Related Guides
 
