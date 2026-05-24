@@ -57,13 +57,20 @@ scripted invocations do not open the TUI.
 <div><h4>Slash Popup</h4><p>Command and argument completions while typing <code>/</code>.</p></div>
 <div><h4>Working Indicator</h4><p>Elapsed-time status while an agent task is in flight.</p></div>
 <div><h4>Input</h4><p>Bordered prompt region with CLI-prefix detection and paste collapse.</p></div>
-<div><h4>Status Bar</h4><p><code>Craik · model · state · mode · cwd</code> at the bottom edge.</p></div>
+<div><h4>Status Bar</h4><p><code>Craik · model · state · mode · usage · quota · policy · cwd</code> at the bottom edge, omitting unavailable optional fields.</p></div>
 <div><h4>Modals</h4><p>Focused auth, logout, and approval decisions without leaving the runtime.</p></div>
 
 </div>
 
 The bottom status bar uses the Craik brand accent for the wordmark and
 subdued terminal colors for model, readiness, mode, and working directory.
+Token and quota indicators shift from green to yellow, orange, and red as
+available capacity tightens. Provider quota data is shown only when the
+provider exposes non-sensitive rate-limit headers; unauthorized or missing
+quota endpoints are hidden instead of producing noisy warnings. When the
+active local policy auto-approves capabilities, the bar includes an
+`auto-approve` indicator and `/status` includes the matching policy id and
+operator-review warning.
 `CRAIK_THEME=dark|light|monochrome` overrides auto-detection. `NO_COLOR=1`
 uses the monochrome path.
 

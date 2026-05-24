@@ -13,6 +13,7 @@ from typing import Any, Literal
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.policy.envelope import is_auto_approve_shape
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.model_settings import ModelSettingsStore
@@ -137,7 +138,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if not allowed:
         return SlashCommandResult(reason or "blocked")
     if command.name in {"status", "setup"}:
-        return SlashCommandResult(json.dumps(report.as_dict(), indent=2, sort_keys=True))
+        return SlashCommandResult(
+            json.dumps(_status_payload(report, env), indent=2, sort_keys=True)
+        )
     if command.name == "auth":
         if len(tokens) > 1 and tokens[1] == "logout":
             profile = tokens[2] if len(tokens) > 2 else report.active_profile
@@ -363,6 +366,30 @@ def _gateway_payload(env: dict[str, str] | None) -> dict[str, Any]:
 
 def _doctor_payload(report: Any) -> dict[str, Any]:
     return {"readiness": report.as_dict()}
+
+
+def _status_payload(report: Any, env: dict[str, str] | None) -> dict[str, Any]:
+    payload = dict(report.as_dict())
+    auto_approve = auto_approve_status_payload(env)
+    if auto_approve is not None:
+        payload["auto_approve"] = auto_approve
+    return payload
+
+
+def auto_approve_status_payload(env: dict[str, str] | None) -> dict[str, Any] | None:
+    """Return operator-facing auto-approve policy warning data when active."""
+    for policy in _store_list(env, "list_policy_envelopes"):
+        if not is_auto_approve_shape(policy):
+            continue
+        return {
+            "active": True,
+            "policy_id": getattr(policy, "id", None),
+            "detail": (
+                "An active policy envelope auto-approves capabilities; use a gated policy "
+                "when operator review is required."
+            ),
+        }
+    return None
 
 
 def _store_list(env: dict[str, str] | None, method_name: str) -> list[Any]:
