@@ -1,16 +1,50 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-23</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-24</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.3`; historical sign-offs remain below for
+pre-release gate is `0.12.4`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.4 Command Surface Ergonomics
+
+<div className="craik-keypoint">
+
+**v0.12.4 completes the slash-command ergonomics and TUI hardening pass
+for the v0.12 train.**
+
+`0.12.4` ships centralized slash-command schema metadata, structured
+inline result rendering, argument-aware help and validation, current-session
+transcript search, receipt detail modals with integrity status, bounded
+toast notifications, destructive-action confirmations, inline action-key
+dispatch, and release guards for command metadata and TUI brand hygiene.
+
+</div>
+
+### v0.12.4 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run ruff check
+uv run mypy src/craik
+uv run pytest
+(cd docs && npm run build)
+```
 
 ## v0.12.3 Interactive Shell Refinement
 
