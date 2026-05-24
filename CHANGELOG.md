@@ -22,6 +22,9 @@ within the `0.x.0` stability expectations described in
 - Added v0.12.3 session naming and theme controls, including `craik --name`,
   `craik tui --name`, `/rename`, `craik agent rename`, persistent agent
   `display_name`, and `/theme dark|light|monochrome`.
+- Added v0.12.3 MCP discovery and CLI recovery surfaces: `/mcp`, `/mcp verbose`,
+  `/mcp --json`, and command mistype suggestions for top-level and first-level
+  CLI command names.
 
 ## 0.12.2 — 2026-05-23
 

@@ -14,6 +14,7 @@ from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.envelope import is_auto_approve_shape
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
+from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
 from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.shell.session_settings import (
@@ -94,6 +95,7 @@ COMMANDS: tuple[SlashCommand, ...] = (
         "/skills",
     ),
     SlashCommand("memory", "Inspect memory proposals and facts.", "/memory"),
+    SlashCommand("mcp", "Inspect configured MCP clients.", "/mcp [verbose] [--json]"),
     SlashCommand("gateway", "Inspect gateway state.", "/gateway"),
     SlashCommand("exit", "Exit the shell.", "/exit", aliases=("quit",)),
 )
@@ -206,6 +208,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(json.dumps(_skills_payload(env), indent=2, sort_keys=True))
     if command.name == "memory":
         return SlashCommandResult(json.dumps(_memory_payload(env), indent=2, sort_keys=True))
+    if command.name == "mcp":
+        text, exit_code = render_mcp_discovery(tokens[1:], env=env)
+        return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
         return SlashCommandResult(json.dumps(_gateway_payload(env), indent=2, sort_keys=True))
     if command.name == "doctor":
@@ -458,8 +463,7 @@ def _store_list(env: dict[str, str] | None, method_name: str) -> list[Any]:
 
 
 def _database_exists(env: dict[str, str] | None) -> bool:
-    paths = resolve_craik_paths(env)
-    return (paths.state / DATABASE_NAME).exists()
+    return (resolve_craik_paths(env).state / DATABASE_NAME).exists()
 
 
 def _json_ready(item: Any) -> Any:

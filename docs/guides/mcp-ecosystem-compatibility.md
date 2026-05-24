@@ -112,6 +112,12 @@ Craik config. Export prints the same clients in redacted form:
 craik mcp client export --path ./mcp.json
 ```
 
+Inside the terminal UI, `/mcp` reads configured MCP client metadata from
+Craik local state and summarizes client ids, transports, advertised tool
+counts, and stale config references. `/mcp verbose` expands each client with
+grant, receipt, redaction, and tool-policy attributes. Add `--json` to either
+form for structured output.
+
 ## Tools
 
 A tool route is compatible when **every** condition holds:
