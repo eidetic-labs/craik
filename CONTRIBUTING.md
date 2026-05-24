@@ -2,9 +2,12 @@
 
 Craik is an early-stage public project. Contributions are welcome, but the architecture is still forming. For now, open an issue or discussion before starting large design, runtime contract, storage, security, orchestration, or Stigmem integration changes.
 
-## Development Status
+## Project Positioning
 
-Craik is pre-implementation. The current repository contains the product plan, runtime contracts, and implementation roadmap. APIs, schemas, package names, and command names may change before `0.1.0`.
+Craik is an audit-first agent runtime. Before proposing broad product or
+architecture changes, read [Positioning](docs/guides/positioning.md) so the
+change stays aligned with the runtime's evidence, policy, receipt, and handoff
+boundaries.
 
 ## Contribution Flow
 
@@ -72,7 +75,8 @@ Before merging implementation work, maintainers should expect:
 - no secret leakage in logs or receipts,
 - and documentation for new user-visible behavior.
 
-Exact commands will be added once the implementation stack is committed.
+Use [Coverage Reports](docs/guides/coverage.md) when evaluating whether a
+change needs additional tests beyond the minimum local validation.
 
 ## Security Issues
 

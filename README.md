@@ -1,5 +1,7 @@
 # Craik
 
+[![Coverage](https://eidetic-labs.github.io/craik/coverage-badge.svg)](https://eidetic-labs.github.io/craik/)
+
 Craik is a governed agent-runtime substrate: typed case files, policy envelopes,
 capability receipts, prompt compilation, pluggable provider transports, handoffs,
 and work graphs for durable project work.
@@ -15,6 +17,9 @@ Craik is built around a different premise:
 > Agent systems become useful at organizational scale when they can remember, justify, coordinate, dispute, and hand off work over time.
 
 Craik treats memory, provenance, policy, and work state as runtime concerns rather than optional logging.
+
+For the contributor-facing product frame, see
+[Positioning](docs/guides/positioning.md).
 
 ## What Works Today
 
@@ -60,6 +65,9 @@ provider metadata, and resolve credentials through typed credential profiles or
 credential pools. The local OpenAI-compatible provider path can target a
 localhost `/v1` server such as Ollama for optional live validation without paid
 API keys.
+Receipts can be verified outside the producing runtime with
+`craik receipt verify`; see
+[Receipt Verification](docs/guides/receipt-verification.md).
 
 ## Getting Started
 
