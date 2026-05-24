@@ -1,6 +1,11 @@
 # Craik
 
-[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Feidetic-labs.github.io%2Fcraik%2Fcoverage-badge.json)](https://eidetic-labs.github.io/craik/)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-green)](https://eidetic-labs.github.io/craik/)
+[![CI](https://github.com/eidetic-labs/craik/actions/workflows/ci.yml/badge.svg)](https://github.com/eidetic-labs/craik/actions/workflows/ci.yml)
+[![Conformance](https://img.shields.io/badge/conformance-contract%20gate-blue)](docs/reference/ci-cd.md#conformance-reports)
+[![PyPI version](https://img.shields.io/pypi/v/craik?label=pypi)](https://pypi.org/project/craik/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Stability: pre-alpha](https://img.shields.io/badge/stability-pre--alpha-orange.svg)](#what-works-today)
 
 Craik is a governed agent-runtime substrate: typed case files, policy envelopes,
 capability receipts, prompt compilation, pluggable provider transports, handoffs,
