@@ -118,6 +118,18 @@ def test_capability_receipt_integrity_fields_round_trip(
         CONTRACT_REGISTRY["craik.capability_receipt"].model_validate(dumped)
 
 
+def test_shell_invocation_receipt_defaults_store_id_to_receipt_id(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.shell_invocation_receipt"])
+    payload.pop("id", None)
+
+    parsed = CONTRACT_REGISTRY["craik.shell_invocation_receipt"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["id"] == dumped["receipt_id"]
+
+
 def test_shell_invocation_receipt_contract_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
