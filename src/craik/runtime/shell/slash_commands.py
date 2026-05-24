@@ -24,7 +24,9 @@ from craik.runtime.shell.session_settings import (
     shell_session_name,
 )
 from craik.runtime.shell.slash_command_schema import (
+    PayloadShape,
     ReadinessRequirement,
+    slash_command_spec_by_name,
     slash_command_specs,
 )
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
@@ -52,6 +54,9 @@ class SlashCommandResult:
     text: str
     exit_shell: bool = False
     exit_code: int = 0
+    command_name: str | None = None
+    payload_shape: PayloadShape | None = None
+    payload: Any | None = None
 
 
 COMMANDS: tuple[SlashCommand, ...] = tuple(
@@ -109,15 +114,13 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "exit":
         return SlashCommandResult("Session ended.", exit_shell=True)
     if command.name == "help":
-        return SlashCommandResult(_localized_help_text(tokens[1:], env=env))
+        return _payload_result(command.name, _localized_help_text(tokens[1:], env=env))
     report = resolve_readiness(env)
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
         return SlashCommandResult(reason or "blocked")
     if command.name in {"status", "setup"}:
-        return SlashCommandResult(
-            json.dumps(_status_payload(report, env), indent=2, sort_keys=True)
-        )
+        return _payload_result(command.name, _status_payload(report, env))
     if command.name == "auth":
         if len(tokens) > 1 and tokens[1] == "logout":
             profile = tokens[2] if len(tokens) > 2 else report.active_profile
@@ -126,30 +129,28 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
                 "The interactive TUI opens a confirmation modal for this action."
             )
         if len(tokens) > 1 and tokens[1] == "status":
-            return SlashCommandResult(
-                json.dumps(auth_status_payload(env), indent=2, sort_keys=True)
-            )
+            return _payload_result(command.name, auth_status_payload(env))
         if len(tokens) > 2 and tokens[1] == "login":
             return SlashCommandResult(
                 f"Auth capture requested for `{tokens[2]}`. "
                 "The interactive TUI opens the credential capture modal."
             )
-        return SlashCommandResult(json.dumps(_auth_summary_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _auth_summary_payload(env))
     if command.name == "provider" and len(tokens) >= 3 and tokens[1] == "login":
         return SlashCommandResult(
             f"Provider auth capture requested for `{tokens[2]}`. "
             "The interactive TUI opens the credential capture modal."
         )
     if command.name == "provider":
-        return SlashCommandResult(json.dumps(_provider_payload(), indent=2, sort_keys=True))
+        return _payload_result(command.name, _provider_payload())
     if command.name == "model":
         if len(tokens) >= 3 and tokens[1] == "set":
             return _set_active_model(tokens[2], env=env)
         if len(tokens) >= 2 and tokens[1] == "list":
-            return SlashCommandResult(json.dumps(_model_list_payload(), indent=2, sort_keys=True))
-        return SlashCommandResult(json.dumps(_model_payload(env), indent=2, sort_keys=True))
+            return _payload_result(command.name, _model_list_payload())
+        return _payload_result(command.name, _model_payload(env))
     if command.name == "sessions":
-        return SlashCommandResult(json.dumps(_sessions_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _sessions_payload(env))
     if command.name == "rename":
         if len(tokens) < 2:
             return SlashCommandResult("rename requires a session name")
@@ -168,20 +169,20 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
             )
         return SlashCommandResult(_approval_text(env))
     if command.name == "handoffs":
-        return SlashCommandResult(json.dumps(_handoffs_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _handoffs_payload(env))
     if command.name == "receipts":
-        return SlashCommandResult(json.dumps(_receipts_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _receipts_payload(env))
     if command.name == "skills":
-        return SlashCommandResult(json.dumps(_skills_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _skills_payload(env))
     if command.name == "memory":
-        return SlashCommandResult(json.dumps(_memory_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _memory_payload(env))
     if command.name == "mcp":
         text, exit_code = render_mcp_discovery(tokens[1:], env=env)
         return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
-        return SlashCommandResult(json.dumps(_gateway_payload(env), indent=2, sort_keys=True))
+        return _payload_result(command.name, _gateway_payload(env))
     if command.name == "doctor":
-        return SlashCommandResult(json.dumps(_doctor_payload(report), indent=2, sort_keys=True))
+        return _payload_result(command.name, _doctor_payload(report))
     return SlashCommandResult(f"`/{command.name}` is registered but has no inline handler yet.")
 
 
@@ -190,6 +191,16 @@ def _command_for_name(name: str) -> SlashCommand | None:
         if command.name == name or name in command.aliases:
             return command
     return None
+
+
+def _payload_result(command_name: str, payload: Any) -> SlashCommandResult:
+    spec = slash_command_spec_by_name(command_name)
+    return SlashCommandResult(
+        json.dumps(payload, indent=2, sort_keys=True) if not isinstance(payload, str) else payload,
+        command_name=command_name,
+        payload_shape=spec.payload_shape if spec is not None else None,
+        payload=payload,
+    )
 
 
 def _help_text(args: list[str]) -> str:
