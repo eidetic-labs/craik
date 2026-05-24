@@ -53,6 +53,7 @@ class SlashCommandSpec(BaseModel):
     empty_state: EmptyState | None = None
     action_keys: ActionKeySet = Field(default_factory=ActionKeySet)
     requires_confirmation: bool = False
+    confirm_message: str | None = None
 
     @field_validator("usage")
     @classmethod
@@ -149,6 +150,20 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         usage="/status",
         payload_shape="tree",
         help="Show operator, provider, model, and policy readiness.",
+    ),
+    SlashCommandSpec(
+        name="/clear",
+        summary="Clear the current transcript.",
+        usage="/clear",
+        payload_shape="markdown",
+        help="Clear the current TUI transcript while preserving persisted receipts.",
+        example="/clear",
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message=(
+            "This discards the current session transcript from the screen. "
+            "Persisted receipts and audit records remain stored."
+        ),
     ),
     SlashCommandSpec(
         name="/doctor",

@@ -28,6 +28,7 @@ from craik.runtime.shell.slash_command_schema import (
     slash_command_spec_by_name,
     slash_command_specs,
 )
+from craik.runtime.shell.slash_command_schema.detail_help import command_detail_help
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
 from craik.runtime.shell.slash_command_schema.results import (
     SlashCommandResult as SlashCommandResult,
@@ -109,6 +110,11 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult("Session ended.", exit_shell=True)
     if command.name == "help":
         return _payload_result(command.name, _localized_help_text(tokens[1:], env=env))
+    if command.name == "clear":
+        return SlashCommandResult(
+            "Transcript clear confirmation requested. "
+            "The interactive TUI opens a confirmation modal for this action."
+        )
     report = resolve_readiness(env)
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
@@ -207,24 +213,10 @@ def _help_text(args: list[str]) -> str:
 
 def _localized_help_text(args: list[str], *, env: dict[str, str] | None) -> str:
     if args:
-        command = _command_for_name(args[0].removeprefix("/"))
-        if command is None:
-            suggestion = _suggest(args[0].removeprefix("/"))
-            unknown = localized_text("slash.unknown", env=env, name=args[0])
-            suffix = localized_text("slash.suggestion", env=env, suggestion=suggestion)
-            return f"{unknown}{suffix}"
-        examples = "\n".join(f"  {example}" for example in command.examples)
-        example_block = f"\nExamples:\n{examples}" if examples else ""
-        usage = localized_text("slash.help.usage", env=env)
-        requires = localized_text("slash.help.requires", env=env)
-        return (
-            f"/{command.name}\n{command.summary}\n{usage}: {command.usage}\n"
-            f"{requires}: {command.readiness}{example_block}"
-        )
-    rows = [f"/{command.name:<10} {command.summary}" for command in COMMANDS]
+        return command_detail_help(args[0], env=env)
+    rows = [f"- `/{command.name}` - {command.summary}" for command in COMMANDS]
     return (
-        localized_text("slash.help.title", env=env)
-        + "\n"
+        f"## {localized_text('slash.help.title', env=env)}\n\n"
         + "\n".join(rows)
         + "\n\n"
         + MULTILINE_HELP_TEXT
