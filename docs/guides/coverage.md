@@ -33,8 +33,19 @@ Run the same coverage command locally before release prep:
 uv run pytest --cov=craik --cov-report=term --cov-report=html --cov-report=xml
 ```
 
-The threshold is configured in `pyproject.toml`. Raise it only after `main`
-has stayed green at the higher threshold.
+The default local threshold is configured in `pyproject.toml`.
+
+## Coverage Threshold
+
+The release workflow enforces a minimum overall coverage of **80%**. If a
+release-tag push drops total coverage below this threshold, the coverage
+workflow fails before publishing the Pages report or attaching `coverage.xml`
+to the GitHub Release.
+
+The threshold is set below the current measured full-suite coverage to allow
+normal variance from feature work. Raise it only after `main` has stayed green
+at the higher threshold. Lower it only with explicit maintainer rationale and a
+follow-up issue to recover the floor.
 
 ## Reading the Report
 
@@ -47,4 +58,3 @@ Use the report to answer focused review questions:
 Coverage is a guardrail, not proof of correctness. Security, migration,
 provider, and TUI behavior still need targeted tests that exercise the user
 workflow and failure mode.
-

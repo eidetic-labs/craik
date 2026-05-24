@@ -22,6 +22,10 @@ within the `0.x.0` stability expectations described in
 - Slash-command error messages escape operator-supplied command names before
   rendering through the markup-enabled transcript.
 - The first-launch TUI text-selection marker uses owner-only POSIX permissions.
+- Bottom-of-screen dock-coverage CI guard now requires `region.y` reads to
+  appear inside `assert` statements and scans all `textual_app_*.tcss` variants.
+- Coverage workflow now enforces an 80% minimum overall coverage threshold
+  before publishing release coverage artifacts.
 
 ## 0.12.4 — 2026-05-24
 
