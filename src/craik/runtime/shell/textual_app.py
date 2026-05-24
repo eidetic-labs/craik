@@ -37,6 +37,7 @@ from craik.runtime.shell.textual_widgets.craik_input import (
     cli_prefix_warning,
     continue_multiline_value,
     should_continue_on_submit,
+    slash_command_conversion,
 )
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
@@ -69,6 +70,7 @@ class CraikApp(App[None]):
         super().__init__()
         self.env = dict(os.environ) if env is None else dict(env)
         self._editor_prefix_pending = False
+        self._forgot_slash_pending: tuple[str, str] | None = None
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="transcript", markup=True, wrap=True)
@@ -116,6 +118,20 @@ class CraikApp(App[None]):
             input_widget.cursor_position = len(input_widget.value)
             event.stop()
             return
+        conversion = slash_command_conversion(event.value)
+        if conversion is not None:
+            pending = self._forgot_slash_pending
+            if pending != (event.value, conversion):
+                self._forgot_slash_pending = (event.value, conversion)
+                self.notify(
+                    f"Did you mean `{conversion.split()[0]}`? "
+                    "Press Tab to convert, Enter to send to the model.",
+                    severity="warning",
+                    timeout=8,
+                )
+                event.stop()
+                return
+            self._forgot_slash_pending = None
         self._submit_text(event.value)
 
     def _submit_text(self, value: str) -> None:
@@ -162,6 +178,23 @@ class CraikApp(App[None]):
                 self.action_external_editor()
                 event.stop()
                 return
+        if self._forgot_slash_pending is not None:
+            original, conversion = self._forgot_slash_pending
+            if event.key == "escape":
+                self._forgot_slash_pending = None
+                event.stop()
+                return
+            if event.key == "tab":
+                self._forgot_slash_pending = None
+                input_widget = self.query_one("#input", CraikInput)
+                input_widget.value = conversion
+                self._submit_text(conversion)
+                event.stop()
+                return
+            if event.key != "enter":
+                input_widget = self.query_one("#input", CraikInput)
+                if input_widget.value != original:
+                    self._forgot_slash_pending = None
         overlay = self.query_one("#history-search", HistorySearchOverlay)
         if not overlay.display:
             return

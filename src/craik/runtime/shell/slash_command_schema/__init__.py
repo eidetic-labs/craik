@@ -48,6 +48,8 @@ class SlashCommandSpec(BaseModel):
     readiness: ReadinessRequirement = "none"
     mutating: bool = False
     args_schema: str | None = None
+    required_args: tuple[str, ...] = ()
+    choices: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     empty_state: EmptyState | None = None
     action_keys: ActionKeySet = Field(default_factory=ActionKeySet)
     requires_confirmation: bool = False
@@ -139,6 +141,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Inspect model settings or select the active provider/model.",
         example="/model set openai/gpt-4o-mini",
         mutating=True,
+        args_schema="model [set <provider/model>]",
     ),
     SlashCommandSpec(
         name="/status",
@@ -173,6 +176,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Rename the current shell session display name.",
         example="/rename Incident 42",
         mutating=True,
+        required_args=("name",),
     ),
     SlashCommandSpec(
         name="/theme",
@@ -182,6 +186,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Inspect or switch the terminal UI theme.",
         example="/theme monochrome",
         mutating=True,
+        choices={"theme": ("dark", "light", "monochrome")},
     ),
     SlashCommandSpec(
         name="/resume",
@@ -191,6 +196,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Set the active persistent session.",
         example="/resume session_alpha",
         mutating=True,
+        required_args=("session-id",),
     ),
     SlashCommandSpec(
         name="/approvals",
