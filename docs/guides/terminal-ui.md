@@ -121,6 +121,29 @@ Typing `@` opens file mention completion for paths under the current working
 directory. Selected paths are inserted as `@path` tokens and resolved by the
 runtime when the prompt is submitted.
 
+## Input Ergonomics
+
+Press `Ctrl+R` to open reverse history search above the input region. Typing
+filters local shell history newest-first, `Up` and `Down` move through matches,
+`Tab` inserts the selected match, and `Enter` submits it immediately. `Esc`
+dismisses without modifying the input. `Ctrl+S` cycles the search label through
+session, project, and all-history scopes.
+
+Press `Ctrl+G` to open the current input buffer in an external editor. Craik
+uses `$EDITOR`, then `$VISUAL`, then `vi` when available. The temporary file is
+created under `~/.craik/state/external-editor/` with owner-only POSIX
+permissions and is removed after the editor exits. If the editor fails, the
+original input stays unchanged.
+
+Multi-line input works through four equivalent paths:
+
+| Method | Use |
+|---|---|
+| Shift+Enter | Native terminal newline where supported. |
+| `\` + Enter | Universal continuation marker; Craik removes the trailing backslash. |
+| Ctrl+J | Universal terminal newline binding. |
+| Option/Alt+Enter | Meta newline where the terminal sends Option/Alt as Meta. |
+
 ## History
 
 The TUI persists prompt and slash-command history locally:

@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.reactive import reactive
 from textual.widgets import Footer, OptionList, RichLog
 
 from craik import __version__
+from craik.runtime.shell.external_editor import edit_text_externally
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.slash_commands import (
@@ -25,7 +27,13 @@ from craik.runtime.shell.textual_modals import (
     AuthLogoutModal,
     ModalFlowResult,
 )
-from craik.runtime.shell.textual_widgets.craik_input import CraikInput, cli_prefix_warning
+from craik.runtime.shell.textual_widgets.craik_input import (
+    CraikInput,
+    cli_prefix_warning,
+    continue_multiline_value,
+    should_continue_on_submit,
+)
+from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
@@ -38,6 +46,10 @@ class CraikApp(App[None]):
     CSS_PATH = "textual_app_dark.tcss"
     BINDINGS = [
         ("ctrl+d", "quit", "Exit"),
+        ("ctrl+r", "history_search", "History"),
+        ("ctrl+g", "external_editor", "Editor"),
+        ("ctrl+x", "external_editor_prefix", "Editor Prefix"),
+        ("ctrl+j", "insert_newline", "Newline"),
         ("escape", "hide_popup", "Dismiss"),
     ]
 
@@ -46,11 +58,13 @@ class CraikApp(App[None]):
     def __init__(self, *, env: dict[str, str] | None = None) -> None:
         super().__init__()
         self.env = dict(os.environ) if env is None else dict(env)
+        self._editor_prefix_pending = False
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="transcript", markup=True, wrap=True)
         with Container(id="slash-popup"):
             yield OptionList(id="slash-options")
+        yield HistorySearchOverlay(env=self.env, id="history-search")
         yield WorkingIndicator("", id="working")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield StatusBar(id="status")
@@ -70,6 +84,7 @@ class CraikApp(App[None]):
             auto_approve=auto_approve_status_payload(self.env) is not None,
         )
         self.query_one("#slash-popup", Container).display = False
+        self.query_one("#history-search", HistorySearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
         self.query_one("#input", CraikInput).focus()
 
@@ -81,7 +96,15 @@ class CraikApp(App[None]):
             self.query_one("#slash-popup", Container).display = False
 
     def on_input_submitted(self, event: CraikInput.Submitted) -> None:
-        text = event.value.strip()
+        input_widget = self.query_one("#input", CraikInput)
+        if should_continue_on_submit(event.value):
+            input_widget.value = continue_multiline_value(event.value)
+            event.stop()
+            return
+        self._submit_text(event.value)
+
+    def _submit_text(self, value: str) -> None:
+        text = value.strip()
         input_widget = self.query_one("#input", CraikInput)
         if not text:
             return
@@ -103,8 +126,85 @@ class CraikApp(App[None]):
         if result.exit_shell:
             self.exit()
 
+    def on_key(self, event: events.Key) -> None:
+        if self._editor_prefix_pending:
+            self._editor_prefix_pending = False
+            if event.key == "ctrl+e":
+                self.action_external_editor()
+                event.stop()
+                return
+        overlay = self.query_one("#history-search", HistorySearchOverlay)
+        if not overlay.display:
+            return
+        if event.key == "escape":
+            overlay.dismiss()
+            event.stop()
+            return
+        if event.key == "ctrl+s":
+            overlay.cycle_scope()
+            event.stop()
+            return
+        if event.key == "up":
+            overlay.move(-1)
+            event.stop()
+            return
+        if event.key == "down":
+            overlay.move(1)
+            event.stop()
+            return
+        if event.key == "backspace":
+            overlay.backspace()
+            event.stop()
+            return
+        if event.key == "tab":
+            self._apply_history_selection(submit=False)
+            event.stop()
+            return
+        if event.key == "enter":
+            self._apply_history_selection(submit=True)
+            event.stop()
+            return
+        if event.character and event.character.isprintable():
+            overlay.append_query(event.character)
+            event.stop()
+
     def action_hide_popup(self) -> None:
         self.query_one("#slash-popup", Container).display = False
+        self.query_one("#history-search", HistorySearchOverlay).dismiss()
+
+    def action_history_search(self) -> None:
+        overlay = self.query_one("#history-search", HistorySearchOverlay)
+        if overlay.display:
+            overlay.move(1)
+            return
+        overlay.open()
+
+    def action_external_editor(self) -> None:
+        input_widget = self.query_one("#input", CraikInput)
+        result = edit_text_externally(input_widget.value, env=self.env)
+        if result.warning:
+            self.notify(result.warning, severity="warning", timeout=8)
+            return
+        input_widget.value = result.text
+
+    def action_external_editor_prefix(self) -> None:
+        self._editor_prefix_pending = True
+        self.notify("Press Ctrl+E to open the external editor.", timeout=3)
+
+    def action_insert_newline(self) -> None:
+        input_widget = self.query_one("#input", CraikInput)
+        input_widget.value = continue_multiline_value(input_widget.value)
+
+    def _apply_history_selection(self, *, submit: bool) -> None:
+        overlay = self.query_one("#history-search", HistorySearchOverlay)
+        selection = overlay.selected(submit=submit)
+        if selection is None:
+            return
+        input_widget = self.query_one("#input", CraikInput)
+        input_widget.value = selection.text
+        overlay.dismiss()
+        if selection.submit:
+            self._submit_text(selection.text)
 
     def _dispatch(self, text: str) -> SlashCommandResult:
         if text.startswith("/"):
