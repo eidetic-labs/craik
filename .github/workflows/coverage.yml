@@ -34,14 +34,28 @@ jobs:
           from __future__ import annotations
 
           import html
+          import json
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
           root = ET.parse("coverage.xml").getroot()
           percent = round(float(root.attrib["line-rate"]) * 100)
           color = "brightgreen" if percent >= 90 else "green" if percent >= 80 else "yellow" if percent >= 70 else "orange" if percent >= 60 else "red"
+          svg_color = {
+              "brightgreen": "#4c1",
+              "green": "#97ca00",
+              "yellow": "#dfb317",
+              "orange": "#fe7d37",
+              "red": "#e05d44",
+          }[color]
           label = "coverage"
           value = f"{percent}%"
+          badge = {
+              "schemaVersion": 1,
+              "label": label,
+              "message": value,
+              "color": color,
+          }
           svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="112" height="20" role="img" aria-label="{label}: {value}">
             <title>{html.escape(label)}: {html.escape(value)}</title>
             <linearGradient id="s" x2="0" y2="100%">
@@ -51,7 +65,7 @@ jobs:
             <clipPath id="r"><rect width="112" height="20" rx="3" fill="#fff"/></clipPath>
             <g clip-path="url(#r)">
               <rect width="64" height="20" fill="#555"/>
-              <rect x="64" width="48" height="20" fill="{color}"/>
+              <rect x="64" width="48" height="20" fill="{svg_color}"/>
               <rect width="112" height="20" fill="url(#s)"/>
             </g>
             <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
@@ -62,6 +76,7 @@ jobs:
             </g>
           </svg>
           """
+          Path("htmlcov/coverage-badge.json").write_text(json.dumps(badge, sort_keys=True) + "\n", encoding="utf-8")
           Path("htmlcov/coverage-badge.svg").write_text(svg, encoding="utf-8")
           PY
       - name: Upload coverage artifact

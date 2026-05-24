@@ -1,6 +1,6 @@
 # Craik
 
-[![Coverage](https://eidetic-labs.github.io/craik/coverage-badge.svg)](https://eidetic-labs.github.io/craik/)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Feidetic-labs.github.io%2Fcraik%2Fcoverage-badge.json)](https://eidetic-labs.github.io/craik/)
 
 Craik is a governed agent-runtime substrate: typed case files, policy envelopes,
 capability receipts, prompt compilation, pluggable provider transports, handoffs,

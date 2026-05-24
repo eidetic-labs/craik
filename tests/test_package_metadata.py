@@ -24,6 +24,7 @@ def test_package_version_matches_project_metadata() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert craik.__version__ == pyproject["project"]["version"]
+    assert craik.__all__ == ["__version__"]
     assert re.fullmatch(r"\d+\.\d+\.\d+", craik.__version__)
 
 
