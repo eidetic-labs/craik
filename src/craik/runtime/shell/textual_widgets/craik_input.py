@@ -19,6 +19,7 @@ _CLI_PREFIX_RE = re.compile(
     r"(?P<command>auth|model|chat|doctor|migrate|gateway|approvals|session|login|logout|"
     r"whoami|tui|dashboard|desktop|home|insights|usage)\b"
 )
+_NATURAL_LANGUAGE_SAFE_COMMANDS = {"auth", "exit", "memory", "status"}
 
 
 class CraikInput(Input):
@@ -58,6 +59,8 @@ def slash_command_conversion(text: str) -> str | None:
     first, separator, rest = stripped.partition(" ")
     normalized = first.lower()
     if not is_known_command_name(normalized):
+        return None
+    if separator and normalized in _NATURAL_LANGUAGE_SAFE_COMMANDS:
         return None
     command = "/" + normalized
     return f"{command}{separator}{rest}" if separator else command

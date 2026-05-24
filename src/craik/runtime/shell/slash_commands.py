@@ -15,6 +15,7 @@ from craik.runtime.policy.envelope import is_auto_approve_shape
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
+from craik.runtime.shell.argument_validation import argument_validation_error
 from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.shell.session_settings import (
@@ -122,6 +123,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     help_result = _argument_help_result(command, tokens[1:])
     if help_result is not None:
         return help_result
+    validation_error = argument_validation_error(command, tokens[1:])
+    if validation_error is not None:
+        return SlashCommandResult(validation_error, exit_code=2)
     if command.name in {"status", "setup"}:
         return _payload_result(command.name, _status_payload(report, env))
     if command.name == "auth":

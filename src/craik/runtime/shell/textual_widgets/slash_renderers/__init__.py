@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.table import Table
 from rich.tree import Tree
 from textual.widgets import RichLog
@@ -16,6 +17,7 @@ from craik.runtime.shell.textual_widgets.brand_tokens import (
     CRAIK_BRAND_LAVENDER,
     CRAIK_GREY_400,
 )
+from craik.runtime.shell.textual_widgets.glyph_palette import BULLET_SEPARATOR
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 
 COLLAPSE_RENDER_LINE_THRESHOLD = 50
@@ -63,7 +65,11 @@ def _table_payload(payload: Any) -> Table:
     if hidden:
         table.add_row(
             *[
-                f"… +{hidden} lines (Space=expand, Ctrl+F=find)" if index == 0 else ""
+                (
+                    f"{BULLET_SEPARATOR} +{hidden} lines (Space=expand, Ctrl+F=find)"
+                    if index == 0
+                    else ""
+                )
                 for index, _column in enumerate(columns)
             ]
         )
@@ -89,12 +95,12 @@ def _kv_payload(payload: Any) -> Table:
     else:
         items = [("value", payload)]
     for key, value in items:
-        table.add_row(str(key).replace("_", " "), _cell(value))
+        table.add_row(escape(str(key).replace("_", " ")), _cell(value))
     return table
 
 
 def _tree_payload(payload: Any) -> Tree:
-    tree = Tree("result")
+    tree = Tree(escape("result"))
     _add_tree_value(tree, payload)
     return tree
 
@@ -102,7 +108,7 @@ def _tree_payload(payload: Any) -> Tree:
 def _add_tree_value(node: Tree, value: Any) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
-            branch = node.add(str(key).replace("_", " "))
+            branch = node.add(escape(str(key).replace("_", " ")))
             _add_tree_value(branch, child)
         return
     if isinstance(value, list):
@@ -143,7 +149,7 @@ def _cell(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
-        return value
+        return escape(value)
     if isinstance(value, bool | int | float):
-        return str(value)
-    return json.dumps(value, sort_keys=True, default=str)
+        return escape(str(value))
+    return escape(json.dumps(value, sort_keys=True, default=str))

@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.4 — 2026-05-24
+
 ### Added
 
 - Added v0.12.4 command-surface ergonomics: centralized slash-command

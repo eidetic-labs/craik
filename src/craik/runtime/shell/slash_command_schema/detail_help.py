@@ -50,7 +50,7 @@ def command_detail_help(name: str, *, env: dict[str, str] | None = None) -> str:
 
 
 def _action_key_help(action_keys: ActionKeySet) -> str:
-    values: dict[str, Any] = action_keys.model_dump(exclude_none=True)
+    values: dict[str, Any] = action_keys.model_dump(exclude_none=True, by_alias=True)
     return " · ".join(f"`{key}`={value}" for key, value in values.items())
 
 
