@@ -28,6 +28,8 @@ within the `0.x.0` stability expectations described in
   appear inside `assert` statements and scans all `textual_app_*.tcss` variants.
 - Coverage workflow now enforces an 80% minimum overall coverage threshold
   before publishing release coverage artifacts.
+- README coverage badge now renders before the release Pages coverage artifacts
+  are published.
 
 ## 0.12.4 — 2026-05-24
 

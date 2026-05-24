@@ -6,9 +6,11 @@
 
 **What ships with a release**
 
-Release tags generate HTML coverage, a `coverage.xml` artifact, a Shields-backed
-README badge endpoint, and a generated SVG badge so contributors can inspect the
-tested surface without running the full suite locally.
+Release tags generate HTML coverage, a `coverage.xml` artifact, and generated
+badge artifacts so contributors can inspect the tested surface without running
+the full suite locally. The README uses a static Shields badge for the latest
+release-prep coverage value so it renders before the release Pages workflow has
+published new artifacts.
 
 </div>
 
@@ -19,8 +21,7 @@ the pytest suite with `pytest-cov`, writes terminal, HTML, XML, and badge
 endpoint reports, publishes `htmlcov/` to GitHub Pages, and attaches
 `coverage.xml` to the matching GitHub Release.
 
-The README badge is rendered through Shields from the published badge endpoint
-and links to the published HTML report:
+The README badge links to the published HTML report:
 
 ```text
 https://eidetic-labs.github.io/craik/

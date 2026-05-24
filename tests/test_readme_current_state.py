@@ -24,15 +24,23 @@ def test_readme_getting_started_and_operator_modes_match_v0121(
     assert "CRAIK_OPERATOR_REQUIRED=1" in readme_content
 
 
-def test_readme_coverage_badge_uses_published_shields_endpoint(
+def test_readme_coverage_badge_renders_before_release_pages_publish(
     readme_content: str,
 ) -> None:
     assert (
-        "[![Coverage](https://img.shields.io/endpoint?url="
-        "https%3A%2F%2Feidetic-labs.github.io%2Fcraik%2Fcoverage-badge.json)]"
+        "[![Coverage](https://img.shields.io/badge/coverage-87%25-green)]"
         "(https://eidetic-labs.github.io/craik/)"
     ) in readme_content
+    assert "img.shields.io/endpoint" not in readme_content
     assert "coverage-badge.svg)]" not in readme_content
+
+
+def test_readme_exposes_release_status_badges(readme_content: str) -> None:
+    assert "actions/workflows/ci.yml/badge.svg" in readme_content
+    assert "conformance-contract%20gate-blue" in readme_content
+    assert "img.shields.io/pypi/v/craik?label=pypi" in readme_content
+    assert "license-MIT-blue.svg" in readme_content
+    assert "stability-pre--alpha-orange.svg" in readme_content
 
 
 def test_readme_stays_current_state_not_planning_doc(readme_content: str) -> None:
