@@ -17,7 +17,7 @@ from craik.runtime.auth.operator import (
     OperatorSessionNotFoundError,
     OperatorSessionStore,
 )
-from craik.runtime.paths import ensure_craik_home
+from craik.runtime.paths import _ensure_owner_only_dir, ensure_craik_home
 from craik.runtime.policy.redaction import redact
 from craik.runtime.sandbox.local_process_backend import (
     LocalProcessCommand,
@@ -173,7 +173,7 @@ def _persist_receipt(env: dict[str, str], receipt: ShellInvocationReceipt) -> No
 
 def _write_side_log(state_dir: Path, digest: str, stream: str, text: str) -> Path:
     path = shell_output_path(state_dir, digest, stream)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_owner_only_dir(path.parent)
     path.write_text(text, encoding="utf-8")
     if os.name == "posix":
         path.chmod(0o600)

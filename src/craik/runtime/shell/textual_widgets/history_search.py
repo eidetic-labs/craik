@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from craik.runtime.shell.shell_history import search_history
@@ -97,11 +98,12 @@ class HistorySearchOverlay(Static):
         """Render current query, scope, and up to five matches."""
         if not self.matches:
             self.update(
-                f"[b]reverse-i-search[/b] ({self.scope}) `{self.search_query}`\nNo history"
+                f"[b]reverse-i-search[/b] ({self.scope}) `{escape(self.search_query)}`\n"
+                "No history"
             )
             return
-        rows = [f"[b]reverse-i-search[/b] ({self.scope}) `{self.search_query}`"]
+        rows = [f"[b]reverse-i-search[/b] ({self.scope}) `{escape(self.search_query)}`"]
         for index, value in enumerate(self.matches[:5]):
             marker = ">" if index == self.selected_index else " "
-            rows.append(f"{marker} {value}")
+            rows.append(f"{marker} {escape(value)}")
         self.update("\n".join(rows))

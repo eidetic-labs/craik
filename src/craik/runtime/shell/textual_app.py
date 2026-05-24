@@ -56,7 +56,9 @@ class CraikApp(App[None]):
         ("ctrl+r", "history_search", "History"),
         ("ctrl+g", "external_editor", "Editor"),
         ("ctrl+x", "external_editor_prefix", "Editor Prefix"),
+        ("shift+enter", "insert_newline", "Newline"),
         ("ctrl+j", "insert_newline", "Newline"),
+        ("alt+enter", "insert_newline", "Newline"),
         ("escape", "hide_popup", "Dismiss"),
     ]
 
@@ -75,7 +77,7 @@ class CraikApp(App[None]):
         yield WorkingIndicator("", id="working")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield AccentEmission("", id="accent-emission")
-        yield StatusBar(id="status")
+        yield StatusBar(id="status", classes="status-bar")
         yield FooterSafeArea("", id="footer-safe-area")
 
     def on_mount(self) -> None:
@@ -110,6 +112,7 @@ class CraikApp(App[None]):
         input_widget = self.query_one("#input", CraikInput)
         if should_continue_on_submit(event.value):
             input_widget.value = continue_multiline_value(event.value)
+            input_widget.cursor_position = len(input_widget.value)
             event.stop()
             return
         self._submit_text(event.value)
@@ -216,6 +219,7 @@ class CraikApp(App[None]):
     def action_insert_newline(self) -> None:
         input_widget = self.query_one("#input", CraikInput)
         input_widget.value = continue_multiline_value(input_widget.value)
+        input_widget.cursor_position = len(input_widget.value)
 
     def _apply_history_selection(self, *, submit: bool) -> None:
         overlay = self.query_one("#history-search", HistorySearchOverlay)

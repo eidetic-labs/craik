@@ -28,7 +28,7 @@ DEFAULT_SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"),
     re.compile(r"(?i)\b(api[_-]?key|token|password|secret)=([^\s&]+)"),
     re.compile(r"(?i)(--(?:api[_-]?key|token|password|secret)(?:=|\s+))([^\s]+)"),
-    re.compile(r"(?i)\b(ghp|github_pat|sk|xox[baprs])-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"(?i)\b(ghp|gho|ghs|ghr|github_pat|sk|xox[baprs])[-_][A-Za-z0-9_-]{8,}"),
     re.compile(r"(?i)(https?://)([^/\s:@]+):([^@\s/]+)@"),
     re.compile(r"(?i)(https?://)([A-Za-z0-9._~+/=-]{8,})@"),
 )

@@ -161,13 +161,18 @@ an active local operator session before reading persisted state.
 
 ## v0.12.3 Terminal Shell Mode Trust Model
 
-Craik's TUI shell mode is an explicit operator action: only input prefixed
-with `!` is treated as a local command, and it is executed without model
-involvement.
+Craik's TUI `!`-prefix shell mode is an explicit operator action:
+only input prefixed with `!` is treated as a local command, and it is
+executed without model involvement.
 
 - Shell mode parses the command into argv and executes it through the
   local-process backend with `shell=False`; it does not pass input through
   a shell expansion layer.
+- Shell mode is intentionally operator-initiated and receipt-anchored. It
+  does not evaluate the active policy envelope before execution because the
+  operator can already run the same command outside Craik. Operators who want
+  shell operations subject to policy-envelope evaluation should use the
+  sandbox/local-process runtime path instead of the TUI `!` prefix.
 - Every invocation emits a `craik.shell_invocation_receipt` with operator
   subject, redacted command, exit code, redacted stdout/stderr previews,
   side-log hashes, working directory, duration, and a local HMAC.

@@ -12,6 +12,7 @@ from craik.runtime.auth.usage import (
     quota_status_from_headers,
 )
 from craik.runtime.paths import ensure_craik_home
+from craik.runtime.policy.envelope import is_auto_approve_shape
 from craik.runtime.providers.provider_config import OPENAI_OFFICIAL_DOCS, ProviderRuntimeConfig
 from craik.runtime.providers.provider_models import (
     ProviderMessage,
@@ -110,6 +111,15 @@ def test_status_payload_warns_when_policy_auto_approves_capabilities(tmp_path: P
     assert payload["auto_approve"]["active"] is True
     assert payload["auto_approve"]["policy_id"] == "policy_auto_all"
     assert "operator review" in payload["auto_approve"]["detail"]
+
+
+def test_approve_all_capabilities_overrides_required_list() -> None:
+    envelope = {
+        "approve_all_capabilities": True,
+        "required_approval_capabilities": ["sensitive.op"],
+    }
+
+    assert is_auto_approve_shape(envelope) is True
 
 
 def test_provider_runtime_receipt_preserves_usage_metadata() -> None:

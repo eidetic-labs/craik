@@ -59,6 +59,7 @@ def test_shell_invocation_emits_hmac_receipt_and_side_logs(tmp_path: Path) -> No
     assert result.stdout_log.read_text(encoding="utf-8") == "hello\n"
     assert result.stderr_log.read_text(encoding="utf-8") == ""
     if os.name == "posix":
+        assert stat.S_IMODE(result.stdout_log.parent.stat().st_mode) == 0o700
         assert stat.S_IMODE(result.stdout_log.stat().st_mode) == 0o600
 
     store = LocalStore.from_paths(ensure_craik_home(env))
