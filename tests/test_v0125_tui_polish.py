@@ -11,6 +11,7 @@ from craik.runtime.shell.textual_app import CraikApp
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
+from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.text_selection_hint import (
     SELECTION_HINT_MESSAGE,
@@ -43,6 +44,21 @@ def test_v0125_bottom_stack_renders_in_locked_edge_order(tmp_path: Path) -> None
             assert input_widget.region.y > toast.region.y
             assert toast.region.y > working.region.y
             assert footer.region.y - status.region.y == 1
+
+    asyncio.run(run())
+
+
+def test_v0125_history_overlay_has_region_snapshot_coverage(tmp_path: Path) -> None:
+    async def run() -> None:
+        env = {"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_TUI_SELECTION_HINT": "0"}
+        async with CraikApp(env=env).run_test(size=(120, 40)) as pilot:
+            await pilot.pause(0.5)
+            overlay = pilot.app.query_one(HistorySearchOverlay)
+            overlay.open()
+            await pilot.pause(0.1)
+            input_widget = pilot.app.query_one(CraikInput)
+
+            assert overlay.region.y < input_widget.region.y
 
     asyncio.run(run())
 
