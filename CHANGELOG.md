@@ -25,6 +25,9 @@ within the `0.x.0` stability expectations described in
 - Added v0.12.3 MCP discovery and CLI recovery surfaces: `/mcp`, `/mcp verbose`,
   `/mcp --json`, and command mistype suggestions for top-level and first-level
   CLI command names.
+- Added v0.12.3 walkthrough and security documentation for the interactive TUI
+  surface, session naming, MCP discovery, mistype recovery, and audited shell
+  invocation receipts.
 
 ## 0.12.2 — 2026-05-23
 

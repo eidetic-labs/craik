@@ -74,6 +74,23 @@ Command targets use a redacted command reference such as
 as stable routing references; credential values never appear in receipt
 metadata.
 
+## TUI shell invocations
+
+The terminal UI also supports explicit operator-triggered local commands
+with the `!` prefix. These commands do not go through a model. Craik parses
+the command with `shlex`, executes it through the local-process backend with
+`shell=False`, records stdout and stderr previews, and writes full redacted
+side logs under `~/.craik/state/shell-output/`.
+
+Each invocation records a `shell_invocation` receipt with the working
+directory, exit code, output hashes, redaction labels, duration, and operator
+subject when an operator session exists. The receipt is HMAC signed before it
+is stored. On POSIX systems, side logs are written with owner-only permissions.
+
+Treat `!` as an audited operator shell convenience, not as delegated model
+authority. If a model suggests a local command, the operator still has to copy
+or type that command with the `!` prefix.
+
 ## Operator checks
 
 Use these checks when reviewing a persistent-agent run:

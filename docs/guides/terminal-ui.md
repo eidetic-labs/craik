@@ -135,6 +135,35 @@ If you accidentally type a shell command shape such as
 place and shows a warning with the matching slash-command path. Press
 `Ctrl-D` to exit if you intended to run a command from your operator shell.
 
+## Walkthrough
+
+Use this path to verify the v0.12.3 interactive surface from a clean local
+home without choosing a provider first:
+
+```text
+craik --name "Desk review"
+/status
+/theme monochrome
+/rename Desk review
+/mcp
+! python -c "print('walkthrough')"
+/sessions
+/help
+```
+
+Expected behavior:
+
+<div className="craik-grid">
+
+<div><h4>Launch</h4><p>The TUI opens before auth and keeps setup guidance in <code>/status</code>.</p></div>
+<div><h4>Name</h4><p>The status bar and <code>/sessions</code> show <code>Desk review</code>.</p></div>
+<div><h4>Theme</h4><p><code>/theme monochrome</code> persists the monochrome terminal palette.</p></div>
+<div><h4>MCP</h4><p><code>/mcp</code> reports configured clients or the empty-state import hint.</p></div>
+<div><h4>Shell</h4><p>The <code>!</code> command returns output inline and records a signed shell receipt.</p></div>
+<div><h4>Recovery</h4><p>Misspelled CLI commands outside the TUI show close command suggestions.</p></div>
+
+</div>
+
 ## Completion
 
 Slash completion starts when you type `/`. Completion is context-aware:
