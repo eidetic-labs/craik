@@ -38,6 +38,10 @@ The TUI status bar and `/sessions` output show the current shell session name.
 The name is persisted under Craik's local config directory and is also kept in
 the in-process TUI environment for commands launched from the same shell.
 
+The shell name is intentionally lightweight. It helps operators correlate a
+terminal tab, local shell receipts, and persistent sessions started from that
+tab, but it is not an authorization factor and is not treated as identity.
+
 ## Persistent Agents
 
 Persistent agent sessions keep a `display_name` alongside their stable
@@ -61,6 +65,15 @@ craik agent rename <session-id> "Planning desk"
 Renaming the shell session later does not retroactively rename already-spawned
 agents. Use `craik agent rename` when a persistent agent should receive a new
 label.
+
+## Review Flow
+
+When reviewing a named session, check these surfaces together:
+
+1. `/sessions` for the active shell session and persistent agent labels.
+2. `craik agent list` for stable session ids and current lifecycle state.
+3. Shell invocation receipts for local commands started from a named TUI.
+4. Provider and sandbox receipts for prompts run through persistent agents.
 
 ## Privacy
 
