@@ -30,6 +30,7 @@ from craik.runtime.shell.textual_modals import (
     AuthCaptureModal,
     AuthLogoutModal,
     ModalFlowResult,
+    ReceiptDetailModal,
 )
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.craik_input import (
@@ -46,6 +47,7 @@ from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_comm
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
+from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
 
@@ -56,6 +58,7 @@ class CraikApp(App[None]):
     CSS_PATH = "textual_app_dark.tcss"
     BINDINGS = [
         ("ctrl+d", "quit", "Exit"),
+        ("ctrl+f", "transcript_search", "Find"),
         ("ctrl+r", "history_search", "History"),
         ("ctrl+g", "external_editor", "Editor"),
         ("ctrl+x", "external_editor_prefix", "Editor Prefix"),
@@ -72,12 +75,14 @@ class CraikApp(App[None]):
         self.env = dict(os.environ) if env is None else dict(env)
         self._editor_prefix_pending = False
         self._forgot_slash_pending: tuple[str, str] | None = None
+        self._transcript_lines: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="transcript", markup=True, wrap=True)
         with Container(id="slash-popup"):
             yield OptionList(id="slash-options")
         yield HistorySearchOverlay(env=self.env, id="history-search")
+        yield TranscriptSearchOverlay(id="transcript-search")
         yield WorkingIndicator("", id="working")
         yield ToastQueue(id="toast-queue")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
@@ -90,9 +95,10 @@ class CraikApp(App[None]):
 
         report = resolve_readiness(self.env)
         self.readiness = report
-        transcript = self.query_one("#transcript", RichLog)
         mode = "audited" if report.operator_required else "single-operator"
-        transcript.write(f"Welcome to Craik {__version__}. Mode: {mode}. Type a prompt or /help.")
+        self._write_transcript(
+            f"Welcome to Craik {__version__}. Mode: {mode}. Type a prompt or /help."
+        )
         self.query_one("#status", StatusBar).update_status(
             report,
             cwd=Path.cwd(),
@@ -101,6 +107,7 @@ class CraikApp(App[None]):
         )
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).display = False
+        self.query_one("#transcript-search", TranscriptSearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
         self.query_one("#toast-queue", ToastQueue).display = False
         if auto_approve_status_payload(self.env) is not None:
@@ -148,15 +155,15 @@ class CraikApp(App[None]):
             self.notify(warning, severity="warning", timeout=8)
             return
         transcript = self.query_one("#transcript", RichLog)
-        transcript.write(f"> {text}")
+        self._write_transcript(f"> {text}")
         append_history(text, env=self.env)
         if is_shell_invocation_text(text):
             try:
                 shell_result = run_shell_invocation(text, env=self.env, cwd=Path.cwd())
             except ValueError as error:
-                transcript.write(str(error))
+                self._write_transcript(str(error))
             else:
-                transcript.write(shell_result.transcript_text)
+                self._write_transcript(shell_result.transcript_text)
                 self._flash_accent("receipt")
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
@@ -168,8 +175,9 @@ class CraikApp(App[None]):
         result = self._dispatch(text)
         if text.startswith("/"):
             write_slash_command_result(transcript, result)
+            self._transcript_lines.append(result.text)
         else:
-            transcript.write(linkify_text(result.text))
+            self._write_transcript(linkify_text(result.text), plain_text=result.text)
         input_widget.value = ""
         self.query_one("#slash-popup", Container).display = False
         if result.exit_shell:
@@ -200,6 +208,25 @@ class CraikApp(App[None]):
                 if input_widget.value != original:
                     self._forgot_slash_pending = None
         overlay = self.query_one("#history-search", HistorySearchOverlay)
+        transcript_search = self.query_one("#transcript-search", TranscriptSearchOverlay)
+        if transcript_search.display:
+            if event.key == "escape":
+                transcript_search.dismiss()
+                self.query_one("#input", CraikInput).focus()
+                event.stop()
+                return
+            if event.key == "backspace":
+                transcript_search.backspace()
+                event.stop()
+                return
+            if event.key == "enter":
+                transcript_search.move(1)
+                event.stop()
+                return
+            if event.character and event.character.isprintable():
+                transcript_search.append_query(event.character)
+                event.stop()
+                return
         if not overlay.display:
             return
         if event.key == "escape":
@@ -237,6 +264,7 @@ class CraikApp(App[None]):
     def action_hide_popup(self) -> None:
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).dismiss()
+        self.query_one("#transcript-search", TranscriptSearchOverlay).dismiss()
         self.query_one("#toast-queue", ToastQueue).dismiss()
 
     def action_history_search(self) -> None:
@@ -245,6 +273,14 @@ class CraikApp(App[None]):
             overlay.move(1)
             return
         overlay.open()
+
+    def action_transcript_search(self) -> None:
+        overlay = self.query_one("#transcript-search", TranscriptSearchOverlay)
+        if overlay.display:
+            overlay.move(1)
+            return
+        overlay.open(self._transcript_lines)
+        overlay.focus()
 
     def action_external_editor(self) -> None:
         input_widget = self.query_one("#input", CraikInput)
@@ -321,15 +357,21 @@ class CraikApp(App[None]):
                 self._modal_complete,
             )
             return True
+        if len(tokens) >= 3 and tokens[:2] == ["/receipts", "detail"]:
+            self.push_screen(ReceiptDetailModal(tokens[2], env=self.env))
+            return True
         return False
 
     def _modal_complete(self, result: ModalFlowResult | None) -> None:
         if result is None:
             return
-        transcript = self.query_one("#transcript", RichLog)
-        transcript.write(linkify_text(result.message))
+        self._write_transcript(linkify_text(result.message), plain_text=result.message)
         if result.severity != "information":
             self.notify(result.message, severity=result.severity, timeout=8)
+
+    def _write_transcript(self, value: object, *, plain_text: str | None = None) -> None:
+        self.query_one("#transcript", RichLog).write(value)
+        self._transcript_lines.append(str(value if plain_text is None else plain_text))
 
     def _active_profile(self) -> str:
         report = self.readiness
