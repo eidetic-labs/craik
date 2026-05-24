@@ -15,6 +15,7 @@ from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.slash_commands import (
     SlashCommandResult,
+    auto_approve_status_payload,
     dispatch_slash_command,
 )
 from craik.runtime.shell.slash_completer import complete_slash_input
@@ -63,7 +64,11 @@ class CraikApp(App[None]):
         transcript = self.query_one("#transcript", RichLog)
         mode = "audited" if report.operator_required else "single-operator"
         transcript.write(f"Welcome to Craik {__version__}. Mode: {mode}. Type a prompt or /help.")
-        self.query_one("#status", StatusBar).update_status(report, cwd=Path.cwd())
+        self.query_one("#status", StatusBar).update_status(
+            report,
+            cwd=Path.cwd(),
+            auto_approve=auto_approve_status_payload(self.env) is not None,
+        )
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#working", WorkingIndicator).display = False
         self.query_one("#input", CraikInput).focus()

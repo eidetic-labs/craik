@@ -10,6 +10,12 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- Added v0.12.3 terminal status-bar usage, provider quota, and
+  auto-approve indicators, plus `/status` policy warning payloads for
+  active auto-approve envelopes.
+
 ## 0.12.2 — 2026-05-23
 
 ### Added
