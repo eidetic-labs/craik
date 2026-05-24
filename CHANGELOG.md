@@ -10,6 +10,21 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- Added v0.12.4 command-surface ergonomics: centralized slash-command
+  schema metadata, structured table/key-value/tree/Markdown rendering,
+  registry drift checks, forgot-slash recovery, argument-aware help,
+  current-session transcript search, receipt detail modals, overflow
+  handling, toast notifications, and confirmation receipts for destructive
+  TUI actions.
+
+### Documentation
+
+- Added `docs/guides/slash-commands.md` and refreshed terminal UI docs with
+  v0.12.4 slash-command discovery, output rendering, transcript search,
+  receipt detail, and confirmation behavior.
+
 ## 0.12.3 — 2026-05-23
 
 ### Added

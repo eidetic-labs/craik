@@ -7,8 +7,9 @@
 **What you'll do**
 
 Launch Craik's canonical interactive runtime, work from a chat-first
-terminal surface, use slash commands without leaving the TUI, and review
-auth or approval decisions in inline modal flows.
+terminal surface, use structured slash commands without leaving the TUI,
+search current-session output, and review auth, approval, receipt, or
+confirmation decisions in inline modal flows.
 
 </div>
 
@@ -103,8 +104,11 @@ The TUI uses slash commands as the primary operator control surface:
 /rename Desk review
 /resume <session-id>
 /theme light
+/clear
 /approvals
 /approvals decide <approval-id>
+/receipts
+/receipts detail <receipt-id>
 /gateway
 /skills
 /mcp
@@ -115,6 +119,12 @@ The TUI uses slash commands as the primary operator control surface:
 Commands either execute inline, print structured status into the transcript,
 or open a modal. They do not route you back to shell commands while you are
 inside the TUI.
+
+Run `/help <command>` for a detail page generated from the slash-command
+registry. Detail pages include usage, output shape, readiness requirements,
+examples, action keys, and confirmation notes. If you type a known command
+without the slash, such as `provider`, Craik shows a toast with
+`Tab` to convert and `Enter` to send the original text to the model.
 
 `/mcp` summarizes configured MCP clients from Craik local state. Use
 `/mcp verbose` to inspect policy, receipt, redaction, and advertised tool
@@ -154,6 +164,9 @@ craik --name "Desk review"
 ! python -c "print('walkthrough')"
 /sessions
 /help
+/help clear
+/receipts
+/clear
 ```
 
 Expected behavior:
@@ -163,9 +176,10 @@ Expected behavior:
 <div><h4>Launch</h4><p>The TUI opens before auth and keeps setup guidance in <code>/status</code>.</p></div>
 <div><h4>Name</h4><p>The status bar and <code>/sessions</code> show <code>Desk review</code>.</p></div>
 <div><h4>Theme</h4><p><code>/theme monochrome</code> persists the monochrome terminal palette.</p></div>
-<div><h4>MCP</h4><p><code>/mcp</code> reports configured clients or the empty-state import hint.</p></div>
+<div><h4>Slash help</h4><p><code>/help clear</code> shows usage, output shape, and confirmation behavior.</p></div>
+<div><h4>Receipts</h4><p><code>/receipts</code> renders a structured receipt table or an empty-state message.</p></div>
 <div><h4>Shell</h4><p>The <code>!</code> command returns output inline and records a signed shell receipt.</p></div>
-<div><h4>Recovery</h4><p>Misspelled CLI commands outside the TUI show close command suggestions.</p></div>
+<div><h4>Confirmation</h4><p><code>/clear</code> opens a confirmation modal before discarding visible transcript lines.</p></div>
 
 </div>
 
@@ -193,6 +207,10 @@ filters local shell history newest-first, `Up` and `Down` move through matches,
 `Tab` inserts the selected match, and `Enter` submits it immediately. `Esc`
 dismisses without modifying the input. `Ctrl+S` cycles the search label through
 session, project, and all-history scopes.
+
+Press `Ctrl+F` to search the current transcript. Typing filters visible
+session output, `Enter` moves to the next match, `Backspace` edits the query,
+and `Esc` returns focus to the prompt. Search is current-session only.
 
 Press `Ctrl+G` to open the current input buffer in an external editor. Craik
 uses `$EDITOR`, then `$VISUAL`, then `vi` when available. The temporary file is
@@ -242,6 +260,13 @@ profile or keyring reference.
 capability, target, risk, policy, and retry path. Approve or deny with a
 reason; Craik records a redacted decision receipt.
 
+`/receipts detail <receipt-id>` opens a receipt detail modal showing receipt
+identity, integrity state, result status, and redacted summary.
+
+`/clear` opens a destructive-action confirmation modal. Confirming clears the
+visible transcript and records a redacted `slash.confirmation` receipt; declining
+also records the decision. Persisted receipts and side logs remain stored.
+
 ## Transcript Signals
 
 Craik uses transcript widgets to keep runtime state visible:
@@ -249,7 +274,8 @@ Craik uses transcript widgets to keep runtime state visible:
 - Action markers show tool actions, waiting states, approvals, and review
   events tied back to receipt ids.
 - Section dividers separate turns.
-- Long output collapses after three lines and can expand inline.
+- Long slash-command tables collapse after 50 lines with an expand/search hint.
+- Toasts surface warnings and confirmations with severity-specific lifetimes.
 - URLs render as terminal links where supported.
 - Pasted content with three or more lines collapses to `[N lines of text]`
   in the input while preserving the full submitted content.

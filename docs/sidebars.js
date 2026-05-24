@@ -180,6 +180,7 @@ const sidebars = {
       items: [
         'reference/cli',
         'guides/terminal-ui',
+        'guides/slash-commands',
         'guides/sessions',
         'guides/dashboard',
         'guides/approvals',
@@ -293,6 +294,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'guides/terminal-ui',
+        'guides/slash-commands',
         'guides/sessions',
         'guides/dashboard',
         'guides/approvals',
