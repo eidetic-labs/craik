@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.5 — 2026-05-24
+
 ### Fixed
 
 - TUI readiness next-action hints now use `/login` for operator-session

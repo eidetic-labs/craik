@@ -7,10 +7,48 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.4`; historical sign-offs remain below for
+pre-release gate is `0.12.5`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.5 TUI Polish and Release Guards
+
+<div className="craik-keypoint">
+
+**v0.12.5 completes the terminal UI polish, receipt verification, and
+release-guard hardening pass for the v0.12 train.**
+
+`0.12.5` ships bottom-stack TUI ordering, text-selection support, inline
+subcommand listings, TUI-shaped next-action guidance, standalone receipt
+verification, coverage publishing, positioning documentation, AST-bound
+dock-bottom snapshot coverage, all-theme TCSS dock scanning, and an 80%
+coverage floor for release coverage publication.
+
+</div>
+
+### v0.12.5 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_doc_links.py
+uv run ruff check
+uv run mypy
+uv run pytest
+uv run pytest --cov=craik --cov-report=term --cov-fail-under=80
+(cd docs && npm run build)
+```
 
 ## v0.12.4 Command Surface Ergonomics
 
