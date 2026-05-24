@@ -12,7 +12,14 @@ _AUTO_VALUES = {"auto", "auto_approve", "auto-approve", "allow", "allowed"}
 
 
 def is_auto_approve_shape(policy: PolicyEnvelope | object) -> bool:
-    """Return whether a policy envelope effectively auto-approves every capability."""
+    """Return whether a policy envelope effectively auto-approves every capability.
+
+    Precedence (high-to-low):
+    1. ``approve_all_capabilities=True`` is the master switch and returns
+       ``True`` even when ``required_approval_capabilities`` is non-empty.
+    2. Wildcards in ``allowlist`` or ``allowed_capabilities`` auto-approve.
+    3. Per-capability gates auto-approve only when every gate is auto-shaped.
+    """
     if _truthy_value(_field(policy, "approve_all_capabilities")):
         return True
     if _approval_required(policy):

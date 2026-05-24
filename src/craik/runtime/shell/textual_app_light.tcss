@@ -29,7 +29,7 @@ Screen {
     border: round $craik-brand;
 }
 
-#status {
+.status-bar {
     color: #4A4A4A;
 }
 

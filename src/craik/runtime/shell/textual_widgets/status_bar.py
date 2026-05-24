@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from rich.markup import escape
 from textual.widgets import Static
 
 from craik.runtime.auth.usage import ProviderQuotaStatus, TokenUsageStatus, UsageTier
@@ -40,6 +41,7 @@ class StatusBar(Static):
         mode = "audited" if report.operator_required else "single-operator"
         model = report.active_model or "no model"
         display_cwd = _tilde_path(cwd or Path.cwd())
+        rich_cwd = escape(display_cwd)
         plain_segments = ["Craik", model, report.state, mode]
         rich_segments = ["[b]Craik[/b]", model, report.state, mode]
         if session_name:
@@ -55,7 +57,7 @@ class StatusBar(Static):
             plain_segments.append(f"{AUTO_APPROVE_GLYPH} auto-approve")
             rich_segments.append(f"[yellow]{AUTO_APPROVE_GLYPH} auto-approve[/yellow]")
         plain_segments.append(display_cwd)
-        rich_segments.append(display_cwd)
+        rich_segments.append(rich_cwd)
         separator = f" {BULLET_SEPARATOR} "
         self.current_status = separator.join(plain_segments)
         self.update(separator.join(rich_segments))

@@ -200,6 +200,12 @@ created under `~/.craik/state/external-editor/` with owner-only POSIX
 permissions and is removed after the editor exits. If the editor fails, the
 original input stays unchanged.
 
+Craik tokenizes `$EDITOR` with `shlex.split` and executes the editor with
+`shell=False`. Shell metacharacters are not expanded; the variable's literal
+value is the editor command. A misconfigured value such as `rm` can still
+delete the temporary draft file, so check `echo "$EDITOR"` if editor behavior
+looks wrong.
+
 Multi-line input works through four equivalent paths:
 
 | Method | Use |

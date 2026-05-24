@@ -24,6 +24,43 @@ def test_redacts_secret_flag_command_shape() -> None:
     assert result.redacted_paths == ("$",)
 
 
+def test_redacts_github_classic_pat() -> None:
+    token = _token("ghp_", "AbCdEf0123456789AbCdEf0123456789AbCdEf")
+
+    result = redact(f"GITHUB_TOKEN={token}")
+
+    assert result.value == "GITHUB_TOKEN=[REDACTED]"
+    assert token not in result.value
+
+
+def test_redacts_github_oauth_server_and_refresh_tokens() -> None:
+    for token in (
+        _token("gho_", "test1234567890abcdef"),
+        _token("ghs_", "test1234567890abcdef"),
+        _token("ghr_", "test1234567890abcdef"),
+    ):
+        result = redact(token)
+
+        assert result.value == "[REDACTED]"
+
+
+def test_redacts_github_fine_grained_pat() -> None:
+    token = _token("github_pat_", "11ABCDEFG_82chars1234567890abcdef")
+
+    result = redact(token)
+
+    assert result.value == "[REDACTED]"
+
+
+def test_redacts_hyphenated_provider_tokens_still_work() -> None:
+    assert redact(_token("sk-", "test1234567890abcdef")).value == "[REDACTED]"
+    assert redact(_token("xoxb-", "test1234567890abcdef")).value == "[REDACTED]"
+
+
+def _token(prefix: str, body: str) -> str:
+    return prefix + body
+
+
 def test_redacts_auth_url_without_destroying_shape() -> None:
     result = redact("https://user:redactionfixture123@example.com/path")
 

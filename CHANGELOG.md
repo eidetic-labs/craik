@@ -25,12 +25,29 @@ within the `0.x.0` stability expectations described in
 - Added v0.12.3 MCP discovery and CLI recovery surfaces: `/mcp`, `/mcp verbose`,
   `/mcp --json`, and command mistype suggestions for top-level and first-level
   CLI command names.
-- Added v0.12.3 walkthrough and security documentation for the interactive TUI
-  surface, session naming, MCP discovery, mistype recovery, and audited shell
-  invocation receipts.
-- Added v0.12.3 TUI aesthetic refinements: centralized glyph palette, low-
+
+### Changed
+
+- Provider-call usage metadata now persists to capability receipts so status and
+  audit views can inspect token usage without replaying provider responses.
+
+### Security
+
+- Added v0.12.3 TUI shell mode via `!` commands with local-process
+  execution, GitHub/provider token redaction, owner-only side-log directories,
+  and HMAC-signed shell invocation receipts.
+
+### Refined
+
+- Refined v0.12.3 TUI aesthetics with a centralized glyph palette, low-
   contrast bottom hint bar, footer safe area, transient accent emission, and
   dot-leader transcript dividers.
+
+### Documentation
+
+- Documented the v0.12.3 interactive TUI
+  surface, session naming, MCP discovery, mistype recovery, and audited shell
+  invocation receipts.
 
 ## 0.12.2 — 2026-05-23
 

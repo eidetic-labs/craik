@@ -8,6 +8,7 @@ from pathlib import Path
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.textual_app import CraikApp
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
+from craik.runtime.shell.textual_widgets.brand_tokens import CRAIK_GREY_400
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.glyph_palette import (
     BULLET_SEPARATOR,
@@ -15,6 +16,7 @@ from craik.runtime.shell.textual_widgets.glyph_palette import (
     RECEIPT_OK,
     STATE_INFLIGHT,
 )
+from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.section_divider import SectionDivider
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 
@@ -65,7 +67,7 @@ def test_theme_css_keeps_status_bar_low_contrast_without_background() -> None:
     for theme in ("dark", "light"):
         path = ROOT / f"src/craik/runtime/shell/textual_app_{theme}.tcss"
         content = path.read_text(encoding="utf-8")
-        status_rule = _css_rule(content, "#status")
+        status_rule = _css_rule(content, ".status-bar")
 
         assert "background" not in status_rule
         assert "color: #A0A0A0" in status_rule or "color: #4A4A4A" in status_rule
@@ -83,6 +85,33 @@ def test_textual_app_mounts_footer_safe_area_and_accent_emission(tmp_path: Path)
             assert accent.current_glyph == RECEIPT_OK
             accent.flash("state")
             assert accent.current_glyph == STATE_INFLIGHT
+
+    asyncio.run(run())
+
+
+def test_operator_supplied_markup_is_rendered_literally() -> None:
+    history = HistorySearchOverlay()
+    history.search_query = "[red]query[/red]"
+    history.matches = ["[blue]history[/blue]"]
+    history.refresh_display()
+    bar = StatusBar()
+    bar.update_status(_report(), cwd=Path("/tmp/[red]cwd[/red]"))
+
+    assert "[red]query[/red]" in str(history.render())
+    assert "[blue]history[/blue]" in str(history.render())
+    assert "[red]cwd[/red]" in str(bar.render())
+
+
+def test_accent_emission_uses_animator_fade(tmp_path: Path) -> None:
+    async def run() -> None:
+        env = {"CRAIK_HOME": str(tmp_path / ".craik"), "TERM": "xterm-256color"}
+        async with CraikApp(env=env).run_test() as pilot:
+            accent = pilot.app.query_one("#accent-emission", AccentEmission)
+            accent.flash("receipt")
+            assert accent.current_glyph == RECEIPT_OK
+            await pilot.pause(1.5)
+            assert accent.current_glyph == ""
+            assert accent.styles.color.hex == CRAIK_GREY_400
 
     asyncio.run(run())
 
