@@ -45,6 +45,7 @@ from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
+from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
 
@@ -78,6 +79,7 @@ class CraikApp(App[None]):
             yield OptionList(id="slash-options")
         yield HistorySearchOverlay(env=self.env, id="history-search")
         yield WorkingIndicator("", id="working")
+        yield ToastQueue(id="toast-queue")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield AccentEmission("", id="accent-emission")
         yield StatusBar(id="status", classes="status-bar")
@@ -100,6 +102,7 @@ class CraikApp(App[None]):
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
+        self.query_one("#toast-queue", ToastQueue).display = False
         if auto_approve_status_payload(self.env) is not None:
             self._flash_accent("state")
         self.query_one("#input", CraikInput).focus()
@@ -123,11 +126,12 @@ class CraikApp(App[None]):
             pending = self._forgot_slash_pending
             if pending != (event.value, conversion):
                 self._forgot_slash_pending = (event.value, conversion)
-                self.notify(
-                    f"Did you mean `{conversion.split()[0]}`? "
-                    "Press Tab to convert, Enter to send to the model.",
+                self._toast(
+                    (
+                        f"Did you mean `{conversion.split()[0]}`? "
+                        "Press Tab to convert, Enter to send to the model."
+                    ),
                     severity="warning",
-                    timeout=8,
                 )
                 event.stop()
                 return
@@ -233,6 +237,7 @@ class CraikApp(App[None]):
     def action_hide_popup(self) -> None:
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).dismiss()
+        self.query_one("#toast-queue", ToastQueue).dismiss()
 
     def action_history_search(self) -> None:
         overlay = self.query_one("#history-search", HistorySearchOverlay)
@@ -292,6 +297,11 @@ class CraikApp(App[None]):
             auto_approve=auto_approve_status_payload(self.env) is not None,
             session_name=self.env.get("CRAIK_SESSION_NAME"),
         )
+
+    def _toast(self, message: str, *, severity: ToastSeverity = "information") -> None:
+        toast_queue = self.query_one("#toast-queue", ToastQueue)
+        toast_queue.push(message, severity=severity)
+        self.notify(message, severity=severity, timeout=8)
 
     def _open_modal_flow(self, text: str) -> bool:
         tokens = text.split()

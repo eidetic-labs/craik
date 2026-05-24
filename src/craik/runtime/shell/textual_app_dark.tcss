@@ -29,6 +29,12 @@ Screen {
     color: $craik-brand;
 }
 
+#toast-queue {
+    dock: bottom;
+    margin: 0 2 4 2;
+    color: #A0A0A0;
+}
+
 #accent-emission {
     color: $craik-brand;
 }

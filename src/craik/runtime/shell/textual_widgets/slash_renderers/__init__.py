@@ -18,9 +18,14 @@ from craik.runtime.shell.textual_widgets.brand_tokens import (
 )
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 
+COLLAPSE_RENDER_LINE_THRESHOLD = 50
+
 
 def write_slash_command_result(transcript: RichLog, result: SlashCommandResult) -> None:
     """Write a slash command result using structured rendering when available."""
+    if result.empty_state_message is not None:
+        transcript.write(_empty_state_payload(result))
+        return
     if result.payload is None or result.payload_shape is None:
         transcript.write(linkify_text(result.text))
         return
@@ -42,6 +47,9 @@ def render_slash_payload(payload: Any, *, shape: PayloadShape) -> object:
 
 def _table_payload(payload: Any) -> Table:
     rows = _table_rows(payload)
+    hidden = max(0, len(rows) - COLLAPSE_RENDER_LINE_THRESHOLD)
+    if hidden:
+        rows = rows[:COLLAPSE_RENDER_LINE_THRESHOLD]
     table = Table(show_header=True, header_style=CRAIK_BRAND_LAVENDER, expand=True)
     if not rows:
         table.add_column("result")
@@ -52,6 +60,23 @@ def _table_payload(payload: Any) -> Table:
         table.add_column(column.replace("_", " "), style=CRAIK_GREY_400)
     for row in rows:
         table.add_row(*[_cell(row.get(column)) for column in columns])
+    if hidden:
+        table.add_row(
+            *[
+                f"… +{hidden} lines (Space=expand, Ctrl+F=find)" if index == 0 else ""
+                for index, _column in enumerate(columns)
+            ]
+        )
+    return table
+
+
+def _empty_state_payload(result: SlashCommandResult) -> Table:
+    table = Table.grid(padding=(0, 2))
+    table.add_column(style=CRAIK_BRAND_LAVENDER, no_wrap=True)
+    table.add_column(style=CRAIK_GREY_400)
+    table.add_row("empty", result.empty_state_message or "")
+    if result.empty_state_remediation:
+        table.add_row("next", result.empty_state_remediation)
     return table
 
 

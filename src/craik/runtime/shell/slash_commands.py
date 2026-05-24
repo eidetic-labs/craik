@@ -24,12 +24,17 @@ from craik.runtime.shell.session_settings import (
     shell_session_name,
 )
 from craik.runtime.shell.slash_command_schema import (
-    PayloadShape,
     ReadinessRequirement,
     slash_command_spec_by_name,
     slash_command_specs,
 )
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
+from craik.runtime.shell.slash_command_schema.results import (
+    SlashCommandResult as SlashCommandResult,
+)
+from craik.runtime.shell.slash_command_schema.results import (
+    payload_result as _payload_result,
+)
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
 from craik.runtime.store import DATABASE_NAME, LocalStore
@@ -46,18 +51,6 @@ class SlashCommand:
     aliases: tuple[str, ...] = ()
     readiness: ReadinessRequirement = "none"
     mutating: bool = False
-
-
-@dataclass(frozen=True)
-class SlashCommandResult:
-    """Rendered slash-command dispatch result."""
-
-    text: str
-    exit_shell: bool = False
-    exit_code: int = 0
-    command_name: str | None = None
-    payload_shape: PayloadShape | None = None
-    payload: Any | None = None
 
 
 COMMANDS: tuple[SlashCommand, ...] = tuple(
@@ -206,16 +199,6 @@ def _argument_help_result(command: SlashCommand, args: list[str]) -> SlashComman
     if command.name == "model" and args == ["set"]:
         return _payload_result("help", argument_help_markdown(spec))
     return None
-
-
-def _payload_result(command_name: str, payload: Any) -> SlashCommandResult:
-    spec = slash_command_spec_by_name(command_name)
-    return SlashCommandResult(
-        json.dumps(payload, indent=2, sort_keys=True) if not isinstance(payload, str) else payload,
-        command_name=command_name,
-        payload_shape=spec.payload_shape if spec is not None else None,
-        payload=payload,
-    )
 
 
 def _help_text(args: list[str]) -> str:
