@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -21,7 +22,9 @@ from craik.runtime.reviewing.approvals import (
     approval_view,
     decide_approval,
 )
+from craik.runtime.shell.textual_widgets.glyph_palette import RECEIPT_OK, REVIEW_GLYPH
 from craik.runtime.store import LocalStore
+from craik.runtime.store.receipt_integrity import contract_receipt_hmac_status
 
 
 @dataclass(frozen=True)
@@ -116,7 +119,7 @@ class AuthLogoutModal(ModalScreen[ModalFlowResult | None]):
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label("Remove credential profile?", classes="modal-title"),
-            Static(f"Profile: {self.profile_id}", classes="modal-copy"),
+            Static(f"Profile: {escape(self.profile_id)}", classes="modal-copy"),
             Horizontal(
                 Button("Cancel", id="logout-cancel"),
                 Button("Remove", id="logout-confirm", variant="error"),
@@ -148,7 +151,7 @@ class ApprovalDecisionModal(ModalScreen[ModalFlowResult | None]):
     def compose(self) -> ComposeResult:
         summary = self._approval_summary()
         yield Vertical(
-            Label("Approval decision", classes="modal-title"),
+            Label(f"{REVIEW_GLYPH} Approval decision", classes="modal-title"),
             Static(summary, id="approval-summary", classes="modal-copy"),
             Input(placeholder="Reason", id="approval-reason"),
             Horizontal(
@@ -180,17 +183,17 @@ class ApprovalDecisionModal(ModalScreen[ModalFlowResult | None]):
         try:
             delegation = store.get_human_delegation(self.approval_id)
             if delegation is None or delegation.kind != "approval":
-                return f"Approval `{self.approval_id}` was not found."
+                return f"Approval `{escape(self.approval_id)}` was not found."
             view = approval_view(delegation)
         finally:
             store.close()
         return (
             f"ID: {view.id}\n"
-            f"Capability: {view.capability}\n"
-            f"Target: {view.target}\n"
-            f"Risk: {view.risk}\n"
-            f"Policy: {view.policy}\n"
-            f"Retry: {view.retry_path}"
+            f"Capability: {escape(view.capability)}\n"
+            f"Target: {escape(view.target)}\n"
+            f"Risk: {escape(view.risk)}\n"
+            f"Policy: {escape(view.policy)}\n"
+            f"Retry: {escape(view.retry_path)}"
         )
 
     def _decide(self, decision: ApprovalDecision) -> None:
@@ -231,7 +234,7 @@ class ReceiptDetailModal(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label("Receipt details", classes="modal-title"),
+            Label(f"{RECEIPT_OK} Receipt details", classes="modal-title"),
             Static(self._detail_text(), id="receipt-detail", classes="modal-copy"),
             Horizontal(
                 Button("Close", id="receipt-close", variant="primary"),
@@ -249,19 +252,19 @@ class ReceiptDetailModal(ModalScreen[None]):
         store = _open_store(self.env)
         try:
             receipt = _find_receipt(store, self.receipt_id)
+            if receipt is None:
+                return f"Receipt `{escape(self.receipt_id)}` was not found."
+            integrity_status = _receipt_integrity_status(store, receipt)
         finally:
             store.close()
-        if receipt is None:
-            return f"Receipt `{self.receipt_id}` was not found."
-        integrity_status = _receipt_integrity_status(receipt)
         result = getattr(receipt, "result", None)
         status = getattr(result, "status", "unknown")
         summary = getattr(result, "summary", "")
         return (
-            f"ID: {self.receipt_id}\n"
-            f"Integrity: {integrity_status}\n"
-            f"Status: {status}\n"
-            f"Summary: {summary or 'not recorded'}"
+            f"ID: {escape(self.receipt_id)}\n"
+            f"Integrity: {escape(integrity_status)}\n"
+            f"Status: {escape(str(status))}\n"
+            f"Summary: {escape(str(summary or 'not recorded'))}"
         )
 
 
@@ -295,10 +298,13 @@ def _find_receipt(store: LocalStore, receipt_id: str) -> object | None:
     return None
 
 
-def _receipt_integrity_status(receipt: object) -> str:
+def _receipt_integrity_status(store: LocalStore, receipt: object) -> str:
     hmac = getattr(receipt, "receipt_hmac", None)
     if hmac:
-        return "verified hmac"
+        try:
+            return f"{contract_receipt_hmac_status(store, receipt)} hmac"  # type: ignore[arg-type]
+        except (AttributeError, TypeError, ValueError):
+            return "tampered hmac"
     receipt_hash = getattr(receipt, "self_hash", None)
     if receipt_hash:
         return "verified receipt chain"

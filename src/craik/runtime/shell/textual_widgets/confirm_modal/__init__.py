@@ -9,6 +9,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
+from craik.runtime.shell.textual_widgets.glyph_palette import WARN_GLYPH
+
 
 @dataclass(frozen=True)
 class ConfirmationRequest:
@@ -33,7 +35,7 @@ class ConfirmModal(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Label(self.request.title, classes="modal-title"),
+            Label(f"{WARN_GLYPH} {self.request.title}", classes="modal-title"),
             Static(self.request.message, classes="modal-copy"),
             Horizontal(
                 Button("No", id="confirm-no"),

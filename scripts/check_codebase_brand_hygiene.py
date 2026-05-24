@@ -69,6 +69,13 @@ _SCAN_SUFFIXES = {".py", ".tcss", ".md", ".js", ".jsx", ".ts", ".tsx"}
 _TEXTUAL_WIDGET_ROOT = Path("src/craik/runtime/shell/textual_widgets")
 _GLYPH_PALETTE_PATH = _TEXTUAL_WIDGET_ROOT / "glyph_palette.py"
 _DISALLOWED_WIDGET_GLYPHS = frozenset("●○⚠✓✗▲└›─│═║╔╗╚╝")
+_GLYPH_DISCIPLINE_REQUIRED = (
+    Path("src/craik/runtime/shell/textual_modals.py"),
+    _TEXTUAL_WIDGET_ROOT / "confirm_modal" / "__init__.py",
+    _TEXTUAL_WIDGET_ROOT / "slash_renderers" / "__init__.py",
+    _TEXTUAL_WIDGET_ROOT / "toast_queue" / "__init__.py",
+    _TEXTUAL_WIDGET_ROOT / "transcript_search" / "__init__.py",
+)
 
 
 @dataclass(frozen=True)
@@ -100,6 +107,7 @@ def codebase_brand_hygiene_failures(root: Path = ROOT) -> list[str]:
     """Return public-artifact brand-hygiene failures under ``root``."""
     failures = _allowlist_contract_failures(root)
     failures.extend(_raw_widget_glyph_failures(root))
+    failures.extend(_glyph_palette_import_failures(root))
     allowlist = _brand_hygiene_allowlist(root)
     allowed_locations = {(entry.path, entry.line_number) for entry in allowlist}
     for path in _iter_scanned_paths(root):
@@ -117,6 +125,20 @@ def codebase_brand_hygiene_failures(root: Path = ROOT) -> list[str]:
                     f"{relative_path}:{line_number}: forbidden brand reference "
                     f"{match.group()!r} ({description})"
                 )
+    return failures
+
+
+def _glyph_palette_import_failures(root: Path = ROOT) -> list[str]:
+    failures: list[str] = []
+    for relative_path in _GLYPH_DISCIPLINE_REQUIRED:
+        path = root / relative_path
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8")
+        if "glyph_palette import" not in content:
+            failures.append(
+                f"{relative_path.as_posix()}: expected import from glyph_palette.py"
+            )
     return failures
 
 

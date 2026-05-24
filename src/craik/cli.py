@@ -16,6 +16,7 @@ from craik.cli_agents import agent_app
 from craik.cli_approvals import approvals_app
 from craik.cli_channels import channels_app
 from craik.cli_diagnostics import doctor_command, update_command
+from craik.cli_errors import install_craik_error_handler
 from craik.cli_gateway import gateway_app
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
@@ -52,7 +53,7 @@ from craik.runtime.shell.tui import run_tui
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 PACKAGE_NAME = "craik"
-
+install_craik_error_handler()
 app = craik_typer(
     add_completion=False,
     help="Governed agent-runtime substrate for case files, policy, receipts, and providers.",
@@ -132,7 +133,6 @@ migrate_app = craik_typer(help="Inspect and dry-run adjacent runtime migrations.
 app.add_typer(migrate_app, name="migrate")
 mcp_app = craik_typer(help="Inspect MCP server and client compatibility.")
 app.add_typer(mcp_app, name="mcp")
-
 
 def package_version() -> str:
     """Return the installed package version, with a source-tree fallback."""

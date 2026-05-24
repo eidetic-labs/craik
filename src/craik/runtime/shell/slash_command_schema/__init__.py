@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PayloadShape = Literal["table", "kv", "tree", "markdown"]
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
@@ -28,14 +28,54 @@ class ActionKeySet(BaseModel):
     D: str | None = None
     R: str | None = None
     A: str | None = None
+    slash: str | None = Field(default=None, alias="/")
     F: str | None = None
     escape: str | None = None
+
+
+class ThemeArgs(BaseModel):
+    """Validated arguments for /theme."""
+
+    model_config = ConfigDict(frozen=True)
+
+    theme: Literal["dark", "light", "monochrome"] | None = None
+
+
+class ModelArgs(BaseModel):
+    """Validated arguments for /model."""
+
+    model_config = ConfigDict(frozen=True)
+
+    action: Literal["list", "set"] | None = None
+    selector: str | None = None
+
+    @model_validator(mode="after")
+    def _selector_required_for_set(self) -> ModelArgs:
+        if self.action == "set" and not self.selector:
+            raise ValueError("model set requires a provider/model selector")
+        if self.action != "set" and self.selector:
+            raise ValueError("model selector is only valid with `set`")
+        if self.selector and (
+            "/" not in self.selector
+            or self.selector.startswith("/")
+            or self.selector.endswith("/")
+        ):
+            raise ValueError("model set requires a provider/model selector")
+        return self
+
+
+class NamedArg(BaseModel):
+    """Validated single non-empty argument."""
+
+    model_config = ConfigDict(frozen=True)
+
+    value: str = Field(min_length=1)
 
 
 class SlashCommandSpec(BaseModel):
     """Durable command metadata shared by slash rendering, help, and CI."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     name: str = Field(pattern=r"^/[a-z][a-z0-9-]*$")
     summary: str
@@ -47,7 +87,7 @@ class SlashCommandSpec(BaseModel):
     aliases: tuple[str, ...] = ()
     readiness: ReadinessRequirement = "none"
     mutating: bool = False
-    args_schema: str | None = None
+    args_schema: type[BaseModel] | None = None
     required_args: tuple[str, ...] = ()
     choices: dict[str, tuple[str, ...]] = Field(default_factory=dict)
     empty_state: EmptyState | None = None
@@ -100,6 +140,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Show slash-command help for all commands or one command.",
         example="/help status",
         examples=("/help status",),
+        empty_state=EmptyState(message="No matching slash-command help was found."),
     ),
     SlashCommandSpec(
         name="/setup",
@@ -118,7 +159,19 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         example="/auth login",
         examples=("/auth login",),
         mutating=True,
+        empty_state=EmptyState(message="No auth status rows found."),
+    ),
+    SlashCommandSpec(
+        name="/logout",
+        summary="Remove a provider credential profile.",
+        usage="/logout [profile]",
+        payload_shape="markdown",
+        help="Open a confirmation flow before removing a provider credential profile.",
+        example="/logout openai:default",
+        mutating=True,
         requires_confirmation=True,
+        confirm_message="This removes a cached credential profile or keyring reference.",
+        empty_state=EmptyState(message="No credential profile is selected for logout."),
     ),
     SlashCommandSpec(
         name="/provider",
@@ -142,7 +195,8 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Inspect model settings or select the active provider/model.",
         example="/model set openai/gpt-4o-mini",
         mutating=True,
-        args_schema="model [set <provider/model>]",
+        args_schema=ModelArgs,
+        empty_state=EmptyState(message="No active model is configured."),
     ),
     SlashCommandSpec(
         name="/status",
@@ -150,6 +204,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         usage="/status",
         payload_shape="tree",
         help="Show operator, provider, model, and policy readiness.",
+        empty_state=EmptyState(message="No readiness details are available."),
     ),
     SlashCommandSpec(
         name="/clear",
@@ -164,6 +219,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
             "This discards the current session transcript from the screen. "
             "Persisted receipts and audit records remain stored."
         ),
+        empty_state=EmptyState(message="No transcript lines are available to clear."),
     ),
     SlashCommandSpec(
         name="/doctor",
@@ -171,6 +227,55 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         usage="/doctor",
         payload_shape="tree",
         help="Run inline diagnostics for the current shell environment.",
+        empty_state=EmptyState(message="No diagnostics are available."),
+    ),
+    SlashCommandSpec(
+        name="/policy",
+        summary="Manage local policy state.",
+        usage="/policy reset",
+        payload_shape="markdown",
+        help="Open a confirmation flow before resetting local policy state.",
+        example="/policy reset",
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message="This restores local policy defaults for the active Craik home.",
+        empty_state=EmptyState(message="No local policy reset is pending."),
+    ),
+    SlashCommandSpec(
+        name="/migrate",
+        summary="Apply migration plans.",
+        usage="/migrate apply",
+        payload_shape="markdown",
+        help="Open a confirmation flow before applying a migration plan.",
+        example="/migrate apply",
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message="This writes migrated records to local Craik state.",
+        empty_state=EmptyState(message="No migration plan is selected for apply."),
+    ),
+    SlashCommandSpec(
+        name="/agent",
+        summary="Manage agent records.",
+        usage="/agent delete <agent-id>",
+        payload_shape="markdown",
+        help="Open a confirmation flow before deleting an agent record.",
+        example="/agent delete agent_123",
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message="This deletes the selected agent record from local Craik state.",
+        empty_state=EmptyState(message="No agent record is selected for delete."),
+    ),
+    SlashCommandSpec(
+        name="/session",
+        summary="Manage persistent sessions.",
+        usage="/session delete <session-id>",
+        payload_shape="markdown",
+        help="Open a confirmation flow before deleting a persistent session.",
+        example="/session delete session_123",
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message="This deletes the selected persistent session record.",
+        empty_state=EmptyState(message="No persistent session is selected for delete."),
     ),
     SlashCommandSpec(
         name="/sessions",
@@ -191,7 +296,9 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Rename the current shell session display name.",
         example="/rename Incident 42",
         mutating=True,
+        args_schema=NamedArg,
         required_args=("name",),
+        empty_state=EmptyState(message="No session name has been provided."),
     ),
     SlashCommandSpec(
         name="/theme",
@@ -201,7 +308,9 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Inspect or switch the terminal UI theme.",
         example="/theme monochrome",
         mutating=True,
+        args_schema=ThemeArgs,
         choices={"theme": ("dark", "light", "monochrome")},
+        empty_state=EmptyState(message="No theme change is pending."),
     ),
     SlashCommandSpec(
         name="/resume",
@@ -211,7 +320,9 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Set the active persistent session.",
         example="/resume session_alpha",
         mutating=True,
+        args_schema=NamedArg,
         required_args=("session-id",),
+        empty_state=EmptyState(message="No session id has been provided."),
     ),
     SlashCommandSpec(
         name="/approvals",
@@ -220,7 +331,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         payload_shape="table",
         help="Inspect pending approval requests.",
         empty_state=EmptyState(message="No pending approvals."),
-        action_keys=ActionKeySet(enter="open", A="approve"),
+        action_keys=ActionKeySet(enter="open", A="approve", **{"/": "focus-search"}),
     ),
     SlashCommandSpec(
         name="/handoffs",
@@ -239,6 +350,9 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         example="/receipts detail receipt_123",
         empty_state=EmptyState(message="No receipts found."),
         action_keys=ActionKeySet(enter="details"),
+        mutating=True,
+        requires_confirmation=True,
+        confirm_message="This permanently purges receipt records from local Craik state.",
     ),
     SlashCommandSpec(
         name="/skills",
@@ -283,6 +397,7 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         payload_shape="markdown",
         help="Exit the interactive shell.",
         aliases=("quit",),
+        empty_state=EmptyState(message="No exit action is pending."),
     ),
 )
 

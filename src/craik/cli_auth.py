@@ -359,6 +359,10 @@ def login(
     ] = 600,
 ) -> None:
     """Authenticate the local operator with OIDC device-code flow."""
+    if issuer == "--help":
+        typer.echo("Option `--issuer`: OIDC issuer URL. Defaults to CRAIK_OIDC_ISSUER.")
+        typer.echo("  Must be an https:// URL outside loopback development.")
+        raise typer.Exit(0)
     resolved_issuer = issuer or os.environ.get("CRAIK_OIDC_ISSUER")
     if not resolved_issuer:
         raise typer.BadParameter("--issuer or CRAIK_OIDC_ISSUER is required")

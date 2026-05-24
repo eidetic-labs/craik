@@ -40,13 +40,15 @@ class StatusBar(Static):
     ) -> None:
         mode = "audited" if report.operator_required else "single-operator"
         model = report.active_model or "no model"
+        rich_model = escape(model)
+        rich_state = escape(report.state)
         display_cwd = _tilde_path(cwd or Path.cwd())
         rich_cwd = escape(display_cwd)
         plain_segments = ["Craik", model, report.state, mode]
-        rich_segments = ["[b]Craik[/b]", model, report.state, mode]
+        rich_segments = ["[b]Craik[/b]", rich_model, rich_state, mode]
         if session_name:
             plain_segments.append(session_name)
-            rich_segments.append(f"[b]{session_name}[/b]")
+            rich_segments.append(f"[b]{escape(session_name)}[/b]")
         if token_usage is not None:
             plain_segments.append(token_usage.display)
             rich_segments.append(_tier_markup(token_usage.display, token_usage.tier))

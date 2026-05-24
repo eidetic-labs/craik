@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from rich.markup import escape
 from textual.widgets import Static
 
+from craik.runtime.shell.textual_widgets.glyph_palette import BULLET_SEPARATOR
+
 
 @dataclass(frozen=True)
 class TranscriptSearchState:
@@ -69,10 +71,11 @@ class TranscriptSearchOverlay(Static):
             self.update("Find in transcript: ")
             return
         if not self.state.matches:
-            self.update(f"Find: {escape(self.state.query)} · no matches")
+            self.update(f"Find: {escape(self.state.query)} {BULLET_SEPARATOR} no matches")
             return
         current = self.state.matches[self.state.index]
         self.update(
-            f"Find: {escape(self.state.query)} · "
-            f"{self.state.index + 1}/{len(self.state.matches)} · {escape(current)}"
+            f"Find: {escape(self.state.query)} {BULLET_SEPARATOR} "
+            f"{self.state.index + 1}/{len(self.state.matches)} {BULLET_SEPARATOR} "
+            f"{escape(current)}"
         )

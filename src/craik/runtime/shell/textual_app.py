@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 from textual import events
 from textual.app import App, ComposeResult
@@ -14,9 +12,12 @@ from textual.reactive import reactive
 from textual.widgets import OptionList, RichLog
 
 from craik import __version__
-from craik.contracts.models import CapabilityReceipt, ReceiptResult
-from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.shell.confirmations import (
+    confirmation_request_for_text,
+    record_confirmation_decision,
+)
 from craik.runtime.shell.external_editor import edit_text_externally
+from craik.runtime.shell.inline_actions import handle_inline_action
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.shell_invocation import (
@@ -47,6 +48,7 @@ from craik.runtime.shell.textual_widgets.craik_input import (
 )
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
+from craik.runtime.shell.textual_widgets.inline_action_table import InlineActionTable
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
@@ -55,7 +57,6 @@ from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSev
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
-from craik.runtime.store import LocalStore
 
 
 class CraikApp(App[None]):
@@ -92,9 +93,9 @@ class CraikApp(App[None]):
         yield WorkingIndicator("", id="working")
         yield ToastQueue(id="toast-queue")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
-        yield AccentEmission("", id="accent-emission")
-        yield StatusBar(id="status", classes="status-bar")
         yield FooterSafeArea("", id="footer-safe-area")
+        yield StatusBar(id="status", classes="status-bar")
+        yield AccentEmission("", id="accent-emission")
 
     def on_mount(self) -> None:
         from craik.runtime.shell.readiness import resolve_readiness
@@ -151,7 +152,7 @@ class CraikApp(App[None]):
             self._forgot_slash_pending = None
         self._submit_text(event.value)
 
-    def _submit_text(self, value: str) -> None:
+    def _submit_text(self, value: str, *, skip_confirmation: bool = False) -> None:
         text = value.strip()
         input_widget = self.query_one("#input", CraikInput)
         if not text:
@@ -160,7 +161,15 @@ class CraikApp(App[None]):
         if warning is not None:
             self.notify(warning, severity="warning", timeout=8)
             return
-        confirmation = self._confirmation_request(text)
+        confirmation = (
+            None
+            if skip_confirmation
+            else confirmation_request_for_text(
+                text,
+                transcript_line_count=len(self._transcript_lines),
+                active_profile=self._active_profile(),
+            )
+        )
         if confirmation is not None:
             self.push_screen(
                 ConfirmModal(confirmation),
@@ -360,8 +369,10 @@ class CraikApp(App[None]):
             provider = tokens[2] if len(tokens) > 2 else "openai"
             self.push_screen(AuthCaptureModal(provider, env=self.env), self._modal_complete)
             return True
-        if tokens[:2] == ["/auth", "logout"]:
+        if tokens[:2] == ["/auth", "logout"] or tokens[0] == "/logout":
             profile = tokens[2] if len(tokens) > 2 else self._active_profile()
+            if tokens[0] == "/logout":
+                profile = tokens[1] if len(tokens) > 1 else self._active_profile()
             self.push_screen(AuthLogoutModal(profile, env=self.env), self._modal_complete)
             return True
         if len(tokens) >= 3 and tokens[:2] == ["/approvals", "decide"]:
@@ -374,17 +385,6 @@ class CraikApp(App[None]):
             self.push_screen(ReceiptDetailModal(tokens[2], env=self.env))
             return True
         return False
-
-    def _confirmation_request(self, text: str) -> ConfirmationRequest | None:
-        tokens = text.strip().split()
-        if tokens == ["/clear"]:
-            count = len(self._transcript_lines)
-            message = (
-                "This will discard the current session transcript from the screen "
-                f"({count} lines). Persisted receipts and audit records remain stored."
-            )
-            return ConfirmationRequest(text, "Confirm: clear transcript", message)
-        return None
 
     def _complete_confirmation(
         self,
@@ -403,31 +403,22 @@ class CraikApp(App[None]):
             self._transcript_lines.clear()
             self._write_transcript("Transcript cleared. Receipts remain audited.")
             self._toast("Transcript cleared.", severity="information")
+            return
+        self._submit_text(request.command_text, skip_confirmation=True)
+
+    def on_inline_action_table_inline_action_requested(
+        self,
+        message: InlineActionTable.InlineActionRequested,
+    ) -> None:
+        handle_inline_action(self, message)
 
     def _record_confirmation_decision(self, command_text: str, decision: str) -> None:
-        store = LocalStore.from_paths(resolve_craik_paths(self.env))
-        try:
-            store.initialize()
-            store.put_receipt(
-                CapabilityReceipt(
-                    id=f"confirmation_{uuid4().hex[:12]}",
-                    task_id="interactive-shell",
-                    actor="operator",
-                    capability="slash.confirmation",
-                    target=command_text,
-                    policy_profile="strict",
-                    reason="Record operator confirmation decision for a destructive slash command.",
-                    result=ReceiptResult(
-                        status="passed",
-                        summary=f"Confirmation {decision} for `{command_text}`.",
-                        metadata={"command": command_text, "decision": decision},
-                    ),
-                    redacted=True,
-                    created_at=datetime.now(UTC),
-                )
+        error = record_confirmation_decision(command_text, decision, env=self.env)
+        if error is not None:
+            self._toast(
+                error,
+                severity="error",
             )
-        finally:
-            store.close()
 
     def _modal_complete(self, result: ModalFlowResult | None) -> None:
         if result is None:

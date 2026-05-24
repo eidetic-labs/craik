@@ -57,6 +57,8 @@ def registry_failures(specs: Iterable[SlashCommandSpec]) -> list[str]:
         command = runtime_by_name.get(spec.command_name)
         if command is None:
             continue
+        if spec.empty_state is None:
+            failures.append(f"/{spec.command_name}: missing empty-state guidance")
         if command.usage != spec.usage:
             failures.append(
                 f"/{spec.command_name}: runtime usage {command.usage!r} "
