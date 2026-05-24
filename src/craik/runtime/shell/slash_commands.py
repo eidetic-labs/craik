@@ -29,6 +29,7 @@ from craik.runtime.shell.slash_command_schema import (
     slash_command_spec_by_name,
     slash_command_specs,
 )
+from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
 from craik.runtime.store import DATABASE_NAME, LocalStore
@@ -119,6 +120,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
         return SlashCommandResult(reason or "blocked")
+    help_result = _argument_help_result(command, tokens[1:])
+    if help_result is not None:
+        return help_result
     if command.name in {"status", "setup"}:
         return _payload_result(command.name, _status_payload(report, env))
     if command.name == "auth":
@@ -190,6 +194,17 @@ def _command_for_name(name: str) -> SlashCommand | None:
     for command in COMMANDS:
         if command.name == name or name in command.aliases:
             return command
+    return None
+
+
+def _argument_help_result(command: SlashCommand, args: list[str]) -> SlashCommandResult | None:
+    spec = slash_command_spec_by_name(command.name)
+    if spec is None:
+        return None
+    if spec.required_args and not args:
+        return _payload_result("help", argument_help_markdown(spec))
+    if command.name == "model" and args == ["set"]:
+        return _payload_result("help", argument_help_markdown(spec))
     return None
 
 

@@ -6,6 +6,8 @@ import re
 
 from textual.widgets import Input
 
+from craik.runtime.shell.slash_command_schema import is_known_command_name
+
 PASTE_COLLAPSE_THRESHOLD = 3
 MULTILINE_HELP_TEXT = (
     "Multi-line: Shift+Enter (native), `\\`+Enter (universal), Ctrl+J "
@@ -46,6 +48,19 @@ def cli_prefix_warning(text: str) -> str | None:
         f"`craik {command}` looks like a CLI command. Try `/{command}` for the in-TUI "
         "version, or press Ctrl-D to exit and run from your operator shell."
     )
+
+
+def slash_command_conversion(text: str) -> str | None:
+    """Return a slash-prefixed command when text appears to omit the slash."""
+    stripped = text.strip()
+    if not stripped or stripped.startswith(("/", "!", "@")):
+        return None
+    first, separator, rest = stripped.partition(" ")
+    normalized = first.lower()
+    if not is_known_command_name(normalized):
+        return None
+    command = "/" + normalized
+    return f"{command}{separator}{rest}" if separator else command
 
 
 def collapse_paste_placeholder(text: str) -> str | None:
