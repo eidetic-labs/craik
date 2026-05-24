@@ -40,6 +40,7 @@ Craik stores runtime evidence locally:
 - model and session settings
 - receipts and policy decisions
 - shell history
+- redacted shell-mode side logs
 - migration reports and local-store data
 
 Credential material is redacted from operator-facing status, doctor output,
@@ -58,6 +59,11 @@ personally identifying subject values in filenames.
 Credential capture modals mask input and never write credential material to
 the transcript. Approval modals write only the decision summary and redacted
 receipt id back to the transcript.
+
+Shell mode (`! command`) records a structured local receipt and redacted
+stdout/stderr side logs under `~/.craik/state/shell-output/`. The receipt is
+HMAC-signed with the local store key so later inspection can distinguish
+verified, unsigned legacy, and tampered records.
 
 ## Removing Local State
 

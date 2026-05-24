@@ -247,6 +247,7 @@ class ShellInvocationReceipt(CraikModel):
         alias="schema",
     )
     version: Literal["0.1.0"] = "0.1.0"
+    id: str | None = None
     kind: Literal["shell_invocation"] = "shell_invocation"
     receipt_id: str
     timestamp: datetime
@@ -261,6 +262,13 @@ class ShellInvocationReceipt(CraikModel):
     duration_ms: int
     redactions_applied: list[str] = Field(default_factory=list)
     receipt_hmac: str | None = None
+
+    @model_validator(mode="after")
+    def default_id_to_receipt_id(self) -> ShellInvocationReceipt:
+        """Keep local-store identity aligned with the public receipt id."""
+        if self.id is None:
+            self.id = self.receipt_id
+        return self
 
 
 class AgentRole(CraikModel):

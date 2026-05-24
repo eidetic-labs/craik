@@ -158,6 +158,24 @@ an active local operator session before reading persisted state.
 - Multi-project homes require an explicit `--project` scope for
   unscoped list views. Single-project homes auto-scope to that project,
   and empty homes preserve the existing empty-view behavior.
+
+## v0.12.3 Terminal Shell Mode Trust Model
+
+Craik's TUI shell mode is an explicit operator action: only input prefixed
+with `!` is treated as a local command, and it is executed without model
+involvement.
+
+- Shell mode parses the command into argv and executes it through the
+  local-process backend with `shell=False`; it does not pass input through
+  a shell expansion layer.
+- Every invocation emits a `craik.shell_invocation_receipt` with operator
+  subject, redacted command, exit code, redacted stdout/stderr previews,
+  side-log hashes, working directory, duration, and a local HMAC.
+- Side logs under `~/.craik/state/shell-output/` contain redacted output
+  and use owner-only POSIX permissions where supported.
+- Shell invocation receipts are local audit evidence, not durable remote
+  attestation. Shared access to `~/.craik/` remains a compromise of local
+  audit integrity.
 - Contradiction and delegation queues default to records owned by the
   active operator or unassigned records. `--all` is explicit operator
   intent to inspect records owned by other operators.

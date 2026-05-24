@@ -15,6 +15,10 @@ from craik import __version__
 from craik.runtime.shell.external_editor import edit_text_externally
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
+from craik.runtime.shell.shell_invocation import (
+    is_shell_invocation_text,
+    run_shell_invocation,
+)
 from craik.runtime.shell.slash_commands import (
     SlashCommandResult,
     auto_approve_status_payload,
@@ -115,6 +119,16 @@ class CraikApp(App[None]):
         transcript = self.query_one("#transcript", RichLog)
         transcript.write(f"> {text}")
         append_history(text, env=self.env)
+        if is_shell_invocation_text(text):
+            try:
+                shell_result = run_shell_invocation(text, env=self.env, cwd=Path.cwd())
+            except ValueError as error:
+                transcript.write(str(error))
+            else:
+                transcript.write(shell_result.transcript_text)
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
         if self._open_modal_flow(text):
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False

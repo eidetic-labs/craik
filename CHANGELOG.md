@@ -17,6 +17,8 @@ within the `0.x.0` stability expectations described in
   active auto-approve envelopes.
 - Added v0.12.3 TUI input ergonomics for reverse history search, external
   editor round-trips, and multi-line input alternatives.
+- Added v0.12.3 TUI shell mode via `!` commands with local-process
+  execution, redacted side logs, and HMAC-signed shell invocation receipts.
 
 ## 0.12.2 — 2026-05-23
 

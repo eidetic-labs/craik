@@ -17,6 +17,7 @@ CONTRACT_KINDS: dict[str, str] = {
     "craik.plugin_descriptor": "plugin_descriptors",
     "craik.plugin_probation": "plugin_probations",
     "craik.plugin_receipt": "plugin_receipts",
+    "craik.shell_invocation_receipt": "shell_invocation_receipts",
     "craik.capability_grant": "grants",
     "craik.capability_receipt": "receipts",
     "craik.compiled_prompt": "compiled_prompts",

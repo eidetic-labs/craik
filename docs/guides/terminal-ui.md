@@ -99,6 +99,17 @@ Commands either execute inline, print structured status into the transcript,
 or open a modal. They do not route you back to shell commands while you are
 inside the TUI.
 
+Prefix a line with `!` to run a local command without model involvement:
+
+```text
+! npm test
+```
+
+Shell mode executes through Craik's local-process backend with `shell=False`.
+Each invocation writes a redacted `shell_invocation` receipt, HMAC signs it,
+and stores redacted stdout/stderr side logs under
+`~/.craik/state/shell-output/`.
+
 If you accidentally type a shell command shape such as
 `craik auth login openai` into the TUI prompt, Craik leaves your input in
 place and shows a warning with the matching slash-command path. Press
