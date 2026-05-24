@@ -10,6 +10,8 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.3 — 2026-05-23
+
 ### Added
 
 - Added v0.12.3 terminal status-bar usage, provider quota, and
