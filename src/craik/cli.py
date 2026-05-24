@@ -20,6 +20,7 @@ from craik.cli_gateway import gateway_app
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
+from craik.cli_session import env_with_session_name
 from craik.contracts.registry import schema_model, schema_names
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.companions.desktop_companion import (
@@ -185,6 +186,10 @@ def root(
             help="Force the plain shell even when running in an interactive terminal.",
         ),
     ] = False,
+    session_name: Annotated[
+        str | None,
+        typer.Option("-n", "--name", help="Operator-visible shell session name."),
+    ] = None,
 ) -> None:
     """Run Craik."""
     if version_requested:
@@ -192,21 +197,22 @@ def root(
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None:
+        env = env_with_session_name(session_name)
         if tui_requested:
-            raise typer.Exit(run_tui())
+            raise typer.Exit(run_tui(env=env))
         if one_shot is not None:
             prompt = resolve_cli_prompt(one_shot, allow_argv=allow_argv_prompt)
             typer.echo(one_shot_response(prompt))
             raise typer.Exit()
         if (
             not no_tui
-            and os.environ.get("CRAIK_NO_TUI") != "1"
-            and os.environ.get("TERM") != "dumb"
+            and env.get("CRAIK_NO_TUI") != "1"
+            and env.get("TERM") != "dumb"
             and os.isatty(0)
             and os.isatty(1)
         ):
-            raise typer.Exit(run_tui())
-        raise typer.Exit(run_shell())
+            raise typer.Exit(run_tui(env=env))
+        raise typer.Exit(run_shell(env=env))
 
 
 @app.command("version")
@@ -216,9 +222,14 @@ def version_command() -> None:
 
 
 @app.command("tui")
-def tui_command() -> None:
+def tui_command(
+    session_name: Annotated[
+        str | None,
+        typer.Option("-n", "--name", help="Operator-visible shell session name."),
+    ] = None,
+) -> None:
     """Launch the keyboard-first terminal UI."""
-    raise typer.Exit(run_tui())
+    raise typer.Exit(run_tui(env=env_with_session_name(session_name)))
 
 
 @app.command("setup")

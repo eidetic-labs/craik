@@ -21,6 +21,7 @@ Options:
 - `--allow-argv-prompt`: Acknowledge that argv prompts are visible in local process listings and shell history.; default `false`
 - `--tui`: Launch the keyboard-first terminal UI.; default `false`
 - `--no-tui`: Force the plain shell even when running in an interactive terminal.; default `false`
+- `-n, --name`: Operator-visible shell session name.
 
 ## `craik agent`
 
@@ -47,6 +48,7 @@ Options:
 - `--auth-profile-id`: Credential profile id used by the session.
 - `--policy-envelope-id`: Policy envelope governing the session.
 - `--endpoint-url`: Local endpoint URL when a foreground loop exposes one.
+- `--name, -n`: Operator-visible session display name.
 
 ## `craik agent list`
 
@@ -83,6 +85,14 @@ Options:
 - `--reason`: Failure reason: auth_expired, provider_unavailable, sandbox_failed, stale_endpoint.
 - `--action`: Recovery action: reconnect or resume.
 - `--detail`: Redacted operator recovery detail.
+
+## `craik agent rename`
+
+Rename a persistent agent session.
+
+```text
+craik agent rename [OPTIONS] SESSION_ID NAME
+```
 
 ## `craik agent restart`
 
@@ -2611,8 +2621,12 @@ Options:
 Launch the keyboard-first terminal UI.
 
 ```text
-craik tui
+craik tui [OPTIONS]
 ```
+
+Options:
+
+- `-n, --name`: Operator-visible shell session name.
 
 ## `craik update`
 

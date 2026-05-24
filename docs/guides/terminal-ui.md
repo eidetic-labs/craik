@@ -31,6 +31,13 @@ the Textual TUI by default:
 craik
 ```
 
+Add `--name` to label the shell session in the status bar and `/sessions`
+output:
+
+```sh
+craik --name "Desk review"
+```
+
 The explicit TUI entrypoints still work:
 
 ```sh
@@ -72,7 +79,8 @@ active local policy auto-approves capabilities, the bar includes an
 `auto-approve` indicator and `/status` includes the matching policy id and
 operator-review warning.
 `CRAIK_THEME=dark|light|monochrome` overrides auto-detection. `NO_COLOR=1`
-uses the monochrome path.
+uses the monochrome path. Use `/theme dark`, `/theme light`, or
+`/theme monochrome` to persist a theme without restarting the TUI.
 
 ## Commands
 
@@ -87,7 +95,9 @@ The TUI uses slash commands as the primary operator control surface:
 /model list
 /model set openai/gpt-4o-mini
 /sessions
+/rename Desk review
 /resume <session-id>
+/theme light
 /approvals
 /approvals decide <approval-id>
 /gateway
@@ -109,6 +119,10 @@ Shell mode executes through Craik's local-process backend with `shell=False`.
 Each invocation writes a redacted `shell_invocation` receipt, HMAC signs it,
 and stores redacted stdout/stderr side logs under
 `~/.craik/state/shell-output/`.
+
+Use `/rename <name>` to rename the current shell session. Valid names are 1 to
+64 characters and may contain letters, numbers, spaces, `_`, and `-`. The name
+is local operator metadata, so avoid putting secrets or prompt content in it.
 
 If you accidentally type a shell command shape such as
 `craik auth login openai` into the TUI prompt, Craik leaves your input in
@@ -231,6 +245,12 @@ across macOS Terminal, iTerm, Linux terminals, and Windows Terminal.
 <strong>Guide</strong>
 <span>Privacy</span>
 <small>Where prompts, receipts, logs, and history go.</small>
+</a>
+
+<a href="../sessions/">
+<strong>Guide</strong>
+<span>Sessions</span>
+<small>Name shell sessions and persistent agent sessions.</small>
 </a>
 
 </div>

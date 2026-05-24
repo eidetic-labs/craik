@@ -176,6 +176,7 @@ class AgentSessionState(CraikModel):
     )
     version: Literal["0.1.0"] = "0.1.0"
     id: str
+    display_name: str | None = Field(default=None, max_length=64)
     project_id: str | None = None
     operator_subject: str = Field(min_length=1)
     operator_issuer: str | None = None
