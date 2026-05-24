@@ -31,12 +31,16 @@ class StatusBar(Static):
         token_usage: TokenUsageStatus | None = None,
         quota: ProviderQuotaStatus | None = None,
         auto_approve: bool = False,
+        session_name: str | None = None,
     ) -> None:
         mode = "audited" if report.operator_required else "single-operator"
         model = report.active_model or "no model"
         display_cwd = _tilde_path(cwd or Path.cwd())
         plain_segments = ["Craik", model, report.state, mode]
         rich_segments = ["[b]Craik[/b]", model, report.state, mode]
+        if session_name:
+            plain_segments.append(session_name)
+            rich_segments.append(f"[b]{session_name}[/b]")
         if token_usage is not None:
             plain_segments.append(token_usage.display)
             rich_segments.append(_tier_markup(token_usage.display, token_usage.tier))

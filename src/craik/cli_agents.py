@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Annotated, Any
 
 import typer
@@ -23,6 +24,7 @@ from craik.runtime.agents import (
     start_agent_session,
     stop_agent_session,
 )
+from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.operator import OperatorSessionStore
 from craik.runtime.store import LocalStore
 
@@ -62,6 +64,10 @@ def agent_launch(
             help="Local endpoint URL when a foreground loop exposes one.",
         ),
     ] = None,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", "-n", help="Operator-visible session display name."),
+    ] = None,
 ) -> None:
     """Launch a foreground persistent agent session control record."""
     operator_subject = operator_identity_or_fail()
@@ -84,6 +90,7 @@ def agent_launch(
             auth_profile_id=auth_profile_id,
             policy_envelope_id=policy_envelope_id,
             endpoint_url=endpoint_url,
+            display_name=_resolved_agent_name(name),
             mode="foreground",
             status="running",
         )
@@ -97,6 +104,32 @@ def agent_launch(
     finally:
         store.close()
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+
+
+@agent_app.command("rename")
+def agent_rename(
+    session_id: Annotated[str, typer.Argument(help="Agent session id.")],
+    name: Annotated[str, typer.Argument(help="New operator-visible display name.")],
+) -> None:
+    """Rename a persistent agent session."""
+    operator_identity_or_fail()
+    try:
+        display_name = validate_session_name(name)
+    except SessionNameError as error:
+        raise typer.BadParameter(str(error)) from None
+    store = LocalStore.from_env()
+    try:
+        store.initialize()
+        state = get_agent_session_status(store, session_id)
+        updated = AgentSessionState.model_validate(
+            {**state.model_dump(mode="json", by_alias=True), "display_name": display_name}
+        )
+        store.put_agent_session_state(updated)
+    except AgentSessionLifecycleError as error:
+        raise typer.BadParameter(str(error)) from None
+    finally:
+        store.close()
+    typer.echo(json.dumps({"renamed": True, "session": _session_payload(updated)}, indent=2))
 
 
 @agent_app.command("list")
@@ -303,6 +336,16 @@ def _session_payload(state: AgentSessionState) -> dict[str, Any]:
     payload = state.model_dump(mode="json", by_alias=True)
     payload["runtime_boundary"] = "persistent_agent"
     return payload
+
+
+def _resolved_agent_name(name: str | None) -> str | None:
+    raw = name or os.environ.get("CRAIK_SESSION_NAME")
+    if raw is None:
+        return None
+    try:
+        return validate_session_name(raw)
+    except SessionNameError as error:
+        raise typer.BadParameter(str(error)) from None
 
 
 def _boundary_payload() -> dict[str, str]:

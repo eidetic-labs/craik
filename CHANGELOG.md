@@ -19,6 +19,9 @@ within the `0.x.0` stability expectations described in
   editor round-trips, and multi-line input alternatives.
 - Added v0.12.3 TUI shell mode via `!` commands with local-process
   execution, redacted side logs, and HMAC-signed shell invocation receipts.
+- Added v0.12.3 session naming and theme controls, including `craik --name`,
+  `craik tui --name`, `/rename`, `craik agent rename`, persistent agent
+  `display_name`, and `/theme dark|light|monochrome`.
 
 ## 0.12.2 — 2026-05-23
 

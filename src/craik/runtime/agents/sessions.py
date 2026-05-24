@@ -87,6 +87,7 @@ def start_agent_session(
     status: AgentSessionStatus = "running",
     pid: int | None = None,
     endpoint_url: str | None = None,
+    display_name: str | None = None,
     now: datetime | None = None,
     replace_stopped: bool = False,
 ) -> AgentSessionState:
@@ -99,6 +100,7 @@ def start_agent_session(
     timestamp = now or datetime.now(UTC)
     state = AgentSessionState(
         id=session_id,
+        display_name=display_name,
         project_id=project_id,
         operator_subject=operator_subject,
         operator_issuer=operator_issuer,

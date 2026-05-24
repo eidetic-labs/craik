@@ -40,6 +40,7 @@ from craik.runtime.shell.textual_widgets.craik_input import (
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
+from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
 
@@ -86,6 +87,7 @@ class CraikApp(App[None]):
             report,
             cwd=Path.cwd(),
             auto_approve=auto_approve_status_payload(self.env) is not None,
+            session_name=self.env.get("CRAIK_SESSION_NAME"),
         )
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).display = False
@@ -222,8 +224,23 @@ class CraikApp(App[None]):
 
     def _dispatch(self, text: str) -> SlashCommandResult:
         if text.startswith("/"):
-            return dispatch_slash_command(text, env=self.env)
-        return dispatch_tui_input(text, env=self.env)
+            result = dispatch_slash_command(text, env=self.env)
+        else:
+            result = dispatch_tui_input(text, env=self.env)
+        if text.startswith("/rename") or text.startswith("/theme"):
+            self._refresh_status_bar()
+        return result
+
+    def _refresh_status_bar(self) -> None:
+        report = self.readiness
+        if report is None:
+            return
+        self.query_one("#status", StatusBar).update_status(
+            report,
+            cwd=Path.cwd(),
+            auto_approve=auto_approve_status_payload(self.env) is not None,
+            session_name=self.env.get("CRAIK_SESSION_NAME"),
+        )
 
     def _open_modal_flow(self, text: str) -> bool:
         tokens = text.split()
@@ -279,6 +296,9 @@ def resolve_textual_theme(env: dict[str, str] | None = None) -> str:
         return override
     if values.get("NO_COLOR") == "1":
         return "monochrome"
+    stored = configured_theme(values)
+    if stored is not None:
+        return stored
     colorfgbg = values.get("COLORFGBG", "")
     if ";" in colorfgbg:
         try:

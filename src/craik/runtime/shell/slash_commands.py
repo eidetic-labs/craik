@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import difflib
 import json
-import os
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Literal
 
+from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
@@ -18,7 +16,14 @@ from craik.runtime.providers.model_providers import default_model_provider_regis
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
+from craik.runtime.shell.session_settings import (
+    active_session_id,
+    save_active_session,
+    save_shell_settings,
+    shell_session_name,
+)
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
+from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
@@ -72,6 +77,8 @@ COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand("status", "Show readiness state.", "/status"),
     SlashCommand("doctor", "Run diagnostics inline.", "/doctor"),
     SlashCommand("sessions", "List persistent sessions.", "/sessions"),
+    SlashCommand("rename", "Rename the current shell session.", "/rename <name>", mutating=True),
+    SlashCommand("theme", "Inspect or switch the TUI theme.", "/theme [dark|light|monochrome]"),
     SlashCommand(
         "resume",
         "Resume a persistent session.",
@@ -174,6 +181,12 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(json.dumps(_model_payload(env), indent=2, sort_keys=True))
     if command.name == "sessions":
         return SlashCommandResult(json.dumps(_sessions_payload(env), indent=2, sort_keys=True))
+    if command.name == "rename":
+        if len(tokens) < 2:
+            return SlashCommandResult("rename requires a session name")
+        return _rename_shell_session(" ".join(tokens[1:]), env=env)
+    if command.name == "theme":
+        return _theme_result(tokens[1:], env=env)
     if command.name == "resume":
         if len(tokens) < 2:
             return SlashCommandResult("resume requires a session id")
@@ -308,7 +321,8 @@ def _set_active_model(model: str, *, env: dict[str, str] | None) -> SlashCommand
 def _sessions_payload(env: dict[str, str] | None) -> dict[str, Any]:
     sessions = _store_list(env, "list_agent_session_states")
     return {
-        "active_session": _active_session_id(env),
+        "active_session": active_session_id(env),
+        "shell_session_name": shell_session_name(env),
         "count": len(sessions),
         "sessions": [_json_ready(item) for item in sessions],
     }
@@ -320,8 +334,35 @@ def _resume_session(session_id: str, *, env: dict[str, str] | None) -> SlashComm
         return SlashCommandResult(f"unknown session: {session_id}")
     if not sessions and _database_exists(env):
         return SlashCommandResult(f"unknown session: {session_id}")
-    _save_active_session(session_id, env)
+    save_active_session(session_id, env)
     return SlashCommandResult(f"Active session set to `{session_id}`.")
+
+
+def _rename_shell_session(name: str, *, env: dict[str, str] | None) -> SlashCommandResult:
+    try:
+        display_name = validate_session_name(name)
+    except SessionNameError as error:
+        return SlashCommandResult(f"invalid session name: {error}", exit_code=2)
+    save_shell_settings(env, session_name=display_name)
+    if env is not None:
+        env["CRAIK_SESSION_NAME"] = display_name
+    return SlashCommandResult(f"Shell session renamed to `{display_name}`.")
+
+
+def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashCommandResult:
+    if not args:
+        return SlashCommandResult(
+            json.dumps(
+                {"current": current_theme(env), "themes": list(THEMES)},
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    try:
+        settings = save_theme(args[0], env)
+    except ValueError as error:
+        return SlashCommandResult(str(error), exit_code=2)
+    return SlashCommandResult(f"Theme set to `{settings.theme}`.")
 
 
 def _handoffs_payload(env: dict[str, str] | None) -> dict[str, Any]:
@@ -429,43 +470,6 @@ def _json_ready(item: Any) -> Any:
     if isinstance(item, dict):
         return item
     return str(item)
-
-
-def _shell_settings_path(env: dict[str, str] | None) -> Path:
-    return resolve_craik_paths(env).config / "shell-settings.json"
-
-
-def _active_session_id(env: dict[str, str] | None) -> str | None:
-    path = _shell_settings_path(env)
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    value = payload.get("active_session")
-    return value if isinstance(value, str) and value.strip() else None
-
-
-def _save_active_session(session_id: str, env: dict[str, str] | None) -> None:
-    path = _shell_settings_path(env)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"active_session": session_id}
-    fd, temp_name = tempfile.mkstemp(
-        prefix=".shell-settings.",
-        suffix=".tmp",
-        dir=path.parent,
-        text=True,
-    )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
 
 
 def _craik_prefix_recovery(tokens: list[str]) -> str:

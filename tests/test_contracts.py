@@ -81,6 +81,18 @@ def test_agent_session_event_records_redacted_runtime_links(
     assert "prompt" not in dumped["metadata"]
 
 
+def test_agent_session_state_display_name_round_trips(
+    fixtures: dict[str, dict[str, Any]],
+) -> None:
+    payload = dict(fixtures["craik.agent_session_state"])
+    payload["display_name"] = "docs review"
+
+    parsed = CONTRACT_REGISTRY["craik.agent_session_state"].model_validate(payload)
+    dumped = parsed.model_dump(mode="json", by_alias=True)
+
+    assert dumped["display_name"] == "docs review"
+
+
 def test_capability_receipt_auth_fields_round_trip(
     fixtures: dict[str, dict[str, Any]],
 ) -> None:
