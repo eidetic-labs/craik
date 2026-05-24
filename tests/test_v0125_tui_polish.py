@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import stat
 from pathlib import Path
 
 import pytest
 
+from craik.runtime.shell import slash_commands
 from craik.runtime.shell.readiness import ReadinessReport, next_actions, resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.shell.textual_app import CraikApp
@@ -89,6 +92,24 @@ def test_v0125_unknown_slash_command_still_suggests_help(tmp_path: Path) -> None
     assert "unknown slash command" in result.text
 
 
+def test_v0125_unknown_slash_command_escapes_rich_markup(tmp_path: Path) -> None:
+    result = dispatch_slash_command("/[red]oops", env={"CRAIK_HOME": str(tmp_path / "home")})
+
+    assert "unknown slash command" in result.text
+    assert "unknown slash command: /[red]" not in result.text
+    assert r"\[red]" in result.text
+
+
+def test_v0125_subcommand_listing_escapes_rich_markup(monkeypatch) -> None:
+    monkeypatch.setitem(slash_commands.SUBCOMMAND_LISTINGS, "[red]agent", ("list",))
+
+    result = slash_commands._subcommand_listing_response("[red]agent", ["/[red]agent"])
+
+    assert result is not None
+    assert "`/[red]" not in result
+    assert r"\[red]" in result
+
+
 def test_v0125_next_actions_split_tui_and_cli_shapes(tmp_path: Path) -> None:
     report = ReadinessReport(
         state="unconfigured",
@@ -112,6 +133,26 @@ def test_v0125_next_actions_split_tui_and_cli_shapes(tmp_path: Path) -> None:
     ]
 
 
+def test_v0125_operator_required_next_action_uses_registered_slash_login(
+    tmp_path: Path,
+) -> None:
+    report = ReadinessReport(
+        state="unconfigured",
+        home=tmp_path,
+        initialized=False,
+        operator_required=True,
+        operator_authenticated=False,
+        provider_configured=False,
+        local_model_configured=False,
+        active_profile="default",
+        active_model=None,
+    )
+
+    assert next_actions(report, in_tui=True)[0] == "use `/login`"
+    assert next_actions(report, in_tui=False)[0] == "run craik login"
+    assert "Operator login" in dispatch_slash_command("/login").text
+
+
 def test_v0125_resolve_readiness_uses_tui_next_actions(tmp_path: Path) -> None:
     report = resolve_readiness(
         {"CRAIK_HOME": str(tmp_path / "home")},
@@ -133,3 +174,7 @@ def test_v0125_text_selection_hint_is_once_per_state_dir(tmp_path: Path) -> None
 
     assert first_launch_selection_hint(env) == SELECTION_HINT_MESSAGE
     assert first_launch_selection_hint(env) is None
+    marker = state / "tui-selection-hint.seen"
+    assert marker.exists()
+    if os.name == "posix":
+        assert stat.S_IMODE(marker.stat().st_mode) == 0o600

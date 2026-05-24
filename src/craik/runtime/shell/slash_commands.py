@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from rich.markup import escape
+
 from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
@@ -112,7 +114,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command is None:
         suggestion = suggest_close_command(tokens)
         suffix = f" Did you mean `{suggestion}`?" if suggestion else ""
-        return SlashCommandResult(f"unknown slash command: /{name}.{suffix}")
+        return SlashCommandResult(f"unknown slash command: /{escape(name)}.{suffix}")
     if command.name == "exit":
         return SlashCommandResult("Session ended.", exit_shell=True)
     if command.name == "help":
@@ -152,6 +154,11 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
                 "The interactive TUI opens the credential capture modal."
             )
         return _payload_result(command.name, _auth_summary_payload(env))
+    if command.name == "login":
+        return SlashCommandResult(
+            "Operator login is handled by Craik's browser/device-code flow. "
+            "Start it from an outer shell, then return here and use `/status`."
+        )
     if command.name == "provider" and len(tokens) >= 3 and tokens[1] == "login":
         return SlashCommandResult(
             f"Provider auth capture requested for `{tokens[2]}`. "
@@ -206,10 +213,11 @@ def _subcommand_listing_response(command_name: str, tokens: list[str]) -> str | 
     subcommands = SUBCOMMAND_LISTINGS.get(command_name)
     if subcommands is None or len(tokens) > 1:
         return None
-    rendered = ", ".join(f"`/{command_name} {subcommand}`" for subcommand in subcommands)
+    escaped_command = escape(command_name)
+    rendered = ", ".join(f"`/{escaped_command} {subcommand}`" for subcommand in subcommands)
     return (
-        f"`/{command_name}` requires a subcommand: {rendered}. "
-        f"See `/help {command_name}` for details."
+        f"`/{escaped_command}` requires a subcommand: {rendered}. "
+        f"See `/help {escaped_command}` for details."
     )
 
 

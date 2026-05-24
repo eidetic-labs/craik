@@ -105,6 +105,32 @@ def test_receipt_verifier_reports_side_log_tamper(tmp_path: Path) -> None:
     assert "stdout_side_log_sha_mismatch" in result.failures
 
 
+def test_receipt_verifier_rejects_invalid_side_log_digest_before_path_join(
+    tmp_path: Path,
+) -> None:
+    key = _key_file(tmp_path)
+    side_log_base = tmp_path / "shell-output"
+    side_log_base.mkdir()
+    receipt = {
+        "receipt_id": "shell_receipt",
+        "stdout_sha256": "../../outside",
+        "redacted": True,
+        "receipt_hmac": None,
+    }
+    receipt["receipt_hmac"] = contract_hmac(receipt, _hmac_key(key))
+
+    result = verify_receipt_bytes(
+        json.dumps(receipt).encode(),
+        public_key_path=key,
+        side_log_base=side_log_base,
+    )
+
+    assert result.passed is False
+    assert result.side_log_status == "failed"
+    assert "stdout_sha256_invalid_format" in result.failures
+    assert not (tmp_path / "outside.stdout.log").exists()
+
+
 def test_receipt_verify_cli_outputs_json_and_exit_code(tmp_path: Path) -> None:
     key = _key_file(tmp_path)
     receipt = _signed_receipt(key)

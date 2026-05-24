@@ -224,7 +224,7 @@ def _next_actions_for_state(
         ]
     actions: list[str] = []
     if operator_required and not operator_authenticated:
-        actions.append("exit and run craik login" if in_tui else "run craik login")
+        actions.append("use `/login`" if in_tui else "run craik login")
     if not provider_configured:
         actions.append(
             "use `/auth login <provider>`"

@@ -162,6 +162,16 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         empty_state=EmptyState(message="No auth status rows found."),
     ),
     SlashCommandSpec(
+        name="/login",
+        summary="Start operator-session login guidance.",
+        usage="/login",
+        payload_shape="markdown",
+        help="Show operator-session login guidance for authenticated mode.",
+        example="/login",
+        mutating=True,
+        empty_state=EmptyState(message="No operator login action is pending."),
+    ),
+    SlashCommandSpec(
         name="/logout",
         summary="Remove a provider credential profile.",
         usage="/logout [profile]",

@@ -43,6 +43,7 @@ confirmation warning.
 | Command | Use |
 |---|---|
 | `/status` | Show readiness, active model, operator state, and policy warnings. |
+| `/login` | Show operator-session login guidance for audited operator mode. |
 | `/auth login [provider]` | Open credential capture without echoing secret material. |
 | `/auth status` | Inspect cached credential and runtime health state. |
 | `/provider` | List provider families and credential state. |

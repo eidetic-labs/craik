@@ -95,6 +95,7 @@ The TUI uses slash commands as the primary operator control surface:
 ```text
 /help
 /status
+/login
 /auth login openai
 /auth status
 /provider
@@ -117,8 +118,8 @@ The TUI uses slash commands as the primary operator control surface:
 ```
 
 Commands either execute inline, print structured status into the transcript,
-or open a modal. They do not route you back to shell commands while you are
-inside the TUI.
+or open a modal. Setup guidance uses slash-command form while you are inside
+the TUI, including `/login` for operator-session authentication.
 
 Run `/help <command>` for a detail page generated from the slash-command
 registry. Detail pages include usage, output shape, readiness requirements,
@@ -262,6 +263,8 @@ History files use owner-only permissions on POSIX systems. The default cap is
 10,000 entries. Set `CRAIK_HISTORY_MAX_ENTRIES=0` to disable persistence.
 
 ## Modal Flows
+
+`/login` shows operator-session login guidance for audited operator mode.
 
 `/auth login [provider]` opens a credential capture modal with a provider
 picker and password-masked credential input. The modal verifies the credential

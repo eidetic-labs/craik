@@ -79,7 +79,9 @@ craik receipt verify shell-receipt.json \
 ```
 
 The verifier expects files named `<digest>.stdout.log` and
-`<digest>.stderr.log`. Missing or mismatched side logs fail verification.
+`<digest>.stderr.log`. Digest fields must be lowercase SHA-256 hex strings
+before the verifier constructs side-log paths. Missing, malformed, or
+mismatched side logs fail verification.
 
 ## Library Use
 
@@ -95,4 +97,3 @@ if not result.passed:
 
 Use `verify_receipt_bytes()` when a receipt is already loaded from an artifact,
 HTTP response, or signed bundle.
-

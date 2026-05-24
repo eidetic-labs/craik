@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac as _hmac
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,7 @@ from craik.runtime.store.integrity import contract_hmac
 
 # Filename only; actual HMAC key material is read from operator-controlled state.
 _HMAC_SECRET_FILENAME = "instruction-approval-hmac.key"  # nosec B105
+_SHA256_HEX_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True)
@@ -116,7 +119,7 @@ def _hmac_status(
         failures.append("hmac_key_unavailable")
         return "unverified"
     expected = contract_hmac(payload, key)
-    if supplied != expected:
+    if not _hmac.compare_digest(supplied, expected):
         failures.append("receipt_hmac_mismatch")
         return "tampered"
     return "verified"
@@ -167,15 +170,22 @@ def _side_log_status(
     if side_log_base is None:
         return "not_checked"
     base = Path(side_log_base)
+    side_log_failed = False
     for stream, digest in expected.items():
+        if _SHA256_HEX_RE.fullmatch(digest) is None:
+            failures.append(f"{stream}_sha256_invalid_format")
+            side_log_failed = True
+            continue
         path = base / f"{digest}.{stream}.log"
         if not path.exists():
             failures.append(f"{stream}_side_log_missing")
+            side_log_failed = True
             continue
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
         if actual != digest:
             failures.append(f"{stream}_side_log_sha_mismatch")
-    return "verified" if not any("side_log" in failure for failure in failures) else "failed"
+            side_log_failed = True
+    return "failed" if side_log_failed else "verified"
 
 
 def _receipt_id(payload: dict[str, Any]) -> str | None:
