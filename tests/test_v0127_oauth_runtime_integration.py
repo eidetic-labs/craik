@@ -42,6 +42,21 @@ def test_provider_oauth_source_returns_bearer_header_without_secret_specific_hea
     assert "x-goog-api-key" not in headers
 
 
+def test_provider_oauth_source_uses_anthropic_api_key_header(monkeypatch) -> None:
+    monkeypatch.setattr(
+        provider_oauth,
+        "get_cached_credential",
+        lambda ref: StoredCredential(value=f"value-for-{ref}", backend="test", secure=True),
+    )
+
+    headers = ProviderOAuthCredentialSource(
+        _oauth_profile(provider="anthropic")
+    ).headers_for("anthropic")
+
+    assert headers == {"x-api-key": "value-for-anthropic:subscription:access"}
+    assert "Authorization" not in headers
+
+
 def test_provider_oauth_source_refreshes_expired_access_token(monkeypatch) -> None:
     stored = {
         "openai:subscription:access": "expired-access",
@@ -147,21 +162,21 @@ def profile_runtime_ok():
     return CredentialStatus(status="ok")
 
 
-def _oauth_profile(expires_at: datetime | None = None) -> AuthProfile:
+def _oauth_profile(expires_at: datetime | None = None, *, provider: str = "openai") -> AuthProfile:
     resolved_expires_at = expires_at or datetime.now(UTC) + timedelta(hours=1)
     return AuthProfile(
-        id="openai:subscription",
+        id=f"{provider}:subscription",
         kind=CredentialKind.OAUTH,
-        provider_family="openai",
+        provider_family=provider,
         metadata={
             "token_expires_at": resolved_expires_at.isoformat(),
             "credential_backend": "test-keyring",
         },
         created_at=datetime.now(UTC),
-        oauth_authorization_endpoint="https://auth.openai.example/authorize",
-        oauth_token_endpoint="https://auth.openai.example/token",
+        oauth_authorization_endpoint=f"https://auth.{provider}.example/authorize",
+        oauth_token_endpoint=f"https://auth.{provider}.example/token",
         oauth_client_id="craik-cli",
         oauth_scope_list=["model.request"],
-        oauth_token_keyring_handle="openai:subscription:access",
-        oauth_refresh_keyring_handle="openai:subscription:refresh",
+        oauth_token_keyring_handle=f"{provider}:subscription:access",
+        oauth_refresh_keyring_handle=f"{provider}:subscription:refresh",
     )
