@@ -32,10 +32,14 @@ from craik.runtime.session_commands import (
 )
 from craik.runtime.shell.argument_validation import argument_validation_error
 from craik.runtime.shell.commands import (
+    attach_result,
     compact_stub_result,
     confirmation_result,
     cost_result,
+    fork_result,
+    note_result,
     quota_result,
+    redo_result,
     share_stub_result,
     who_result,
 )
@@ -236,6 +240,26 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return _command_result_slash_result(command.name, quota_result(env))
     if command.name == "who":
         return _command_result_slash_result(command.name, who_result(env))
+    if command.name == "note":
+        try:
+            return _command_result_slash_result(
+                command.name,
+                note_result(" ".join(tokens[1:]), env),
+            )
+        except ValueError as error:
+            return SlashCommandResult(str(error), exit_code=2)
+    if command.name == "fork":
+        return _command_result_slash_result(command.name, fork_result(env))
+    if command.name == "attach":
+        try:
+            return _command_result_slash_result(
+                command.name,
+                attach_result(" ".join(tokens[1:]), env),
+            )
+        except ValueError as error:
+            return SlashCommandResult(str(error), exit_code=2)
+    if command.name == "redo":
+        return _command_result_slash_result(command.name, redo_result(env))
     if command.name == "compact":
         return _command_result_slash_result(command.name, compact_stub_result())
     if command.name == "share":

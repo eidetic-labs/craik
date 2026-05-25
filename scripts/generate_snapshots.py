@@ -6,6 +6,7 @@ import argparse
 import io
 import os
 import sys
+import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
@@ -35,21 +36,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.name is None:
         args.name = _snapshot_name(args.command)
 
-    env_updates.setdefault(
-        "CRAIK_HOME",
-        str(Path("/tmp") / "craik-snapshot-home"),
-    )
-    snapshots = render_snapshots(
-        args.command,
-        widths=widths,
-        env_updates=env_updates,
-    )
-    failures = write_or_check_snapshots(
-        snapshots,
-        output_root=args.output_root,
-        name=args.name,
-        check=args.check,
-    )
+    temp_home: tempfile.TemporaryDirectory[str] | None = None
+    if "CRAIK_HOME" not in env_updates:
+        temp_home = tempfile.TemporaryDirectory(dir="/tmp", prefix="craik-snap-")
+        env_updates["CRAIK_HOME"] = temp_home.name
+    try:
+        snapshots = render_snapshots(
+            args.command,
+            widths=widths,
+            env_updates=env_updates,
+        )
+        failures = write_or_check_snapshots(
+            snapshots,
+            output_root=args.output_root,
+            name=args.name,
+            check=args.check,
+        )
+    finally:
+        if temp_home is not None:
+            temp_home.cleanup()
     if failures:
         print("Snapshot generation check failed:", file=sys.stderr)
         for failure in failures:
