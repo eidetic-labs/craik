@@ -33,6 +33,8 @@ STRICT_COMMAND_RESULT_RENDERING: frozenset[tuple[str, str]] = frozenset(
         ("src/craik/cli_auth_login.py", "auth_migrate_secrets"),
         ("src/craik/cli_auth_login.py", "auth_storage_status"),
         ("src/craik/cli_connect.py", "connect_stigmem"),
+        ("src/craik/cli_references.py", "references_list"),
+        ("src/craik/cli_references.py", "references_verify"),
     }
 )
 
