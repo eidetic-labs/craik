@@ -12,6 +12,7 @@ from craik.runtime.auth.oauth_loopback import generate_pkce_challenge
 from craik.runtime.auth.profile import CredentialKind
 from craik.runtime.auth.sources import anthropic_oauth
 from craik.runtime.auth.sources.anthropic_oauth import (
+    ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT,
     ANTHROPIC_OAUTH_BILLING_SURFACE,
     ANTHROPIC_OAUTH_CLIENT_ID,
     ANTHROPIC_OAUTH_SCOPES,
@@ -49,11 +50,17 @@ def test_anthropic_oauth_authorization_url_uses_state_pkce_and_scope() -> None:
     )
 
     params = parse_qs(urlparse(url).query)
+    assert urlparse(url)._replace(query="").geturl() == ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT
     assert params["client_id"] == [ANTHROPIC_OAUTH_CLIENT_ID]
     assert params["state"] == ["state-value"]
     assert params["code_challenge"] == [pkce.challenge]
     assert params["code_challenge_method"] == ["S256"]
     assert params["scope"] == [" ".join(ANTHROPIC_OAUTH_SCOPES)]
+
+
+def test_anthropic_oauth_uses_documented_console_token_endpoint() -> None:
+    assert ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT == "https://claude.ai/oauth/authorize"
+    assert ANTHROPIC_OAUTH_TOKEN_ENDPOINT == "https://console.anthropic.com/v1/oauth/token"
 
 
 def test_anthropic_oauth_exchange_code_posts_verifier_without_persisting_it() -> None:

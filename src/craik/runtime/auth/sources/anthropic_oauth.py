@@ -14,8 +14,8 @@ from craik.runtime.auth.oauth_loopback import PKCEChallenge, authorization_url
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.shell import credential_storage
 
-ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT = "https://console.anthropic.com/oauth/authorize"
-ANTHROPIC_OAUTH_TOKEN_ENDPOINT = "https://console.anthropic.com/oauth/token"  # nosec B105
+ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT = "https://claude.ai/oauth/authorize"
+ANTHROPIC_OAUTH_TOKEN_ENDPOINT = "https://console.anthropic.com/v1/oauth/token"  # nosec B105
 ANTHROPIC_OAUTH_CLIENT_ID = "craik-cli"
 ANTHROPIC_OAUTH_SCOPES = ["models.read", "messages.create"]
 ANTHROPIC_OAUTH_BILLING_SURFACE = "subscription"

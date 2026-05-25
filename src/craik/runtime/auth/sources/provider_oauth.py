@@ -34,6 +34,8 @@ class ProviderOAuthCredentialSource:
         access_token = self._access_token()
         if self._is_expired():
             access_token = self._refresh_access_token()
+        if self.profile.provider_family == "anthropic":
+            return {"x-api-key": access_token}
         return {"Authorization": f"Bearer {access_token}"}
 
     def status(self) -> CredentialStatus:
