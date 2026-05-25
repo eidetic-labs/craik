@@ -402,6 +402,22 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         empty_state=EmptyState(message="No gateway state found."),
     ),
     SlashCommandSpec(
+        name="/compact",
+        summary="Compact the current conversation.",
+        usage="/compact",
+        payload_shape="kv",
+        help="Show the registered placeholder for manual conversation compression.",
+        empty_state=EmptyState(message="Conversation compression is not implemented yet."),
+    ),
+    SlashCommandSpec(
+        name="/share",
+        summary="Share the current transcript.",
+        usage="/share",
+        payload_shape="kv",
+        help="Show the registered placeholder for public transcript sharing.",
+        empty_state=EmptyState(message="Transcript sharing is not implemented yet."),
+    ),
+    SlashCommandSpec(
         name="/exit",
         summary="Exit the shell.",
         usage="/exit",
