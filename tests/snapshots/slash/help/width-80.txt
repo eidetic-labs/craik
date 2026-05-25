@@ -1,0 +1,30 @@
+## Craik slash commands
+
+- `/help` - Show slash-command help.
+- `/setup` - Show progressive setup guidance.
+- `/auth` - Manage operator and provider auth.
+- `/login` - Start operator-session login guidance.
+- `/logout` - Remove a provider credential profile.
+- `/provider` - Inspect or configure provider credentials.
+- `/model` - Inspect or select the active model.
+- `/status` - Show readiness state.
+- `/clear` - Clear the current transcript.
+- `/doctor` - Run diagnostics inline.
+- `/policy` - Manage local policy state.
+- `/migrate` - Apply migration plans.
+- `/agent` - Manage agent records.
+- `/session` - Manage persistent sessions.
+- `/sessions` - List persistent sessions.
+- `/rename` - Rename the current shell session.
+- `/theme` - Inspect or switch the TUI theme.
+- `/resume` - Resume a persistent session.
+- `/approvals` - Inspect pending approvals.
+- `/handoffs` - Inspect handoffs.
+- `/receipts` - Inspect receipts.
+- `/skills` - Inspect learning-loop skill controls.
+- `/memory` - Inspect memory proposals and facts.
+- `/mcp` - Inspect configured MCP clients.
+- `/gateway` - Inspect gateway state.
+- `/exit` - Exit the shell.
+
+Multi-line: Shift+Enter (native), `\`+Enter (universal), Ctrl+J (any terminal), Option/Alt+Enter (macOS Meta).
