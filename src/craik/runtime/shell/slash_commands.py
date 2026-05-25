@@ -43,6 +43,7 @@ from craik.runtime.shell.slash_command_schema.results import (
 )
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
+from craik.runtime.skills.commands import skills_overview_result
 from craik.runtime.status import status_payload
 from craik.runtime.store import DATABASE_NAME, LocalStore
 from craik.runtime.work.commands.handoff_commands import handoff_list_result
@@ -200,7 +201,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "receipts":
         return receipts_slash_result(tokens[1:], env=env)
     if command.name == "skills":
-        return _payload_result(command.name, _skills_payload(env))
+        return _payload_result(command.name, skills_overview_result(env).payload)
     if command.name == "memory":
         return _payload_result(command.name, _memory_payload(env))
     if command.name == "mcp":
@@ -347,17 +348,6 @@ def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashComman
     if not args:
         return SlashCommandResult(json.dumps(result.payload, indent=2, sort_keys=True))
     return SlashCommandResult(f"Theme set to `{result.payload['theme']}`.")
-
-
-def _skills_payload(env: dict[str, str] | None) -> dict[str, Any]:
-    packages = _store_list(env, "list_skill_packages")
-    registries = _store_list(env, "list_skill_registries")
-    proposals = _store_list(env, "list_distilled_instruction_proposals")
-    return {
-        "packages": [_json_ready(item) for item in packages],
-        "registries": [_json_ready(item) for item in registries],
-        "proposals": [_json_ready(item) for item in proposals],
-    }
 
 
 def _memory_payload(env: dict[str, str] | None) -> dict[str, Any]:
