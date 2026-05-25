@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import agent_message_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import AgentMessageKind
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.store import LocalStore
 from craik.runtime.work.coordination.mailbox import (
@@ -21,6 +22,7 @@ from craik.runtime.work.coordination.mailbox import (
 
 
 @agent_message_app.command("send")
+@craik_command(payload_shape="card")
 def agent_message_send(
     task_id: Annotated[str, typer.Option("--task-id", help="Task id for the message.")],
     from_agent: Annotated[str, typer.Option("--from-agent", help="Authenticated sender id.")],
@@ -52,7 +54,7 @@ def agent_message_send(
         str | None,
         typer.Option("--handoff-id", help="Related handoff id."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Send a receipt-backed message from one authenticated run/role to another agent."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -80,14 +82,20 @@ def agent_message_send(
     finally:
         store.close()
 
-    typer.echo(json.dumps(message.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    result = CommandResult(
+        payload=message.model_dump(mode="json", by_alias=True),
+        shape="card",
+    )
+    emit_command_result(result)
+    return result
 
 
 @agent_message_app.command("receive")
+@craik_command(payload_shape="card")
 def agent_message_receive(
     message_id: Annotated[str, typer.Argument(help="Message id to mark received.")],
     received_by: Annotated[str, typer.Option("--received-by", help="Receiving agent id.")],
-) -> None:
+) -> CommandResult:
     """Mark an agent mailbox message as received and append a receipt."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -108,9 +116,12 @@ def agent_message_receive(
     finally:
         store.close()
 
-    typer.echo(
-        json.dumps(received.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
+    result = CommandResult(
+        payload=received.model_dump(mode="json", by_alias=True),
+        shape="card",
     )
+    emit_command_result(result)
+    return result
 
 
 def _message_kind(value: str) -> AgentMessageKind:
