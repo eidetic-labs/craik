@@ -9,9 +9,9 @@ from craik.runtime.shell.model_settings import ModelSettings, ModelSettingsStore
 from craik.runtime.shell.readiness import resolve_readiness
 
 
-def model_list_result() -> CommandResult:
+def model_list_result(env: dict[str, str] | None = None) -> CommandResult:
     """Return configured provider/model choices and visible auth profiles."""
-    settings = ModelSettingsStore.from_env().load()
+    settings = ModelSettingsStore.from_env(env).load()
     try:
         auth_profiles = [
             {
@@ -20,7 +20,7 @@ def model_list_result() -> CommandResult:
                 "last_status": profile.last_status,
             }
             for profile in visible_auth_profiles(
-                AuthProfileStore.from_env().list(), active_operator_session_from_env()
+                AuthProfileStore.from_env(env).list(), active_operator_session_from_env(env)
             )
         ]
     except Exception:
@@ -45,10 +45,10 @@ def model_list_result() -> CommandResult:
     )
 
 
-def model_status_result() -> CommandResult:
+def model_status_result(env: dict[str, str] | None = None) -> CommandResult:
     """Return active model state and readiness."""
-    settings = ModelSettingsStore.from_env().load()
-    readiness = resolve_readiness()
+    settings = ModelSettingsStore.from_env(env).load()
+    readiness = resolve_readiness(env)
     return CommandResult(
         payload={
             "active_model": settings.active_model,
@@ -60,10 +60,10 @@ def model_status_result() -> CommandResult:
     )
 
 
-def model_set_result(model: str) -> CommandResult:
+def model_set_result(model: str, env: dict[str, str] | None = None) -> CommandResult:
     """Persist and return the active model selection."""
     validate_model_ref(model)
-    store = ModelSettingsStore.from_env()
+    store = ModelSettingsStore.from_env(env)
     settings = store.load()
     updated = ModelSettings(
         active_model=model,
@@ -74,10 +74,10 @@ def model_set_result(model: str) -> CommandResult:
     return CommandResult(payload=updated.as_dict(), shape="kv")
 
 
-def model_probe_result() -> CommandResult:
+def model_probe_result(env: dict[str, str] | None = None) -> CommandResult:
     """Return model readiness without sending live prompts."""
-    settings = ModelSettingsStore.from_env().load()
-    readiness = resolve_readiness()
+    settings = ModelSettingsStore.from_env(env).load()
+    readiness = resolve_readiness(env)
     return CommandResult(
         payload={
             "active_model": settings.active_model,
@@ -93,9 +93,10 @@ def model_alias_result(
     action: str,
     name: str | None = None,
     target: str | None = None,
+    env: dict[str, str] | None = None,
 ) -> CommandResult:
     """List, add, or remove model aliases."""
-    store = ModelSettingsStore.from_env()
+    store = ModelSettingsStore.from_env(env)
     settings = store.load()
     aliases = dict(settings.aliases)
     if action == "list":
@@ -112,9 +113,13 @@ def model_alias_result(
     return CommandResult(payload=updated.as_dict(), shape="kv")
 
 
-def model_fallback_result(action: str, model: str | None = None) -> CommandResult:
+def model_fallback_result(
+    action: str,
+    model: str | None = None,
+    env: dict[str, str] | None = None,
+) -> CommandResult:
     """List, add, remove, or clear model fallback order."""
-    store = ModelSettingsStore.from_env()
+    store = ModelSettingsStore.from_env(env)
     settings = store.load()
     fallbacks = list(settings.fallbacks)
     if action == "list":

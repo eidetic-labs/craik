@@ -1,6 +1,6 @@
 # Slash Commands
 
-<p className="craik-meta"><span>7 min read</span><span>For operators</span><span>Updated 2026-05-23</span></p>
+<p className="craik-meta"><span>7 min read</span><span>For operators</span><span>Updated 2026-05-25</span></p>
 
 <div className="craik-lead">
 
@@ -37,6 +37,11 @@ The detail page is generated from the same registry that drives completion,
 rendering, empty states, and confirmation requirements. Each page includes
 usage, readiness requirements, output shape, examples, action keys, and any
 confirmation warning.
+
+Core auth, provider, model, and session commands share their structured result
+builders with the plain CLI. That keeps `/auth status`, `/provider`,
+`/model`, `/model list`, `/model set`, `/sessions`, and `/resume` aligned with
+the command behavior operators see outside the TUI.
 
 ## Core Commands
 

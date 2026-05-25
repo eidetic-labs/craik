@@ -884,6 +884,14 @@ Options:
 - `--allow-blocked-exit`: Persist the handoff despite a blocked exit-discipline check.; default `false`
 - `--blocked-exit-rationale`: Required with --allow-blocked-exit.
 
+## `craik handoff list`
+
+List persisted handoffs.
+
+```text
+craik handoff list
+```
+
 ## `craik handoff show`
 
 Show one persisted handoff by handoff id or task id.
@@ -2151,6 +2159,14 @@ Verify that a reference integration is present and valid.
 craik references verify [OPTIONS] INTEGRATION_ID
 ```
 
+## `craik rename`
+
+Set the operator-visible shell session name.
+
+```text
+craik rename [OPTIONS] NAME
+```
+
 ## `craik review`
 
 Capture reviewable critic and red-team findings.
@@ -2672,6 +2688,18 @@ Options:
 - `--max-iterations`: Maximum run iterations.; default `5`
 - `--allow-identity-continuation`: Explicitly allow the consumer to reuse the producer identity.; default `false`
 - `--identity-continuation-rationale`: Required rationale when explicitly reusing producer identity.
+
+## `craik theme`
+
+Inspect or set the terminal UI theme.
+
+```text
+craik theme [OPTIONS]
+```
+
+Options:
+
+- `--theme`
 
 ## `craik tui`
 

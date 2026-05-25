@@ -21,6 +21,7 @@ from craik.runtime.auth import (
     CredentialKind,
     CredentialStatus,
 )
+from craik.runtime.auth.commands import auth_status_result as shared_auth_status_result
 from craik.runtime.auth.guided_setup import (
     DEFAULT_REF_MANAGER,
     FILE_REF_MANAGER,
@@ -29,7 +30,6 @@ from craik.runtime.auth.guided_setup import (
     default_pool_for_profile,
     guided_provider_defaults,
 )
-from craik.runtime.auth.login import auth_status_rows
 from craik.runtime.auth.operator import (
     OIDCAuthenticator,
     OIDCConfig,
@@ -40,6 +40,7 @@ from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.redaction import masked_metadata
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
@@ -48,7 +49,8 @@ from craik.runtime.providers.provider_url_safety import (
 
 
 @auth_app.command("list")
-def auth_list() -> None:
+@craik_command(payload_shape="card_list")
+def auth_list() -> CommandResult:
     """List configured auth profiles."""
     store = AuthProfileStore.from_env()
     payload = [
@@ -56,6 +58,7 @@ def auth_list() -> None:
         for profile in visible_auth_profiles(store.list(), active_operator_session_from_env())
     ]
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return CommandResult(payload=payload, shape="card_list")
 
 
 @auth_app.command("add")
@@ -305,12 +308,13 @@ def auth_grant(
 
 
 @auth_app.command("status")
-def auth_status() -> None:
+@craik_command(slash_alias="auth-status", payload_shape="table")
+def auth_status() -> CommandResult:
     """Show auth profile health and last-use status."""
-    store = AuthProfileStore.from_env()
-    profiles = visible_auth_profiles(store.list(), active_operator_session_from_env())
-    payload = [row.as_dict() for row in auth_status_rows(profiles)]
+    result = shared_auth_status_result()
+    payload = result.payload
     typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return result
 
 
 @app.command("login")
