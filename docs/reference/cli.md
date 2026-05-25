@@ -222,6 +222,14 @@ Show one approval request.
 craik approvals show [OPTIONS] APPROVAL_ID
 ```
 
+## `craik attach`
+
+Attach a file reference to the active session.
+
+```text
+craik attach [OPTIONS] PATH
+```
+
 ## `craik auth`
 
 Manage provider credential profiles.
@@ -506,6 +514,14 @@ Options:
 - `-q, --prompt`: Run one prompt; pass '-' to read stdin.
 - `--allow-argv-prompt`: Acknowledge argv prompt exposure in process listings and shell history.; default `false`
 
+## `craik compact`
+
+Manually compact the current conversation (coming in v0.14.0).
+
+```text
+craik compact
+```
+
 ## `craik connect`
 
 Connect to external services.
@@ -574,6 +590,14 @@ Show one local contradiction report and linked evidence.
 
 ```text
 craik contradictions show [OPTIONS] REPORT_ID
+```
+
+## `craik cost`
+
+Show provider token usage and cost accounting state.
+
+```text
+craik cost
 ```
 
 ## `craik dashboard`
@@ -741,6 +765,14 @@ Options:
 - `--dry-run, --apply`: Preview fixes without writing state, or apply supported safe fixes.; default `true`
 - `--yes`: Confirm unsafe fix actions such as public-bind rebinding.; default `false`
 - `--json`: Print the diagnostic report as JSON.; default `false`
+
+## `craik fork`
+
+Fork the active persistent session.
+
+```text
+craik fork
+```
 
 ## `craik gateway`
 
@@ -1492,6 +1524,14 @@ Show active model state and readiness.
 craik model status
 ```
 
+## `craik note`
+
+Add an operator note to the active session.
+
+```text
+craik note [OPTIONS] TEXT
+```
+
 ## `craik onboard`
 
 Print runner-readable onboarding context for a project.
@@ -2047,6 +2087,14 @@ Print one model provider as JSON.
 craik provider show [OPTIONS] PROVIDER_ID
 ```
 
+## `craik quota`
+
+Show provider quota references and runtime quota state.
+
+```text
+craik quota
+```
+
 ## `craik receipt`
 
 Inspect persisted capability receipts.
@@ -2134,6 +2182,14 @@ Options:
 - `--public-key`: HMAC key material path for verification.
 - `--auto-discover`: Discover the local Craik HMAC key from CRAIK_HOME.; default `false`
 - `--side-log-base`: Directory containing shell side-log files.
+
+## `craik redo`
+
+Redo the latest replayable agent turn when available.
+
+```text
+craik redo
+```
 
 ## `craik references`
 
@@ -2503,6 +2559,14 @@ Options:
 - `--policy-envelope-id`: Policy envelope for gateway authority.
 - `--allow-insecure-public-gateway`: Explicitly allow a public gateway bind without TLS termination.; default `false`
 
+## `craik share`
+
+Share the current transcript (coming in v0.13.0).
+
+```text
+craik share
+```
+
 ## `craik skills`
 
 Install and inspect governed skill packages.
@@ -2739,6 +2803,14 @@ Print the installed Craik version.
 
 ```text
 craik version
+```
+
+## `craik who`
+
+Show active operator identity and auth scope.
+
+```text
+craik who
 ```
 
 ## `craik whoami`
