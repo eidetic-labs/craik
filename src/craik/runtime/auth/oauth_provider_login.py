@@ -28,8 +28,10 @@ from craik.runtime.auth.sources.gemini_oauth import (
     store_gemini_service_account_profile,
 )
 from craik.runtime.auth.sources.openai_oauth import (
+    OPENAI_OAUTH_REDIRECT_PATH,
+    OPENAI_OAUTH_REDIRECT_PORT,
     OpenAIOAuthClient,
-    raise_openai_oauth_pending_registration,
+    OpenAIOAuthError,
     store_openai_oauth_profile,
 )
 from craik.runtime.auth.store import AuthProfileStore
@@ -70,8 +72,6 @@ def browser_oauth_login(
 ) -> OAuthLoginResult:
     """Create a provider OAuth profile through a loopback browser login."""
     normalized = provider.strip().lower()
-    if normalized == "openai":
-        raise_openai_oauth_pending_registration()
     if normalized == "anthropic":
         return anthropic_bootstrap_login(
             profile_id=profile_id,
@@ -88,7 +88,7 @@ def browser_oauth_login(
         )
     state = generate_oauth_state()
     pkce = generate_pkce_challenge()
-    listener = OAuthLoopbackListener(expected_state=state).start()
+    listener = _loopback_listener(normalized, state)
     try:
         client = _oauth_client(normalized)
         authorization = client.authorization_url(
@@ -126,6 +126,24 @@ def browser_oauth_login(
         authorization_url=authorization,
         browser_opened=browser_opened,
     )
+
+
+def _loopback_listener(provider: str, state: str) -> OAuthLoopbackListener:
+    try:
+        if provider == "openai":
+            return OAuthLoopbackListener(
+                expected_state=state,
+                callback_path=OPENAI_OAUTH_REDIRECT_PATH,
+                port=OPENAI_OAUTH_REDIRECT_PORT,
+            ).start()
+        return OAuthLoopbackListener(expected_state=state).start()
+    except OSError as exc:
+        if provider == "openai":
+            raise OpenAIOAuthError(
+                "OpenAI OAuth callback port 1455 is in use. Close any in-flight "
+                "OpenAI OAuth authentication and retry."
+            ) from exc
+        raise
 
 
 def anthropic_bootstrap_login(
@@ -241,7 +259,7 @@ def _store_anthropic_bootstrap_api_key(
         provider_family="anthropic",
         metadata={
             "base_url": "https://api.anthropic.com",
-            "billing_surface": "subscription",
+            "billing_surface": "anthropic-console-api",
             "credential_backend": storage_status.backend,
             "last_validated_at": datetime.now(UTC).isoformat(),
             "provider": "anthropic",

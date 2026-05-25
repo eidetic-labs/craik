@@ -47,12 +47,15 @@ class OAuthLoopbackListener:
         *,
         expected_state: str,
         callback_path: str = DEFAULT_CALLBACK_PATH,
+        port: int = 0,
         timeout_seconds: float = DEFAULT_CALLBACK_TIMEOUT_SECONDS,
     ) -> None:
         if not expected_state:
             raise OAuthLoopbackError("OAuth state is required")
         if not callback_path.startswith("/"):
             raise OAuthLoopbackError("OAuth callback path must start with /")
+        if port < 0 or port > 65535:
+            raise OAuthLoopbackError("OAuth callback port must be between 0 and 65535")
         validate_loopback_host(LOOPBACK_HOST)
         self.expected_state = expected_state
         self.callback_path = callback_path
@@ -60,7 +63,7 @@ class OAuthLoopbackListener:
         self._event = threading.Event()
         self._result: OAuthCallbackResult | None = None
         self._error: OAuthLoopbackError | None = None
-        self._server = HTTPServer(("127.0.0.1", 0), self._handler_class())
+        self._server = HTTPServer(("127.0.0.1", port), self._handler_class())
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             kwargs={"poll_interval": 0.05},

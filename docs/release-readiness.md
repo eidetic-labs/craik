@@ -20,12 +20,11 @@ audit continuity.
 usable without private client registrations.**
 
 `0.12.7` adds OAuth auth-profile contracts, one-shot loopback PKCE
-helpers, callback-safety CI coverage, Anthropic OAuth-to-API-key
-bootstrap, Gemini/Vertex ADC and service-account login through
-`google-auth`, provider-specific header handling, OAuth status metadata,
-and explicit `craik auth login <provider> --mode=api-key|oauth`
-selection. OpenAI keeps the OAuth foundation in place but defaults to
-API-key capture until Craik has a registered OpenAI OAuth client.
+helpers, callback-safety CI coverage, OpenAI browser PKCE OAuth,
+Anthropic OAuth-to-API-key bootstrap, Gemini/Vertex ADC and service-account
+login through `google-auth`, provider-specific header handling, OAuth status
+metadata, billing-surface status metadata, and explicit
+`craik auth login <provider> --mode=api-key|oauth` selection.
 
 </div>
 

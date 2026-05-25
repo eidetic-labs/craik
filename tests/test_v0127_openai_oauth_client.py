@@ -14,12 +14,12 @@ from craik.runtime.auth.sources import openai_oauth
 from craik.runtime.auth.sources.openai_oauth import (
     OPENAI_OAUTH_BILLING_SURFACE,
     OPENAI_OAUTH_CLIENT_ID,
+    OPENAI_OAUTH_REDIRECT_URI,
     OPENAI_OAUTH_SCOPES,
     OPENAI_OAUTH_TOKEN_ENDPOINT,
     OpenAIOAuthClient,
     OpenAIOAuthError,
     OpenAIOAuthTokenSet,
-    raise_openai_oauth_pending_registration,
     store_openai_oauth_profile,
 )
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
@@ -44,13 +44,15 @@ def test_openai_oauth_authorization_url_uses_state_pkce_and_scope() -> None:
     client = OpenAIOAuthClient()
 
     url = client.authorization_url(
-        redirect_uri="http://127.0.0.1:54321/oauth/callback",
+        redirect_uri=OPENAI_OAUTH_REDIRECT_URI,
         state="state-value",
         pkce=pkce,
     )
 
     params = parse_qs(urlparse(url).query)
     assert params["client_id"] == [OPENAI_OAUTH_CLIENT_ID]
+    assert params["client_id"] == ["app_EMoamEEZ73f0CkXaXp7hrann"]
+    assert params["redirect_uri"] == [OPENAI_OAUTH_REDIRECT_URI]
     assert params["state"] == ["state-value"]
     assert params["code_challenge"] == [pkce.challenge]
     assert params["code_challenge_method"] == ["S256"]
@@ -59,15 +61,6 @@ def test_openai_oauth_authorization_url_uses_state_pkce_and_scope() -> None:
 
 def test_openai_oauth_scopes_match_public_subscription_flow() -> None:
     assert OPENAI_OAUTH_SCOPES == ["openid", "profile", "email", "offline_access"]
-
-
-def test_openai_oauth_pending_registration_fails_with_api_key_remediation() -> None:
-    with pytest.raises(OpenAIOAuthError) as exc_info:
-        raise_openai_oauth_pending_registration()
-
-    message = str(exc_info.value)
-    assert "registered as an OAuth client with OpenAI" in message
-    assert "--mode=api-key" in message
 
 
 def test_openai_oauth_exchange_code_posts_verifier_without_persisting_it() -> None:

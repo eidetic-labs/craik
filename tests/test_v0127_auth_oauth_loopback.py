@@ -30,6 +30,14 @@ def test_loopback_listener_binds_to_127001_and_random_port() -> None:
         listener.close()
 
 
+def test_loopback_listener_can_bind_requested_loopback_port() -> None:
+    listener = OAuthLoopbackListener(expected_state="state", port=0).start()
+    try:
+        assert listener.redirect_uri == f"http://{LOOPBACK_HOST}:{listener.port}/oauth/callback"
+    finally:
+        listener.close()
+
+
 def test_loopback_listener_accepts_one_valid_callback() -> None:
     listener = OAuthLoopbackListener(expected_state="expected-state").start()
     url = f"{listener.redirect_uri}?code=auth-code&state=expected-state"

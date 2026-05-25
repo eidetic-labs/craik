@@ -11,6 +11,7 @@ from craik.runtime.auth import (
     AuthProfileStoreError,
     CredentialStatus,
 )
+from craik.runtime.auth.login import auth_status_rows
 from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.diagnostics.doctor_checks import (
@@ -22,6 +23,7 @@ from craik.runtime.diagnostics.doctor_checks import (
     model_availability_check,
     operator_session_check,
     provider_auth_check,
+    provider_billing_surface_checks,
     public_bind_security_check,
     secure_credential_store_check,
     stale_sessions_locks_check,
@@ -47,7 +49,7 @@ def run_doctor(
         dry_run=dry_run,
         confirm_unsafe=confirm_unsafe,
     ) if fix else []
-    auth_profile_checks, auth_profile_payloads = _auth_profile_checks(paths)
+    auth_profile_checks, auth_profile_payloads = _auth_profile_checks(paths, env)
     checks = [
         _home_check(paths),
         *_store_checks(paths),
@@ -56,6 +58,7 @@ def run_doctor(
         model_availability_check(paths, env),
         *auth_profile_checks,
         provider_auth_check(auth_profile_payloads),
+        *provider_billing_surface_checks(auth_profile_payloads),
         anthropic_env_credential_check(env),
         secure_credential_store_check(paths),
         file_permissions_check(paths),
@@ -203,7 +206,10 @@ def _memory_backend_check(env: dict[str, str]) -> DiagnosticCheck:
     )
 
 
-def _auth_profile_checks(paths: CraikPaths) -> tuple[list[DiagnosticCheck], list[dict[str, Any]]]:
+def _auth_profile_checks(
+    paths: CraikPaths,
+    env: dict[str, str],
+) -> tuple[list[DiagnosticCheck], list[dict[str, Any]]]:
     store = AuthProfileStore(paths.home)
     if not paths.home.exists() or not store.path.exists():
         return [
@@ -236,7 +242,7 @@ def _auth_profile_checks(paths: CraikPaths) -> tuple[list[DiagnosticCheck], list
         ], []
 
     payloads = [
-        _auth_profile_payload(profile, _auth_profile_status(profile)) for profile in profiles
+        _auth_profile_payload(profile, _auth_profile_status(profile), env) for profile in profiles
     ]
     checks = [
         DiagnosticCheck(
@@ -259,15 +265,19 @@ def _auth_profile_status(profile: AuthProfile) -> CredentialStatus:
 def _auth_profile_payload(
     profile: AuthProfile,
     status: CredentialStatus,
+    env: dict[str, str],
 ) -> dict[str, Any]:
     backend = profile.metadata.get("credential_backend")
     backend_name = backend if isinstance(backend, str) else None
     warning = FILE_BACKED_CREDENTIAL_WARNING if backend_name == "file" else None
+    status_row = auth_status_rows([profile], env=env)[0].as_dict()
     return {
         "id": profile.id,
         "kind": profile.kind,
         "provider_family": profile.provider_family,
         "credential_backend": backend_name,
+        "credential_source": status_row["credential_source"],
+        "billing_surface": status_row["billing_surface"],
         "warning": warning,
         "last_used_at": profile.last_used_at.isoformat()
         if profile.last_used_at is not None

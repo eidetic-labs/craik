@@ -62,7 +62,36 @@ def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) ->
     assert json.loads(result.stdout)["authorization_url"] == "gcloud auth application-default login"
 
 
-def test_openai_defaults_to_api_key_when_mode_is_omitted(monkeypatch, tmp_path) -> None:
+def test_openai_defaults_to_oauth_when_mode_is_omitted_without_api_key(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    called: dict[str, str] = {}
+
+    def _browser_login(provider: str, **kwargs):
+        called["provider"] = provider
+        return OAuthLoginResult(
+            capture=_capture_result(provider, CredentialKind.OAUTH),
+            authorization_url="https://auth.openai.com/oauth/authorize",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _browser_login)
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert called == {"provider": "openai"}
+    assert json.loads(result.stdout)["kind"] == "oauth"
+
+
+def test_openai_no_browser_defaults_to_api_key_mode(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     captured: dict[str, str] = {}
 
     def _capture_login(provider: str, **kwargs):
@@ -71,7 +100,33 @@ def test_openai_defaults_to_api_key_when_mode_is_omitted(monkeypatch, tmp_path) 
         return _capture_result(provider, CredentialKind.KEYRING_REF)
 
     def _browser_login(provider: str, **kwargs):
-        raise AssertionError("OpenAI defaults to api-key mode until OAuth registration exists")
+        raise AssertionError("OpenAI --no-browser should use api-key mode by default")
+
+    monkeypatch.setattr("craik.cli_auth_login.capture_and_cache_login", _capture_login)
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _browser_login)
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--no-browser", "--json"],
+        input="sk-test\n",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {"provider": "openai", "credential": "sk-test"}
+
+
+def test_openai_defaults_to_api_key_when_openai_api_key_is_set(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    captured: dict[str, str] = {}
+
+    def _capture_login(provider: str, **kwargs):
+        captured["provider"] = provider
+        captured["credential"] = kwargs["credential"]
+        return _capture_result(provider, CredentialKind.KEYRING_REF)
+
+    def _browser_login(provider: str, **kwargs):
+        raise AssertionError("OpenAI should use api-key mode when OPENAI_API_KEY is set")
 
     monkeypatch.setattr("craik.cli_auth_login.capture_and_cache_login", _capture_login)
     monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _browser_login)
@@ -112,12 +167,25 @@ def test_explicit_api_key_mode_overrides_provider_oauth_default(monkeypatch, tmp
 
 
 def _capture_result(provider: str, kind: CredentialKind) -> AuthCaptureResult:
+    oauth_fields = (
+        {
+            "oauth_authorization_endpoint": f"https://auth.{provider}.example/authorize",
+            "oauth_token_endpoint": f"https://auth.{provider}.example/token",
+            "oauth_client_id": "test-client",
+            "oauth_scope_list": ["openid"],
+            "oauth_token_keyring_handle": f"{provider}:default:access",
+            "oauth_refresh_keyring_handle": f"{provider}:default:refresh",
+        }
+        if kind is CredentialKind.OAUTH
+        else {}
+    )
     profile = AuthProfile(
         id=f"{provider}:default",
         kind=kind,
         provider_family=provider,
         metadata={"ref": f"{provider}:default:api-key"},
         created_at=datetime.now(UTC),
+        **oauth_fields,
     )
     return AuthCaptureResult(
         provider=provider,

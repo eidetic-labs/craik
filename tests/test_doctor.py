@@ -93,6 +93,8 @@ def test_doctor_reports_auth_profile_health(tmp_path, monkeypatch) -> None:
             "kind": "api-key",
             "provider_family": "anthropic",
             "credential_backend": None,
+            "credential_source": "ANTHROPIC_API_KEY (env)",
+            "billing_surface": "Anthropic Console API (per-token)",
             "warning": None,
             "last_used_at": None,
             "last_status": "unknown",
@@ -100,6 +102,8 @@ def test_doctor_reports_auth_profile_health(tmp_path, monkeypatch) -> None:
             "metadata": {"base_url": None},
         }
     ]
+    assert checks["billing_surface:anthropic"]["status"] == "pass"
+    assert "Anthropic Console API (per-token)" in checks["billing_surface:anthropic"]["summary"]
 
 
 def test_doctor_reports_file_credential_backend_warning(tmp_path) -> None:

@@ -1,6 +1,6 @@
 # Craik
 
-[![Coverage](https://img.shields.io/badge/coverage-87%25-green)](https://eidetic-labs.github.io/craik/)
+[![Coverage](https://img.shields.io/badge/coverage-87%25-green)](docs/guides/coverage.md)
 [![CI](https://github.com/eidetic-labs/craik/actions/workflows/ci.yml/badge.svg)](https://github.com/eidetic-labs/craik/actions/workflows/ci.yml)
 [![Conformance](https://img.shields.io/badge/conformance-contract%20gate-blue)](docs/reference/ci-cd.md#conformance-reports)
 [![PyPI version](https://img.shields.io/pypi/v/craik?label=pypi)](https://pypi.org/project/craik/)

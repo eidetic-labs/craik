@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from typer.testing import CliRunner
@@ -17,7 +18,12 @@ from craik.runtime.auth.sources import (
     provider_oauth,
     source_for_auth_profile,
 )
-from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError, OpenAIOAuthTokenSet
+from craik.runtime.auth.sources.openai_oauth import (
+    OPENAI_OAUTH_CLIENT_ID,
+    OPENAI_OAUTH_REDIRECT_URI,
+    OpenAIOAuthError,
+    OpenAIOAuthTokenSet,
+)
 from craik.runtime.shell.credential_storage import CredentialStorageStatus, StoredCredential
 
 runner = CliRunner()
@@ -118,7 +124,47 @@ def test_auth_status_rows_include_oauth_expiration(monkeypatch) -> None:
     assert row["kind"] == "oauth"
     assert row["health_status"] == "ok"
     assert row["oauth_expires_at"] == expires_at.isoformat()
+    assert row["billing_surface"] == "OpenAI subscription"
     assert row["redacted"] is True
+
+
+def test_auth_status_rows_include_provider_billing_surfaces(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api")
+    rows = [
+        row.as_dict()
+        for row in auth_status_rows(
+            [
+                AuthProfile(
+                    id="anthropic:env",
+                    kind=CredentialKind.API_KEY,
+                    provider_family="anthropic",
+                    metadata={"env_var": "ANTHROPIC_API_KEY"},
+                    created_at=datetime.now(UTC),
+                ),
+                _oauth_profile(provider="openai"),
+                AuthProfile(
+                    id="gemini:vertex",
+                    kind=CredentialKind.OAUTH,
+                    provider_family="gemini",
+                    metadata={"credential_source": "adc", "gcp_project_id": "craik-project"},
+                    created_at=datetime.now(UTC),
+                    oauth_authorization_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+                    oauth_token_endpoint="https://oauth2.googleapis.com/token",
+                    oauth_client_id="google-adc",
+                    oauth_scope_list=["https://www.googleapis.com/auth/cloud-platform"],
+                ),
+            ],
+            env={"ANTHROPIC_API_KEY": "sk-ant-api"},
+            validate=False,
+        )
+    ]
+
+    billing_by_id = {row["id"]: row["billing_surface"] for row in rows}
+    assert billing_by_id == {
+        "anthropic:env": "Anthropic Console API (per-token)",
+        "openai:subscription": "OpenAI subscription",
+        "gemini:vertex": "GCP project (Vertex AI)",
+    }
 
 
 def test_auth_login_oauth_mode_uses_browser_oauth_flow(monkeypatch, tmp_path) -> None:
@@ -236,7 +282,49 @@ def test_auth_login_gemini_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None
     assert payload["authorization_url"] == "gcloud auth application-default login"
 
 
-def test_auth_login_openai_defaults_to_api_key_mode(monkeypatch, tmp_path) -> None:
+def test_auth_login_openai_defaults_to_oauth_without_openai_api_key(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    profile = _oauth_profile()
+
+    def _login(provider: str, **kwargs):
+        assert provider == "openai"
+        assert kwargs["browser_opener"]("https://auth.example.test/authorize") is False
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="openai",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="test-keyring",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="https://auth.example.test/authorize",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _login)
+    monkeypatch.setattr("craik.cli_auth_login.webbrowser.open", lambda url: False)
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--json"],
+        input="\n",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout[result.stdout.index("{") :])
+    assert payload["provider"] == "openai"
+    assert payload["kind"] == "oauth"
+    assert payload["authorization_url"] == "https://auth.example.test/authorize"
+
+
+def test_auth_login_openai_defaults_to_api_key_when_openai_api_key_is_set(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
     calls: dict[str, str] = {}
     profile = AuthProfile(
         id="openai:default",
@@ -279,8 +367,106 @@ def test_auth_login_openai_defaults_to_api_key_mode(monkeypatch, tmp_path) -> No
     assert calls == {"provider": "openai", "credential": "sk-test"}
 
 
-def test_browser_oauth_login_openai_fails_with_pending_registration() -> None:
-    with pytest.raises(OpenAIOAuthError, match="registered as an OAuth client"):
+def test_auth_login_openai_oauth_disclosure_precedes_browser_open(monkeypatch, tmp_path) -> None:
+    profile = _oauth_profile()
+
+    def _login(provider: str, **kwargs):
+        assert provider == "openai"
+        assert kwargs["browser_opener"]("https://auth.example.test/authorize") is True
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="openai",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="test-keyring",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="https://auth.example.test/authorize",
+            browser_opened=True,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _login)
+    monkeypatch.setattr("craik.cli_auth_login.webbrowser.open", lambda url: True)
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--mode=oauth", "--json"],
+        input="\n",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert 'consent page will identify the requesting application as "Codex"' in result.output
+    assert "--mode=api-key" in result.output
+
+
+def test_browser_oauth_login_openai_uses_codex_client_and_fixed_redirect(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    class _Listener:
+        def __init__(self, **kwargs):
+            seen["listener_kwargs"] = kwargs
+            self.redirect_uri = OPENAI_OAUTH_REDIRECT_URI
+
+        def start(self):
+            return self
+
+        def wait(self):
+            return SimpleNamespace(code="auth-code")
+
+        def close(self):
+            seen["closed"] = True
+
+    def _exchange(self, **kwargs):
+        seen["exchange"] = kwargs
+        return (
+            OpenAIOAuthTokenSet(
+                access_token="access-token",
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+                scope=["openid"],
+            ),
+            "refresh-token",
+        )
+
+    def _store(token_set, refresh_token, **kwargs):
+        seen["store"] = kwargs
+        return _oauth_profile(provider="openai")
+
+    opened: list[str] = []
+    monkeypatch.setattr(oauth_provider_login, "OAuthLoopbackListener", _Listener)
+    monkeypatch.setattr(oauth_provider_login.OpenAIOAuthClient, "exchange_code", _exchange)
+    monkeypatch.setattr(oauth_provider_login, "store_openai_oauth_profile", _store)
+
+    result = browser_oauth_login(
+        "openai",
+        browser_opener=lambda url: opened.append(url) or True,
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    params = parse_qs(urlparse(opened[0]).query)
+    assert params["client_id"] == ["app_EMoamEEZ73f0CkXaXp7hrann"]
+    assert params["redirect_uri"] == [OPENAI_OAUTH_REDIRECT_URI]
+    assert params["code_challenge_method"] == ["S256"]
+    assert seen["listener_kwargs"]["port"] == 1455
+    assert seen["listener_kwargs"]["callback_path"] == "/auth/callback"
+    assert seen["exchange"]["redirect_uri"] == OPENAI_OAUTH_REDIRECT_URI
+    assert result.capture.profile.kind is CredentialKind.OAUTH
+
+
+def test_browser_oauth_login_openai_reports_port_1455_conflict(monkeypatch) -> None:
+    class _Listener:
+        def __init__(self, **kwargs):
+            raise OSError("address already in use")
+
+    monkeypatch.setattr(oauth_provider_login, "OAuthLoopbackListener", _Listener)
+
+    with pytest.raises(OpenAIOAuthError, match="port 1455 is in use"):
         browser_oauth_login(
             "openai",
             browser_opener=lambda url: False,
@@ -389,7 +575,7 @@ def _oauth_profile(expires_at: datetime | None = None, *, provider: str = "opena
         created_at=datetime.now(UTC),
         oauth_authorization_endpoint=f"https://auth.{provider}.example/authorize",
         oauth_token_endpoint=f"https://auth.{provider}.example/token",
-        oauth_client_id="craik-cli",
+        oauth_client_id=OPENAI_OAUTH_CLIENT_ID,
         oauth_scope_list=["model.request"],
         oauth_token_keyring_handle=f"{provider}:subscription:access",
         oauth_refresh_keyring_handle=f"{provider}:subscription:refresh",

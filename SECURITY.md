@@ -225,10 +225,10 @@ Craik's provider login surface is browser-first where provider OAuth is
 usable today, and explicit about compatibility paths that rely on external
 credential stores.
 
-- Anthropic and Gemini default to OAuth when running `craik auth login`.
-  OpenAI defaults to API-key capture until Craik has a registered OpenAI
-  OAuth client; explicitly requesting `--mode=oauth` fails with remediation
-  instead of using a placeholder client id.
+- OpenAI OAuth uses a loopback PKCE flow against `auth.openai.com` with the
+  public Codex OAuth client. The consent screen identifies the requesting
+  application as "Codex"; Craik prints a pre-flight disclosure before opening
+  the browser. Access and refresh tokens are stored in the OS keyring.
 - Anthropic browser bootstrap stores the resulting provider API key through
   Craik credential storage and persists a keyring-ref auth profile. The
   OAuth code and PKCE verifier are transient and are not stored in Craik
@@ -241,6 +241,10 @@ credential stores.
 - Gemini OAuth uses Google-managed ADC or service-account credentials.
   Craik stores profile metadata such as project id, credential source, and
   service-account path, not Google refresh tokens.
+- Billing-surface labels in `craik doctor` and `craik auth status` are derived
+  from the resolved credential source. Craik routes calls to the selected
+  credential audience but does not inspect vendor-side quota state, subscription
+  balance, committed-use discounts, or per-token account charges.
 - Provider OAuth state values are generated with `secrets.token_urlsafe(32)`
   and compared with `hmac.compare_digest`.
 - Loopback callback helpers bind only to literal `127.0.0.1`, use an

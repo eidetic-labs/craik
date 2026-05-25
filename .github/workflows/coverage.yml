@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   coverage:
@@ -86,13 +84,6 @@ jobs:
           path: |
             htmlcov/
             coverage.xml
-      - name: Upload coverage Pages artifact
-        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
-        with:
-          path: htmlcov
-      - name: Deploy coverage Pages report
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
       - name: Attach coverage.xml to release
         if: startsWith(github.ref, 'refs/tags/v')
         env:

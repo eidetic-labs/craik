@@ -84,9 +84,10 @@ Loopback HTTP base URLs are rejected unless the selected provider is
 ### Provider login
 
 Use `craik auth login` for the default provider setup flow. Craik chooses
-the strongest supported flow per provider: OpenAI and local-compatible
-providers use API-key capture, Anthropic uses browser OAuth bootstrap, and
-Gemini uses Google-managed ADC or service-account OAuth.
+the strongest supported flow per provider: OpenAI uses browser PKCE OAuth
+when no `OPENAI_API_KEY` is set, local-compatible providers use API-key
+capture, Anthropic uses browser OAuth bootstrap, and Gemini uses
+Google-managed ADC or service-account OAuth.
 
 ```sh
 craik auth login openai
@@ -95,11 +96,12 @@ craik auth login gemini --project-id my-gcp-project
 craik auth login local --base-url http://localhost:11434/v1
 ```
 
-OpenAI and local-compatible providers open the provider setup page when a
-browser is available, then Craik prompts for the key with hidden terminal
-input, validates the shape, stores the credential in the local credential
-backend, and writes a redacted `keyring-ref` profile. Copy/paste fallback
-remains available with `--no-browser`.
+OpenAI opens a browser OAuth flow by default. Local-compatible providers, and
+OpenAI when `--no-browser`, `--mode=api-key`, `--dry-run`, or an explicit
+`--env-var`/`--secret-ref` is supplied, use API-key capture. In API-key mode
+Craik opens the provider setup page when a browser is available, prompts for
+the key with hidden terminal input, validates the shape, stores the credential
+in the local credential backend, and writes a redacted `keyring-ref` profile.
 
 Use `--mode=api-key` to force API-key capture for providers whose default is
 OAuth-backed:
@@ -136,17 +138,21 @@ available through `craik login` and `craik whoami`.
 
 ### OpenAI login status
 
-OpenAI defaults to API-key capture in v0.12.7. Craik includes the OAuth
-profile contract, PKCE helper, and token client foundation, but production
-OpenAI OAuth requires a registered Craik OAuth client. Explicitly running
-`craik auth login openai --mode=oauth` exits with remediation text instead
-of launching an unregistered placeholder client.
+OpenAI defaults to browser PKCE OAuth when `OPENAI_API_KEY` is not set:
 
-Craik currently authenticates OpenAI requests against the Platform API, which
-is billed per-token regardless of any OpenAI consumer or workspace
-subscription the operator may hold. OpenAI has not published a third-party
-reuse interface for the subscription-billed token its first-party clients
-obtain through their hosted sign-in flow.
+```sh
+craik auth login openai
+```
+
+The OAuth path stores access and refresh tokens in the OS keyring and routes
+subsequent Craik usage through the operator's OpenAI consumer or workspace
+subscription quota. The pre-flight notice explains that the OpenAI consent
+screen identifies the requesting application as "Codex" because Craik uses
+OpenAI's public Codex OAuth client.
+
+Set `OPENAI_API_KEY`, pass `--no-browser`, or run
+`craik auth login openai --mode=api-key` to use Platform API key billing
+instead.
 
 ### Anthropic browser bootstrap
 
