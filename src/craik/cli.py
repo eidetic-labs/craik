@@ -8,7 +8,6 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 import typer
-from pydantic import ValidationError
 
 from craik import __version__
 from craik.cli_agents import agent_app
@@ -23,7 +22,6 @@ from craik.cli_runs import run_app
 from craik.cli_session import env_with_session_name
 from craik.cli_typer import craik_typer
 from craik.contracts.registry import schema_model, schema_names
-from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.companions.desktop_companion import (
     desktop_approval_notification,
     desktop_companion_action,
@@ -31,25 +29,19 @@ from craik.runtime.companions.desktop_companion import (
     desktop_companion_snapshot,
     desktop_update_check_payload,
 )
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.dashboard import (
     DashboardConfig,
     DashboardConfigError,
     dashboard_preview_payload,
     run_dashboard_server,
 )
-from craik.runtime.gateway import (
-    default_gateway_config,
-    gateway_configured_state,
-)
-from craik.runtime.paths import (
-    CraikPaths,
-    ensure_craik_home,
-    resolve_craik_home,
-    resolve_craik_paths,
+from craik.runtime.setup import (
+    SetupOperatorSessionRequiredError,
+    setup_command_result,
 )
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
 from craik.runtime.shell.tui import run_tui
-from craik.runtime.store import DATABASE_NAME, LocalStore
 
 PACKAGE_NAME = "craik"
 install_craik_error_handler()
@@ -234,6 +226,7 @@ def tui_command(
 
 
 @app.command("setup")
+@craik_command(payload_shape="kv")
 def setup_command(
     project_id: Annotated[
         str | None,
@@ -265,57 +258,23 @@ def setup_command(
             help="Explicitly allow a public gateway bind without TLS termination.",
         ),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Initialize local state and write non-secret gateway setup output."""
-    resolved_paths = resolve_craik_paths()
-    if (resolved_paths.state / DATABASE_NAME).exists():
-        _operator_identity()
-    public_bind = gateway_bind_host in {"0.0.0.0", "::"}  # nosec B104
-    if public_bind and policy_envelope_id and not allow_insecure_public_gateway:
-        raise typer.BadParameter(
-            "public gateway bind without TLS requires --allow-insecure-public-gateway"
-        )
-    paths = ensure_craik_home()
-    store = LocalStore.from_paths(paths)
     try:
-        store.initialize()
-        config = default_gateway_config(
+        result = setup_command_result(
             project_id=project_id,
+            gateway_enabled=gateway_enabled,
+            gateway_bind_host=gateway_bind_host,
+            gateway_port=gateway_port,
             policy_envelope_id=policy_envelope_id,
-        ).model_copy(
-            update={
-                "bind_host": gateway_bind_host,
-                "port": gateway_port,
-                "enabled": gateway_enabled,
-            }
+            allow_insecure_public_gateway=allow_insecure_public_gateway,
         )
-        try:
-            config = type(config).model_validate(config.model_dump(mode="json", by_alias=True))
-        except ValidationError as error:
-            raise typer.BadParameter(str(error)) from None
-        store.put_gateway_config(config)
-        runtime_state = gateway_configured_state(config)
-        store.put_gateway_runtime_state(runtime_state)
-        payload = {
-            "home": _paths_payload(paths),
-            "gateway_config": config.model_dump(mode="json", by_alias=True),
-            "gateway_runtime_state": runtime_state.model_dump(mode="json", by_alias=True),
-            "secrets_written": False,
-            "next_steps": [
-                "Review gateway_config before enabling external ingress.",
-                "Store channel secrets outside Craik config files.",
-                "Run gateway diagnostics before starting the daemon.",
-            ],
-        }
-        if public_bind:
-            payload["warnings"] = [
-                "Public gateway bind configured without TLS termination; place it behind TLS "
-                "or keep it on a private network."
-            ]
-    finally:
-        store.close()
-
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    except SetupOperatorSessionRequiredError:
+        raise typer.BadParameter("active operator session required; run craik login") from None
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @app.command("dashboard")
@@ -436,32 +395,6 @@ def schema_show(name: str) -> None:
         raise typer.BadParameter(f"unknown schema {name!r}; known schemas: {known}") from None
 
     typer.echo(json.dumps(model.model_json_schema(), indent=2, sort_keys=True))
-
-
-
-
-def _paths_payload(paths: CraikPaths) -> dict[str, str]:
-    return {
-        "cache": str(paths.cache),
-        "case_files": str(paths.case_files),
-        "config": str(paths.config),
-        "handoffs": str(paths.handoffs),
-        "home": str(paths.home),
-        "logs": str(paths.logs),
-        "projects": str(paths.projects),
-        "receipts": str(paths.receipts),
-        "secrets": str(paths.secrets),
-        "state": str(paths.state),
-    }
-
-
-def _operator_identity() -> str:
-    try:
-        session = OperatorSessionStore(resolve_craik_home()).get()
-    except OperatorSessionNotFoundError:
-        raise typer.BadParameter("active operator session required; run craik login") from None
-    return session.subject
-
 
 def _load_cli_extensions() -> None:
     """Import command modules that register subcommands on shared Typer apps."""
