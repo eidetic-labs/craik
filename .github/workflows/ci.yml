@@ -180,8 +180,12 @@ jobs:
         run: python scripts/check_release_readiness.py
       - name: Check CommandResult return annotations
         run: python scripts/check_command_result_return.py
+      - name: Check CLI/TUI contract metadata
+        run: python scripts/check_cli_tui_contract.py
       - name: Check direct stdout in migrated commands
         run: python scripts/check_no_direct_stdout.py
+      - name: Check status slash snapshot generator
+        run: python scripts/generate_snapshots.py /status --name status --width 80 --check
       - name: Check slash command registry
         run: python scripts/check_slash_command_registry.py
       - name: Check dock-bottom snapshot coverage
