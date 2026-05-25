@@ -123,6 +123,11 @@ Destructive TUI actions confirm before they proceed. In v0.12.4, `/clear`
 opens a modal that describes the blast radius: the visible transcript is
 discarded, while persisted receipts and audit records remain stored.
 
+Confirmation-only families such as `/policy reset`, `/migrate apply`,
+`/agent delete <agent-id>`, and `/session delete <session-id>` return a
+structured modal request in the TUI. Inline slash dispatch does not perform the
+destructive action directly.
+
 Confirmations record a redacted `slash.confirmation` capability receipt with
 the command and decision. Declines are recorded too, so an audit trail can
 distinguish "not attempted" from "explicitly declined."
