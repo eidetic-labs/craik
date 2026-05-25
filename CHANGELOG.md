@@ -10,6 +10,18 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.7 — 2026-05-25
+
+### Added
+
+- Added provider OAuth profile contracts, loopback PKCE safety helpers, and
+  callback-safety CI coverage for browser-based provider login.
+- Added OpenAI, Anthropic, and Gemini/Vertex OAuth authorization-code clients
+  with secure keyring-only access and refresh token storage.
+- Added `craik auth login <provider> --mode=oauth` for browser OAuth login,
+  provider OAuth bearer-token transport, OAuth profile status expiry metadata,
+  and refreshed authentication/CLI reference documentation.
+
 ## 0.12.6 — 2026-05-25
 
 ### Fixed

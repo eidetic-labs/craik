@@ -660,6 +660,26 @@ migration policy, and localized operator-facing surfaces.
 
 </div>
 
+<div className="craik-keypoint">
+
+**v0.12.x fast-follow status: provider OAuth suite ready for release prep.**
+
+The v0.12.7 goal workflow shipped provider OAuth contracts, loopback
+PKCE helpers, OpenAI/Anthropic/Gemini OAuth clients, secure keyring-only
+token storage, OAuth bearer-token transport, `craik auth login
+<provider> --mode=oauth`, status expiry metadata, callback-safety CI,
+and current authentication docs through milestone issues
+<a href="https://github.com/eidetic-labs/craik/issues/936">#936</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/937">#937</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/940">#940</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/938">#938</a>,
+<a href="https://github.com/eidetic-labs/craik/issues/939">#939</a>,
+and <a href="https://github.com/eidetic-labs/craik/issues/941">#941</a>.
+Release prep is tracked in
+<a href="https://github.com/eidetic-labs/craik/issues/942">#942</a>.
+
+</div>
+
 ### Post-MVP stability · Professional agent runtime
 
 <div className="craik-lead">
