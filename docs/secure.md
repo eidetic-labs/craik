@@ -242,7 +242,7 @@ underlying design.
 <h4 className="craik-product-feature__title">Authentication &amp; credentials</h4>
 <p className="craik-product-feature__summary">
 The operator-facing surface: OIDC login, credential profiles (api-key,
-oauth-token, vendor-cli), credential pools with rotation and failover,
+provider OAuth, keyring-ref, vendor-cli), credential pools with rotation and failover,
 workload identity for CI, and the approval-gated first-use flow. Every
 credential is referenced — never copied.
 </p>

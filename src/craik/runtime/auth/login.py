@@ -19,6 +19,7 @@ from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
+from craik.runtime.auth.sources.anthropic_env import resolve_anthropic_credential_from_env
 from craik.runtime.auth.store import AuthProfileStore, AuthProfileStoreError
 from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
 from craik.runtime.providers.provider_transport import ProviderFamily
@@ -76,6 +77,7 @@ class AuthStatusRow:
     detail: str | None = None
     warning: str | None = None
     oauth_expires_at: str | None = None
+    credential_source: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-safe auth status row."""
@@ -89,6 +91,7 @@ class AuthStatusRow:
             "detail": self.detail,
             "warning": self.warning,
             "oauth_expires_at": self.oauth_expires_at,
+            "credential_source": self.credential_source,
             "redacted": True,
         }
 
@@ -206,6 +209,19 @@ def profile_runtime_status(
         env_var = profile.metadata.get("env_var")
         if not isinstance(env_var, str) or not env_var:
             return CredentialStatus(status="unknown", detail="no environment variable configured")
+        if profile.provider_family == "anthropic":
+            credential = resolve_anthropic_credential_from_env(
+                env,
+                fallback_env_vars=(env_var, "ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY"),
+            )
+            return (
+                CredentialStatus(status="ok", detail=credential.display)
+                if credential is not None
+                else CredentialStatus(
+                    status="rejected",
+                    detail="secret reference could not resolve",
+                )
+            )
         return CredentialStatus(status="ok") if env.get(env_var) else CredentialStatus(
             status="rejected",
             detail="secret reference could not resolve",
@@ -241,6 +257,7 @@ def auth_status_rows(
                 detail=status.detail,
                 warning=_profile_warning(profile),
                 oauth_expires_at=_oauth_expires_at(profile),
+                credential_source=_credential_source(profile, env),
             )
         )
     return rows
@@ -406,6 +423,19 @@ def _oauth_expires_at(profile: AuthProfile) -> str | None:
         return None
     value = profile.metadata.get("token_expires_at")
     return value if isinstance(value, str) else None
+
+
+def _credential_source(profile: AuthProfile, env: dict[str, str] | None) -> str | None:
+    if profile.provider_family != "anthropic" or profile.kind is not CredentialKind.API_KEY:
+        return None
+    env_var = profile.metadata.get("env_var")
+    if not isinstance(env_var, str):
+        return None
+    credential = resolve_anthropic_credential_from_env(
+        env,
+        fallback_env_vars=(env_var, "ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY"),
+    )
+    return credential.display if credential is not None else None
 
 
 __all__ = [

@@ -41,10 +41,44 @@ without changing the auth-profile contract.
 | Token endpoint | `https://console.anthropic.com/v1/oauth/token` |
 | Request header | `x-api-key` |
 | Billing surface | Anthropic Console account |
-| Flow type | OAuth-to-API-key bootstrap |
-| v0.12.7 status | Browser bootstrap is supported |
+| Flow type | Environment token, direct API key, or OAuth-to-API-key bootstrap |
+| v0.12.7 status | Anthropic CLI token env var and browser bootstrap are supported |
 
-Run:
+Craik checks Anthropic credential sources in this order.
+
+### 1. Anthropic CLI OAuth token
+
+If you have Anthropic CLI installed and authenticated, reuse those
+credentials through Anthropic's documented environment-variable integration:
+
+```sh
+claude setup-token
+export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+```
+
+Craik reads `CLAUDE_CODE_OAUTH_TOKEN` automatically for Anthropic requests
+and sends it via `x-api-key`. Craik never writes this environment variable
+or refreshes the token; rotate it by re-running `claude setup-token`.
+
+Verify detection with:
+
+```sh
+craik doctor
+craik auth status
+```
+
+### 2. Anthropic Platform API key
+
+Use a direct Anthropic Platform key when Anthropic CLI is not installed or when
+you want a separate billing credential:
+
+```sh
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 3. OAuth-to-API-key bootstrap
+
+Run the browser bootstrap when neither environment variable is set:
 
 ```sh
 craik auth login anthropic

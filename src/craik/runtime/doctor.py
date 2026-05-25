@@ -14,6 +14,7 @@ from craik.runtime.auth import (
 from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
 from craik.runtime.diagnostics.doctor_checks import (
+    anthropic_env_credential_check,
     channel_pairing_check,
     file_permissions_check,
     gateway_status_check,
@@ -55,6 +56,7 @@ def run_doctor(
         model_availability_check(paths, env),
         *auth_profile_checks,
         provider_auth_check(auth_profile_payloads),
+        anthropic_env_credential_check(env),
         secure_credential_store_check(paths),
         file_permissions_check(paths),
         local_endpoint_safety_check(auth_profile_payloads),

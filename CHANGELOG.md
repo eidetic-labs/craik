@@ -20,6 +20,11 @@ within the `0.x.0` stability expectations described in
   `craik auth login anthropic`; the browser setup stores the resulting API key
   through Craik credential storage and sends provider calls with Anthropic's
   required `x-api-key` header.
+- Added Anthropic credential resolution for `CLAUDE_CODE_OAUTH_TOKEN`, the
+  documented Anthropic CLI token export path. Anthropic resolution now prefers
+  `CLAUDE_CODE_OAUTH_TOKEN`, then `ANTHROPIC_API_KEY`, then stored keyring
+  credentials, and `craik doctor` / `craik auth status` surface the active
+  source without printing credential material.
 - Added Gemini/Vertex OAuth login through Google Application Default
   Credentials and service-account JSON profiles via `google-auth`.
 - Added OpenAI OAuth profile and token-client foundations while keeping OpenAI

@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from craik.contracts.models import AgentSessionState
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.auth.sources.anthropic_env import resolve_anthropic_credential_from_env
 from craik.runtime.auth.store import AUTH_PROFILES_FILENAME, OWNER_ONLY_FILE_MODE
 from craik.runtime.diagnostics.doctor_types import DiagnosticCheck
 from craik.runtime.paths import CraikPaths
@@ -81,6 +82,26 @@ def provider_auth_check(payloads: list[dict[str, Any]]) -> DiagnosticCheck:
         status="fail",
         summary="Provider auth profiles exist but none are usable.",
         action="Refresh or replace provider credentials.",
+    )
+
+
+def anthropic_env_credential_check(env: dict[str, str]) -> DiagnosticCheck:
+    """Report Anthropic's documented environment-token integration state."""
+    credential = resolve_anthropic_credential_from_env(env)
+    if credential is None:
+        return DiagnosticCheck(
+            name="anthropic_env_credential",
+            status="warning",
+            summary="No Anthropic credential was detected in environment variables.",
+            action=(
+                "Run claude setup-token and export CLAUDE_CODE_OAUTH_TOKEN, "
+                "set ANTHROPIC_API_KEY, or run craik auth login anthropic."
+            ),
+        )
+    return DiagnosticCheck(
+        name="anthropic_env_credential",
+        status="pass",
+        summary=f"Anthropic credential detected: {credential.display}.",
     )
 
 
