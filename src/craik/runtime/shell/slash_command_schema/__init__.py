@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from craik.runtime.contract.command_result import PayloadShape as PayloadShape
+from craik.runtime.shell.slash_command_schema.new_commands import new_command_specs
 
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
 
@@ -401,48 +402,10 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         help="Inspect gateway configs, runtime states, and schedules.",
         empty_state=EmptyState(message="No gateway state found."),
     ),
-    SlashCommandSpec(
-        name="/cost",
-        summary="Show provider cost and token usage.",
-        usage="/cost",
-        payload_shape="kv",
-        help="Show provider token usage, known costs, and explicit accounting gaps.",
-        example="/cost",
-        empty_state=EmptyState(message="No provider usage receipts found."),
-    ),
-    SlashCommandSpec(
-        name="/quota",
-        summary="Show provider quota state.",
-        usage="/quota",
-        payload_shape="table",
-        help="Show configured provider quota references and runtime quota availability.",
-        example="/quota",
-        empty_state=EmptyState(message="No provider quota metadata found."),
-    ),
-    SlashCommandSpec(
-        name="/who",
-        summary="Show active operator identity.",
-        usage="/who",
-        payload_shape="kv",
-        help="Show active operator identity and auth profile visibility scope.",
-        example="/who",
-        empty_state=EmptyState(message="No operator session is active."),
-    ),
-    SlashCommandSpec(
-        name="/compact",
-        summary="Compact the current conversation.",
-        usage="/compact",
-        payload_shape="kv",
-        help="Show the registered placeholder for manual conversation compression.",
-        empty_state=EmptyState(message="Conversation compression is not implemented yet."),
-    ),
-    SlashCommandSpec(
-        name="/share",
-        summary="Share the current transcript.",
-        usage="/share",
-        payload_shape="kv",
-        help="Show the registered placeholder for public transcript sharing.",
-        empty_state=EmptyState(message="Transcript sharing is not implemented yet."),
+    *new_command_specs(
+        spec_cls=SlashCommandSpec,
+        empty_state_cls=EmptyState,
+        named_arg_cls=NamedArg,
     ),
     SlashCommandSpec(
         name="/exit",

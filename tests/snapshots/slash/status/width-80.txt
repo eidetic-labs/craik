@@ -1,5 +1,5 @@
 state                   ✗ unconfigured                                          
-home                    <craik-home>                                           
+home                    <craik-home>                        
 initialized             ✗                                                       
 operator required       ✗                                                       
 operator authenticated  ✗  ->  run /login                                       
