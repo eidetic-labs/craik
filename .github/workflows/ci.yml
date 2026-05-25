@@ -186,6 +186,8 @@ jobs:
         run: python scripts/check_no_direct_stdout.py
       - name: Check status slash snapshot generator
         run: python scripts/generate_snapshots.py /status --name status --width 80 --check
+      - name: Check slash snapshot coverage
+        run: python scripts/check_snapshot_coverage.py
       - name: Check slash command registry
         run: python scripts/check_slash_command_registry.py
       - name: Check dock-bottom snapshot coverage
