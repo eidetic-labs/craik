@@ -38,6 +38,8 @@ uv run python scripts/check_release_readiness.py
 uv run python scripts/check_cli_tui_contract.py
 uv run python scripts/check_command_result_return.py
 uv run python scripts/check_no_direct_stdout.py
+uv run python scripts/check_modal_screen_mappings.py
+uv run python scripts/check_modal_screen_security.py
 uv run python scripts/generate_snapshots.py /status --name status --width 80 --check
 uv run python scripts/check_snapshot_coverage.py
 uv run python scripts/check_dead_code.py
