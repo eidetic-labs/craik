@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Annotated
@@ -11,7 +10,9 @@ import typer
 
 from craik.cli import demo_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.runtime.agents.demo import DemoConfigError, PersistentAgentLaunchDemo
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.projects.demos import StigmemDocsDemo
 from craik.runtime.projects.demos_provider import ProviderBackedStigmemDocsDemo
@@ -26,6 +27,7 @@ from craik.runtime.work.handoffs import HandoffContextError
 
 
 @demo_app.command("stigmem-docs")
+@craik_command(payload_shape="card")
 def demo_stigmem_docs(
     repo_path: Annotated[
         Path,
@@ -75,7 +77,7 @@ def demo_stigmem_docs(
         int,
         typer.Option("--max-tokens", min=1, help="Approximate case-file context budget."),
     ] = 24000,
-) -> None:
+) -> CommandResult:
     """Run the Stigmem documentation reconciliation demo."""
     store = LocalStore.from_env()
     try:
@@ -124,10 +126,13 @@ def demo_stigmem_docs(
     finally:
         store.close()
 
-    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    command_result = CommandResult(payload=result, shape="card")
+    emit_command_result(command_result)
+    return command_result
 
 
 @demo_app.command("persistent-agent")
+@craik_command(payload_shape="card")
 def demo_persistent_agent(
     repo_path: Annotated[
         Path,
@@ -152,7 +157,7 @@ def demo_persistent_agent(
         bool,
         typer.Option("--keep-artifacts", help="Keep demo agent session artifacts after exit."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Run the deterministic persistent agent launch demo."""
     store = LocalStore.from_env()
     try:
@@ -173,7 +178,9 @@ def demo_persistent_agent(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    command_result = CommandResult(payload=result, shape="card")
+    emit_command_result(command_result)
+    return command_result
 
 
 def _github_adapter() -> GitHubReadAdapter:

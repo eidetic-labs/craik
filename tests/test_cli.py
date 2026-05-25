@@ -114,7 +114,10 @@ def test_connect_stigmem_emits_structured_capability_payload(monkeypatch) -> Non
 
     result = runner.invoke(app, ["connect", "stigmem", "--url", "https://stigmem.example.test"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["backend"] == "stigmem"
     assert payload["node_id"] == "stigmem:test"
@@ -805,6 +808,7 @@ def test_schema_show_prints_json_schema() -> None:
 def test_runners_matrix_lists_built_in_trust_profiles() -> None:
     result = runner.invoke(app, ["runners", "matrix"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     runner_ids = {entry["runner"]["id"] for entry in payload}
@@ -829,7 +833,10 @@ def test_runners_matrix_lists_built_in_trust_profiles() -> None:
 def test_runners_matrix_filters_one_runner() -> None:
     result = runner.invoke(app, ["runners", "matrix", "--runner", "codex"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.runner_capability_matrix"
     assert payload["runner"]["id"] == "codex"
@@ -842,7 +849,10 @@ def test_provider_certification_command_filters_provider_matrix() -> None:
         ["provider", "certification", "--provider-id", "provider_gemini"],
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.provider_certification_matrix"
     assert [row["provider_id"] for row in payload["rows"]] == ["provider_gemini"]
@@ -890,7 +900,10 @@ def test_setup_wizard_writes_non_secret_gateway_config(tmp_path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["secrets_written"] is False
     assert payload["gateway_config"]["project_id"] == "project_gateway"
@@ -983,7 +996,10 @@ def test_setup_wizard_public_gateway_override_outputs_warning(tmp_path) -> None:
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["gateway_config"]["bind_host"] == "0.0.0.0"
     assert "without TLS termination" in payload["warnings"][0]
@@ -1467,7 +1483,10 @@ def test_demo_stigmem_docs_command_runs_without_live_stigmem(tmp_path: Path) -> 
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.demo.stigmem_docs_reconciliation"
     assert payload["status"] == "runnable"
@@ -1504,7 +1523,10 @@ def test_demo_stigmem_docs_command_surfaces_provider_findings(tmp_path: Path) ->
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["provider_demo"]["mode"] == "fixture"
     assert payload["provider_demo"]["provider_id"] == "provider_openai_chat"
@@ -1567,7 +1589,10 @@ def test_demo_persistent_agent_command_runs_fixture_path(tmp_path: Path) -> None
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.demo.persistent_agent_launch"
     assert payload["mode"] == "fixture"
