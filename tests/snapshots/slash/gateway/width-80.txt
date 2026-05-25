@@ -1,0 +1,9 @@
+configured       ✗
+enabled          ✗
+status           not configured
+pid              ✗
+pid file         /tmp/craik/state/gateway.pid
+pid file exists  ✗
+stale pid        ✗
+bind             ✗
+log file         ✗

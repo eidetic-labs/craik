@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, TypedDict
 
 from craik.contracts.models import CapabilityReceipt
+from craik.runtime.contract import CommandResult
+from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.runners.runner_metadata import runner_metadata_from_receipt_metadata
 from craik.runtime.store import LocalStore
+from craik.tools.receipt_verifier import verify_receipt_bytes, verify_receipt_file
 
 
 class ReceiptLinks(TypedDict):
@@ -87,6 +92,75 @@ def receipt_links(receipt: CapabilityReceipt) -> ReceiptLinks:
         "handoff_ids": _string_list(metadata.get("handoff_ids")),
         "runner_metadata": runner_metadata_from_receipt_metadata(metadata),
     }
+
+
+def receipts_list_result(
+    *,
+    task_id: str | None = None,
+    policy_id: str | None = None,
+    handoff_id: str | None = None,
+    env: dict[str, str] | None = None,
+) -> CommandResult:
+    """Return persisted capability receipts."""
+    store = LocalStore.from_paths(resolve_craik_paths(env))
+    try:
+        store.initialize()
+        receipt_store = ReceiptStore(store)
+        receipts = receipt_store.list_receipts(
+            task_id=task_id,
+            policy_id=policy_id,
+            handoff_id=handoff_id,
+        )
+    finally:
+        store.close()
+    return CommandResult(
+        payload=[receipt.model_dump(mode="json", by_alias=True) for receipt in receipts],
+        shape="card_list",
+        empty_state_message="No capability receipts found.",
+    )
+
+
+def receipts_show_result(receipt_id: str, *, env: dict[str, str] | None = None) -> CommandResult:
+    """Return one persisted capability receipt."""
+    store = LocalStore.from_paths(resolve_craik_paths(env))
+    try:
+        store.initialize()
+        receipt_store = ReceiptStore(store)
+        receipt = receipt_store.require_receipt(receipt_id)
+    except ReceiptNotFoundError as error:
+        raise ValueError(str(error)) from None
+    finally:
+        store.close()
+    return CommandResult(payload=receipt.model_dump(mode="json", by_alias=True), shape="card")
+
+
+def receipts_verify_result(
+    path: str,
+    *,
+    public_key: Path | None = None,
+    auto_discover: bool = False,
+    side_log_base: Path | None = None,
+) -> CommandResult:
+    """Verify a receipt JSON file without trusting the producing runtime."""
+    if path == "-":
+        verification = verify_receipt_bytes(
+            sys.stdin.buffer.read(),
+            public_key_path=public_key,
+            auto_discover=auto_discover,
+            side_log_base=side_log_base,
+        )
+    else:
+        verification = verify_receipt_file(
+            path,
+            public_key_path=public_key,
+            auto_discover=auto_discover,
+            side_log_base=side_log_base,
+        )
+    return CommandResult(
+        payload=verification.as_dict(),
+        shape="kv",
+        exit_code=0 if verification.passed else 1,
+    )
 
 
 def _optional_string(value: Any) -> str | None:
