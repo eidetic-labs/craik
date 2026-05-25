@@ -7,10 +7,51 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.6`; historical sign-offs remain below for
+pre-release gate is `0.12.7`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.7 Provider OAuth Suite
+
+<div className="craik-keypoint">
+
+**v0.12.7 completes browser-based provider OAuth for OpenAI, Anthropic,
+and Gemini/Vertex.**
+
+`0.12.7` adds OAuth auth-profile contracts, one-shot loopback PKCE
+helpers, callback-safety CI coverage, provider-specific authorization-code
+clients, secure keyring-only token storage, OAuth bearer-token transport,
+OAuth status expiry metadata, and `craik auth login <provider>
+--mode=oauth`.
+
+</div>
+
+### v0.12.7 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_oauth_callback_safety.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
+uv run python scripts/check_text_selection_wiring.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_doc_links.py
+uv run python scripts/generate_cli_reference.py --check
+uv run ruff check
+uv run mypy
+uv run pytest
+uv run pytest --cov=craik --cov-report=term --cov-fail-under=80
+(cd docs && npm run build)
+```
 
 ## v0.12.6 Inherited Surface Sweep
 
