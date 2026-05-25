@@ -1,0 +1,1 @@
+`/session` requires a subcommand: `/session list`, `/session rename`, `/session delete`. See `/help session` for details.

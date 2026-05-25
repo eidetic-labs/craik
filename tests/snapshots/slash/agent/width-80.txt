@@ -1,0 +1,1 @@
+`/agent` requires a subcommand: `/agent list`, `/agent launch`, `/agent rename`, `/agent delete`. See `/help agent` for details.
