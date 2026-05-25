@@ -29,6 +29,7 @@ from craik.runtime.session_commands import (
     session_shell_status_result,
 )
 from craik.runtime.shell.argument_validation import argument_validation_error
+from craik.runtime.shell.commands import confirmation_result
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
@@ -133,10 +134,8 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if listing is not None:
         return SlashCommandResult(listing)
     if command.name == "clear":
-        return SlashCommandResult(
-            "Transcript clear confirmation requested. "
-            "The interactive TUI opens a confirmation modal for this action."
-        )
+        result = confirmation_result("clear")
+        return SlashCommandResult(result.text or "")
     report = resolve_readiness(env)
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
@@ -222,6 +221,18 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return gateway_slash_result(tokens[1:], env=env)
     if command.name == "doctor":
         return _payload_result(command.name, {"readiness": report.as_dict()})
+    if command.name == "policy":
+        return _confirmation_slash_result("policy.reset")
+    if command.name == "migrate":
+        return _confirmation_slash_result("migrate.apply")
+    if command.name == "agent":
+        if len(tokens) >= 3 and tokens[1] == "delete":
+            return _confirmation_slash_result("agent.delete", target_id=tokens[2])
+        return SlashCommandResult("agent requires `delete <agent-id>` for inline confirmation.")
+    if command.name == "session":
+        if len(tokens) >= 3 and tokens[1] == "delete":
+            return _confirmation_slash_result("session.delete", target_id=tokens[2])
+        return SlashCommandResult("session requires `delete <session-id>` for inline confirmation.")
     return SlashCommandResult(f"`/{command.name}` is registered but has no inline handler yet.")
 
 
@@ -287,6 +298,15 @@ def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashComman
     if not args:
         return _payload_result("theme", result.payload)
     return SlashCommandResult(f"Theme set to `{result.payload['theme']}`.")
+
+
+def _confirmation_slash_result(
+    action: str,
+    *,
+    target_id: str | None = None,
+) -> SlashCommandResult:
+    result = confirmation_result(action, target_id=target_id)
+    return SlashCommandResult(result.text or "")
 
 
 def _status_payload(_report: object, env: dict[str, str] | None) -> dict[str, object]:
