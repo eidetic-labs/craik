@@ -35,6 +35,7 @@ from craik.runtime.shell.commands import (
     compact_stub_result,
     confirmation_result,
     share_stub_result,
+    who_result,
 )
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
@@ -227,6 +228,8 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
         return gateway_slash_result(tokens[1:], env=env)
+    if command.name == "who":
+        return _command_result_slash_result(command.name, who_result(env))
     if command.name == "compact":
         return _command_result_slash_result(command.name, compact_stub_result())
     if command.name == "share":

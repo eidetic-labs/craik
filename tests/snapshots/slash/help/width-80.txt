@@ -25,6 +25,7 @@
 - `/memory` - Inspect memory proposals and facts.
 - `/mcp` - Inspect configured MCP clients.
 - `/gateway` - Inspect gateway state.
+- `/who` - Show active operator identity.
 - `/compact` - Compact the current conversation.
 - `/share` - Share the current transcript.
 - `/exit` - Exit the shell.
