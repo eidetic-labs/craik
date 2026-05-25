@@ -32,6 +32,37 @@ def test_auth_setup_openai_writes_profile_and_pool(tmp_path: Path) -> None:
     assert CredentialPool(home).get("openai:default").profiles[0].profile_id == "openai:default"
 
 
+def test_auth_add_and_remove_emit_single_json_payload(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_session(home)
+    env = {"CRAIK_HOME": str(home)}
+
+    added = runner.invoke(
+        app,
+        [
+            "auth",
+            "add",
+            "openai:test",
+            "--kind",
+            "api-key",
+            "--env-var",
+            "CRAIK_TEST_OPENAI_KEY",
+        ],
+        env=env,
+    )
+
+    assert added.exit_code == 0, added.output
+    added_payload = json.loads(added.stdout)
+    assert added_payload["id"] == "openai:test"
+    assert added_payload["metadata"]["env_var"] == "CRAIK_TEST_OPENAI_KEY"
+    assert AuthProfileStore(home).get("openai:test").provider_family == "openai"
+
+    removed = runner.invoke(app, ["auth", "remove", "openai:test"], env=env)
+
+    assert removed.exit_code == 0, removed.output
+    assert json.loads(removed.stdout) == {"removed": "openai:test"}
+
+
 def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _put_session(home)
