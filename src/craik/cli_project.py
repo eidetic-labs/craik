@@ -22,6 +22,7 @@ from craik.cli import (
 )
 from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import Priority, TaskMode
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.paths import CraikPaths, ensure_craik_home, resolve_craik_paths
 from craik.runtime.policy.intent_locks import IntentLockManager, IntentLockNotFoundError
@@ -31,10 +32,10 @@ from craik.runtime.projects.prompts import (
     PromptCompiler,
     PromptTaskNotFoundError,
 )
-from craik.runtime.providers.model_providers import (
-    ModelProviderNotFoundError,
-    default_model_provider_registry,
-    provider_selection_payload,
+from craik.runtime.providers.commands import (
+    provider_list_result,
+    provider_select_result,
+    provider_show_result,
 )
 from craik.runtime.runners.runners import (
     default_runner_capability_matrices,
@@ -86,26 +87,28 @@ def runners_matrix(
 
 
 @provider_app.command("list")
-def provider_list() -> None:
+@craik_command(slash_alias="provider", payload_shape="card_list")
+def provider_list() -> CommandResult:
     """Print registered model providers as JSON."""
-    registry = default_model_provider_registry()
-    payload = [provider.model_dump(mode="json", by_alias=True) for provider in registry.list()]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = provider_list_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @provider_app.command("show")
-def provider_show(provider_id: str) -> None:
+@craik_command(payload_shape="card")
+def provider_show(provider_id: str) -> CommandResult:
     """Print one model provider as JSON."""
-    registry = default_model_provider_registry()
     try:
-        provider = registry.require(provider_id)
-    except ModelProviderNotFoundError as error:
+        result = provider_show_result(provider_id)
+    except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    payload = provider.model_dump(mode="json", by_alias=True)
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @provider_app.command("select")
+@craik_command(payload_shape="card")
 def provider_select(
     provider_id: str,
     mode: Annotated[
@@ -120,20 +123,19 @@ def provider_select(
         list[str] | None,
         typer.Option("--receipt-id", help="Receipt id linked to this selection."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Print a redacted provider selection payload."""
-    registry = default_model_provider_registry()
     try:
-        provider = registry.require(provider_id)
-        payload = provider_selection_payload(
-            provider,
+        result = provider_select_result(
+            provider_id,
             mode=mode,
             policy_envelope_id=policy_envelope_id,
             receipt_ids=receipt_id,
         )
-    except (ModelProviderNotFoundError, ValueError) as error:
+    except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @prompt_app.command("compile")

@@ -21,7 +21,17 @@ def summarize_nested(value: Any, *, item_name: str = "items", show_first: int = 
 
 
 def _sample(values: list[Any], *, count: int, show_first: int) -> str:
-    sample = ", ".join(str(value) for value in values)
+    sample = ", ".join(_sample_value(value) for value in values)
     if count > show_first:
         return f"{sample}, ..." if sample else "..."
     return sample
+
+
+def _sample_value(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("name", "id", "provider", "mode"):
+            raw = value.get(key)
+            if raw is not None:
+                return str(raw)
+        return f"{len(value)} keys"
+    return str(value)
