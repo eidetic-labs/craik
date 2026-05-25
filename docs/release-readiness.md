@@ -12,6 +12,48 @@ audit continuity.
 
 </div>
 
+## Upcoming v0.12.8 Canonical CLI/TUI Contract
+
+<div className="craik-keypoint">
+
+**v0.12.8 extends the slash-command migration with structural guards for
+shared CLI/TUI callbacks.**
+
+`0.12.8` keeps migrated commands on the `CommandResult` contract, prevents
+strictly migrated shared callbacks from writing directly to stdout during
+slash dispatch, and adds CI gates so future migrations stay aligned with
+the canonical renderer flow.
+
+</div>
+
+### v0.12.8 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_command_result_return.py
+uv run python scripts/check_no_direct_stdout.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_oauth_callback_safety.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
+uv run python scripts/check_text_selection_wiring.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_doc_links.py
+uv run python scripts/generate_cli_reference.py --check
+uv run ruff check
+uv run mypy
+uv run pytest
+uv run pytest --cov=craik --cov-report=term --cov-fail-under=80
+(cd docs && npm run build)
+```
+
 ## v0.12.7 Provider OAuth Suite
 
 <div className="craik-keypoint">
@@ -37,6 +79,8 @@ creation:
 uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_version.py
 uv run python scripts/check_release_readiness.py
+uv run python scripts/check_command_result_return.py
+uv run python scripts/check_no_direct_stdout.py
 uv run python scripts/check_dead_code.py
 uv run python scripts/check_oauth_callback_safety.py
 uv run python scripts/check_dock_bottom_snapshot_coverage.py
