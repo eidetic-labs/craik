@@ -1,0 +1,1 @@
+Session delete confirmation requested. The interactive TUI opens a confirmation modal for this action.

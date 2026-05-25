@@ -135,8 +135,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if listing is not None:
         return SlashCommandResult(listing)
     if command.name == "clear":
-        result = confirmation_result("clear")
-        return SlashCommandResult(result.text or "")
+        return _confirmation_slash_result("clear")
     report = resolve_readiness(env)
     allowed, reason = readiness_allows_action(report, command.readiness)
     if not allowed:
@@ -307,7 +306,13 @@ def _confirmation_slash_result(
     target_id: str | None = None,
 ) -> SlashCommandResult:
     result = confirmation_result(action, target_id=target_id)
-    return SlashCommandResult(result.text or "")
+    command_name = action.split(".", 1)[0]
+    return SlashCommandResult(
+        result.text or "",
+        command_name=command_name,
+        payload_shape=result.shape,
+        payload=result.payload,
+    )
 
 
 def _status_payload(_report: object, env: dict[str, str] | None) -> dict[str, object]:
