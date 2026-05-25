@@ -77,6 +77,24 @@ class AuthProfile(CraikModel):
         """Require complete OAuth metadata for provider OAuth profiles."""
         if self.kind is not CredentialKind.OAUTH:
             return self
+        if self.provider_family == "gemini" and self.metadata.get("credential_source") in {
+            "adc",
+            "service_account",
+        }:
+            if self.oauth_scope_list is None or not self.oauth_scope_list:
+                raise ValueError("oauth auth profiles require: oauth_scope_list")
+            if any(not scope.strip() for scope in self.oauth_scope_list):
+                raise ValueError("oauth_scope_list entries must be non-empty")
+            if not isinstance(self.metadata.get("gcp_project_id"), str):
+                raise ValueError("gemini oauth auth profiles require metadata.gcp_project_id")
+            if (
+                self.metadata.get("credential_source") == "service_account"
+                and not isinstance(self.metadata.get("service_account_path"), str)
+            ):
+                raise ValueError(
+                    "gemini service-account oauth profiles require service_account_path"
+                )
+            return self
 
         required_strings = {
             "oauth_authorization_endpoint": self.oauth_authorization_endpoint,

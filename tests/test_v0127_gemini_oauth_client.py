@@ -1,190 +1,114 @@
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime, timedelta
-from typing import Any
-from urllib.parse import parse_qs, urlparse
-from urllib.request import Request
+from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+from google.auth.exceptions import DefaultCredentialsError
 
-from craik.runtime.auth.oauth_loopback import generate_pkce_challenge
 from craik.runtime.auth.profile import CredentialKind
-from craik.runtime.auth.sources import gemini_oauth
 from craik.runtime.auth.sources.gemini_oauth import (
+    GEMINI_ADC_CREDENTIAL_SOURCE,
     GEMINI_OAUTH_BILLING_SURFACE,
-    GEMINI_OAUTH_CLIENT_ID,
     GEMINI_OAUTH_SCOPES,
-    GEMINI_OAUTH_TOKEN_ENDPOINT,
-    GeminiOAuthClient,
+    GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE,
     GeminiOAuthError,
-    GeminiOAuthTokenSet,
-    store_gemini_oauth_profile,
+    headers_for_credentials,
+    resolve_via_adc,
+    resolve_via_service_account,
 )
-from craik.runtime.shell.credential_storage import CredentialStorageStatus
 
 
-class _FakeResponse:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self.payload = payload
+class _FakeCredentials:
+    def __init__(
+        self,
+        *,
+        token: str | None = "access-token",
+        expired: bool = False,
+        project_id: str = "craik-project",
+    ) -> None:
+        self.token = token
+        self.expired = expired
+        self.project_id = project_id
+        self.refresh_count = 0
 
-    def __enter__(self) -> _FakeResponse:
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        return None
-
-    def read(self) -> bytes:
-        return json.dumps(self.payload).encode("utf-8")
-
-
-def test_gemini_oauth_authorization_url_uses_state_pkce_scope_and_offline_access() -> None:
-    pkce = generate_pkce_challenge()
-    client = GeminiOAuthClient()
-
-    url = client.authorization_url(
-        redirect_uri="http://127.0.0.1:54321/oauth/callback",
-        state="state-value",
-        pkce=pkce,
-    )
-
-    params = parse_qs(urlparse(url).query)
-    assert params["client_id"] == [GEMINI_OAUTH_CLIENT_ID]
-    assert params["state"] == ["state-value"]
-    assert params["code_challenge"] == [pkce.challenge]
-    assert params["code_challenge_method"] == ["S256"]
-    assert params["scope"] == [" ".join(GEMINI_OAUTH_SCOPES)]
-    assert params["access_type"] == ["offline"]
-    assert params["prompt"] == ["consent"]
+    def refresh(self, request: object) -> None:
+        self.refresh_count += 1
+        self.token = "fresh-access-token"
+        self.expired = False
 
 
-def test_gemini_oauth_exchange_code_posts_verifier_without_persisting_it() -> None:
-    seen: dict[str, Any] = {}
-    pkce = generate_pkce_challenge()
-    client = GeminiOAuthClient()
-    now = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+def test_resolve_via_adc_returns_oauth_profile_without_keyring_handles() -> None:
+    credentials = _FakeCredentials()
 
-    def _opener(request: Request, *, timeout: float) -> _FakeResponse:
-        seen["url"] = request.full_url
-        seen["timeout"] = timeout
-        seen["form"] = parse_qs((request.data or b"").decode("utf-8"))
-        return _FakeResponse(
-            {
-                "access_token": "access-token",
-                "refresh_token": "refresh-token",
-                "expires_in": 1200,
-                "scope": "https://www.googleapis.com/auth/cloud-platform",
-            }
+    def _resolver(scopes: list[str]):
+        assert scopes == GEMINI_OAUTH_SCOPES
+        return credentials, "craik-project"
+
+    result = resolve_via_adc(resolver=_resolver)
+
+    assert result.credentials is credentials
+    assert result.gcp_project_id == "craik-project"
+    assert result.profile.kind is CredentialKind.OAUTH
+    assert result.profile.provider_family == "gemini"
+    assert result.profile.metadata["credential_source"] == GEMINI_ADC_CREDENTIAL_SOURCE
+    assert result.profile.metadata["gcp_project_id"] == "craik-project"
+    assert result.profile.metadata["billing_surface"] == GEMINI_OAUTH_BILLING_SURFACE
+    assert result.profile.oauth_token_keyring_handle is None
+    assert result.profile.oauth_refresh_keyring_handle is None
+
+
+def test_resolve_via_adc_reports_gcloud_remediation() -> None:
+    def _resolver(scopes: list[str]):
+        raise DefaultCredentialsError("missing adc")
+
+    with pytest.raises(GeminiOAuthError, match="gcloud auth application-default login"):
+        resolve_via_adc(resolver=_resolver)
+
+
+def test_resolve_via_service_account_returns_project_profile(tmp_path: Path) -> None:
+    key_path = tmp_path / "service-account.json"
+    key_path.write_text("{}", encoding="utf-8")
+    credentials = _FakeCredentials(project_id="service-project")
+
+    def _loader(path: str, scopes: list[str]):
+        assert path == str(key_path)
+        assert scopes == GEMINI_OAUTH_SCOPES
+        return credentials
+
+    result = resolve_via_service_account(json_path=key_path, loader=_loader)
+
+    assert result.credentials is credentials
+    assert result.gcp_project_id == "service-project"
+    assert result.profile.metadata["credential_source"] == GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE
+    assert result.profile.metadata["service_account_path"] == str(key_path)
+
+
+def test_headers_for_credentials_refreshes_expired_credentials() -> None:
+    credentials = _FakeCredentials(token=None, expired=True)
+
+    headers = headers_for_credentials(credentials, refresh_request_factory=lambda: object())
+
+    assert headers == {"Authorization": "Bearer fresh-access-token"}
+    assert credentials.refresh_count == 1
+
+
+def test_headers_for_credentials_rejects_missing_token_after_refresh() -> None:
+    class _BrokenCredentials(_FakeCredentials):
+        def refresh(self, request: object) -> None:
+            self.refresh_count += 1
+            self.token = None
+
+    with pytest.raises(GeminiOAuthError, match="access token"):
+        headers_for_credentials(
+            _BrokenCredentials(token=None, expired=True),
+            refresh_request_factory=lambda: object(),
         )
 
-    token_set, refresh_value = client.exchange_code(
-        code="auth-code",
-        redirect_uri="http://127.0.0.1:54321/oauth/callback",
-        pkce=pkce,
-        opener=_opener,
-        now=now,
-    )
 
-    assert seen["url"] == GEMINI_OAUTH_TOKEN_ENDPOINT
-    assert seen["form"]["grant_type"] == ["authorization_code"]
-    assert seen["form"]["code"] == ["auth-code"]
-    assert seen["form"]["code_verifier"] == [pkce.verifier]
-    assert token_set.access_token == "access-token"
-    assert refresh_value == "refresh-token"
-    assert token_set.expires_at == now + timedelta(seconds=1200)
-    assert token_set.scope == ["https://www.googleapis.com/auth/cloud-platform"]
+def test_gemini_adc_profile_accepts_metadata_schema() -> None:
+    result = resolve_via_adc(resolver=lambda scopes: (_FakeCredentials(), "craik-project"))
 
+    restored = result.profile.model_copy(update={"created_at": datetime(2026, 5, 25, tzinfo=UTC)})
 
-def test_gemini_oauth_refresh_posts_refresh_token_as_local_value() -> None:
-    seen: dict[str, Any] = {}
-    client = GeminiOAuthClient()
-
-    def _opener(request: Request, *, timeout: float) -> _FakeResponse:
-        seen["form"] = parse_qs((request.data or b"").decode("utf-8"))
-        return _FakeResponse(
-            {
-                "access_token": "new-access-token",
-                "refresh_token": "new-refresh-token",
-                "expires_in": 3600,
-            }
-        )
-
-    token_set, refresh_value = client.refresh_access_token(
-        refresh_token="old-refresh-token",
-        opener=_opener,
-    )
-
-    assert seen["form"]["grant_type"] == ["refresh_token"]
-    assert seen["form"]["refresh_token"] == ["old-refresh-token"]
-    assert token_set.access_token == "new-access-token"
-    assert refresh_value == "new-refresh-token"
-
-
-def test_gemini_oauth_rejects_token_response_without_refresh_token() -> None:
-    def _opener(request: Request, *, timeout: float) -> _FakeResponse:
-        return _FakeResponse({"access_token": "access-token"})
-
-    with pytest.raises(GeminiOAuthError, match="refresh token"):
-        GeminiOAuthClient().refresh_access_token(refresh_token="old", opener=_opener)
-
-
-def test_store_gemini_oauth_profile_writes_access_and_refresh_handles(monkeypatch) -> None:
-    stored: dict[str, str] = {}
-
-    monkeypatch.setattr(
-        gemini_oauth.credential_storage,
-        "credential_storage_status",
-        lambda env=None: CredentialStorageStatus(
-            backend="test-keyring",
-            status="available",
-            secure=True,
-        ),
-    )
-    monkeypatch.setattr(
-        gemini_oauth.credential_storage,
-        "put_cached_credential",
-        lambda ref, value, *, env=None: stored.__setitem__(ref, value),
-    )
-
-    token_set = GeminiOAuthTokenSet(
-        access_token="access-token",
-        expires_at=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
-        scope=["https://www.googleapis.com/auth/cloud-platform"],
-    )
-
-    profile = store_gemini_oauth_profile(
-        token_set,
-        refresh_token="refresh-token",
-        profile_id="gemini:vertex",
-        project_id="craik-project",
-    )
-
-    assert profile.kind is CredentialKind.OAUTH
-    assert profile.oauth_token_keyring_handle == "gemini:vertex:oauth-access-token"
-    assert profile.oauth_refresh_keyring_handle == "gemini:vertex:oauth-refresh-token"
-    assert stored == {
-        "gemini:vertex:oauth-access-token": "access-token",
-        "gemini:vertex:oauth-refresh-token": "refresh-token",
-    }
-    assert profile.metadata["billing_surface"] == GEMINI_OAUTH_BILLING_SURFACE
-    assert profile.metadata["project_id"] == "craik-project"
-
-
-def test_store_gemini_oauth_profile_requires_secure_keyring(monkeypatch) -> None:
-    monkeypatch.setattr(
-        gemini_oauth.credential_storage,
-        "credential_storage_status",
-        lambda env=None: CredentialStorageStatus(
-            backend="file",
-            status="fallback",
-            secure=False,
-        ),
-    )
-    token_set = GeminiOAuthTokenSet(
-        access_token="access-token",
-        expires_at=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
-        scope=["https://www.googleapis.com/auth/cloud-platform"],
-    )
-
-    with pytest.raises(GeminiOAuthError, match="OS keyring"):
-        store_gemini_oauth_profile(token_set, refresh_token="refresh-token")
+    assert restored.metadata["credential_source"] == "adc"

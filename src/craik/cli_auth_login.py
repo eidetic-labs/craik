@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import webbrowser
 from collections.abc import Callable
+from pathlib import Path
 from typing import Annotated
 
 import click
@@ -19,7 +20,11 @@ from craik.runtime.auth.login import (
     logout_provider,
     migrate_env_profiles,
 )
-from craik.runtime.auth.oauth_provider_login import OAuthLoginResult, browser_oauth_login
+from craik.runtime.auth.oauth_provider_login import (
+    OAuthLoginResult,
+    browser_oauth_login,
+    gemini_oauth_login,
+)
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness
@@ -62,6 +67,13 @@ def auth_login_provider(
         str | None,
         typer.Option("--project-id", help="GCP project id for Gemini/Vertex OAuth profiles."),
     ] = None,
+    service_account: Annotated[
+        Path | None,
+        typer.Option(
+            "--service-account",
+            help="Service-account JSON file for Gemini/Vertex OAuth profiles.",
+        ),
+    ] = None,
     allow_local_base_url: Annotated[
         bool,
         typer.Option("--allow-local-base-url", help="Allow loopback HTTP provider URLs."),
@@ -87,16 +99,27 @@ def auth_login_provider(
                 raise typer.BadParameter("--base-url is only supported by --mode=api-key")
             if dry_run:
                 raise typer.BadParameter("--dry-run is not supported for browser OAuth login")
-            oauth_result = browser_oauth_login(
-                provider,
-                profile_id=profile_id,
-                project_id=project_id,
-                browser_opener=_browser_opener(no_browser=no_browser),
-            )
+            if provider.strip().lower() == "gemini":
+                oauth_result = gemini_oauth_login(
+                    profile_id=profile_id,
+                    project_id=project_id,
+                    service_account_path=service_account,
+                )
+            else:
+                if service_account is not None:
+                    raise typer.BadParameter("--service-account is only supported for gemini OAuth")
+                oauth_result = browser_oauth_login(
+                    provider,
+                    profile_id=profile_id,
+                    project_id=project_id,
+                    browser_opener=_browser_opener(no_browser=no_browser),
+                )
             _emit_oauth_login_result(oauth_result, json_output=json_output)
             return
         if project_id is not None:
             raise typer.BadParameter("--project-id is only supported by --mode=oauth")
+        if service_account is not None:
+            raise typer.BadParameter("--service-account is only supported by --mode=oauth")
         setup_url = _provider_setup_url(provider)
         browser_opened = False
         if setup_url and not no_browser and not dry_run and env_var is None and secret_ref is None:
