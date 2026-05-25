@@ -1,16 +1,54 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-24</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-25</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.5`; historical sign-offs remain below for
+pre-release gate is `0.12.6`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.6 Inherited Surface Sweep
+
+<div className="craik-keypoint">
+
+**v0.12.6 closes the inherited-surface sweep for channel ingress,
+slash-command payload shape, and TUI text selection.**
+
+`0.12.6` sanitizes normalized messaging-channel text before runtime
+boundaries, extends the slash-command registry guard to execute structured
+payload smoke commands, and keeps TUI text-selection behavior documented,
+styled, and covered by a release-readiness guard.
+
+</div>
+
+### v0.12.6 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
+uv run python scripts/check_text_selection_wiring.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_doc_links.py
+uv run ruff check
+uv run mypy
+uv run pytest
+uv run pytest --cov=craik --cov-report=term --cov-fail-under=80
+(cd docs && npm run build)
+```
 
 ## v0.12.5 TUI Polish and Release Guards
 
