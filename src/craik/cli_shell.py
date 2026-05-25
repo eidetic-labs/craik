@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
@@ -20,6 +19,15 @@ from craik.runtime.model_commands import (
     model_probe_result,
     model_set_result,
     model_status_result,
+)
+from craik.runtime.session_commands import (
+    session_delete_result,
+    session_export_result,
+    session_list_result,
+    session_prune_result,
+    session_rename_result,
+    session_resume_result,
+    session_show_result,
 )
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
 from craik.runtime.shell.profile_settings import (
@@ -128,138 +136,97 @@ def model_fallback(action: str, model: str | None = None) -> CommandResult:
 
 
 @session_app.command("list")
-def session_list() -> None:
+@craik_command(slash_alias="sessions", payload_shape="card_list")
+def session_list() -> CommandResult:
     """List persistent agent sessions."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        sessions = [_session_payload(session) for session in store.list_agent_session_states()]
-    finally:
-        store.close()
-    typer.echo(json.dumps(sessions, indent=2, sort_keys=True))
+    result = session_list_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("show")
-def session_show(session_id: str) -> None:
+@craik_command(payload_shape="card")
+def session_show(session_id: str) -> CommandResult:
     """Show one persistent agent session."""
     _operator_identity()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        session = store.get_agent_session_state(session_id)
-    finally:
-        store.close()
-    if session is None:
-        raise typer.BadParameter(f"unknown session: {session_id}")
-    typer.echo(json.dumps(_session_payload(session), indent=2, sort_keys=True))
+        result = session_show_result(session_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("resume")
-def session_resume(session_id: str) -> None:
+@craik_command(slash_alias="resume", payload_shape="kv")
+def session_resume(session_id: str) -> CommandResult:
     """Print resume guidance for one persistent session."""
     _operator_identity()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        session = store.get_agent_session_state(session_id)
-    finally:
-        store.close()
-    if session is None:
-        raise typer.BadParameter(f"unknown session: {session_id}")
-    payload = {
-        "session_id": session.id,
-        "status": session.status,
-        "resume_supported": session.status in {"idle", "stopped", "auth_expired"},
-        "next_action": f"craik session show {session.id}",
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        result = session_resume_result(session_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("rename")
-def session_rename(session_id: str, name: str) -> None:
+@craik_command(payload_shape="card")
+def session_rename(session_id: str, name: str) -> CommandResult:
     """Assign a display name to a persistent session."""
     _operator_identity()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        session = store.get_agent_session_state(session_id)
-        if session is None:
-            raise typer.BadParameter(f"unknown session: {session_id}")
-        metadata = dict(session.recovery_metadata)
-        metadata["name"] = name
-        updated = session.model_copy(update={"recovery_metadata": metadata, "updated_at": _now()})
-        store.put_agent_session_state(updated)
-    finally:
-        store.close()
-    typer.echo(json.dumps(_session_payload(updated), indent=2, sort_keys=True))
+        result = session_rename_result(session_id, name)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("export")
-def session_export(session_id: str) -> None:
+@craik_command(payload_shape="card")
+def session_export(session_id: str) -> CommandResult:
     """Export one redacted persistent session."""
     _operator_identity()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        session = store.get_agent_session_state(session_id)
-    finally:
-        store.close()
-    if session is None:
-        raise typer.BadParameter(f"unknown session: {session_id}")
-    payload = _session_payload(session)
-    payload["redacted"] = True
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        result = session_export_result(session_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("prune")
+@craik_command(payload_shape="kv")
 def session_prune(
     yes: Annotated[bool, typer.Option("--yes", help="Confirm pruning stopped sessions.")] = False,
-) -> None:
+) -> CommandResult:
     """Preview pruning stopped sessions; destructive deletion is not performed."""
     _operator_identity()
     if not yes:
         raise typer.BadParameter("session prune requires --yes")
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        stopped = [
-            session.id
-            for session in store.list_agent_session_states()
-            if session.status in {"stopped", "failed"}
-        ]
-    finally:
-        store.close()
-    typer.echo(json.dumps({"prunable": stopped, "deleted": []}, indent=2, sort_keys=True))
+    result = session_prune_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("delete")
+@craik_command(payload_shape="kv")
 def session_delete(
     session_id: str,
     yes: Annotated[bool, typer.Option("--yes", help="Confirm session deletion.")] = False,
-) -> None:
+) -> CommandResult:
     """Mark a session as stopped; raw record deletion is intentionally not supported."""
     _operator_identity()
     if not yes:
         raise typer.BadParameter("session delete requires --yes")
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        session = store.get_agent_session_state(session_id)
-        if session is None:
-            raise typer.BadParameter(f"unknown session: {session_id}")
-        updated = session.model_copy(
-            update={
-                "status": "stopped",
-                "stopped_at": _now(),
-                "updated_at": _now(),
-                "supervision_notes": [*session.supervision_notes, "marked stopped by CLI delete"],
-            }
-        )
-        store.put_agent_session_state(updated)
-    finally:
-        store.close()
-    typer.echo(json.dumps({"session_id": session_id, "marked_stopped": True}, indent=2))
+        result = session_delete_result(session_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2))
+    return result
 
 
 @profile_app.command("list")
@@ -390,33 +357,6 @@ def _operator_identity() -> str:
     if session is None:
         raise typer.BadParameter("active operator session required; run craik login")
     return session.subject
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _session_payload(session: Any) -> dict[str, object]:
-    return {
-        "id": session.id,
-        "name": session.recovery_metadata.get("name") if session.recovery_metadata else None,
-        "project_id": session.project_id,
-        "operator_subject": session.operator_subject,
-        "provider_id": session.provider_id,
-        "model_id": session.model_id,
-        "status": session.status,
-        "mode": session.mode,
-        "active_task_id": session.active_task_id,
-        "active_run_id": session.active_run_id,
-        "started_at": session.started_at.isoformat() if session.started_at else None,
-        "last_activity_at": session.last_activity_at.isoformat()
-        if session.last_activity_at
-        else None,
-        "stopped_at": session.stopped_at.isoformat() if session.stopped_at else None,
-        "receipt_ids": session.receipt_ids,
-        "handoff_ids": session.handoff_ids,
-        "redacted": True,
-    }
 
 
 def _usage_payload() -> dict[str, object]:

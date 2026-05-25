@@ -1,0 +1,4 @@
+session id        agent_session_docs
+status            idle
+resume supported  ✓
+next action       craik session show agent_session_docs
