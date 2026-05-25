@@ -76,7 +76,6 @@ def test_format_text_uses_empty_state_when_payload_absent() -> None:
     assert format_command_result(result, kind="text") == "No results found."
 
 
-@pytest.mark.xfail(reason="renderer pipeline lands in v0.12.8 Task 1.5+")
 def test_format_tui_returns_rich_renderable() -> None:
     result = CommandResult(payload={"a": 1}, shape="kv")
     rendered = format_command_result(result, kind="tui")
