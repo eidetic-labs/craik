@@ -1120,6 +1120,8 @@ def test_task_and_case_commands_round_trip(tmp_path: Path) -> None:
     assert shown.exit_code == 0
     assert prompt.exit_code == 0
     assert graph.exit_code == 0
+    assert graph.stdout.strip().startswith("{")
+    assert graph.stdout.strip().endswith("}")
     task_payload = json.loads(task.stdout)
     assert task_payload["task"]["id"] == "task_review_docs"
     assert task_payload["intent_lock"]["id"] == "intent_review_docs"
@@ -1174,9 +1176,18 @@ def test_contradiction_commands_open_list_show(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert opened.exception is None, opened.output
     assert opened.exit_code == 0
+    assert opened.stdout.strip().startswith("{")
+    assert opened.stdout.strip().endswith("}")
+    assert listed.exception is None, listed.output
     assert listed.exit_code == 0
+    assert listed.stdout.strip().startswith("[")
+    assert listed.stdout.strip().endswith("]")
+    assert shown.exception is None, shown.output
     assert shown.exit_code == 0
+    assert shown.stdout.strip().startswith("{")
+    assert shown.stdout.strip().endswith("}")
     assert [item["id"] for item in json.loads(listed.stdout)] == [report_id]
     assert json.loads(shown.stdout)["contradiction"]["id"] == report_id
 
@@ -2020,9 +2031,13 @@ def test_memory_commands_propose_approve_and_search(tmp_path: Path) -> None:
 def test_policy_show_defaults_to_strict() -> None:
     result = runner.invoke(app, ["policy", "show"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert '"profile": "strict"' in result.stdout
-    assert '"fail_open": false' in result.stdout
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["policy_envelope"]["profile"] == "strict"
+    assert payload["policy_envelope"]["fail_open"] is False
 
 
 def test_policy_show_requires_trusted_local_fail_open_opt_in() -> None:
@@ -2045,10 +2060,14 @@ def test_policy_show_can_include_fail_open_receipt() -> None:
         ],
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert '"profile": "trusted-local"' in result.stdout
-    assert '"fail_open": true' in result.stdout
-    assert '"capability": "policy.fail_open"' in result.stdout
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["policy_envelope"]["profile"] == "trusted-local"
+    assert payload["policy_envelope"]["fail_open"] is True
+    assert payload["receipt"]["capability"] == "policy.fail_open"
 
 
 def test_policy_test_command_prints_passing_report(tmp_path: Path) -> None:
@@ -2060,7 +2079,10 @@ def test_policy_test_command_prints_passing_report(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.policy_test_report"
     assert payload["status"] == "passed"
