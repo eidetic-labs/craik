@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import delegation_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import HumanDelegationKind
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.reviewing.delegations import (
     DelegationResolution,
@@ -21,6 +22,7 @@ from craik.runtime.store import LocalStore
 
 
 @delegation_app.command("pause")
+@craik_command(payload_shape="card")
 def delegation_pause(
     run_id: Annotated[str, typer.Argument(help="Run id to pause for human input.")],
     summary: Annotated[str, typer.Option("--summary", help="Delegation summary.")],
@@ -36,7 +38,7 @@ def delegation_pause(
         ),
     ] = "clarification",
     owner: Annotated[str | None, typer.Option("--owner", help="Delegation owner.")] = None,
-) -> None:
+) -> CommandResult:
     """Pause a run by opening a receipted human delegation."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -58,20 +60,20 @@ def delegation_pause(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(
-        json.dumps(
-            {
-                "run": result.run.model_dump(mode="json", by_alias=True),
-                "delegation": result.delegation.model_dump(mode="json", by_alias=True),
-                "receipt": result.receipt.model_dump(mode="json", by_alias=True),
-            },
-            indent=2,
-            sort_keys=True,
-        )
+    command_result = CommandResult(
+        payload={
+            "run": result.run.model_dump(mode="json", by_alias=True),
+            "delegation": result.delegation.model_dump(mode="json", by_alias=True),
+            "receipt": result.receipt.model_dump(mode="json", by_alias=True),
+        },
+        shape="card",
     )
+    emit_command_result(command_result)
+    return command_result
 
 
 @delegation_app.command("resolve")
+@craik_command(payload_shape="card")
 def delegation_resolve(
     delegation_id: Annotated[str, typer.Argument(help="Delegation id to resolve.")],
     resolution: Annotated[str, typer.Option("--resolution", help="Human resolution text.")],
@@ -87,7 +89,7 @@ def delegation_resolve(
         str,
         typer.Option("--outcome", help="accepted, rejected, or cancelled."),
     ] = "accepted",
-) -> None:
+) -> CommandResult:
     """Resolve or cancel a human delegation and link the decision receipt to its run."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -108,19 +110,18 @@ def delegation_resolve(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(
-        json.dumps(
-            {
-                "delegation": result.delegation.model_dump(mode="json", by_alias=True),
-                "receipt": result.receipt.model_dump(mode="json", by_alias=True),
-                "run": result.run.model_dump(mode="json", by_alias=True)
-                if result.run is not None
-                else None,
-            },
-            indent=2,
-            sort_keys=True,
-        )
+    command_result = CommandResult(
+        payload={
+            "delegation": result.delegation.model_dump(mode="json", by_alias=True),
+            "receipt": result.receipt.model_dump(mode="json", by_alias=True),
+            "run": result.run.model_dump(mode="json", by_alias=True)
+            if result.run is not None
+            else None,
+        },
+        shape="card",
     )
+    emit_command_result(command_result)
+    return command_result
 
 
 def _delegation_outcome(value: str) -> DelegationResolution:

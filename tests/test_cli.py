@@ -2344,6 +2344,8 @@ def test_delegation_pause_and_resolve_cli_flow(tmp_path: Path) -> None:
     )
 
     assert paused.exit_code == 0
+    assert paused.stdout.lstrip().startswith("{")
+    assert paused.stdout.rstrip().endswith("}")
     paused_payload = json.loads(paused.stdout)
     assert paused_payload["run"]["status"] == "interrupted"
     assert paused_payload["delegation"]["run_id"] == "run_docs"
@@ -2368,6 +2370,8 @@ def test_delegation_pause_and_resolve_cli_flow(tmp_path: Path) -> None:
     )
 
     assert resolved.exit_code == 0
+    assert resolved.stdout.lstrip().startswith("{")
+    assert resolved.stdout.rstrip().endswith("}")
     resolved_payload = json.loads(resolved.stdout)
     assert resolved_payload["delegation"]["status"] == "resolved"
     assert resolved_payload["receipt"]["result"]["metadata"]["outcome"] == "accepted"
@@ -2404,6 +2408,8 @@ def test_agent_message_send_and_receive_cli_flow(tmp_path: Path) -> None:
     )
 
     assert sent.exit_code == 0
+    assert sent.stdout.lstrip().startswith("{")
+    assert sent.stdout.rstrip().endswith("}")
     sent_payload = json.loads(sent.stdout)
     assert sent_payload["from_agent"] == "agent:orchestrator"
 
@@ -2420,6 +2426,8 @@ def test_agent_message_send_and_receive_cli_flow(tmp_path: Path) -> None:
     )
 
     assert received.exit_code == 0
+    assert received.stdout.lstrip().startswith("{")
+    assert received.stdout.rstrip().endswith("}")
     received_payload = json.loads(received.stdout)
     assert received_payload["status"] == "received"
     assert len(received_payload["receipt_ids"]) == 2
