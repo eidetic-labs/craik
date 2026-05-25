@@ -1,0 +1,19 @@
+Provider Quotas
+
+- provider_anthropic: budget=budget_anthropic_monthly quota=quota_anthropic_daily remaining=unknown
+- provider_anthropic_messages: budget=budget_anthropic_monthly quota=quota_anthropic_daily remaining=unknown
+- provider_fixture_local: budget=budget_fixture_monthly quota=quota_fixture_daily remaining=unknown
+- provider_gemini: budget=budget_gemini_monthly quota=quota_gemini_daily remaining=unknown
+- provider_local_lm_studio: budget=budget_local_lm_studio_monthly quota=quota_local_lm_studio_daily remaining=unknown
+- provider_local_ollama: budget=budget_local_ollama_monthly quota=quota_local_ollama_daily remaining=unknown
+- provider_local_openai_compatible: budget=budget_local_monthly quota=quota_local_daily remaining=unknown
+- provider_local_vllm: budget=budget_local_vllm_monthly quota=quota_local_vllm_daily remaining=unknown
+- provider_openai: budget=budget_openai_monthly quota=quota_openai_daily remaining=unknown
+- provider_openai_chat: budget=budget_openai_monthly quota=quota_openai_daily remaining=unknown
+- provider_openai_responses: budget=budget_openai_monthly quota=quota_openai_daily remaining=unknown
+
+Active provider: unknown
+Last provider call: unknown
+Missing data:
+- quota_remaining
+- budget_remaining

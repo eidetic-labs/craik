@@ -25,6 +25,8 @@
 - `/memory` - Inspect memory proposals and facts.
 - `/mcp` - Inspect configured MCP clients.
 - `/gateway` - Inspect gateway state.
+- `/cost` - Show provider cost and token usage.
+- `/quota` - Show provider quota state.
 - `/who` - Show active operator identity.
 - `/compact` - Compact the current conversation.
 - `/share` - Share the current transcript.
