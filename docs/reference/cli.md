@@ -242,10 +242,6 @@ Options:
 
 - `--kind`: Credential kind for this profile.
 - `--env-var`: Environment variable containing an API key.
-- `--source`: Optional source hint for future credential kinds.
-- `--credentials-path`: Local CLI credentials file path.
-- `--refresh-endpoint`: OAuth refresh endpoint for local CLI tokens.
-- `--client-id`: OAuth client id for refresh requests.
 - `--ref`: Secret reference for secret-ref profiles.
 - `--manager`: Secret manager for secret-ref profiles.
 - `--secrets-root`: Root directory for file secret references.

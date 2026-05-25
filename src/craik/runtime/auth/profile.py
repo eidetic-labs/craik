@@ -20,7 +20,6 @@ class CredentialKind(StrEnum):
 
     API_KEY = "api-key"
     OAUTH = "oauth"
-    OAUTH_TOKEN = "oauth-token"
     SECRET_REF = "secret-ref"
     KEYRING_REF = "keyring-ref"
     STIGMEM_REF = "stigmem-ref"

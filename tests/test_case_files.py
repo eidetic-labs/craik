@@ -251,16 +251,16 @@ def test_case_file_records_credential_expiry_risk(
     expires_at = datetime.now(UTC) + timedelta(minutes=30)
     _put_auth_profile(
         store,
-        "anthropic:local-cli",
-        kind=CredentialKind.OAUTH_TOKEN,
-        metadata={"source": "local-cli", "expires_at": expires_at.isoformat()},
+        "anthropic:env",
+        kind=CredentialKind.API_KEY,
+        metadata={"env_var": "ANTHROPIC_API_KEY", "expires_at": expires_at.isoformat()},
     )
     task = create_task(
         store,
         title="Credential expiry",
         objective="Build case with credential expiry context.",
         project_id=project.id,
-        auth_profile_id="anthropic:local-cli",
+        auth_profile_id="anthropic:env",
         expected_duration_minutes=60,
     )
 
@@ -272,7 +272,7 @@ def test_case_file_records_credential_expiry_risk(
         if evidence.id == f"evidence_{task.id}_auth_profile"
     ]
     assert auth_evidence
-    assert auth_evidence[0].metadata["auth_profile_id"] == "anthropic:local-cli"
+    assert auth_evidence[0].metadata["auth_profile_id"] == "anthropic:env"
     assert auth_evidence[0].metadata["expires_at"] == expires_at.isoformat()
     assert any("credential_expiry_risk" in risk for risk in case_file.stale_risks)
 
@@ -285,10 +285,10 @@ def test_case_file_skips_credential_expiry_risk_for_long_lived_token(
     project = ProjectRegistry(store).add_project(repo, name="Example")
     _put_auth_profile(
         store,
-        "anthropic:local-cli",
-        kind=CredentialKind.OAUTH_TOKEN,
+        "anthropic:env",
+        kind=CredentialKind.API_KEY,
         metadata={
-            "source": "local-cli",
+            "env_var": "ANTHROPIC_API_KEY",
             "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
         },
     )
@@ -297,14 +297,14 @@ def test_case_file_skips_credential_expiry_risk_for_long_lived_token(
         title="Long lived credential",
         objective="Build case with credential expiry context.",
         project_id=project.id,
-        auth_profile_id="anthropic:local-cli",
+        auth_profile_id="anthropic:env",
         expected_duration_minutes=60,
     )
 
     case_file = CaseFileAssembler(store).build(task.id)
 
     assert any(
-        evidence.metadata.get("auth_profile_id") == "anthropic:local-cli"
+        evidence.metadata.get("auth_profile_id") == "anthropic:env"
         for evidence in case_file.evidence
     )
     assert not any("credential_expiry_risk" in risk for risk in case_file.stale_risks)

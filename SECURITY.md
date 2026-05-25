@@ -248,11 +248,6 @@ credential stores.
 - `scripts/check_oauth_callback_safety.py` enforces loopback bind, state
   comparison, PKCE verifier non-persistence, and refresh-token scope
   invariants in CI.
-- Local-CLI OAuth (`kind=oauth-token`, `source=local-cli`) is a compatibility
-  exception. It reads vendor-managed credential files and may write refreshed
-  token payloads back to that vendor file. This is not Craik keyring-cached
-  storage; use it only when the operator explicitly trusts the vendor CLI
-  credential store and its file permissions.
 - Gateway/channel artifacts are persisted through typed local-store
   helpers: adapter contracts, identity pairings, allowlists, gateway
   receipts, schedules, scheduled automations, and channel policy
