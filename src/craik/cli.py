@@ -402,6 +402,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_agent_messages",
         "craik.cli_auth",
         "craik.cli_auth_login",
+        "craik.cli_status",
         "craik.cli_shell",
         "craik.cli_delegations",
         "craik.cli_handoffs",
