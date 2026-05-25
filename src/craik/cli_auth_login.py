@@ -13,6 +13,7 @@ import click
 import typer
 
 from craik.cli import auth_app
+from craik.cli_output import emit_command_result
 from craik.runtime.auth import AuthProfileNotFoundError, AuthProfileStore, CredentialKind
 from craik.runtime.auth.login import (
     AuthCaptureResult,
@@ -29,6 +30,7 @@ from craik.runtime.auth.oauth_provider_login import (
 from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
 from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness
@@ -195,6 +197,7 @@ def auth_login_provider(
 
 
 @auth_app.command("logout")
+@craik_command(payload_shape="kv")
 def auth_logout_provider(
     provider: Annotated[
         str,
@@ -204,16 +207,19 @@ def auth_logout_provider(
         str | None,
         typer.Option("--profile", help="Auth profile id to remove."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Remove a provider auth profile and cached credential."""
     from craik.cli_operator_auth import operator_identity_or_fail
 
     operator_identity_or_fail()
     payload = logout_provider(provider, profile_id=profile_id)
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="kv")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("migrate-from-env")
+@craik_command(payload_shape="card_list")
 def auth_migrate_from_env(
     dry_run: Annotated[
         bool,
@@ -223,26 +229,32 @@ def auth_migrate_from_env(
         bool,
         typer.Option("-y", "--yes", help="Consent to all eligible profile migrations."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Migrate env-var API-key profiles into cached credential storage."""
     consent = (lambda _prompt: True) if yes else typer.confirm
     payload = migrate_env_profiles(dry_run=dry_run, consent=consent)
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card_list")
+    emit_command_result(result)
+    return result
 
 
 @storage_app.command("status")
-def auth_storage_status() -> None:
+@craik_command(slash_alias="auth-storage-status", payload_shape="kv")
+def auth_storage_status() -> CommandResult:
     """Show credential storage backend posture without printing secrets."""
-    typer.echo(json.dumps(credential_storage_status().as_dict(), indent=2, sort_keys=True))
+    result = CommandResult(payload=credential_storage_status().as_dict(), shape="kv")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("migrate-secrets")
+@craik_command(payload_shape="card")
 def auth_migrate_secrets(
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run/--apply", help="Preview migration by default."),
     ] = True,
-) -> None:
+) -> CommandResult:
     """Preview migration from file/env references into a secure backend."""
     status = credential_storage_status()
     payload = {
@@ -252,7 +264,9 @@ def auth_migrate_secrets(
         "requires_manual_action": status.status != "available",
         "redacted": True,
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 def _default_env_var(provider: str) -> str:

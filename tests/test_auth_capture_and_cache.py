@@ -199,6 +199,21 @@ def test_migrate_from_env_is_consent_based_and_idempotent(tmp_path: Path) -> Non
     assert json.loads(second.stdout)["skipped"][0]["reason"] == "not-env-var-profile"
 
 
+def test_auth_migrate_secrets_emits_redacted_payload(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["auth", "migrate-secrets", "--dry-run"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["dry_run"] is True
+    assert payload["redacted"] is True
+    assert payload["migrated"] == []
+    assert "credential_storage" in payload
+
+
 def test_readiness_uses_credential_resolvability(tmp_path: Path) -> None:
     home = tmp_path / "home"
     env = {"CRAIK_HOME": str(home)}
