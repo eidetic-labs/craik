@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import app
+from craik.cli_output import emit_command_result
 from craik.contracts.models import PolicyProfile
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.policy.policy import FailOpenNotAllowedError
 from craik.runtime.projects.onboarding import AgentOnboardingBuilder, OnboardingProjectNotFoundError
 from craik.runtime.store import LocalStore
 
 
 @app.command("onboard")
+@craik_command(payload_shape="card")
 def onboard(
     project: Annotated[
         str,
@@ -38,7 +40,7 @@ def onboard(
         int,
         typer.Option("--max-recent-handoffs", min=0, help="Recent handoffs to include."),
     ] = 5,
-) -> None:
+) -> CommandResult:
     """Print runner-readable onboarding context for a project."""
     store = LocalStore.from_env()
     try:
@@ -54,7 +56,12 @@ def onboard(
     finally:
         store.close()
 
-    typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    result = CommandResult(
+        payload=report.model_dump(mode="json", by_alias=True),
+        shape="card",
+    )
+    emit_command_result(result)
+    return result
 
 
 def _policy_profile(value: str) -> PolicyProfile:

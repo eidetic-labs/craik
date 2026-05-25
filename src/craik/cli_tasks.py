@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import task_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import Priority, RunnerMode, TaskMode
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.store import LocalStore
 from craik.runtime.work.coordination.handoff_consumption import (
     HandoffConsumptionError,
@@ -18,6 +19,7 @@ from craik.runtime.work.coordination.handoff_consumption import (
 
 
 @task_app.command("resume")
+@craik_command(payload_shape="card")
 def task_resume(
     from_handoff: Annotated[
         str,
@@ -78,7 +80,7 @@ def task_resume(
             help="Required rationale when explicitly reusing producer identity.",
         ),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Consume a handoff into a new task, case file, and pending run."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -113,7 +115,9 @@ def task_resume(
         "case_file": result.case_file.model_dump(mode="json", by_alias=True),
         "run": result.run.model_dump(mode="json", by_alias=True),
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    command_result = CommandResult(payload=payload, shape="card")
+    emit_command_result(command_result)
+    return command_result
 
 
 def _priority(value: str) -> Priority:

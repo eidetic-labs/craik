@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import scope_change_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import ScopeChangeProtocolDecision
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.policy.policy import generate_policy_envelope
 from craik.runtime.store import LocalStore
 from craik.runtime.work.coordination.scope_changes import (
@@ -19,6 +20,7 @@ from craik.runtime.work.coordination.scope_changes import (
 
 
 @scope_change_app.command("decide")
+@craik_command(payload_shape="card")
 def scope_change_decide(
     request_id: Annotated[str, typer.Argument(help="Scope-change request id.")],
     decision: Annotated[
@@ -39,7 +41,7 @@ def scope_change_decide(
         list[str] | None,
         typer.Option("--handoff-id", help="Handoff id for a handoff decision."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Resolve a pending scope-change request through the explicit protocol."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -83,7 +85,9 @@ def scope_change_decide(
             else None
         ),
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 def _protocol_decision(value: str) -> ScopeChangeProtocolDecision:
