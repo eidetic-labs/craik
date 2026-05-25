@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import webbrowser
+from collections.abc import Callable
 from typing import Annotated
 
 import click
@@ -18,6 +19,7 @@ from craik.runtime.auth.login import (
     logout_provider,
     migrate_env_profiles,
 )
+from craik.runtime.auth.oauth_provider_login import OAuthLoginResult, browser_oauth_login
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness
@@ -36,6 +38,10 @@ def auth_login_provider(
         bool,
         typer.Option("--no-browser", help="Print provider setup URL instead of opening a browser."),
     ] = False,
+    mode: Annotated[
+        str,
+        typer.Option("--mode", help="Login mode: api-key or oauth."),
+    ] = "api-key",
     profile_id: Annotated[
         str | None,
         typer.Option("--profile-id", help="Auth profile id to create."),
@@ -52,6 +58,10 @@ def auth_login_provider(
         str | None,
         typer.Option("--base-url", help="Provider base URL for local-compatible providers."),
     ] = None,
+    project_id: Annotated[
+        str | None,
+        typer.Option("--project-id", help="GCP project id for Gemini/Vertex OAuth profiles."),
+    ] = None,
     allow_local_base_url: Annotated[
         bool,
         typer.Option("--allow-local-base-url", help="Allow loopback HTTP provider URLs."),
@@ -67,12 +77,32 @@ def auth_login_provider(
 ) -> None:
     """Capture and cache provider credentials in local credential storage."""
     try:
+        normalized_mode = mode.strip().lower()
+        if normalized_mode not in {"api-key", "oauth"}:
+            raise typer.BadParameter("--mode must be api-key or oauth")
+        if normalized_mode == "oauth":
+            if env_var is not None or secret_ref is not None:
+                raise typer.BadParameter("--env-var and --secret-ref require --mode=api-key")
+            if base_url is not None:
+                raise typer.BadParameter("--base-url is only supported by --mode=api-key")
+            if dry_run:
+                raise typer.BadParameter("--dry-run is not supported for browser OAuth login")
+            oauth_result = browser_oauth_login(
+                provider,
+                profile_id=profile_id,
+                project_id=project_id,
+                browser_opener=_browser_opener(no_browser=no_browser),
+            )
+            _emit_oauth_login_result(oauth_result, json_output=json_output)
+            return
+        if project_id is not None:
+            raise typer.BadParameter("--project-id is only supported by --mode=oauth")
         setup_url = _provider_setup_url(provider)
         browser_opened = False
         if setup_url and not no_browser and not dry_run and env_var is None and secret_ref is None:
             browser_opened = webbrowser.open(setup_url)
         if env_var is not None or secret_ref is not None:
-            result = explicit_reference_login(
+            result: AuthCaptureResult = explicit_reference_login(
                 provider,
                 env_var=env_var or _default_env_var(provider),
                 secret_ref=secret_ref,
@@ -227,3 +257,31 @@ def _credential_location_message(result: AuthCaptureResult) -> str:
         secret_ref = result.profile.metadata.get("secret_ref") or result.profile.metadata.get("ref")
         return f"Using secret reference {secret_ref}." if secret_ref else "Using secret reference."
     return f"Cached in {result.credential_storage.backend}."
+
+
+def _browser_opener(*, no_browser: bool) -> Callable[[str], bool]:
+    def _open(url: str) -> bool:
+        if no_browser:
+            typer.echo(f"Open this URL to continue: {url}", err=True)
+            return False
+        opened = webbrowser.open(url)
+        if not opened:
+            typer.echo(f"Open this URL to continue: {url}", err=True)
+        return opened
+
+    return _open
+
+
+def _emit_oauth_login_result(result: OAuthLoginResult, *, json_output: bool) -> None:
+    if json_output:
+        typer.echo(json.dumps(result.as_dict(), indent=2, sort_keys=True))
+        return
+    provider_name = result.capture.provider.title()
+    typer.echo(
+        f"Logged into {provider_name} with OAuth. "
+        f"Cached in {result.capture.credential_storage.backend}."
+    )
+    if resolve_readiness().active_model is not None:
+        typer.echo("Ready to chat.")
+    else:
+        typer.echo("Set an active model with `craik model set <provider/model>`.")

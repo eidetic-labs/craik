@@ -75,6 +75,7 @@ class AuthStatusRow:
     health_status: str
     detail: str | None = None
     warning: str | None = None
+    oauth_expires_at: str | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return a JSON-safe auth status row."""
@@ -87,6 +88,7 @@ class AuthStatusRow:
             "health_status": self.health_status,
             "detail": self.detail,
             "warning": self.warning,
+            "oauth_expires_at": self.oauth_expires_at,
             "redacted": True,
         }
 
@@ -238,6 +240,7 @@ def auth_status_rows(
                 health_status=status.status,
                 detail=status.detail,
                 warning=_profile_warning(profile),
+                oauth_expires_at=_oauth_expires_at(profile),
             )
         )
     return rows
@@ -395,6 +398,13 @@ def _profile_warning(profile: AuthProfile) -> str | None:
 
 def _last_validated_at(profile: AuthProfile) -> str | None:
     value = profile.metadata.get("last_validated_at")
+    return value if isinstance(value, str) else None
+
+
+def _oauth_expires_at(profile: AuthProfile) -> str | None:
+    if profile.kind is not CredentialKind.OAUTH:
+        return None
+    value = profile.metadata.get("token_expires_at")
     return value if isinstance(value, str) else None
 
 

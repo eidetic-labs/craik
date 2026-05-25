@@ -13,6 +13,7 @@ from craik.runtime.auth.sources.local_cli_oauth import (
     DEFAULT_CLAUDE_CREDENTIALS_PATH,
     LocalCLICredentialSource,
 )
+from craik.runtime.auth.sources.provider_oauth import ProviderOAuthCredentialSource
 from craik.runtime.auth.sources.secret_ref import (
     EnvVarSecretManager,
     FileSecretManager,
@@ -33,6 +34,8 @@ def source_for_auth_profile(profile: AuthProfile) -> CredentialSource:
         return EnvVarApiKeySource(env_var)
     if profile.kind is CredentialKind.OAUTH_TOKEN and profile.metadata.get("source") == "local-cli":
         return _local_cli_source(profile)
+    if profile.kind is CredentialKind.OAUTH:
+        return ProviderOAuthCredentialSource(profile)
     if profile.kind is CredentialKind.SECRET_REF:
         return _secret_ref_source(profile)
     if profile.kind is CredentialKind.KEYRING_REF:

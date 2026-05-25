@@ -118,10 +118,26 @@ craik auth logout openai
 Provider login configures provider credentials. Operator identity remains
 available through `craik login` and `craik whoami`.
 
+### Browser OAuth provider login
+
+OpenAI, Anthropic, and Gemini also support browser OAuth login:
+
+```sh
+craik auth login openai --mode=oauth
+craik auth login anthropic --mode=oauth
+craik auth login gemini --mode=oauth --project-id my-gcp-project
+```
+
+OAuth login starts a one-shot loopback listener on `127.0.0.1`, opens
+the provider authorization page, verifies the callback `state` value,
+exchanges the authorization code with PKCE, and stores access and
+refresh tokens in secure credential storage. Use `--no-browser` to print
+the authorization URL for copy/paste environments.
+
 ### OpenAI OAuth profile foundation
 
-v0.12.7 adds the OpenAI OAuth client foundation used by the upcoming
-browser login mode. It uses the same one-shot loopback listener as the
+v0.12.7 adds the OpenAI OAuth client used by browser login mode. It
+uses the same one-shot loopback listener as the
 operator OIDC flow: Craik binds only to `127.0.0.1`, chooses a random
 ephemeral port, sends a PKCE S256 challenge, verifies the OAuth `state`
 parameter with constant-time comparison, and closes the callback server
@@ -130,8 +146,7 @@ after the authorization response is handled.
 OpenAI OAuth profiles use kind `oauth`, separate access-token and
 refresh-token keyring handles, and metadata that identifies the
 credential as subscription-billed provider OAuth. The API-key path
-remains available through `craik auth login openai --mode=api-key`
-once OAuth mode selection is wired into the CLI.
+remains available through `craik auth login openai --mode=api-key`.
 
 ### Anthropic OAuth profile foundation
 
@@ -144,8 +159,7 @@ keeps token material out of profile metadata.
 Anthropic OAuth profiles use kind `oauth`, separate access-token and
 refresh-token keyring handles, and metadata that identifies the
 credential as subscription-billed provider OAuth. The API-key path
-remains available through `craik auth login anthropic --mode=api-key`
-once OAuth mode selection is wired into the CLI.
+remains available through `craik auth login anthropic --mode=api-key`.
 
 ### Gemini and Vertex OAuth profile foundation
 
@@ -158,8 +172,7 @@ keeps token material out of profile metadata.
 Gemini OAuth profiles use kind `oauth`, separate access-token and
 refresh-token keyring handles, and metadata that identifies the
 credential as GCP-project billed provider OAuth. The API-key path
-remains available through `craik auth login gemini --mode=api-key`
-once OAuth mode selection is wired into the CLI.
+remains available through `craik auth login gemini --mode=api-key`.
 
 <div className="craik-keypoint">
 
