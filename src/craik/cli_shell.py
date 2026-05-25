@@ -46,12 +46,6 @@ def chat_command(
     raise typer.Exit(run_shell())
 
 
-@app.command("status")
-def status_command() -> None:
-    """Show progressive setup readiness for shell and runtime actions."""
-    typer.echo(json.dumps(resolve_readiness().as_dict(), indent=2, sort_keys=True))
-
-
 @app.command("slash")
 def slash_command(command: str) -> None:
     """Dispatch one slash command for tests and shell integrations."""

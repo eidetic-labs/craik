@@ -26,7 +26,6 @@ from craik.runtime.shell.shell_invocation import (
 )
 from craik.runtime.shell.slash_commands import (
     SlashCommandResult,
-    auto_approve_status_payload,
     dispatch_slash_command,
 )
 from craik.runtime.shell.slash_completer import complete_slash_input
@@ -58,6 +57,7 @@ from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSev
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
+from craik.runtime.status import auto_approve_status_payload
 
 
 class CraikApp(App[None]):

@@ -13,7 +13,6 @@ from craik.runtime.agents.session_naming import SessionNameError, validate_sessi
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
-from craik.runtime.policy.envelope import is_auto_approve_shape
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
@@ -41,6 +40,7 @@ from craik.runtime.shell.slash_command_schema.results import (
 )
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
+from craik.runtime.status import status_payload
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 
@@ -421,28 +421,8 @@ def _doctor_payload(report: Any) -> dict[str, Any]:
     return {"readiness": report.as_dict()}
 
 
-def _status_payload(report: Any, env: dict[str, str] | None) -> dict[str, Any]:
-    payload = dict(report.as_dict())
-    auto_approve = auto_approve_status_payload(env)
-    if auto_approve is not None:
-        payload["auto_approve"] = auto_approve
-    return payload
-
-
-def auto_approve_status_payload(env: dict[str, str] | None) -> dict[str, Any] | None:
-    """Return operator-facing auto-approve policy warning data when active."""
-    for policy in _store_list(env, "list_policy_envelopes"):
-        if not is_auto_approve_shape(policy):
-            continue
-        return {
-            "active": True,
-            "policy_id": getattr(policy, "id", None),
-            "detail": (
-                "An active policy envelope auto-approves capabilities; use a gated policy "
-                "when operator review is required."
-            ),
-        }
-    return None
+def _status_payload(_report: Any, env: dict[str, str] | None) -> dict[str, Any]:
+    return status_payload(env)
 
 
 def _store_list(env: dict[str, str] | None, method_name: str) -> list[Any]:
