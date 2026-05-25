@@ -6,7 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-PayloadShape = Literal["table", "kv", "tree", "markdown"]
+from craik.runtime.contract.command_result import PayloadShape as PayloadShape
+
 ReadinessRequirement = Literal["none", "operator", "provider", "model", "ready"]
 
 
