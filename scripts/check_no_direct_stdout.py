@@ -37,6 +37,8 @@ STRICT_COMMAND_RESULT_RENDERING: frozenset[tuple[str, str]] = frozenset(
         ("src/craik/cli_connect.py", "connect_stigmem"),
         ("src/craik/cli_delegations.py", "delegation_pause"),
         ("src/craik/cli_delegations.py", "delegation_resolve"),
+        ("src/craik/cli_demos.py", "demo_persistent_agent"),
+        ("src/craik/cli_demos.py", "demo_stigmem_docs"),
         ("src/craik/cli_migration.py", "migrate_import"),
         ("src/craik/cli_migration.py", "migrate_inspect"),
         ("src/craik/cli_migration.py", "migrate_plan"),
