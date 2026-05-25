@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -70,16 +71,17 @@ def test_provider_commands_are_registered_as_derived_slash_commands() -> None:
     assert registry.spec_by_name("/provider-certification") is not None
 
 
-def test_provider_tui_snapshot() -> None:
+@pytest.mark.parametrize("width", [80, 100])
+def test_provider_tui_snapshot(width: int) -> None:
     result = provider_show_result("provider_openai")
     result.payload.pop("created_at", None)
-    output = _capture(format_command_result(result, kind="tui"), width=100)
+    output = _capture(format_command_result(result, kind="tui"), width=width)
 
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"
         / "slash"
         / "provider"
-        / "width-100.txt"
+        / f"width-{width}.txt"
     )
     assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
