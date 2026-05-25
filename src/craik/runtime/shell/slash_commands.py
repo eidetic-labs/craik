@@ -11,6 +11,7 @@ from rich.markup import escape
 
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
+from craik.runtime.memory.commands import memory_overview_result
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.providers.commands import provider_summary_payload
 from craik.runtime.providers.model_providers import default_model_provider_registry
@@ -203,7 +204,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "skills":
         return _payload_result(command.name, skills_overview_result(env).payload)
     if command.name == "memory":
-        return _payload_result(command.name, _memory_payload(env))
+        return _payload_result(command.name, memory_overview_result(env).payload)
     if command.name == "mcp":
         text, exit_code = render_mcp_discovery(tokens[1:], env=env)
         return SlashCommandResult(text, exit_code=exit_code)
@@ -348,17 +349,6 @@ def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashComman
     if not args:
         return SlashCommandResult(json.dumps(result.payload, indent=2, sort_keys=True))
     return SlashCommandResult(f"Theme set to `{result.payload['theme']}`.")
-
-
-def _memory_payload(env: dict[str, str] | None) -> dict[str, Any]:
-    proposals = _store_list(env, "list_proposals")
-    diffs = _store_list(env, "list_memory_diffs")
-    previews = _store_list(env, "list_memory_impact_previews")
-    return {
-        "proposals": [_json_ready(item) for item in proposals],
-        "diffs": [_json_ready(item) for item in diffs],
-        "impact_previews": [_json_ready(item) for item in previews],
-    }
 
 
 def _doctor_payload(report: Any) -> dict[str, Any]:

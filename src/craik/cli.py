@@ -409,6 +409,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_instructions",
         "craik.cli_knowledge",
         "craik.cli_migration",
+        "craik.cli_memory",
         "craik.cli_mcp",
         "craik.cli_operations",
         "craik.cli_project",
