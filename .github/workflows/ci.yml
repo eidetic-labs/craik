@@ -178,6 +178,10 @@ jobs:
         run: craik policy test
       - name: Check release readiness
         run: python scripts/check_release_readiness.py
+      - name: Check CommandResult return annotations
+        run: python scripts/check_command_result_return.py
+      - name: Check direct stdout in migrated commands
+        run: python scripts/check_no_direct_stdout.py
       - name: Check slash command registry
         run: python scripts/check_slash_command_registry.py
       - name: Check dock-bottom snapshot coverage

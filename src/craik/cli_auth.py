@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from craik.cli import app, auth_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.runtime.auth import (
     AuthProfile,
     AuthProfileNotFoundError,
@@ -57,8 +58,9 @@ def auth_list() -> CommandResult:
         _profile_payload(profile)
         for profile in visible_auth_profiles(store.list(), active_operator_session_from_env())
     ]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-    return CommandResult(payload=payload, shape="card_list")
+    result = CommandResult(payload=payload, shape="card_list")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("add")
@@ -312,8 +314,7 @@ def auth_grant(
 def auth_status() -> CommandResult:
     """Show auth profile health and last-use status."""
     result = shared_auth_status_result()
-    payload = result.payload
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 

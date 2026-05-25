@@ -98,3 +98,20 @@ def test_invoke_slash_command_wraps_non_command_result() -> None:
     result = invoke_slash_command("/raw", registry=registry)
 
     assert result.payload == {"wrapped": "true"}
+
+
+def test_invoke_slash_command_suppresses_callback_stdout(capsys: Any) -> None:
+    app = typer.Typer()
+
+    @app.command("noisy")
+    @craik_command(payload_shape="kv")
+    def noisy() -> CommandResult:
+        typer.echo('{"duplicate": true}')
+        return CommandResult(payload={"clean": True}, shape="kv")
+
+    registry = AutoSlashRegistry.from_typer(app)
+
+    result = invoke_slash_command("/noisy", registry=registry)
+
+    assert result.payload == {"clean": True}
+    assert capsys.readouterr().out == ""
