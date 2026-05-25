@@ -147,6 +147,20 @@ credential as subscription-billed provider OAuth. The API-key path
 remains available through `craik auth login anthropic --mode=api-key`
 once OAuth mode selection is wired into the CLI.
 
+### Gemini and Vertex OAuth profile foundation
+
+v0.12.7 adds the Gemini and Vertex OAuth client foundation for Google
+account browser login. The client builds a PKCE authorization URL with
+offline access, exchanges the loopback authorization code for provider
+tokens, refreshes access tokens through the stored refresh handle, and
+keeps token material out of profile metadata.
+
+Gemini OAuth profiles use kind `oauth`, separate access-token and
+refresh-token keyring handles, and metadata that identifies the
+credential as GCP-project billed provider OAuth. The API-key path
+remains available through `craik auth login gemini --mode=api-key`
+once OAuth mode selection is wired into the CLI.
+
 <div className="craik-keypoint">
 
 **OAuth tokens require secure credential storage.**
