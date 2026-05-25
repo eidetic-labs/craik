@@ -13,6 +13,7 @@ from craik.runtime.agents.session_naming import SessionNameError, validate_sessi
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
+from craik.runtime.providers.commands import provider_summary_payload
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.reviewing.approvals import approval_queue_payload
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
@@ -278,10 +279,7 @@ def _auth_summary_payload(env: dict[str, str] | None) -> dict[str, Any]:
 
 
 def _provider_payload() -> list[dict[str, Any]]:
-    return [
-        provider.model_dump(mode="json", by_alias=True)
-        for provider in default_model_provider_registry().list()
-    ]
+    return provider_summary_payload()
 
 
 def _model_payload(env: dict[str, str] | None) -> dict[str, Any]:
