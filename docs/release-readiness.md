@@ -35,8 +35,10 @@ creation:
 uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_version.py
 uv run python scripts/check_release_readiness.py
+uv run python scripts/check_cli_tui_contract.py
 uv run python scripts/check_command_result_return.py
 uv run python scripts/check_no_direct_stdout.py
+uv run python scripts/generate_snapshots.py /status --name status --width 80 --check
 uv run python scripts/check_dead_code.py
 uv run python scripts/check_oauth_callback_safety.py
 uv run python scripts/check_dock_bottom_snapshot_coverage.py
@@ -79,8 +81,10 @@ creation:
 uv run python scripts/check_version_consistency.py
 uv run python scripts/check_release_version.py
 uv run python scripts/check_release_readiness.py
+uv run python scripts/check_cli_tui_contract.py
 uv run python scripts/check_command_result_return.py
 uv run python scripts/check_no_direct_stdout.py
+uv run python scripts/generate_snapshots.py /status --name status --width 80 --check
 uv run python scripts/check_dead_code.py
 uv run python scripts/check_oauth_callback_safety.py
 uv run python scripts/check_dock_bottom_snapshot_coverage.py
