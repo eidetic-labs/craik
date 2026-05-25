@@ -118,6 +118,31 @@ craik auth logout openai
 Provider login configures provider credentials. Operator identity remains
 available through `craik login` and `craik whoami`.
 
+### OpenAI OAuth profile foundation
+
+v0.12.7 adds the OpenAI OAuth client foundation used by the upcoming
+browser login mode. It uses the same one-shot loopback listener as the
+operator OIDC flow: Craik binds only to `127.0.0.1`, chooses a random
+ephemeral port, sends a PKCE S256 challenge, verifies the OAuth `state`
+parameter with constant-time comparison, and closes the callback server
+after the authorization response is handled.
+
+OpenAI OAuth profiles use kind `oauth`, separate access-token and
+refresh-token keyring handles, and metadata that identifies the
+credential as subscription-billed provider OAuth. The API-key path
+remains available through `craik auth login openai --mode=api-key`
+once OAuth mode selection is wired into the CLI.
+
+<div className="craik-keypoint">
+
+**OAuth tokens require secure credential storage.**
+
+Provider OAuth stores access and refresh tokens in the OS keyring only.
+Unlike API-key capture, OAuth token storage does not accept the
+file-backed fallback because refresh tokens grant continuing access.
+
+</div>
+
 ### Credential storage posture
 
 Inspect the credential backend without printing secret material:

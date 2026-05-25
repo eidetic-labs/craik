@@ -46,6 +46,7 @@ class OAuthSafetyVisitor(ast.NodeVisitor):
         self.path = path
         self.failures: list[str] = []
         self._class_depth = 0
+        self._function_depth = 0
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self._class_depth += 1
@@ -55,13 +56,23 @@ class OAuthSafetyVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self._class_depth -= 1
 
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._function_depth += 1
+        self.generic_visit(node)
+        self._function_depth -= 1
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._function_depth += 1
+        self.generic_visit(node)
+        self._function_depth -= 1
+
     def visit_Assign(self, node: ast.Assign) -> None:
-        if self._class_depth == 0:
+        if self._class_depth == 0 and self._function_depth == 0:
             self._check_refresh_token_attribute(node)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        if self._class_depth == 0:
+        if self._class_depth == 0 and self._function_depth == 0:
             self._check_refresh_token_attribute(node)
         self.generic_visit(node)
 
