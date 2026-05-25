@@ -104,10 +104,10 @@ reports the active operator; `craik logout` revokes the session. This mode is
 for teams, regulated deployments, and workload-identity CI.
 
 Craik authenticates to provider APIs through typed credential profiles. Profile
-kinds include env-var API keys, local-CLI OAuth fallback (e.g. reading
-`~/.claude/.credentials.json`), vendor CLI subprocess bridges, external secret
-manager references, and Stigmem-backed credential references. A credential pool
-supports rotation and failover across multiple profiles.
+kinds include env-var API keys, provider OAuth profiles, keyring-backed
+captured credentials, vendor CLI subprocess bridges, external secret manager
+references, and Stigmem-backed credential references. A credential pool supports
+rotation and failover across multiple profiles.
 
 In audited multi-operator mode, provider calls are bound to both an operator
 identity and a credential identity; receipts name both. Workload-identity

@@ -144,7 +144,16 @@ of launching an unregistered placeholder client.
 
 ### Anthropic browser bootstrap
 
-Anthropic defaults to OAuth bootstrap:
+Anthropic credential sources resolve in this order:
+
+1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable from `claude setup-token`
+2. `ANTHROPIC_API_KEY` environment variable
+3. OS keyring profile from `craik auth login anthropic`
+
+The first source that resolves wins. `craik doctor` and `craik auth status`
+report which Anthropic source is active without printing credential material.
+
+Anthropic defaults to OAuth bootstrap when no environment credential is set:
 
 ```sh
 craik auth login anthropic
@@ -236,22 +245,12 @@ craik auth test anthropic:work
 Anthropic profiles send `x-api-key`. OpenAI and OpenAI-compatible Chat
 Completions profiles send `Authorization: Bearer`.
 
-### Local-CLI OAuth fallback
-
-Anthropic local-CLI users can reuse the local credential file.
+Anthropic CLI users should use Anthropic's documented token export path:
 
 ```sh
-craik auth add anthropic:claude-code --kind=oauth-token --source=local-cli
-```
-
-The default path is `~/.claude/.credentials.json`; override when needed:
-
-```sh
-craik auth add anthropic:claude-code \
-  --kind=oauth-token \
-  --source=local-cli \
-  --credentials-path ~/.claude/.credentials.json \
-  --refresh-endpoint https://idp.example.com/oauth/token
+claude setup-token
+export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+craik doctor
 ```
 
 <div className="craik-keypoint">

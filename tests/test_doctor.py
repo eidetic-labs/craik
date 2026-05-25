@@ -96,7 +96,7 @@ def test_doctor_reports_auth_profile_health(tmp_path, monkeypatch) -> None:
             "warning": None,
             "last_used_at": None,
             "last_status": "unknown",
-            "health": {"status": "ok", "detail": None, "expires_at": None},
+            "health": {"status": "ok", "detail": "ANTHROPIC_API_KEY (env)", "expires_at": None},
             "metadata": {"base_url": None},
         }
     ]

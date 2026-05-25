@@ -366,7 +366,7 @@ def test_task_request_auth_context_fields_round_trip(
     payload = dict(fixtures["craik.task_request"])
     payload.update(
         {
-            "auth_profile_id": "anthropic:local-cli",
+            "auth_profile_id": "anthropic:claude-code-env",
             "operator_subject": "operator-a",
             "operator_issuer": "https://issuer.example.test",
             "source_handoff_id": "handoff_docs_reconcile",
@@ -379,7 +379,7 @@ def test_task_request_auth_context_fields_round_trip(
     parsed = CONTRACT_REGISTRY["craik.task_request"].model_validate(payload)
     dumped = parsed.model_dump(mode="json", by_alias=True)
 
-    assert dumped["auth_profile_id"] == "anthropic:local-cli"
+    assert dumped["auth_profile_id"] == "anthropic:claude-code-env"
     assert dumped["operator_subject"] == "operator-a"
     assert dumped["operator_issuer"] == "https://issuer.example.test"
     assert dumped["source_handoff_id"] == "handoff_docs_reconcile"
