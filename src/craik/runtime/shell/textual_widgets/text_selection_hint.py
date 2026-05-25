@@ -7,7 +7,7 @@ import os
 from craik.runtime.paths import resolve_craik_paths
 
 SELECTION_HINT_MESSAGE = (
-    "Text selection: hold Option while dragging on macOS, or Ctrl+Shift in Linux terminals."
+    "Text selection: click and drag in the transcript, then use your terminal copy shortcut."
 )
 
 

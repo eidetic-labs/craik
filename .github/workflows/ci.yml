@@ -182,6 +182,8 @@ jobs:
         run: python scripts/check_slash_command_registry.py
       - name: Check dock-bottom snapshot coverage
         run: python scripts/check_dock_bottom_snapshot_coverage.py
+      - name: Check text selection wiring
+        run: python scripts/check_text_selection_wiring.py
       - name: Check dead code
         run: python scripts/check_dead_code.py
       - name: Check release version consistency

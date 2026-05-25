@@ -4,6 +4,11 @@ Screen {
     background: $background;
 }
 
+Screen > .screen--selection {
+    background: #B4ACE6;
+    color: #101010;
+}
+
 #transcript {
     height: 1fr;
     padding: 1 1;

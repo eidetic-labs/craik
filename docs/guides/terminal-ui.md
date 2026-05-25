@@ -216,16 +216,17 @@ and `Esc` returns focus to the prompt. Search is current-session only.
 ## Text Selection
 
 Craik enables terminal text selection while keeping clickable and keyboard
-controls active. Most terminals require a modifier when an application is
-running in alternate-screen mode:
+controls active. Click and drag in the transcript area, then use your terminal's
+copy shortcut.
 
-| Terminal family | Selection modifier |
+| Terminal family | Copy shortcut |
 |---|---|
-| macOS Terminal and iTerm2 | Hold Option while dragging. |
-| Linux terminal emulators | Hold Ctrl+Shift while dragging. |
-| Windows Terminal | Hold Shift while dragging when mouse reporting is active. |
+| macOS Terminal and iTerm2 | Cmd+C |
+| Linux terminal emulators | Ctrl+Shift+C |
+| Windows Terminal | Ctrl+Shift+C |
 
-The first TUI launch shows a short toast with the platform hints. Set
+Selected text uses the active TUI theme's selection highlight. The first TUI
+launch shows a short toast with the copy reminder. Set
 `CRAIK_TUI_SELECTION_HINT=0` to suppress the hint in scripted demos.
 
 Press `Ctrl+G` to open the current input buffer in an external editor. Craik
