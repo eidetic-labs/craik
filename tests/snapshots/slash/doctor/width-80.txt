@@ -1,0 +1,106 @@
+result
+├── status: fail
+├── checks
+│   ├── [1]
+│   │   ├── name: local_home
+│   │   ├── status: fail
+│   │   ├── summary: Craik home does not exist at <craik-home>.
+│   │   └── action: Run craik setup or craik home init.
+│   ├── [2]
+│   │   ├── name: local_store
+│   │   ├── status: fail
+│   │   ├── summary: Local store database is missing at 
+│   │   │   <craik-home>/state/craik.sqlite3.
+│   │   └── action: Run craik setup.
+│   ├── [3]
+│   │   ├── name: operator_session
+│   │   ├── status: fail
+│   │   ├── summary: No active operator session is available.
+│   │   └── action: Run craik login.
+│   ├── [4]
+│   │   ├── name: memory_backend
+│   │   ├── status: warning
+│   │   ├── summary: Stigmem URL is not configured; local proposal memory 
+│   │   │   remains available.
+│   │   └── action: Set CRAIK_STIGMEM_URL and run craik connect stigmem when 
+│   │       shared memory is needed.
+│   ├── [5]
+│   │   ├── name: model_availability
+│   │   ├── status: warning
+│   │   ├── summary: No active model is configured.
+│   │   └── action: Run craik model set <provider/model> after configuring 
+│   │       provider auth.
+│   ├── [6]
+│   │   ├── name: auth_profiles
+│   │   ├── status: pass
+│   │   ├── summary: No auth profiles are configured.
+│   │   └── action: ✗
+│   ├── [7]
+│   │   ├── name: provider_auth
+│   │   ├── status: warning
+│   │   ├── summary: No provider auth profiles are configured.
+│   │   └── action: Run craik auth login openai, anthropic, gemini, or local.
+│   ├── [8]
+│   │   ├── name: anthropic_env_credential
+│   │   ├── status: warning
+│   │   ├── summary: No Anthropic credential was detected in environment 
+│   │   │   variables.
+│   │   └── action: Run claude setup-token and export CLAUDE_CODE_OAUTH_TOKEN, 
+│   │       set ANTHROPIC_TOKEN or ANTHROPIC_API_KEY, or run craik auth login 
+│   │       anthropic.
+│   ├── [9]
+│   │   ├── name: secure_credential_store
+│   │   ├── status: pass
+│   │   ├── summary: No file-backed auth profile store is present.
+│   │   └── action: ✗
+│   ├── [10]
+│   │   ├── name: file_permissions
+│   │   ├── status: pass
+│   │   ├── summary: Craik home paths are not group/world writable.
+│   │   └── action: ✗
+│   ├── [11]
+│   │   ├── name: local_endpoint_safety
+│   │   ├── status: pass
+│   │   ├── summary: No plaintext non-local provider endpoints were found.
+│   │   └── action: ✗
+│   ├── [12]
+│   │   ├── name: gateway_config
+│   │   ├── status: warning
+│   │   ├── summary: Gateway configuration is not inspectable because the local 
+│   │   │   store is missing.
+│   │   └── action: Run craik setup.
+│   ├── [13]
+│   │   ├── name: gateway_prerequisites
+│   │   ├── status: warning
+│   │   ├── summary: Gateway prerequisites cannot be checked without gateway 
+│   │   │   configuration.
+│   │   └── action: Run craik setup.
+│   ├── [14]
+│   │   ├── name: policy
+│   │   ├── status: warning
+│   │   ├── summary: Policy readiness cannot be checked without gateway 
+│   │   │   configuration.
+│   │   └── action: Run craik setup or persist a gateway policy envelope.
+│   ├── [15]
+│   │   ├── name: gateway_status
+│   │   ├── status: warning
+│   │   ├── summary: Gateway status cannot be checked without the local store.
+│   │   └── action: Run craik setup.
+│   ├── [16]
+│   │   ├── name: channel_pairing
+│   │   ├── status: warning
+│   │   ├── summary: Channel pairings cannot be checked without the local store.
+│   │   └── action: Run craik setup before enabling channel adapters.
+│   ├── [17]
+│   │   ├── name: public_bind_security
+│   │   ├── status: warning
+│   │   ├── summary: Public bind posture cannot be checked without gateway 
+│   │   │   config.
+│   │   └── action: Run craik setup before exposing gateway ingress.
+│   └── [18]
+│       ├── name: stale_sessions_locks
+│       ├── status: warning
+│       ├── summary: Session and lock state cannot be checked without the local 
+│       │   store.
+│       └── action: Run craik setup.
+└── auth profiles

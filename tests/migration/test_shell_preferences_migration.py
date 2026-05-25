@@ -57,14 +57,37 @@ def test_preference_commands_are_registered_as_derived_slash_commands() -> None:
     assert registry.spec_by_name("/rename") is not None
 
 
-def test_theme_tui_snapshot() -> None:
-    output = _capture(format_command_result(theme_result(None, env={}), kind="tui"), width=80)
+def test_theme_tui_snapshot(tmp_path: Path) -> None:
+    output = _capture(
+        format_command_result(
+            theme_result(None, env={"CRAIK_HOME": str(tmp_path / "craik-home")}),
+            kind="tui",
+        ),
+        width=80,
+    )
 
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"
         / "slash"
         / "theme"
+        / "width-80.txt"
+    )
+    assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
+
+
+def test_rename_tui_snapshot(tmp_path: Path) -> None:
+    result = rename_shell_session_result(
+        "snapshot-session",
+        env={"CRAIK_HOME": str(tmp_path / "craik-home")},
+    )
+    output = _capture(format_command_result(result, kind="tui"), width=80)
+
+    snapshot = (
+        Path(__file__).resolve().parents[1]
+        / "snapshots"
+        / "slash"
+        / "rename"
         / "width-80.txt"
     )
     assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
