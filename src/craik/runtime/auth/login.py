@@ -212,7 +212,12 @@ def profile_runtime_status(
         if profile.provider_family == "anthropic":
             credential = resolve_anthropic_credential_from_env(
                 env,
-                fallback_env_vars=(env_var, "ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY"),
+                fallback_env_vars=(
+                    "ANTHROPIC_TOKEN",
+                    env_var,
+                    "ANTHROPIC_API_KEY",
+                    "CRAIK_ANTHROPIC_API_KEY",
+                ),
             )
             return (
                 CredentialStatus(status="ok", detail=credential.display)
@@ -433,7 +438,12 @@ def _credential_source(profile: AuthProfile, env: dict[str, str] | None) -> str 
         return None
     credential = resolve_anthropic_credential_from_env(
         env,
-        fallback_env_vars=(env_var, "ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY"),
+        fallback_env_vars=(
+            "ANTHROPIC_TOKEN",
+            env_var,
+            "ANTHROPIC_API_KEY",
+            "CRAIK_ANTHROPIC_API_KEY",
+        ),
     )
     return credential.display if credential is not None else None
 

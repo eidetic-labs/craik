@@ -1,6 +1,4 @@
-import json
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -41,22 +39,6 @@ def test_cli_bridge_returns_gemini_api_key_header() -> None:
     )
 
     assert source.headers_for("gemini") == {"x-goog-api-key": "gemini-token"}
-
-
-def test_cli_bridge_credentials_file_extracts_nested_token(tmp_path: Path) -> None:
-    credentials = tmp_path / "bridge.json"
-    credentials.write_text(json.dumps({"auth": {"token": "file-token"}}), encoding="utf-8")
-    source = CLIBridgeCredentialSource(
-        command=(),
-        token_extractor="credentials_file",
-        key_path=("auth", "token"),
-        credentials_file_path=credentials,
-    )
-
-    assert source.headers_for("anthropic") == {
-        "Authorization": "Bearer file-token",
-        "anthropic-version": "2023-06-01",
-    }
 
 
 def test_cli_bridge_error_messages_do_not_include_stdout_token_material() -> None:

@@ -109,14 +109,12 @@ def _cli_bridge_source(profile: AuthProfile) -> CLIBridgeCredentialSource:
     key_path = profile.metadata.get("key_path", ["token"])
     if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
         raise AuthProfileSourceError("cli-bridge auth profile requires metadata.command")
-    if extractor not in {"stdout_json", "stdout_line", "credentials_file"}:
+    if extractor not in {"stdout_json", "stdout_line"}:
         raise AuthProfileSourceError("cli-bridge auth profile has unsupported token_extractor")
-    path = profile.metadata.get("credentials_file_path")
     return CLIBridgeCredentialSource(
         command=tuple(command),
         token_extractor=extractor,
         key_path=tuple(item for item in key_path if isinstance(item, str))
         if isinstance(key_path, list)
         else ("token",),
-        credentials_file_path=Path(path) if isinstance(path, str) else None,
     )

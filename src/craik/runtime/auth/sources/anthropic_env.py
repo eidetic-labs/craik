@@ -7,8 +7,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # nosec B105 - env var name, not a secret.
+ANTHROPIC_TOKEN_ENV = "ANTHROPIC_TOKEN"  # nosec B105 - env var name, not a secret.
 ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
 CRAIK_ANTHROPIC_API_KEY_ENV = "CRAIK_ANTHROPIC_API_KEY"
+
 
 @dataclass(frozen=True, slots=True)
 class AnthropicCredential:
@@ -23,6 +25,7 @@ def resolve_anthropic_credential_from_env(
     env: Mapping[str, str] | None = None,
     *,
     fallback_env_vars: tuple[str, ...] = (
+        ANTHROPIC_TOKEN_ENV,
         ANTHROPIC_API_KEY_ENV,
         CRAIK_ANTHROPIC_API_KEY_ENV,
     ),

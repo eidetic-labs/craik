@@ -33,6 +33,15 @@ of launching a placeholder client. Once Craik has a registered OpenAI OAuth
 client, the existing OAuth profile and loopback infrastructure can be enabled
 without changing the auth-profile contract.
 
+> **About OpenAI subscription billing:** Craik currently authenticates
+> against OpenAI's Platform API only, which is billed per-token regardless
+> of any OpenAI consumer or workspace subscription the operator may hold.
+> OpenAI has not published a third-party reuse interface for the
+> subscription-billed access token its first-party clients obtain through
+> their hosted sign-in flow. Tracking
+> [openai/codex#10974](https://github.com/openai/codex/issues/10974) for
+> the eventual published interface.
+
 ## Anthropic
 
 | Field | Value |
@@ -57,8 +66,10 @@ export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
 Craik reads `CLAUDE_CODE_OAUTH_TOKEN` automatically for Anthropic requests
-and sends it via `x-api-key`. Craik never writes this environment variable
-or refreshes the token; rotate it by re-running `claude setup-token`.
+and sends it via `x-api-key`. Operators can also set `ANTHROPIC_TOKEN` as a
+manual OAuth token override when they need a separately managed Anthropic
+token. Craik never writes these environment variables or refreshes the token;
+rotate the CLI token by re-running `claude setup-token`.
 
 Verify detection with:
 
