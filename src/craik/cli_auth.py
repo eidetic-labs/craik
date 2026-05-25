@@ -400,6 +400,7 @@ def login(
 
 
 @app.command("logout")
+@craik_command(payload_shape="kv")
 def logout(
     issuer: Annotated[
         str | None,
@@ -409,7 +410,7 @@ def logout(
         str,
         typer.Option("--client-id", help="OIDC client id for best-effort revocation."),
     ] = "",
-) -> None:
+) -> CommandResult:
     """Clear the active operator session."""
     authenticator = None
     resolved_issuer = issuer or os.environ.get("CRAIK_OIDC_ISSUER")
@@ -422,17 +423,22 @@ def logout(
             )
         )
     revoked = OperatorSessionStore.from_env().delete(authenticator=authenticator)
-    typer.echo(json.dumps({"logged_out": True, "revoked": revoked}, indent=2, sort_keys=True))
+    result = CommandResult(payload={"logged_out": True, "revoked": revoked}, shape="kv")
+    emit_command_result(result)
+    return result
 
 
 @app.command("whoami")
-def whoami() -> None:
+@craik_command(payload_shape="kv")
+def whoami() -> CommandResult:
     """Print the active operator identity."""
     try:
         session = OperatorSessionStore.from_env().get()
     except OperatorSessionNotFoundError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(_operator_session_payload(session), indent=2, sort_keys=True))
+    result = CommandResult(payload=_operator_session_payload(session), shape="kv")
+    emit_command_result(result)
+    return result
 
 
 def _source_status(profile: AuthProfile) -> CredentialStatus:

@@ -63,6 +63,22 @@ def test_auth_add_and_remove_emit_single_json_payload(tmp_path: Path) -> None:
     assert json.loads(removed.stdout) == {"removed": "openai:test"}
 
 
+def test_operator_whoami_and_logout_emit_structured_payloads(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_session(home)
+    env = {"CRAIK_HOME": str(home)}
+
+    whoami = runner.invoke(app, ["whoami"], env=env)
+    logout = runner.invoke(app, ["logout"], env=env)
+
+    assert whoami.exit_code == 0, whoami.output
+    whoami_payload = json.loads(whoami.stdout)
+    assert whoami_payload["subject"] == "operator-123"
+    assert whoami_payload["email"] == "operator@example.test"
+    assert logout.exit_code == 0, logout.output
+    assert json.loads(logout.stdout) == {"logged_out": True, "revoked": False}
+
+
 def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) -> None:
     home = tmp_path / "home"
     _put_session(home)
