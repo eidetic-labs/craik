@@ -11,6 +11,7 @@ from craik.contracts.models import (
     PolicyProfile,
     ReceiptResult,
 )
+from craik.runtime.policy.text import sanitize_runtime_text
 
 MESSAGING_ADAPTER_ID = "messaging_fixture"
 MESSAGE_RECEIVE_CAPABILITY = "channel.message.receive"
@@ -109,7 +110,7 @@ def normalize_inbound_message(
             "identity_id": identity_id,
             "policy_envelope_id": policy_envelope_id,
         },
-        "text": text,
+        "text": sanitize_runtime_text(text),
         "thread_id": thread_id,
         "metadata": metadata or {},
     }
