@@ -298,12 +298,13 @@ craik auth login [OPTIONS] PROVIDER
 Options:
 
 - `--no-browser`: Print provider setup URL instead of opening a browser.; default `false`
-- `--mode`: Login mode: api-key or oauth.; default `api-key`
+- `--mode`: Login mode: api-key or oauth.
 - `--profile-id`: Auth profile id to create.
 - `--env-var`: Environment variable containing the provider key.
 - `--secret-ref`: Secret reference instead of an environment variable.
 - `--base-url`: Provider base URL for local-compatible providers.
 - `--project-id`: GCP project id for Gemini/Vertex OAuth profiles.
+- `--service-account`: Service-account JSON file for Gemini/Vertex OAuth profiles.
 - `--allow-local-base-url`: Allow loopback HTTP provider URLs.; default `false`
 - `--dry-run`: Validate and print redacted setup without writing state.; default `false`
 - `--json`: Print a redacted JSON result.; default `false`

@@ -1,0 +1,92 @@
+# OAuth Provider Reference
+
+<p className="craik-meta"><span>5 min read</span><span>For operators</span><span>Updated 2026-05-25</span></p>
+
+<div className="craik-lead">
+
+Craik v0.12.7 uses the strongest provider login flow that is usable
+without a private Craik-owned provider client registration. Anthropic and
+Gemini support OAuth-backed setup today. OpenAI keeps the OAuth foundation
+in place, but defaults to API-key capture until client registration is
+available.
+
+</div>
+
+## OpenAI
+
+| Field | Value |
+| --- | --- |
+| Authorization endpoint | `https://auth.openai.com/oauth/authorize` |
+| Token endpoint | `https://auth.openai.com/oauth/token` |
+| Scopes | `openid profile email offline_access` |
+| Billing surface | OpenAI Platform API key |
+| v0.12.7 status | API-key login is supported; production OAuth is pending client registration |
+
+Use the default API-key flow:
+
+```sh
+craik auth login openai
+```
+
+`craik auth login openai --mode=oauth` exits with remediation text instead
+of launching a placeholder client. Once Craik has a registered OpenAI OAuth
+client, the existing OAuth profile and loopback infrastructure can be enabled
+without changing the auth-profile contract.
+
+## Anthropic
+
+| Field | Value |
+| --- | --- |
+| Authorization endpoint | `https://claude.ai/oauth/authorize` |
+| Token endpoint | `https://console.anthropic.com/v1/oauth/token` |
+| Request header | `x-api-key` |
+| Billing surface | Anthropic Console account |
+| Flow type | OAuth-to-API-key bootstrap |
+| v0.12.7 status | Browser bootstrap is supported |
+
+Run:
+
+```sh
+craik auth login anthropic
+```
+
+Craik opens the Anthropic authorization URL, asks the operator to paste the
+one-time code shown by Anthropic, exchanges that code for a long-lived API
+key, and stores the key through Craik credential storage. Subsequent provider
+requests use Anthropic's required `x-api-key` header, not
+`Authorization: Bearer`.
+
+Use `--mode=api-key` to bypass the browser bootstrap and capture an
+Anthropic API key directly.
+
+## Gemini / Vertex AI
+
+| Field | Value |
+| --- | --- |
+| Credential library | `google-auth` |
+| Scope | `https://www.googleapis.com/auth/cloud-platform` |
+| Billing surface | Google Cloud project |
+| Flow type | Application Default Credentials or service-account JSON |
+| v0.12.7 status | ADC and service-account login are supported |
+
+For operator ADC:
+
+```sh
+gcloud auth application-default login
+craik auth login gemini --project-id my-gcp-project
+```
+
+For service accounts:
+
+```sh
+craik auth login gemini \
+  --project-id my-gcp-project \
+  --service-account /path/to/service-account.json
+```
+
+Craik stores profile metadata such as the project id and credential source.
+Google-managed credential material remains in the Google ADC or
+service-account path; Craik does not store Google refresh tokens.
+
+Use `--mode=api-key` for Gemini API-key capture through the v0.12.0
+credential-storage path.

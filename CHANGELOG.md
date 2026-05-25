@@ -16,11 +16,27 @@ within the `0.x.0` stability expectations described in
 
 - Added provider OAuth profile contracts, loopback PKCE safety helpers, and
   callback-safety CI coverage for browser-based provider login.
-- Added OpenAI, Anthropic, and Gemini/Vertex OAuth authorization-code clients
-  with secure keyring-only access and refresh token storage.
-- Added `craik auth login <provider> --mode=oauth` for browser OAuth login,
-  provider OAuth bearer-token transport, OAuth profile status expiry metadata,
-  and refreshed authentication/CLI reference documentation.
+- Added Anthropic OAuth-to-API-key bootstrap through
+  `craik auth login anthropic`; the browser setup stores the resulting API key
+  through Craik credential storage and sends provider calls with Anthropic's
+  required `x-api-key` header.
+- Added Gemini/Vertex OAuth login through Google Application Default
+  Credentials and service-account JSON profiles via `google-auth`.
+- Added OpenAI OAuth profile and token-client foundations while keeping OpenAI
+  login on API-key capture until Craik has a registered OpenAI OAuth client.
+- Added `craik auth login <provider> --mode=api-key` and `--mode=oauth`
+  selectors, with Anthropic and Gemini defaulting to OAuth-backed setup and
+  OpenAI defaulting to API-key capture.
+- Added `docs/reference/oauth-providers.md` and refreshed authentication,
+  security, roadmap, and release-readiness documentation for the shipped
+  provider-specific OAuth behavior.
+
+### Security
+
+- OAuth refresh paths validate token endpoints before resolving credential
+  material and return provider-specific remediation on refresh failure.
+- OAuth callback safety checks now pin loopback bind, state comparison,
+  PKCE-verifier non-persistence, and refresh-token scope invariants.
 
 ## 0.12.6 — 2026-05-25
 
