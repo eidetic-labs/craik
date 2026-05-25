@@ -435,9 +435,10 @@ def usage_command() -> None:
 
 
 def _operator_identity() -> str:
-    from craik.cli import _operator_identity as root_operator_identity
-
-    return root_operator_identity()
+    session = active_operator_session_from_env()
+    if session is None:
+        raise typer.BadParameter("active operator session required; run craik login")
+    return session.subject
 
 
 def _validate_model_ref(value: str) -> None:

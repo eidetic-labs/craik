@@ -9,6 +9,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from craik.runtime.contract.command_result import NextAction
+from craik.runtime.shell.renderers.nested_summary import summarize_nested
 from craik.runtime.shell.renderers.status_icons import icon_for_bool, icon_for_status
 
 _STATUS_VALUES = {
@@ -89,4 +90,8 @@ def _render_value(value: Any) -> str:
         return escape(value)
     if value is None:
         return icon_for_status("missing")
+    if isinstance(value, dict):
+        return escape(summarize_nested(value, item_name="fields"))
+    if isinstance(value, list):
+        return escape(summarize_nested(value, item_name="items"))
     return escape(str(value))

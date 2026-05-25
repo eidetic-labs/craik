@@ -1,0 +1,10 @@
+home                   10 fields (cache, case_files, config, ...)               
+gateway config         12 fields (schema, version, id, ...)  ->  review gateway 
+                       configuration                                            
+gateway runtime state  14 fields (schema, version, id, ...)  ->  run gateway    
+                       diagnostics                                              
+secrets written        ✗                                                        
+next steps             3 items (Review gateway_config before enabling external  
+                       ingress., Store channel secrets outside Craik config     
+                       files., Run gateway diagnostics before starting the      
+                       daemon.)                                                 
