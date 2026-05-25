@@ -142,13 +142,20 @@ OpenAI OAuth requires a registered Craik OAuth client. Explicitly running
 `craik auth login openai --mode=oauth` exits with remediation text instead
 of launching an unregistered placeholder client.
 
+Craik currently authenticates OpenAI requests against the Platform API, which
+is billed per-token regardless of any OpenAI consumer or workspace
+subscription the operator may hold. OpenAI has not published a third-party
+reuse interface for the subscription-billed token its first-party clients
+obtain through their hosted sign-in flow.
+
 ### Anthropic browser bootstrap
 
 Anthropic credential sources resolve in this order:
 
 1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable from `claude setup-token`
-2. `ANTHROPIC_API_KEY` environment variable
-3. OS keyring profile from `craik auth login anthropic`
+2. `ANTHROPIC_TOKEN` environment variable for manual OAuth token overrides
+3. `ANTHROPIC_API_KEY` environment variable
+4. OS keyring profile from `craik auth login anthropic`
 
 The first source that resolves wins. `craik doctor` and `craik auth status`
 report which Anthropic source is active without printing credential material.
@@ -282,7 +289,7 @@ can distinguish the credential path used by a run.
 <div>
 <dt><code>cli-bridge</code></dt>
 <dt><span className="craik-fields__type">vendor subprocess</span></dt>
-<dd>Vendor tools that mint a token through a subprocess or maintain a credentials file. Supports <code>stdout_json</code>, <code>stdout_line</code>, and <code>credentials_file</code> extractors. Today created by writing profile metadata into <code>auth-profiles.json</code>; the CLI does not yet expose dedicated bridge flags.</dd>
+<dd>Vendor tools that mint a token through a subprocess. Supports <code>stdout_json</code> and <code>stdout_line</code> extractors. Today created by writing profile metadata into <code>auth-profiles.json</code>; the CLI does not yet expose dedicated bridge flags.</dd>
 </div>
 
 <div>

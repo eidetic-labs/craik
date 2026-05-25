@@ -21,7 +21,12 @@ class EnvVarApiKeySource:
         """Return provider-specific headers for an API-key credential."""
         if family == "anthropic":
             credential = resolve_anthropic_credential_from_env(
-                fallback_env_vars=(self.env_var, "ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY")
+                fallback_env_vars=(
+                    "ANTHROPIC_TOKEN",
+                    self.env_var,
+                    "ANTHROPIC_API_KEY",
+                    "CRAIK_ANTHROPIC_API_KEY",
+                )
             )
             secret = credential.token if credential is not None else self._resolve_secret()
             headers = {"anthropic-version": "2023-06-01"}
@@ -40,9 +45,14 @@ class EnvVarApiKeySource:
         if not self.env_var:
             return CredentialStatus(status="unknown", detail="no environment variable configured")
         try:
-            if self.env_var in {"ANTHROPIC_API_KEY", "CRAIK_ANTHROPIC_API_KEY"}:
+            if self.env_var in {
+                "ANTHROPIC_TOKEN",
+                "ANTHROPIC_API_KEY",
+                "CRAIK_ANTHROPIC_API_KEY",
+            }:
                 credential = resolve_anthropic_credential_from_env(
                     fallback_env_vars=(
+                        "ANTHROPIC_TOKEN",
                         self.env_var,
                         "ANTHROPIC_API_KEY",
                         "CRAIK_ANTHROPIC_API_KEY",

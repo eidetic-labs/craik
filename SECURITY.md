@@ -234,10 +234,10 @@ credential stores.
   OAuth code and PKCE verifier are transient and are not stored in Craik
   state.
 - Anthropic credentials resolve from `CLAUDE_CODE_OAUTH_TOKEN`,
-  `ANTHROPIC_API_KEY`, or OS keyring. All three are sent via Anthropic's
-  required `x-api-key` header. Craik reads but never writes environment
-  variables; operators rotate Anthropic CLI OAuth tokens by re-running
-  `claude setup-token`.
+  `ANTHROPIC_TOKEN`, `ANTHROPIC_API_KEY`, or OS keyring. All four are sent
+  via Anthropic's required `x-api-key` header. Craik reads but never writes
+  environment variables; operators rotate Anthropic CLI OAuth tokens by
+  re-running `claude setup-token`.
 - Gemini OAuth uses Google-managed ADC or service-account credentials.
   Craik stores profile metadata such as project id, credential source, and
   service-account path, not Google refresh tokens.

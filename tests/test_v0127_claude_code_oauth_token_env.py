@@ -7,6 +7,7 @@ from craik.runtime.auth.login import auth_status_rows
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.sources.anthropic_env import (
     ANTHROPIC_API_KEY_ENV,
+    ANTHROPIC_TOKEN_ENV,
     CLAUDE_CODE_OAUTH_TOKEN_ENV,
     CRAIK_ANTHROPIC_API_KEY_ENV,
     resolve_anthropic_credential_from_env,
@@ -39,8 +40,42 @@ def test_claude_code_token_preferred_over_anthropic_api_key(monkeypatch) -> None
     assert credential.source == "env:CLAUDE_CODE_OAUTH_TOKEN"
 
 
+def test_resolves_anthropic_token_env(monkeypatch) -> None:
+    monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.setenv(ANTHROPIC_TOKEN_ENV, "sk-ant-oat-manual-xxx")
+    monkeypatch.delenv(ANTHROPIC_API_KEY_ENV, raising=False)
+
+    credential = resolve_anthropic_credential_from_env()
+
+    assert credential is not None
+    assert credential.token == "sk-ant-oat-manual-xxx"
+    assert credential.source == "env:ANTHROPIC_TOKEN"
+
+
+def test_claude_code_token_preferred_over_anthropic_token(monkeypatch) -> None:
+    monkeypatch.setenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, "sk-ant-oat01-claude")
+    monkeypatch.setenv(ANTHROPIC_TOKEN_ENV, "sk-ant-oat-manual")
+
+    credential = resolve_anthropic_credential_from_env()
+
+    assert credential is not None
+    assert credential.source == "env:CLAUDE_CODE_OAUTH_TOKEN"
+
+
+def test_anthropic_token_preferred_over_anthropic_api_key(monkeypatch) -> None:
+    monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.setenv(ANTHROPIC_TOKEN_ENV, "sk-ant-oat-manual")
+    monkeypatch.setenv(ANTHROPIC_API_KEY_ENV, "sk-ant-api-key")
+
+    credential = resolve_anthropic_credential_from_env()
+
+    assert credential is not None
+    assert credential.source == "env:ANTHROPIC_TOKEN"
+
+
 def test_falls_back_to_anthropic_api_key(monkeypatch) -> None:
     monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.delenv(ANTHROPIC_TOKEN_ENV, raising=False)
     monkeypatch.setenv(ANTHROPIC_API_KEY_ENV, "sk-ant-api-key")
 
     credential = resolve_anthropic_credential_from_env()
@@ -52,6 +87,7 @@ def test_falls_back_to_anthropic_api_key(monkeypatch) -> None:
 
 def test_falls_back_to_craik_anthropic_api_key(monkeypatch) -> None:
     monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.delenv(ANTHROPIC_TOKEN_ENV, raising=False)
     monkeypatch.delenv(ANTHROPIC_API_KEY_ENV, raising=False)
     monkeypatch.setenv(CRAIK_ANTHROPIC_API_KEY_ENV, "sk-ant-craik-key")
 
@@ -64,6 +100,7 @@ def test_falls_back_to_craik_anthropic_api_key(monkeypatch) -> None:
 
 def test_returns_none_when_neither_env_set(monkeypatch) -> None:
     monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.delenv(ANTHROPIC_TOKEN_ENV, raising=False)
     monkeypatch.delenv(ANTHROPIC_API_KEY_ENV, raising=False)
     monkeypatch.delenv(CRAIK_ANTHROPIC_API_KEY_ENV, raising=False)
 
@@ -72,6 +109,7 @@ def test_returns_none_when_neither_env_set(monkeypatch) -> None:
 
 def test_whitespace_only_token_treated_as_unset(monkeypatch) -> None:
     monkeypatch.setenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, "   ")
+    monkeypatch.delenv(ANTHROPIC_TOKEN_ENV, raising=False)
     monkeypatch.delenv(ANTHROPIC_API_KEY_ENV, raising=False)
     monkeypatch.delenv(CRAIK_ANTHROPIC_API_KEY_ENV, raising=False)
 
@@ -89,6 +127,19 @@ def test_env_api_key_source_prefers_claude_code_oauth_token(monkeypatch) -> None
     assert headers["anthropic-version"] == "2023-06-01"
     assert status.status == "ok"
     assert status.detail == "Anthropic CLI OAuth token (env)"
+
+
+def test_env_api_key_source_prefers_anthropic_token_over_api_key(monkeypatch) -> None:
+    monkeypatch.delenv(CLAUDE_CODE_OAUTH_TOKEN_ENV, raising=False)
+    monkeypatch.setenv(ANTHROPIC_TOKEN_ENV, "sk-ant-oat-manual")
+    monkeypatch.setenv(ANTHROPIC_API_KEY_ENV, "sk-ant-api-key")
+
+    headers = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).headers_for("anthropic")
+    status = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).status()
+
+    assert headers["x-api-key"] == "sk-ant-oat-manual"
+    assert status.status == "ok"
+    assert status.detail == "ANTHROPIC_TOKEN (env)"
 
 
 def test_auth_status_surfaces_anthropic_credential_source() -> None:
@@ -116,6 +167,20 @@ def test_doctor_surfaces_claude_code_oauth_token(tmp_path) -> None:
     checks = {item["name"]: item for item in payload["checks"]}
     assert checks["anthropic_env_credential"]["status"] == "pass"
     assert "Anthropic CLI OAuth token" in checks["anthropic_env_credential"]["summary"]
+    assert "sk-ant" not in json.dumps(checks["anthropic_env_credential"])
+
+
+def test_doctor_surfaces_anthropic_token(tmp_path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+
+    payload = run_doctor(
+        paths,
+        env={ANTHROPIC_TOKEN_ENV: "sk-ant-oat-manual"},
+    )
+
+    checks = {item["name"]: item for item in payload["checks"]}
+    assert checks["anthropic_env_credential"]["status"] == "pass"
+    assert "ANTHROPIC_TOKEN (env)" in checks["anthropic_env_credential"]["summary"]
     assert "sk-ant" not in json.dumps(checks["anthropic_env_credential"])
 
 

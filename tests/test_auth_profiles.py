@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from craik.runtime.auth import AuthProfile, CredentialKind, CredentialSource, CredentialStatus
 from craik.runtime.auth.sources import (
+    AuthProfileSourceError,
     CLIBridgeCredentialSource,
     EnvVarApiKeySource,
     SecretRefCredentialSource,
@@ -225,6 +226,23 @@ def test_source_for_auth_profile_maps_supported_kinds() -> None:
     assert isinstance(secret_ref, SecretRefCredentialSource)
     assert isinstance(cli_bridge, CLIBridgeCredentialSource)
     assert isinstance(stigmem_ref, StigmemCredentialSource)
+
+
+def test_cli_bridge_credentials_file_extractor_is_not_supported() -> None:
+    profile = AuthProfile(
+        id="openai:bridge",
+        kind=CredentialKind.CLI_BRIDGE,
+        provider_family="openai",
+        metadata={
+            "command": ["vendor-cli", "token"],
+            "token_extractor": "credentials_file",
+            "credentials_file_path": "~/.vendor/auth.json",
+        },
+        created_at=datetime(2026, 5, 25, tzinfo=UTC),
+    )
+
+    with pytest.raises(AuthProfileSourceError, match="unsupported token_extractor"):
+        source_for_auth_profile(profile)
 
 
 def test_stigmem_credential_source_resolves_fact_value() -> None:
