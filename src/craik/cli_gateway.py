@@ -3,40 +3,44 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
-from craik.runtime.doctor import run_doctor
-from craik.runtime.gateway import GatewayDaemonError, run_gateway_daemon
-from craik.runtime.paths import resolve_craik_home, resolve_craik_paths
-from craik.runtime.services.gateway import (
-    gateway_logs_payload,
-    gateway_status_payload,
-    install_gateway_service,
-    request_gateway_stop,
-    uninstall_gateway_service,
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.gateway import GatewayDaemonError
+from craik.runtime.paths import resolve_craik_home
+from craik.runtime.services.gateway_commands import (
+    gateway_doctor_result,
+    gateway_install_result,
+    gateway_logs_result,
+    gateway_restart_result,
+    gateway_start_result,
+    gateway_status_result,
+    gateway_stop_result,
+    gateway_uninstall_result,
 )
 
 gateway_app = typer.Typer(help="Run and inspect the local gateway daemon.")
 
 
 @gateway_app.command("start")
-def gateway_start_command() -> None:
+@craik_command(payload_shape="card")
+def gateway_start_command() -> CommandResult:
     """Run the foreground gateway daemon until interrupted."""
     _operator_identity()
-    paths = resolve_craik_paths()
     try:
-        state = run_gateway_daemon(paths)
+        result = gateway_start_result()
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(state.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("stop")
+@craik_command(payload_shape="card")
 def gateway_stop_command(
     signal_process: Annotated[
         bool,
@@ -45,57 +49,62 @@ def gateway_stop_command(
             help="Send SIGTERM to the recorded pid before marking the gateway stopped.",
         ),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Request gateway stop and recover stale pid state."""
     _operator_identity()
     try:
-        state = request_gateway_stop(resolve_craik_paths(), signal_process=signal_process)
+        result = gateway_stop_result(signal_process=signal_process)
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(state.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("restart")
-def gateway_restart_command() -> None:
+@craik_command(payload_shape="card")
+def gateway_restart_command() -> CommandResult:
     """Request a gateway restart by stopping the current lifecycle state."""
     _operator_identity()
     try:
-        state = request_gateway_stop(resolve_craik_paths())
+        result = gateway_restart_result()
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    payload = {
-        "status": "restart_requested",
-        "stopped_state": state.model_dump(mode="json", by_alias=True),
-        "next_step": "start the installed service, or run `craik gateway start` in foreground",
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("status")
-def gateway_status_command() -> None:
+@craik_command(slash_alias="gateway", payload_shape="kv")
+def gateway_status_command() -> CommandResult:
     """Show gateway config, runtime state, pid, bind, and stale-pid status."""
-    typer.echo(json.dumps(gateway_status_payload(resolve_craik_paths()), indent=2, sort_keys=True))
+    result = gateway_status_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("logs")
+@craik_command(payload_shape="card")
 def gateway_logs_command(
     tail: Annotated[int, typer.Option("--tail", min=1, max=500)] = 50,
-) -> None:
+) -> CommandResult:
     """Show recent gateway log lines."""
     _operator_identity()
-    typer.echo(
-        json.dumps(gateway_logs_payload(resolve_craik_paths(), tail=tail), indent=2, sort_keys=True)
-    )
+    result = gateway_logs_result(tail=tail)
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("doctor")
-def gateway_doctor_command() -> None:
+@craik_command(payload_shape="card_list")
+def gateway_doctor_command() -> CommandResult:
     """Run gateway-focused diagnostics."""
-    payload = run_doctor(resolve_craik_paths(), env=dict(os.environ))
-    typer.echo(json.dumps({"gateway": payload["checks"]}, indent=2, sort_keys=True))
+    result = gateway_doctor_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("install")
+@craik_command(payload_shape="card")
 def gateway_install_command(
     backend: Annotated[
         str | None,
@@ -120,36 +129,32 @@ def gateway_install_command(
             help="Write unit to PATH instead of default location; '-' for stdout.",
         ),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Generate a user-service definition for the local gateway."""
     try:
-        install = install_gateway_service(
-            resolve_craik_paths(),
+        result = gateway_install_result(
             backend=backend,
             executable_path=executable_path,
             log_path=log_path,
             dry_run=dry_run,
-            output_path=output,
+            output=output,
         )
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
     if dry_run or output == "-":
-        typer.echo(install.content, nl=False)
-        return
-    payload = {
-        "backend": install.backend,
-        "path": str(install.path),
-        "installed": install.installed,
-        "notes": list(install.notes),
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        typer.echo(result.text or "", nl=False)
+        return result
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @gateway_app.command("uninstall")
-def gateway_uninstall_command() -> None:
+@craik_command(payload_shape="card")
+def gateway_uninstall_command() -> CommandResult:
     """Remove generated gateway service definitions."""
-    payload = uninstall_gateway_service(resolve_craik_paths())
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = gateway_uninstall_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 def _operator_identity() -> str:

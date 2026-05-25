@@ -24,6 +24,10 @@ from craik.runtime.shell.session_settings import (
     save_active_session,
     shell_session_name,
 )
+from craik.runtime.shell.slash_command_adapters.system_command_results import (
+    gateway_slash_result,
+    receipts_slash_result,
+)
 from craik.runtime.shell.slash_command_schema import (
     ReadinessRequirement,
     slash_command_spec_by_name,
@@ -193,7 +197,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "handoffs":
         return _payload_result(command.name, _handoffs_payload(env))
     if command.name == "receipts":
-        return _payload_result(command.name, _receipts_payload(env))
+        return receipts_slash_result(tokens[1:], env=env)
     if command.name == "skills":
         return _payload_result(command.name, _skills_payload(env))
     if command.name == "memory":
@@ -202,7 +206,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         text, exit_code = render_mcp_discovery(tokens[1:], env=env)
         return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
-        return _payload_result(command.name, _gateway_payload(env))
+        return gateway_slash_result(tokens[1:], env=env)
     if command.name == "doctor":
         return _payload_result(command.name, _doctor_payload(report))
     return SlashCommandResult(f"`/{command.name}` is registered but has no inline handler yet.")
@@ -362,15 +366,6 @@ def _handoffs_payload(env: dict[str, str] | None) -> dict[str, Any]:
     return {"count": len(handoffs), "handoffs": [_json_ready(item) for item in handoffs]}
 
 
-def _receipts_payload(env: dict[str, str] | None) -> dict[str, Any]:
-    receipts = [
-        *_store_list(env, "list_receipts"),
-        *_store_list(env, "list_plugin_receipts"),
-        *_store_list(env, "list_gateway_receipts"),
-    ]
-    return {"count": len(receipts), "receipts": [_json_ready(item) for item in receipts]}
-
-
 def _skills_payload(env: dict[str, str] | None) -> dict[str, Any]:
     packages = _store_list(env, "list_skill_packages")
     registries = _store_list(env, "list_skill_registries")
@@ -390,17 +385,6 @@ def _memory_payload(env: dict[str, str] | None) -> dict[str, Any]:
         "proposals": [_json_ready(item) for item in proposals],
         "diffs": [_json_ready(item) for item in diffs],
         "impact_previews": [_json_ready(item) for item in previews],
-    }
-
-
-def _gateway_payload(env: dict[str, str] | None) -> dict[str, Any]:
-    configs = _store_list(env, "list_gateway_configs")
-    states = _store_list(env, "list_gateway_runtime_states")
-    schedules = _store_list(env, "list_gateway_schedules")
-    return {
-        "configs": [_json_ready(item) for item in configs],
-        "runtime_states": [_json_ready(item) for item in states],
-        "schedules": [_json_ready(item) for item in schedules],
     }
 
 
