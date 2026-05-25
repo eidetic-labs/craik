@@ -81,24 +81,40 @@ craik auth setup openai --secret-ref OPENAI_API_KEY --dry-run
 Loopback HTTP base URLs are rejected unless the selected provider is
 `local` or `--allow-local-base-url` is passed explicitly.
 
-### Capture-and-cache provider login
+### Provider login
 
-Use `craik auth login` for the default provider setup flow. Hosted
-providers open their API-key page when a browser is available, then
-Craik prompts for the key with hidden terminal input, validates the
-shape, stores the credential in the local credential backend, and
-writes a redacted `keyring-ref` profile. Copy/paste fallback remains
-available with `--no-browser`.
+Use `craik auth login` for the default provider setup flow. Craik chooses
+the strongest supported flow per provider: OpenAI and local-compatible
+providers use API-key capture, Anthropic uses browser OAuth bootstrap, and
+Gemini uses Google-managed ADC or service-account OAuth.
 
 ```sh
 craik auth login openai
 craik auth login anthropic
-craik auth login gemini
+craik auth login gemini --project-id my-gcp-project
 craik auth login local --base-url http://localhost:11434/v1
 ```
 
-Use `--json` for automation-friendly redacted output. Preview the
-resulting profile without writing state:
+OpenAI and local-compatible providers open the provider setup page when a
+browser is available, then Craik prompts for the key with hidden terminal
+input, validates the shape, stores the credential in the local credential
+backend, and writes a redacted `keyring-ref` profile. Copy/paste fallback
+remains available with `--no-browser`.
+
+Use `--mode=api-key` to force API-key capture for providers whose default is
+OAuth-backed:
+
+```sh
+craik auth login anthropic --mode=api-key
+craik auth login gemini --mode=api-key
+```
+
+For provider-specific OAuth endpoints, headers, setup commands, and current
+support status, see
+[OAuth provider reference](../reference/oauth-providers.md).
+
+Use `--json` for automation-friendly redacted output. API-key capture can
+preview the resulting profile without writing state:
 
 ```sh
 craik auth login openai --json
@@ -118,69 +134,61 @@ craik auth logout openai
 Provider login configures provider credentials. Operator identity remains
 available through `craik login` and `craik whoami`.
 
-### Browser OAuth provider login
+### OpenAI login status
 
-OpenAI, Anthropic, and Gemini also support browser OAuth login:
+OpenAI defaults to API-key capture in v0.12.7. Craik includes the OAuth
+profile contract, PKCE helper, and token client foundation, but production
+OpenAI OAuth requires a registered Craik OAuth client. Explicitly running
+`craik auth login openai --mode=oauth` exits with remediation text instead
+of launching an unregistered placeholder client.
+
+### Anthropic browser bootstrap
+
+Anthropic defaults to OAuth bootstrap:
 
 ```sh
-craik auth login openai --mode=oauth
-craik auth login anthropic --mode=oauth
-craik auth login gemini --mode=oauth --project-id my-gcp-project
+craik auth login anthropic
 ```
 
-OAuth login starts a one-shot loopback listener on `127.0.0.1`, opens
-the provider authorization page, verifies the callback `state` value,
-exchanges the authorization code with PKCE, and stores access and
-refresh tokens in secure credential storage. Use `--no-browser` to print
-the authorization URL for copy/paste environments.
+Craik opens `https://claude.ai/oauth/authorize`, asks the operator to paste
+the one-time code shown by Anthropic, exchanges that code at
+`https://console.anthropic.com/v1/oauth/token`, and stores the resulting
+long-lived API key through Craik credential storage. Anthropic provider
+requests use `x-api-key`; Anthropic rejects `Authorization: Bearer` for this
+surface.
 
-### OpenAI OAuth profile foundation
+### Gemini and Vertex OAuth
 
-v0.12.7 adds the OpenAI OAuth client used by browser login mode. It
-uses the same one-shot loopback listener as the
-operator OIDC flow: Craik binds only to `127.0.0.1`, chooses a random
-ephemeral port, sends a PKCE S256 challenge, verifies the OAuth `state`
-parameter with constant-time comparison, and closes the callback server
-after the authorization response is handled.
+Gemini defaults to Google-managed OAuth through `google-auth`.
 
-OpenAI OAuth profiles use kind `oauth`, separate access-token and
-refresh-token keyring handles, and metadata that identifies the
-credential as subscription-billed provider OAuth. The API-key path
-remains available through `craik auth login openai --mode=api-key`.
+For Application Default Credentials:
 
-### Anthropic OAuth profile foundation
+```sh
+gcloud auth application-default login
+craik auth login gemini --project-id my-gcp-project
+```
 
-v0.12.7 also adds the Anthropic OAuth client foundation for the same
-browser login path. The client builds an Anthropic authorization URL
-with PKCE, exchanges the loopback authorization code for provider
-tokens, refreshes access tokens through the stored refresh handle, and
-keeps token material out of profile metadata.
+For service accounts:
 
-Anthropic OAuth profiles use kind `oauth`, separate access-token and
-refresh-token keyring handles, and metadata that identifies the
-credential as subscription-billed provider OAuth. The API-key path
-remains available through `craik auth login anthropic --mode=api-key`.
+```sh
+craik auth login gemini \
+  --project-id my-gcp-project \
+  --service-account /path/to/service-account.json
+```
 
-### Gemini and Vertex OAuth profile foundation
-
-v0.12.7 adds the Gemini and Vertex OAuth client foundation for Google
-account browser login. The client builds a PKCE authorization URL with
-offline access, exchanges the loopback authorization code for provider
-tokens, refreshes access tokens through the stored refresh handle, and
-keeps token material out of profile metadata.
-
-Gemini OAuth profiles use kind `oauth`, separate access-token and
-refresh-token keyring handles, and metadata that identifies the
-credential as GCP-project billed provider OAuth. The API-key path
-remains available through `craik auth login gemini --mode=api-key`.
+Craik stores the Gemini auth profile metadata, including project id and
+credential source. Google-managed credential material remains in ADC or the
+service-account file; Craik does not store Google refresh tokens.
 
 <div className="craik-keypoint">
 
-**OAuth tokens require secure credential storage.**
+**OAuth credential material stays out of profile metadata.**
 
-Provider OAuth stores access and refresh tokens in the OS keyring only.
-Unlike API-key capture, OAuth token storage does not accept the
-file-backed fallback because refresh tokens grant continuing access.
+Provider OAuth profiles store handles and setup metadata, not raw tokens.
+OpenAI's pending OAuth path uses separate access-token and refresh-token
+handles. Anthropic bootstrap stores the resulting API key through Craik
+credential storage. Gemini relies on Google-managed ADC or service-account
+credentials.
 
 </div>
 

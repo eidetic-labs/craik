@@ -16,14 +16,16 @@ audit continuity.
 
 <div className="craik-keypoint">
 
-**v0.12.7 completes browser-based provider OAuth for OpenAI, Anthropic,
-and Gemini/Vertex.**
+**v0.12.7 completes the provider-specific OAuth adoption path that is
+usable without private client registrations.**
 
 `0.12.7` adds OAuth auth-profile contracts, one-shot loopback PKCE
-helpers, callback-safety CI coverage, provider-specific authorization-code
-clients, secure keyring-only token storage, OAuth bearer-token transport,
-OAuth status expiry metadata, and `craik auth login <provider>
---mode=oauth`.
+helpers, callback-safety CI coverage, Anthropic OAuth-to-API-key
+bootstrap, Gemini/Vertex ADC and service-account login through
+`google-auth`, provider-specific header handling, OAuth status metadata,
+and explicit `craik auth login <provider> --mode=api-key|oauth`
+selection. OpenAI keeps the OAuth foundation in place but defaults to
+API-key capture until Craik has a registered OpenAI OAuth client.
 
 </div>
 

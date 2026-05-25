@@ -665,10 +665,12 @@ migration policy, and localized operator-facing surfaces.
 **v0.12.x fast-follow status: provider OAuth suite ready for release prep.**
 
 The v0.12.7 goal workflow shipped provider OAuth contracts, loopback
-PKCE helpers, OpenAI/Anthropic/Gemini OAuth clients, secure keyring-only
-token storage, OAuth bearer-token transport, `craik auth login
-<provider> --mode=oauth`, status expiry metadata, callback-safety CI,
-and current authentication docs through milestone issues
+PKCE helpers, Anthropic OAuth-to-API-key bootstrap, Gemini/Vertex ADC
+and service-account login through `google-auth`, OpenAI OAuth foundation
+with API-key default pending client registration, provider-specific
+header handling, `craik auth login <provider> --mode=api-key|oauth`,
+status metadata, callback-safety CI, and current authentication docs
+through milestone issues
 <a href="https://github.com/eidetic-labs/craik/issues/936">#936</a>,
 <a href="https://github.com/eidetic-labs/craik/issues/937">#937</a>,
 <a href="https://github.com/eidetic-labs/craik/issues/940">#940</a>,

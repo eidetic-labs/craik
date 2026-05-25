@@ -236,6 +236,18 @@ credential stores.
 - Gemini OAuth uses Google-managed ADC or service-account credentials.
   Craik stores profile metadata such as project id, credential source, and
   service-account path, not Google refresh tokens.
+- Provider OAuth state values are generated with `secrets.token_urlsafe(32)`
+  and compared with `hmac.compare_digest`.
+- Loopback callback helpers bind only to literal `127.0.0.1`, use an
+  ephemeral port, and tear down after one callback or timeout.
+- OAuth token endpoints are validated with the provider URL safety guard
+  before credential-bearing refresh requests. Non-local refresh endpoints
+  must use HTTPS and must not resolve to private network targets.
+- Browser launch uses Python's `webbrowser.open`; Craik does not shell out
+  with an operator-supplied URL.
+- `scripts/check_oauth_callback_safety.py` enforces loopback bind, state
+  comparison, PKCE verifier non-persistence, and refresh-token scope
+  invariants in CI.
 - Local-CLI OAuth (`kind=oauth-token`, `source=local-cli`) is a compatibility
   exception. It reads vendor-managed credential files and may write refreshed
   token payloads back to that vendor file. This is not Craik keyring-cached
