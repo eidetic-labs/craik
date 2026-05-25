@@ -10,6 +10,19 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.6 — 2026-05-25
+
+### Fixed
+
+- Messaging channel ingress now sanitizes normalized inbound text before
+  runtime boundaries.
+- Slash-command registry checks now dispatch structured `/setup`,
+  `/provider`, and `/status` smoke commands to prevent schema and payload
+  drift.
+- TUI text-selection guidance, dark/light selection styling, and
+  `check_text_selection_wiring.py` now keep click-drag copy behavior
+  aligned with the Textual app.
+
 ## 0.12.5 — 2026-05-24
 
 ### Fixed
