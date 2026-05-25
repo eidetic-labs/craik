@@ -218,6 +218,29 @@ daemon processes.
 - Cron-like scheduled automations reject schedules that run more often
   than every five minutes and require policy authority before task
   creation.
+
+## v0.12.7 Provider OAuth Trust Model
+
+Craik's provider login surface is browser-first where provider OAuth is
+usable today, and explicit about compatibility paths that rely on external
+credential stores.
+
+- Anthropic and Gemini default to OAuth when running `craik auth login`.
+  OpenAI defaults to API-key capture until Craik has a registered OpenAI
+  OAuth client; explicitly requesting `--mode=oauth` fails with remediation
+  instead of using a placeholder client id.
+- Anthropic browser bootstrap stores the resulting provider API key through
+  Craik credential storage and persists a keyring-ref auth profile. The
+  OAuth code and PKCE verifier are transient and are not stored in Craik
+  state.
+- Gemini OAuth uses Google-managed ADC or service-account credentials.
+  Craik stores profile metadata such as project id, credential source, and
+  service-account path, not Google refresh tokens.
+- Local-CLI OAuth (`kind=oauth-token`, `source=local-cli`) is a compatibility
+  exception. It reads vendor-managed credential files and may write refreshed
+  token payloads back to that vendor file. This is not Craik keyring-cached
+  storage; use it only when the operator explicitly trusts the vendor CLI
+  credential store and its file permissions.
 - Gateway/channel artifacts are persisted through typed local-store
   helpers: adapter contracts, identity pairings, allowlists, gateway
   receipts, schedules, scheduled automations, and channel policy

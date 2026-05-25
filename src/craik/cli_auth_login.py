@@ -35,6 +35,8 @@ from craik.runtime.shell.readiness import resolve_readiness
 storage_app = typer.Typer(help="Inspect and migrate credential storage posture.")
 auth_app.add_typer(storage_app, name="storage")
 
+DEFAULT_OAUTH_PROVIDERS = {"anthropic", "gemini"}
+
 
 @auth_app.command("login")
 def auth_login_provider(
@@ -47,9 +49,9 @@ def auth_login_provider(
         typer.Option("--no-browser", help="Print provider setup URL instead of opening a browser."),
     ] = False,
     mode: Annotated[
-        str,
+        str | None,
         typer.Option("--mode", help="Login mode: api-key or oauth."),
-    ] = "api-key",
+    ] = None,
     profile_id: Annotated[
         str | None,
         typer.Option("--profile-id", help="Auth profile id to create."),
@@ -92,7 +94,13 @@ def auth_login_provider(
 ) -> None:
     """Capture and cache provider credentials in local credential storage."""
     try:
-        normalized_mode = mode.strip().lower()
+        normalized_provider = provider.strip().lower()
+        if mode is None:
+            normalized_mode = (
+                "oauth" if normalized_provider in DEFAULT_OAUTH_PROVIDERS else "api-key"
+            )
+        else:
+            normalized_mode = mode.strip().lower()
         if normalized_mode not in {"api-key", "oauth"}:
             raise typer.BadParameter("--mode must be api-key or oauth")
         if normalized_mode == "oauth":
@@ -102,7 +110,7 @@ def auth_login_provider(
                 raise typer.BadParameter("--base-url is only supported by --mode=api-key")
             if dry_run:
                 raise typer.BadParameter("--dry-run is not supported for browser OAuth login")
-            if provider.strip().lower() == "gemini":
+            if normalized_provider == "gemini":
                 oauth_result = gemini_oauth_login(
                     profile_id=profile_id,
                     project_id=project_id,

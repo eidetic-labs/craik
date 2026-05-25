@@ -11,6 +11,7 @@ from craik.runtime.auth import AuthProfile, CredentialKind, CredentialSource, Cr
 from craik.runtime.auth.sources import (
     CLIBridgeCredentialSource,
     EnvVarApiKeySource,
+    LocalCLICredentialSource,
     SecretRefCredentialSource,
     StigmemCredentialError,
     StigmemCredentialSource,
@@ -101,6 +102,10 @@ def test_legacy_local_cli_oauth_token_profiles_do_not_require_provider_oauth_fie
 
     assert profile.oauth_authorization_endpoint is None
     assert profile.oauth_refresh_keyring_handle is None
+
+
+def test_auth_profile_kind_has_no_env_variant() -> None:
+    assert "env" not in {kind.value for kind in CredentialKind}
 
 
 @pytest.mark.parametrize(
@@ -234,6 +239,20 @@ def test_source_for_auth_profile_maps_supported_kinds() -> None:
     assert isinstance(secret_ref, SecretRefCredentialSource)
     assert isinstance(cli_bridge, CLIBridgeCredentialSource)
     assert isinstance(stigmem_ref, StigmemCredentialSource)
+
+
+def test_source_for_auth_profile_maps_local_cli_oauth_token_profiles() -> None:
+    source = source_for_auth_profile(
+        AuthProfile(
+            id="openai:local-cli",
+            kind=CredentialKind.OAUTH_TOKEN,
+            provider_family="openai",
+            metadata={"source": "local-cli"},
+            created_at=datetime(2026, 5, 17, tzinfo=UTC),
+        )
+    )
+
+    assert isinstance(source, LocalCLICredentialSource)
 
 
 def test_stigmem_credential_source_resolves_fact_value() -> None:

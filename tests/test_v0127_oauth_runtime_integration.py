@@ -159,6 +159,126 @@ def test_auth_login_oauth_mode_uses_browser_oauth_flow(monkeypatch, tmp_path) ->
     assert "access-token" not in result.output
 
 
+def test_auth_login_anthropic_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None:
+    profile = AuthProfile(
+        id="anthropic:default",
+        kind=CredentialKind.KEYRING_REF,
+        provider_family="anthropic",
+        metadata={"ref": "anthropic:default:api-key"},
+        created_at=datetime.now(UTC),
+    )
+
+    def _login(provider: str, **kwargs):
+        assert provider == "anthropic"
+        assert kwargs["profile_id"] is None
+        assert kwargs["project_id"] is None
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="anthropic",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="test-keyring",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="https://claude.ai/oauth/authorize",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _login)
+    result = runner.invoke(
+        app,
+        ["auth", "login", "anthropic", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["provider"] == "anthropic"
+    assert payload["kind"] == "keyring-ref"
+    assert payload["authorization_url"] == "https://claude.ai/oauth/authorize"
+
+
+def test_auth_login_gemini_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None:
+    profile = _oauth_profile(provider="gemini")
+
+    def _login(**kwargs):
+        assert kwargs["profile_id"] is None
+        assert kwargs["project_id"] is None
+        assert kwargs["service_account_path"] is None
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="gemini",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="google-auth",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="gcloud auth application-default login",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _login)
+    result = runner.invoke(
+        app,
+        ["auth", "login", "gemini", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["provider"] == "gemini"
+    assert payload["authorization_url"] == "gcloud auth application-default login"
+
+
+def test_auth_login_openai_defaults_to_api_key_mode(monkeypatch, tmp_path) -> None:
+    calls: dict[str, str] = {}
+    profile = AuthProfile(
+        id="openai:default",
+        kind=CredentialKind.KEYRING_REF,
+        provider_family="openai",
+        metadata={"ref": "openai:default:api-key"},
+        created_at=datetime.now(UTC),
+    )
+
+    def _capture(provider: str, **kwargs):
+        calls["provider"] = provider
+        calls["credential"] = kwargs["credential"]
+        return AuthCaptureResult(
+            provider=provider,
+            profile=profile,
+            status=profile_runtime_ok(),
+            credential_storage=CredentialStorageStatus(
+                backend="test-keyring",
+                status="available",
+                secure=True,
+            ),
+        )
+
+    def _oauth(provider: str, **kwargs):
+        raise AssertionError("openai should default to api-key mode")
+
+    monkeypatch.setattr("craik.cli_auth_login.capture_and_cache_login", _capture)
+    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _oauth)
+    result = runner.invoke(
+        app,
+        ["auth", "login", "openai", "--no-browser", "--json"],
+        input="sk-test\n",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout[result.stdout.index("{") :])
+    assert payload["provider"] == "openai"
+    assert payload["kind"] == "keyring-ref"
+    assert calls == {"provider": "openai", "credential": "sk-test"}
+
+
 def test_browser_oauth_login_openai_fails_with_pending_registration() -> None:
     with pytest.raises(OpenAIOAuthError, match="registered as an OAuth client"):
         browser_oauth_login(

@@ -119,7 +119,7 @@ def test_auth_login_rejected_key_uses_redacted_remediation(tmp_path: Path) -> No
 
     result = runner.invoke(
         app,
-        ["auth", "login", "anthropic", "--no-browser", "--json"],
+        ["auth", "login", "anthropic", "--mode=api-key", "--no-browser", "--json"],
         input="bad key with spaces\n",
         env=env,
     )
@@ -143,7 +143,7 @@ def test_auth_status_and_logout_require_operator_and_remove_cache(
     _allow_health_check(monkeypatch)
     login = runner.invoke(
         app,
-        ["auth", "login", "gemini", "--no-browser", "--json"],
+        ["auth", "login", "gemini", "--mode=api-key", "--no-browser", "--json"],
         input="gemini-key\n",
         env=env,
     )
