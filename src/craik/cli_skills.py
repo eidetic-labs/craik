@@ -10,228 +10,164 @@ import typer
 
 from craik.cli import skills_app
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
-from craik.runtime.skills.packages import (
-    install_skill_package,
-    list_skill_packages,
-    set_skill_registry_entry_active,
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.skills.commands import (
+    skills_eval_result,
+    skills_history_result,
+    skills_install_result,
+    skills_list_result,
+    skills_overview_result,
+    skills_promote_result,
+    skills_proposals_result,
+    skills_rollback_result,
+    skills_set_active_result,
+    skills_show_result,
+    skills_telemetry_result,
 )
-from craik.runtime.store import LocalStore
 
 
 @skills_app.command("install")
+@craik_command(payload_shape="card")
 def skills_install(
     path: Annotated[Path, typer.Argument(help="Skill package JSON manifest.")],
-) -> None:
+) -> CommandResult:
     """Install a skill package manifest."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        package = install_skill_package(store, path)
-    finally:
-        store.close()
-    _print(package)
+    result = skills_install_result(path)
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("list")
+@craik_command(slash_alias="skills-list", payload_shape="card_list")
 def skills_list(
     scope: Annotated[
         str | None,
         typer.Option("--scope", help="Optional registry scope: project or global."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """List installed skill packages."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        packages = list_skill_packages(store, scope=scope)
-    finally:
-        store.close()
-    typer.echo(json.dumps([_payload(package) for package in packages], indent=2, sort_keys=True))
+    result = skills_list_result(scope=scope)
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("enable")
+@craik_command(payload_shape="card")
 def skills_enable(
     entry_id: Annotated[str, typer.Argument(help="Skill registry entry id.")],
-) -> None:
+) -> CommandResult:
     """Enable a skill registry entry."""
     _operator_identity()
-    _set_active(entry_id, active=True)
+    return _set_active(entry_id, active=True)
 
 
 @skills_app.command("disable")
+@craik_command(payload_shape="card")
 def skills_disable(
     entry_id: Annotated[str, typer.Argument(help="Skill registry entry id.")],
-) -> None:
+) -> CommandResult:
     """Disable a skill registry entry."""
     _operator_identity()
-    _set_active(entry_id, active=False)
+    return _set_active(entry_id, active=False)
 
 
 @skills_app.command("show")
-def skills_show(package_id: Annotated[str, typer.Argument(help="Skill package id.")]) -> None:
+@craik_command(payload_shape="card")
+def skills_show(
+    package_id: Annotated[str, typer.Argument(help="Skill package id.")],
+) -> CommandResult:
     """Show one installed skill package."""
     _operator_identity()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        package = store.get_skill_package(package_id)
-    finally:
-        store.close()
-    if package is None:
-        raise typer.BadParameter(f"unknown skill package: {package_id}")
-    _print(package)
+        result = skills_show_result(package_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("telemetry")
-def skills_telemetry() -> None:
+@craik_command(payload_shape="card_list")
+def skills_telemetry() -> CommandResult:
     """Summarize redacted skill invocation telemetry inputs."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        contexts = store.list_skill_invocation_contexts()
-    finally:
-        store.close()
-    payload = {
-        "telemetry_count": len(contexts),
-        "items": [
-            {
-                "id": context.id,
-                "skill_package_id": context.skill_package_id,
-                "task_id": context.task_id,
-                "policy_envelope_id": context.policy_envelope_id,
-                "receipt_ids": context.receipt_ids,
-                "redacted": True,
-            }
-            for context in contexts
-        ],
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_telemetry_result()
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("proposals")
-def skills_proposals() -> None:
+@craik_command(payload_shape="card_list")
+def skills_proposals() -> CommandResult:
     """List reviewable learning-loop proposal sources."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        instruction_proposals = store.list_distilled_instruction_proposals()
-    finally:
-        store.close()
-    payload = {
-        "proposal_count": len(instruction_proposals),
-        "items": [
-            {
-                "id": proposal.id,
-                "status": proposal.promotion_status,
-                "category": proposal.category,
-                "source_id": proposal.source_id,
-                "provenance_ids": proposal.provenance_ids,
-                "evidence_ids": proposal.evidence_ids,
-                "redacted": True,
-            }
-            for proposal in instruction_proposals
-        ],
-        "silent_promotion_allowed": False,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_proposals_result()
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("eval")
+@craik_command(payload_shape="card_list")
 def skills_eval(
     package_id: Annotated[str | None, typer.Option("--package-id")] = None,
-) -> None:
+) -> CommandResult:
     """Report replay/eval readiness for skill promotion gates."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        packages = store.list_skill_packages()
-    finally:
-        store.close()
-    filtered = [package for package in packages if package_id in {None, package.id}]
-    payload = {
-        "package_count": len(filtered),
-        "eval_status": "no replay fixtures recorded",
-        "items": [_payload(package) for package in filtered],
-        "redacted": True,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_eval_result(package_id=package_id)
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("promote")
+@craik_command(payload_shape="card")
 def skills_promote(
     proposal_id: Annotated[str, typer.Argument(help="Proposal id to review for promotion.")],
     dry_run: Annotated[bool, typer.Option("--dry-run/--apply")] = True,
-) -> None:
+) -> CommandResult:
     """Preview a skill promotion decision; promotion remains approval-gated."""
     _operator_identity()
-    payload = {
-        "proposal_id": proposal_id,
-        "dry_run": dry_run,
-        "approved": False,
-        "reason": "skill promotion requires explicit approval, replay evidence, and receipts",
-        "silent_promotion_allowed": False,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_promote_result(proposal_id, dry_run=dry_run)
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("rollback")
+@craik_command(payload_shape="card")
 def skills_rollback(
     package_id: Annotated[str, typer.Argument(help="Skill package id.")],
     dry_run: Annotated[bool, typer.Option("--dry-run/--apply")] = True,
-) -> None:
+) -> CommandResult:
     """Preview rollback posture for a skill package."""
     _operator_identity()
-    payload = {
-        "package_id": package_id,
-        "dry_run": dry_run,
-        "rollback_ready": False,
-        "reason": (
-            "rollback requires a promoted version, prior version, replay context, and receipt"
-        ),
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_rollback_result(package_id, dry_run=dry_run)
+    _print_payload(result.payload)
+    return result
 
 
 @skills_app.command("history")
-def skills_history() -> None:
+@craik_command(payload_shape="card_list")
+def skills_history() -> CommandResult:
     """Show skill package and learning-loop receipt history."""
     _operator_identity()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        packages = store.list_skill_packages()
-        receipts = [
-            receipt
-            for receipt in store.list_receipts()
-            if receipt.result.metadata.get("learning_action") is not None
-        ]
-    finally:
-        store.close()
-    payload = {
-        "packages": [_payload(package) for package in packages],
-        "learning_receipts": [
-            receipt.model_dump(mode="json", by_alias=True) for receipt in receipts
-        ],
-        "redacted": True,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = skills_history_result()
+    _print_payload(result.payload)
+    return result
 
 
-def _set_active(entry_id: str, *, active: bool) -> None:
-    store = LocalStore.from_env()
+def skills_overview() -> CommandResult:
+    """Return the operator-facing skills overview payload."""
+    return skills_overview_result()
+
+
+def _set_active(entry_id: str, *, active: bool) -> CommandResult:
     try:
-        store.initialize()
-        registry = set_skill_registry_entry_active(store, entry_id, active=active)
-    finally:
-        store.close()
-    if registry is None:
-        raise typer.BadParameter(f"unknown skill registry entry: {entry_id}")
-    _print(registry)
+        result = skills_set_active_result(entry_id, active=active)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    _print_payload(result.payload)
+    return result
 
 
 def _operator_identity() -> str:
@@ -242,9 +178,5 @@ def _operator_identity() -> str:
     return session.subject
 
 
-def _payload(model: object) -> dict[str, object]:
-    return model.model_dump(mode="json", by_alias=True)  # type: ignore[attr-defined,no-any-return]
-
-
-def _print(model: object) -> None:
-    typer.echo(json.dumps(_payload(model), indent=2, sort_keys=True))
+def _print_payload(payload: object) -> None:
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
