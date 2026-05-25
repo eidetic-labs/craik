@@ -14,13 +14,12 @@ from craik.cli import auth_app
 from craik.runtime.auth import AuthProfileNotFoundError, AuthProfileStore, CredentialKind
 from craik.runtime.auth.login import (
     AuthCaptureResult,
-    OAuthLoginResult,
-    browser_oauth_login,
     capture_and_cache_login,
     explicit_reference_login,
     logout_provider,
     migrate_env_profiles,
 )
+from craik.runtime.auth.oauth_provider_login import OAuthLoginResult, browser_oauth_login
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness

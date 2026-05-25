@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta
 from typer.testing import CliRunner
 
 from craik.cli import app
-from craik.runtime.auth.login import AuthCaptureResult, OAuthLoginResult, auth_status_rows
+from craik.runtime.auth.login import AuthCaptureResult, auth_status_rows
+from craik.runtime.auth.oauth_provider_login import OAuthLoginResult
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.sources import (
     ProviderOAuthCredentialSource,
