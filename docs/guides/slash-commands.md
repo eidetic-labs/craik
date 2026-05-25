@@ -69,6 +69,9 @@ the command behavior operators see outside the TUI.
 | `/clear` | Clear the visible transcript after confirmation. |
 | `/exit` | Exit the interactive shell. |
 
+`/doctor` renders the same redacted diagnostic report as `craik doctor --json`,
+including setup, gateway, channel, auth-profile, and local-store checks.
+
 ## Structured Output
 
 Slash-command results use declarative output shapes:

@@ -14,6 +14,7 @@ from craik.runtime.auth.commands import (
     operator_login_guidance_result,
     provider_login_capture_result,
 )
+from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.memory.commands import memory_overview_result
 from craik.runtime.model_commands import (
@@ -220,7 +221,7 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "gateway":
         return gateway_slash_result(tokens[1:], env=env)
     if command.name == "doctor":
-        return _payload_result(command.name, {"readiness": report.as_dict()})
+        return _payload_result(command.name, doctor_result(env=env).payload)
     if command.name == "policy":
         return _confirmation_slash_result("policy.reset")
     if command.name == "migrate":
