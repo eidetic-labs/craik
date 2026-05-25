@@ -23,6 +23,7 @@ def _load_script(name: str) -> ModuleType:
 
 
 check_cli_tui_contract = _load_script("check_cli_tui_contract")
+check_snapshot_coverage = _load_script("check_snapshot_coverage")
 generate_snapshots = _load_script("generate_snapshots")
 
 
@@ -52,6 +53,32 @@ def test_cli_tui_contract_guard_accepts_current_registry() -> None:
     registry = check_cli_tui_contract.registry_from_app(app)
 
     assert check_cli_tui_contract.cli_tui_contract_failures(registry) == []
+
+
+def test_snapshot_coverage_guard_accepts_current_slash_specs() -> None:
+    from craik.runtime.shell.slash_command_schema import slash_command_specs
+
+    command_names = [spec.command_name for spec in slash_command_specs()]
+
+    assert (
+        check_snapshot_coverage.snapshot_coverage_failures(
+            command_names,
+            snapshot_root=ROOT / "tests" / "snapshots" / "slash",
+        )
+        == []
+    )
+
+
+def test_snapshot_coverage_guard_reports_missing_snapshot(tmp_path: Path) -> None:
+    (tmp_path / "alpha").mkdir()
+    (tmp_path / "alpha" / "width-80.txt").write_text("ok\n", encoding="utf-8")
+
+    failures = check_snapshot_coverage.snapshot_coverage_failures(
+        ["alpha", "beta"],
+        snapshot_root=tmp_path,
+    )
+
+    assert failures == ["/beta: missing beta/width-80.txt"]
 
 
 def test_snapshot_writer_creates_expected_width_files(tmp_path: Path) -> None:
