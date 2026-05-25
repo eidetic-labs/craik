@@ -21,7 +21,10 @@ from craik.contracts.models import (
     HumanDelegationPoint,
     InstructionProvenance,
     IntentLock,
+    MemoryBackendCapabilities,
     MemoryImpactPreview,
+    MemoryOptionalCapabilities,
+    MemoryRequiredCapabilities,
     PluginReceipt,
     ReceiptResult,
     RecoverySession,
@@ -33,6 +36,7 @@ from craik.contracts.models import (
     TaskRunStatus,
 )
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
+from craik.runtime.memory.memory import StigmemMemoryStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.store import LocalStore
@@ -84,6 +88,37 @@ def test_cli_extension_modules_register_commands(
 
     assert result.exit_code == 0
     assert expected in result.output
+
+
+def test_connect_stigmem_emits_structured_capability_payload(monkeypatch) -> None:
+    def _discover(self: StigmemMemoryStore) -> MemoryBackendCapabilities:
+        return MemoryBackendCapabilities(
+            backend="stigmem",
+            node_url="https://stigmem.example.test",
+            node_id="stigmem:test",
+            auth_required=True,
+            required=MemoryRequiredCapabilities(
+                health=True,
+                metadata=True,
+                fact_write=True,
+                fact_query=True,
+                fact_get=True,
+                fact_provenance=True,
+            ),
+            optional=MemoryOptionalCapabilities(recall=True),
+            checked_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(StigmemMemoryStore, "discover", _discover)
+
+    result = runner.invoke(app, ["connect", "stigmem", "--url", "https://stigmem.example.test"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["backend"] == "stigmem"
+    assert payload["node_id"] == "stigmem:test"
+    assert payload["required"]["fact_query"] is True
+    assert payload["optional"]["recall"] is True
 
 
 def test_knowledge_resolution_commands_require_operator_session(tmp_path: Path) -> None:

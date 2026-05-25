@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import connect_app
+from craik.cli_output import emit_command_result
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.memory.memory import StigmemClient, StigmemConfig, StigmemMemoryStore
 
 
 @connect_app.command("stigmem")
+@craik_command(payload_shape="card")
 def connect_stigmem(
     url: Annotated[
         str,
@@ -37,10 +39,13 @@ def connect_stigmem(
             help="Request timeout in seconds.",
         ),
     ] = 5.0,
-) -> None:
+) -> CommandResult:
     """Detect Stigmem backend compatibility."""
     config = StigmemConfig(node_url=url, api_key=api_key, timeout_seconds=timeout)
     capabilities = StigmemMemoryStore(StigmemClient(config)).discover()
-    typer.echo(
-        json.dumps(capabilities.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
+    result = CommandResult(
+        payload=capabilities.model_dump(mode="json", by_alias=True),
+        shape="card",
     )
+    emit_command_result(result)
+    return result
