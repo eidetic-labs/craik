@@ -28,6 +28,7 @@ from craik.contracts.models import (
     PluginReceipt,
     ReceiptResult,
     RecoverySession,
+    ReferenceIntegration,
     RunDelta,
     RunDeltaItem,
     RunOutput,
@@ -119,6 +120,48 @@ def test_connect_stigmem_emits_structured_capability_payload(monkeypatch) -> Non
     assert payload["node_id"] == "stigmem:test"
     assert payload["required"]["fact_query"] is True
     assert payload["optional"]["recall"] is True
+
+
+def test_reference_commands_emit_structured_payloads(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    _put_operator_session(home)
+    integration = ReferenceIntegration.model_validate(
+        {
+            "id": "reference_skill_docs_reconcile",
+            "kind": "skill",
+            "name": "Docs Reconcile Skill Reference",
+            "description": "Safe reproducible reference integration fixture.",
+            "skill_package_id": "skill_docs_reconcile",
+            "docs": ["docs/reference/skill-packages.md"],
+            "fixture_paths": ["tests/fixtures/contracts/v0_1/contracts.json"],
+            "check_commands": ["uv run --extra dev pytest tests/test_contracts.py"],
+            "compatibility_notes": ["Compatible with v0.6 reference contracts."],
+            "safe_to_run_locally": True,
+            "reproducible": True,
+            "provenance_ids": ["evidence_readme_status"],
+            "created_at": "2026-05-16T16:50:00Z",
+        }
+    )
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        store.put_reference_integration(integration)
+    finally:
+        store.close()
+
+    env = {"CRAIK_HOME": str(home)}
+    listed = runner.invoke(app, ["references", "list"], env=env)
+    verified = runner.invoke(
+        app,
+        ["references", "verify", "reference_skill_docs_reconcile"],
+        env=env,
+    )
+
+    assert listed.exit_code == 0, listed.output
+    assert json.loads(listed.stdout)[0]["id"] == "reference_skill_docs_reconcile"
+    assert verified.exit_code == 0, verified.output
+    assert json.loads(verified.stdout)["id"] == "reference_skill_docs_reconcile"
 
 
 def test_knowledge_resolution_commands_require_operator_session(tmp_path: Path) -> None:

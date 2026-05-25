@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import references_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.store import LocalStore
 
 
 @references_app.command("list")
-def references_list() -> None:
+@craik_command(payload_shape="card_list")
+def references_list() -> CommandResult:
     """List reference integrations."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -22,13 +24,19 @@ def references_list() -> None:
         integrations = store.list_reference_integrations()
     finally:
         store.close()
-    typer.echo(json.dumps([_payload(item) for item in integrations], indent=2, sort_keys=True))
+    result = CommandResult(
+        payload=[_payload(item) for item in integrations],
+        shape="card_list",
+    )
+    emit_command_result(result)
+    return result
 
 
 @references_app.command("verify")
+@craik_command(payload_shape="card")
 def references_verify(
     integration_id: Annotated[str, typer.Argument(help="Reference integration id.")],
-) -> None:
+) -> CommandResult:
     """Verify that a reference integration is present and valid."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -39,12 +47,10 @@ def references_verify(
         store.close()
     if integration is None:
         raise typer.BadParameter(f"unknown reference integration: {integration_id}")
-    _print(integration)
+    result = CommandResult(payload=_payload(integration), shape="card")
+    emit_command_result(result)
+    return result
 
 
 def _payload(model: object) -> dict[str, object]:
     return model.model_dump(mode="json", by_alias=True)  # type: ignore[attr-defined,no-any-return]
-
-
-def _print(model: object) -> None:
-    typer.echo(json.dumps(_payload(model), indent=2, sort_keys=True))
