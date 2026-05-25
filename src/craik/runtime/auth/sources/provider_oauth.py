@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from craik.runtime.auth.profile import AuthProfile, CredentialStatus
-from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthClient
-from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthClient
-from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthClient
+from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthClient, AnthropicOAuthError
+from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthClient, GeminiOAuthError
+from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthClient, OpenAIOAuthError
 from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_url_safety import (
+    ProviderURLSafetyError,
+    assert_safe_provider_url,
+)
 from craik.runtime.shell.credential_storage import (
     CredentialStorageError,
     get_cached_credential,
@@ -30,7 +34,11 @@ class ProviderOAuthCredentialSource:
     def headers_for(self, family: ProviderFamily) -> dict[str, str]:
         """Return provider OAuth authorization headers, refreshing expired access tokens."""
         if family != self.profile.provider_family:
-            raise ProviderOAuthCredentialError("OAuth profile provider family mismatch")
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile provider family mismatch. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         access_token = self._access_token()
         if self._is_expired():
             access_token = self._refresh_access_token()
@@ -53,29 +61,73 @@ class ProviderOAuthCredentialSource:
     def _access_token(self) -> str:
         handle = self.profile.oauth_token_keyring_handle
         if not handle:
-            raise ProviderOAuthCredentialError("OAuth profile requires an access-token handle")
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile requires an access-token handle. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         credential = get_cached_credential(handle)
         if not credential.value:
-            raise CredentialStorageError("OAuth access token could not be resolved")
+            raise CredentialStorageError(
+                f"Your {_provider_label(self.profile)} OAuth access token could not be resolved. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         return credential.value
 
     def _refresh_token(self) -> str:
         handle = self.profile.oauth_refresh_keyring_handle
         if not handle:
-            raise ProviderOAuthCredentialError("OAuth profile requires a refresh-token handle")
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile requires a refresh-token handle. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         credential = get_cached_credential(handle)
         if not credential.value:
-            raise CredentialStorageError("OAuth refresh token could not be resolved")
+            raise CredentialStorageError(
+                f"Your {_provider_label(self.profile)} OAuth refresh token could not be resolved. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         return credential.value
 
     def _refresh_access_token(self) -> str:
         access_handle = self.profile.oauth_token_keyring_handle
         refresh_handle = self.profile.oauth_refresh_keyring_handle
+        token_endpoint = self.profile.oauth_token_endpoint
+        if not token_endpoint:
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile is missing token endpoint metadata. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
+        try:
+            assert_safe_provider_url(token_endpoint, allow_local=False)
+        except ProviderURLSafetyError as exc:
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: {exc}. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            ) from exc
         if not access_handle or not refresh_handle:
-            raise ProviderOAuthCredentialError("OAuth profile requires token handles")
-        token_set, refresh_token = self._client().refresh_access_token(
-            refresh_token=self._refresh_token()
-        )
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile requires token handles. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
+        try:
+            token_set, refresh_token = self._client().refresh_access_token(
+                refresh_token=self._refresh_token()
+            )
+        except (
+            ProviderOAuthCredentialError,
+            CredentialStorageError,
+            OpenAIOAuthError,
+            AnthropicOAuthError,
+            GeminiOAuthError,
+        ) as exc:
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential could not be "
+                f"refreshed. Re-run: craik auth login {self.profile.provider_family}"
+            ) from exc
         put_cached_credential(access_handle, token_set.access_token)
         put_cached_credential(refresh_handle, refresh_token)
         return token_set.access_token
@@ -85,7 +137,11 @@ class ProviderOAuthCredentialSource:
         client_id = self.profile.oauth_client_id
         scope = tuple(self.profile.oauth_scope_list or ())
         if not token_endpoint or not client_id or not scope:
-            raise ProviderOAuthCredentialError("OAuth profile is missing token metadata")
+            raise ProviderOAuthCredentialError(
+                f"Your {_provider_label(self.profile)} OAuth credential failed: "
+                "profile is missing token metadata. "
+                f"Re-run: craik auth login {self.profile.provider_family}"
+            )
         if self.profile.provider_family == "openai":
             return OpenAIOAuthClient(
                 token_endpoint=token_endpoint,
@@ -104,7 +160,11 @@ class ProviderOAuthCredentialSource:
                 client_id=client_id,
                 scope=scope,
             )
-        raise ProviderOAuthCredentialError("unsupported provider OAuth family")
+        raise ProviderOAuthCredentialError(
+            f"Your {_provider_label(self.profile)} OAuth credential failed: "
+            "unsupported provider OAuth family. "
+            f"Re-run: craik auth login {self.profile.provider_family}"
+        )
 
     def _is_expired(self) -> bool:
         expires_at = self._expires_at()
@@ -121,6 +181,10 @@ class ProviderOAuthCredentialSource:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
+
+
+def _provider_label(profile: AuthProfile) -> str:
+    return profile.provider_family.replace("_", " ").title()
 
 
 __all__ = [
