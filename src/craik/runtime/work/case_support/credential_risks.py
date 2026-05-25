@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from craik.contracts.models import EvidenceReference, TaskRequest
-from craik.runtime.auth.profile import AuthProfile, CredentialKind
-from craik.runtime.auth.sources import AuthProfileSourceError, source_for_auth_profile
+from craik.runtime.auth.profile import AuthProfile
 from craik.runtime.auth.store import AuthProfileNotFoundError, AuthProfileStore
 
 DEFAULT_EXPECTED_DURATION_MINUTES = 60
@@ -64,11 +63,6 @@ def _credential_expires_at(profile: AuthProfile) -> datetime | None:
     expires_at = _metadata_datetime(profile.metadata)
     if expires_at is not None:
         return expires_at
-    if profile.kind is CredentialKind.OAUTH_TOKEN and profile.metadata.get("source") == "local-cli":
-        try:
-            return source_for_auth_profile(profile).status().expires_at
-        except AuthProfileSourceError:
-            return None
     return None
 
 

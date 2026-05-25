@@ -69,22 +69,6 @@ def auth_add(
         str | None,
         typer.Option("--env-var", help="Environment variable containing an API key."),
     ] = None,
-    source: Annotated[
-        str | None,
-        typer.Option("--source", help="Optional source hint for future credential kinds."),
-    ] = None,
-    credentials_path: Annotated[
-        str | None,
-        typer.Option("--credentials-path", help="Local CLI credentials file path."),
-    ] = None,
-    refresh_endpoint: Annotated[
-        str | None,
-        typer.Option("--refresh-endpoint", help="OAuth refresh endpoint for local CLI tokens."),
-    ] = None,
-    client_id: Annotated[
-        str | None,
-        typer.Option("--client-id", help="OAuth client id for refresh requests."),
-    ] = None,
     ref: Annotated[
         str | None,
         typer.Option("--ref", help="Secret reference for secret-ref profiles."),
@@ -118,14 +102,6 @@ def auth_add(
     metadata: dict[str, Any] = {}
     if env_var is not None:
         metadata["env_var"] = env_var
-    if source is not None:
-        metadata["source"] = source
-    if credentials_path is not None:
-        metadata["credentials_path"] = str(credentials_path)
-    if refresh_endpoint is not None:
-        metadata["refresh_endpoint"] = refresh_endpoint
-    if client_id is not None:
-        metadata["client_id"] = client_id
     if ref is not None:
         metadata["ref"] = ref
     if manager is not None:
@@ -142,8 +118,6 @@ def auth_add(
             metadata["allow_local_base_url"] = True
     if credential_kind is CredentialKind.API_KEY and not env_var:
         raise typer.BadParameter("--env-var is required for api-key profiles")
-    if credential_kind is CredentialKind.OAUTH_TOKEN and source != "local-cli":
-        raise typer.BadParameter("--source=local-cli is required for oauth-token profiles")
     if credential_kind is CredentialKind.SECRET_REF:
         if not ref:
             raise typer.BadParameter("--ref is required for secret-ref profiles")

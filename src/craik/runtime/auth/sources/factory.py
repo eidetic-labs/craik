@@ -9,10 +9,6 @@ from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialSo
 from craik.runtime.auth.sources.api_key import EnvVarApiKeySource
 from craik.runtime.auth.sources.cli_bridge import CLIBridgeCredentialSource
 from craik.runtime.auth.sources.keyring_ref import KeyringRefCredentialSource
-from craik.runtime.auth.sources.local_cli_oauth import (
-    DEFAULT_CLAUDE_CREDENTIALS_PATH,
-    LocalCLICredentialSource,
-)
 from craik.runtime.auth.sources.provider_oauth import ProviderOAuthCredentialSource
 from craik.runtime.auth.sources.secret_ref import (
     EnvVarSecretManager,
@@ -32,8 +28,6 @@ def source_for_auth_profile(profile: AuthProfile) -> CredentialSource:
         env_var = profile.metadata.get("env_var")
         env_var = env_var if isinstance(env_var, str) else ""
         return EnvVarApiKeySource(env_var)
-    if profile.kind is CredentialKind.OAUTH_TOKEN and profile.metadata.get("source") == "local-cli":
-        return _local_cli_source(profile)
     if profile.kind is CredentialKind.OAUTH:
         return ProviderOAuthCredentialSource(profile)
     if profile.kind is CredentialKind.SECRET_REF:
@@ -45,19 +39,6 @@ def source_for_auth_profile(profile: AuthProfile) -> CredentialSource:
     if profile.kind is CredentialKind.CLI_BRIDGE:
         return _cli_bridge_source(profile)
     raise AuthProfileSourceError(f"unsupported auth profile kind/source: {profile.kind.value}")
-
-
-def _local_cli_source(profile: AuthProfile) -> LocalCLICredentialSource:
-    credentials_path = profile.metadata.get("credentials_path")
-    refresh_endpoint = profile.metadata.get("refresh_endpoint")
-    client_id = profile.metadata.get("client_id")
-    return LocalCLICredentialSource(
-        credentials_path=Path(credentials_path)
-        if isinstance(credentials_path, str)
-        else DEFAULT_CLAUDE_CREDENTIALS_PATH,
-        refresh_endpoint=refresh_endpoint if isinstance(refresh_endpoint, str) else None,
-        client_id=client_id if isinstance(client_id, str) else None,
-    )
 
 
 def _secret_ref_source(profile: AuthProfile) -> SecretRefCredentialSource:
