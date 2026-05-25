@@ -1416,6 +1416,27 @@ def test_onboard_command_prints_runner_readable_project_context(tmp_path: Path) 
     assert payload["validation_commands"][-1] == "uv run --python 3.12 --extra dev pytest"
 
 
+def test_onboard_command_output_is_single_json_document(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n")
+    _run_git(repo, "init", "-b", "main")
+    _run_git(repo, "add", "README.md")
+    _run_git(repo, "commit", "-m", "initial")
+    home = tmp_path / "home"
+    _put_operator_session(home)
+    env = {"CRAIK_HOME": str(home)}
+
+    added = runner.invoke(app, ["project", "add", str(repo), "--name", "Example"], env=env)
+    onboarded = runner.invoke(app, ["onboard", "--project", "Example"], env=env)
+
+    assert added.exit_code == 0, added.output
+    assert onboarded.exit_code == 0, onboarded.output
+    assert onboarded.stdout.lstrip().startswith("{")
+    assert onboarded.stdout.rstrip().endswith("}")
+    assert json.loads(onboarded.stdout)["project_id"] == "project_example"
+
+
 def test_demo_stigmem_docs_command_runs_without_live_stigmem(tmp_path: Path) -> None:
     repo = tmp_path / "stigmem"
     (repo / "docs" / "adr").mkdir(parents=True)
