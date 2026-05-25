@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -16,6 +15,7 @@ from craik.cli_operator_support import (
     record_in_project,
     task_ids_for_project,
 )
+from craik.cli_output import emit_command_result
 from craik.contracts.models import RunDelta
 from craik.runtime.companions.operator_views import (
     KnownTrapsSnapshot,
@@ -23,10 +23,12 @@ from craik.runtime.companions.operator_views import (
     format_known_traps_view,
     format_run_delta_view,
 )
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.store import LocalStore
 
 
 @operator_app.command("traps")
+@craik_command(payload_shape="card")
 def operator_traps(
     project_id: Annotated[
         str | None,
@@ -40,7 +42,7 @@ def operator_traps(
         bool,
         typer.Option("--json/--view", help="Print JSON instead of the operator view."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Print the read-only known traps and negative knowledge view."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -74,14 +76,16 @@ def operator_traps(
         now=datetime.now(UTC),
     )
 
-    if json_output:
-        typer.echo(json.dumps(json_ready(snapshot), indent=2, sort_keys=True))
-    else:
-        typer.echo("\n".join(format_known_traps_view(snapshot)))
+    payload = json_ready(snapshot)
+    text = None if json_output else "\n".join(format_known_traps_view(snapshot))
+    result = CommandResult(payload=payload, shape="card", text=text)
+    emit_command_result(result)
+    return result
 
 
 @operator_app.command("run-delta")
 @operator_app.command("run-deltas")
+@craik_command(payload_shape="card")
 def operator_run_delta(
     delta_id_or_run_id_or_task_id: Annotated[
         str,
@@ -91,7 +95,7 @@ def operator_run_delta(
         bool,
         typer.Option("--json/--view", help="Print JSON instead of the operator view."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Print the read-only run delta and recovery view."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -114,10 +118,11 @@ def operator_run_delta(
     finally:
         store.close()
 
-    if json_output:
-        typer.echo(json.dumps(json_ready(snapshot), indent=2, sort_keys=True))
-    else:
-        typer.echo("\n".join(format_run_delta_view(snapshot)))
+    payload = json_ready(snapshot)
+    text = None if json_output else "\n".join(format_run_delta_view(snapshot))
+    result = CommandResult(payload=payload, shape="card", text=text)
+    emit_command_result(result)
+    return result
 
 
 def _find_run_delta(

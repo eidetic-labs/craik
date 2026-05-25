@@ -716,9 +716,14 @@ def test_operator_traps_cli_renders_empty_traps_view(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert "Known Traps" in result.output
-    assert "Negative Knowledge" in result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["known_traps"] == []
+    assert payload["negative_knowledge"] == []
+    assert payload["now"]
 
 
 def test_operator_traps_cli_json_renders_timestamped_snapshot(tmp_path: Path) -> None:
@@ -730,7 +735,10 @@ def test_operator_traps_cli_json_renders_timestamped_snapshot(tmp_path: Path) ->
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.output)
     assert payload["known_traps"] == []
     assert payload["negative_knowledge"] == []
@@ -749,10 +757,14 @@ def test_operator_run_delta_cli_renders_persisted_delta(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert "Run Delta: run_delta_task_docs" in result.output
-    assert "Updated: 1" in result.output
-    assert "- recovery_task_docs [changed_state] delta=run_delta_task_docs" in result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["delta"]["id"] == "run_delta_task_docs"
+    assert payload["delta"]["changes"][0]["kind"] == "updated"
+    assert payload["recovery_sessions"][0]["id"] == "recovery_task_docs"
 
 
 def test_operator_run_delta_cli_json_resolves_by_task(tmp_path: Path) -> None:
@@ -767,7 +779,10 @@ def test_operator_run_delta_cli_json_resolves_by_task(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.output)
     assert payload["delta"]["id"] == "run_delta_task_docs"
     assert payload["recovery_sessions"][0]["id"] == "recovery_task_docs"
