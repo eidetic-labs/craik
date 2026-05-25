@@ -402,6 +402,15 @@ SLASH_COMMAND_SPECS: tuple[SlashCommandSpec, ...] = (
         empty_state=EmptyState(message="No gateway state found."),
     ),
     SlashCommandSpec(
+        name="/who",
+        summary="Show active operator identity.",
+        usage="/who",
+        payload_shape="kv",
+        help="Show active operator identity and auth profile visibility scope.",
+        example="/who",
+        empty_state=EmptyState(message="No operator session is active."),
+    ),
+    SlashCommandSpec(
         name="/compact",
         summary="Compact the current conversation.",
         usage="/compact",

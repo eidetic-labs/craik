@@ -413,6 +413,7 @@ def _load_cli_extensions() -> None:
         "craik.cli_mcp",
         "craik.cli_new.cmd_compact_stub",
         "craik.cli_new.cmd_share_stub",
+        "craik.cli_new.cmd_who",
         "craik.cli_operations",
         "craik.cli_project",
         "craik.cli_provider_certification",
