@@ -1,170 +1,227 @@
-"""Gemini and Vertex provider OAuth client primitives."""
+"""Gemini and Vertex OAuth support via Google Application Default Credentials."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from craik.runtime.auth.oauth_loopback import PKCEChallenge, authorization_url
+from google.auth import default as google_auth_default
+from google.auth.exceptions import DefaultCredentialsError
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import service_account
+
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
-from craik.runtime.shell import credential_storage
 
-GEMINI_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
-GEMINI_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"  # nosec B105
-GEMINI_OAUTH_CLIENT_ID = "craik-cli"
 GEMINI_OAUTH_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 GEMINI_OAUTH_BILLING_SURFACE = "gcp-project"
-DEFAULT_TOKEN_TIMEOUT_SECONDS = 10.0
+GEMINI_ADC_CREDENTIAL_SOURCE = "adc"
+GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE = "service_account"
 
-UrlOpen = Callable[..., Any]
+GoogleCredentials = Any
+DefaultCredentialsResolver = Callable[[list[str]], tuple[GoogleCredentials, str | None]]
+ServiceAccountLoader = Callable[[str, list[str]], GoogleCredentials]
+RefreshRequestFactory = Callable[[], GoogleAuthRequest]
 
 
 class GeminiOAuthError(RuntimeError):
-    """Raised when Gemini OAuth exchange or storage fails."""
+    """Raised when Gemini credential resolution fails."""
 
 
 @dataclass(frozen=True)
-class GeminiOAuthTokenSet:
-    """Access-token metadata safe to keep outside the refresh operation."""
+class GeminiCredentialResult:
+    """Resolved Gemini credentials and the AuthProfile that records their source."""
 
-    access_token: str
-    expires_at: datetime
-    scope: list[str]
-    token_type: str = "Bearer"
+    profile: AuthProfile
+    gcp_project_id: str
+    credentials: GoogleCredentials
 
     def status(self) -> CredentialStatus:
         """Return an OAuth-specific credential status without token material."""
-        return CredentialStatus(status="ok", expires_at=self.expires_at)
+        return CredentialStatus(status="ok")
 
 
-@dataclass(frozen=True)
-class GeminiOAuthClient:
-    """Minimal Gemini and Vertex OAuth authorization-code client."""
-
-    authorization_endpoint: str = GEMINI_OAUTH_AUTHORIZATION_ENDPOINT
-    token_endpoint: str = GEMINI_OAUTH_TOKEN_ENDPOINT
-    client_id: str = GEMINI_OAUTH_CLIENT_ID
-    scope: tuple[str, ...] = tuple(GEMINI_OAUTH_SCOPES)
-    timeout_seconds: float = DEFAULT_TOKEN_TIMEOUT_SECONDS
-
-    def authorization_url(
-        self,
-        *,
-        redirect_uri: str,
-        state: str,
-        pkce: PKCEChallenge,
-    ) -> str:
-        """Build the browser URL for the Gemini OAuth authorization request."""
-        return authorization_url(
-            self.authorization_endpoint,
-            client_id=self.client_id,
-            redirect_uri=redirect_uri,
-            scope=list(self.scope),
-            state=state,
-            pkce=pkce,
-            extra_params={
-                "access_type": "offline",
-                "prompt": "consent",
-            },
+def resolve_via_adc(
+    *,
+    scopes: list[str] | None = None,
+    profile_id: str = "gemini:vertex",
+    resolver: DefaultCredentialsResolver = google_auth_default,
+) -> GeminiCredentialResult:
+    """Resolve Gemini credentials from Google Application Default Credentials."""
+    resolved_scopes = scopes or GEMINI_OAUTH_SCOPES
+    try:
+        credentials, project_id = resolver(resolved_scopes)
+    except DefaultCredentialsError as exc:
+        raise GeminiOAuthError(
+            "No Google Cloud credentials found for Gemini. Run `gcloud auth "
+            "application-default login` or use `craik auth login gemini "
+            "--service-account <path>`."
+        ) from exc
+    except OSError as exc:
+        raise GeminiOAuthError("Gemini ADC credential resolution failed") from exc
+    if not project_id:
+        raise GeminiOAuthError(
+            "Gemini ADC credentials did not include a GCP project id. Set an active "
+            "gcloud project or use `craik auth login gemini --service-account <path>`."
         )
+    return GeminiCredentialResult(
+        profile=_gemini_profile(
+            profile_id=profile_id,
+            credential_source=GEMINI_ADC_CREDENTIAL_SOURCE,
+            project_id=project_id,
+            scopes=resolved_scopes,
+        ),
+        gcp_project_id=project_id,
+        credentials=credentials,
+    )
 
-    def exchange_code(
-        self,
-        *,
-        code: str,
-        redirect_uri: str,
-        pkce: PKCEChallenge,
-        opener: UrlOpen = urlopen,
-        now: datetime | None = None,
-    ) -> tuple[GeminiOAuthTokenSet, str]:
-        """Exchange an authorization code for access and refresh tokens."""
-        payload = {
-            "grant_type": "authorization_code",
-            "client_id": self.client_id,
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "code_verifier": pkce.verifier,
-        }
-        return self._post_token(payload, opener=opener, now=now)
 
-    def refresh_access_token(
-        self,
-        *,
-        refresh_token: str,
-        opener: UrlOpen = urlopen,
-        now: datetime | None = None,
-    ) -> tuple[GeminiOAuthTokenSet, str]:
-        """Refresh an expired access token from a stored refresh token."""
-        payload = {
-            "grant_type": "refresh_token",
-            "client_id": self.client_id,
-            "refresh_token": refresh_token,
-        }
-        return self._post_token(payload, opener=opener, now=now)
+def resolve_via_service_account(
+    *,
+    json_path: Path,
+    scopes: list[str] | None = None,
+    profile_id: str = "gemini:vertex",
+    loader: ServiceAccountLoader | None = None,
+) -> GeminiCredentialResult:
+    """Resolve Gemini credentials from a service-account JSON file."""
+    resolved_scopes = scopes or GEMINI_OAUTH_SCOPES
+    resolved_path = json_path.expanduser()
+    if not resolved_path.is_file():
+        raise GeminiOAuthError(f"Gemini service-account file not found: {resolved_path}")
+    try:
+        if loader is None:
+            credentials = service_account.Credentials.from_service_account_file(  # type: ignore[no-untyped-call]
+                str(resolved_path),
+                scopes=resolved_scopes,
+            )
+        else:
+            credentials = loader(str(resolved_path), resolved_scopes)
+    except (OSError, ValueError) as exc:
+        raise GeminiOAuthError("Gemini service-account credential resolution failed") from exc
+    project_id = getattr(credentials, "project_id", None)
+    if not isinstance(project_id, str) or not project_id:
+        raise GeminiOAuthError("Gemini service-account credentials did not include a project id")
+    return GeminiCredentialResult(
+        profile=_gemini_profile(
+            profile_id=profile_id,
+            credential_source=GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE,
+            project_id=project_id,
+            scopes=resolved_scopes,
+            service_account_path=resolved_path,
+        ),
+        gcp_project_id=project_id,
+        credentials=credentials,
+    )
 
-    def _post_token(
-        self,
-        payload: dict[str, str],
-        *,
-        opener: UrlOpen,
-        now: datetime | None,
-    ) -> tuple[GeminiOAuthTokenSet, str]:
-        request = Request(
-            self.token_endpoint,
-            data=urlencode(payload).encode("utf-8"),
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            method="POST",
-        )
+
+def headers_for_credentials(
+    credentials: GoogleCredentials,
+    *,
+    refresh_request_factory: RefreshRequestFactory = GoogleAuthRequest,
+) -> dict[str, str]:
+    """Return a Gemini Bearer header, refreshing Google credentials when needed."""
+    token = getattr(credentials, "token", None)
+    expired = bool(getattr(credentials, "expired", False))
+    if expired or not token:
         try:
-            with opener(request, timeout=self.timeout_seconds) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except TimeoutError as exc:
-            raise GeminiOAuthError("Gemini OAuth token request timed out") from exc
-        except OSError as exc:
-            raise GeminiOAuthError("Gemini OAuth token request failed") from exc
-        except json.JSONDecodeError as exc:
-            raise GeminiOAuthError("Gemini OAuth token response was invalid") from exc
-        if not isinstance(data, dict):
-            raise GeminiOAuthError("Gemini OAuth token response was invalid")
-        return _token_set_from_response(data, scope=list(self.scope), now=now)
+            credentials.refresh(refresh_request_factory())
+        except Exception as exc:  # noqa: BLE001
+            raise GeminiOAuthError("Gemini credentials could not be refreshed") from exc
+        token = getattr(credentials, "token", None)
+    if not isinstance(token, str) or not token:
+        raise GeminiOAuthError("Gemini credentials did not produce an access token")
+    return {"Authorization": f"Bearer {token}"}
 
 
-def store_gemini_oauth_profile(
-    token_set: GeminiOAuthTokenSet,
-    refresh_token: str,
+def headers_for_profile(profile: AuthProfile) -> dict[str, str]:
+    """Resolve and return Gemini authorization headers for an ADC/service-account profile."""
+    source = profile.metadata.get("credential_source")
+    if source == GEMINI_ADC_CREDENTIAL_SOURCE:
+        result = resolve_via_adc(
+            scopes=profile.oauth_scope_list or GEMINI_OAUTH_SCOPES,
+            profile_id=profile.id,
+        )
+        return headers_for_credentials(result.credentials)
+    if source == GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE:
+        path = profile.metadata.get("service_account_path")
+        if not isinstance(path, str) or not path:
+            raise GeminiOAuthError(
+                "Gemini service-account OAuth profile is missing service_account_path"
+            )
+        result = resolve_via_service_account(
+            json_path=Path(path),
+            scopes=profile.oauth_scope_list or GEMINI_OAUTH_SCOPES,
+            profile_id=profile.id,
+        )
+        return headers_for_credentials(result.credentials)
+    raise GeminiOAuthError("Gemini OAuth profile requires credential_source adc or service_account")
+
+
+def store_gemini_adc_profile(
     *,
     profile_id: str = "gemini:vertex",
     project_id: str | None = None,
+    resolver: DefaultCredentialsResolver = google_auth_default,
     env: dict[str, str] | None = None,
-) -> AuthProfile:
-    """Store Gemini OAuth tokens in secure credential storage and return a profile."""
-    status = credential_storage.credential_storage_status(env)
-    if status.status != "available" or not status.secure:
-        raise GeminiOAuthError("Gemini OAuth token storage requires an OS keyring backend")
+) -> GeminiCredentialResult:
+    """Resolve ADC credentials, store their profile, and return the resolved credentials."""
+    from craik.runtime.auth.guided_setup import default_pool_for_profile
+    from craik.runtime.auth.pool import CredentialPool
+    from craik.runtime.auth.store import AuthProfileStore
 
-    token_handle = f"{profile_id}:oauth-access-token"
-    refresh_handle = f"{profile_id}:oauth-refresh-token"
+    result = resolve_via_adc(profile_id=profile_id, resolver=resolver)
+    if project_id and project_id != result.gcp_project_id:
+        result = GeminiCredentialResult(
+            profile=result.profile.model_copy(
+                update={
+                    "metadata": result.profile.metadata
+                    | {"gcp_project_id": project_id, "operator_project_id": project_id}
+                }
+            ),
+            gcp_project_id=project_id,
+            credentials=result.credentials,
+        )
+    AuthProfileStore.from_env(env).put(result.profile)
+    CredentialPool.from_env().put(default_pool_for_profile(result.profile))
+    return result
+
+
+def store_gemini_service_account_profile(
+    *,
+    json_path: Path,
+    profile_id: str = "gemini:vertex",
+    env: dict[str, str] | None = None,
+) -> GeminiCredentialResult:
+    """Resolve service-account credentials, store their profile, and return them."""
+    from craik.runtime.auth.guided_setup import default_pool_for_profile
+    from craik.runtime.auth.pool import CredentialPool
+    from craik.runtime.auth.store import AuthProfileStore
+
+    result = resolve_via_service_account(json_path=json_path, profile_id=profile_id)
+    AuthProfileStore.from_env(env).put(result.profile)
+    CredentialPool.from_env().put(default_pool_for_profile(result.profile))
+    return result
+
+
+def _gemini_profile(
+    *,
+    profile_id: str,
+    credential_source: str,
+    project_id: str,
+    scopes: list[str],
+    service_account_path: Path | None = None,
+) -> AuthProfile:
     metadata = {
         "source": "provider-oauth",
         "provider": "gemini",
-        "credential_backend": status.backend,
         "billing_surface": GEMINI_OAUTH_BILLING_SURFACE,
-        "token_expires_at": token_set.expires_at.isoformat(),
-        "token_type": token_set.token_type,
+        "credential_source": credential_source,
+        "gcp_project_id": project_id,
     }
-    if project_id:
-        metadata["project_id"] = project_id
-
-    credential_storage.put_cached_credential(token_handle, token_set.access_token, env=env)
-    credential_storage.put_cached_credential(refresh_handle, refresh_token, env=env)
+    if service_account_path is not None:
+        metadata["service_account_path"] = str(service_account_path)
     return AuthProfile(
         id=profile_id,
         kind=CredentialKind.OAUTH,
@@ -172,66 +229,21 @@ def store_gemini_oauth_profile(
         metadata=metadata,
         created_at=datetime.now(UTC),
         last_status="ok",
-        oauth_authorization_endpoint=GEMINI_OAUTH_AUTHORIZATION_ENDPOINT,
-        oauth_token_endpoint=GEMINI_OAUTH_TOKEN_ENDPOINT,
-        oauth_client_id=GEMINI_OAUTH_CLIENT_ID,
-        oauth_scope_list=token_set.scope,
-        oauth_token_keyring_handle=token_handle,
-        oauth_refresh_keyring_handle=refresh_handle,
+        oauth_scope_list=scopes,
     )
-
-
-def _token_set_from_response(
-    payload: dict[str, Any],
-    *,
-    scope: list[str],
-    now: datetime | None,
-) -> tuple[GeminiOAuthTokenSet, str]:
-    access_token = payload.get("access_token")
-    refresh_token = payload.get("refresh_token")
-    token_type = payload.get("token_type", "Bearer")
-    if not isinstance(access_token, str) or not access_token:
-        raise GeminiOAuthError("Gemini OAuth token response missing access token")
-    if not isinstance(refresh_token, str) or not refresh_token:
-        raise GeminiOAuthError("Gemini OAuth token response missing refresh token")
-    if not isinstance(token_type, str) or not token_type:
-        token_type = "Bearer"  # nosec B105
-    expires_in = _expires_in(payload.get("expires_in"))
-    response_scope = _scope(payload.get("scope"), fallback=scope)
-    issued_at = now or datetime.now(UTC)
-    token_set = GeminiOAuthTokenSet(
-        access_token=access_token,
-        expires_at=issued_at + timedelta(seconds=expires_in),
-        scope=response_scope,
-        token_type=token_type,
-    )
-    return token_set, refresh_token
-
-
-def _expires_in(value: Any) -> int:
-    if isinstance(value, int) and value > 0:
-        return value
-    if isinstance(value, str) and value.isdigit() and int(value) > 0:
-        return int(value)
-    return 3600
-
-
-def _scope(value: Any, *, fallback: list[str]) -> list[str]:
-    if isinstance(value, str) and value.strip():
-        return [item for item in value.split() if item]
-    if isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value):
-        return list(value)
-    return fallback
 
 
 __all__ = [
-    "GEMINI_OAUTH_AUTHORIZATION_ENDPOINT",
+    "GEMINI_ADC_CREDENTIAL_SOURCE",
     "GEMINI_OAUTH_BILLING_SURFACE",
-    "GEMINI_OAUTH_CLIENT_ID",
     "GEMINI_OAUTH_SCOPES",
-    "GEMINI_OAUTH_TOKEN_ENDPOINT",
-    "GeminiOAuthClient",
+    "GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE",
+    "GeminiCredentialResult",
     "GeminiOAuthError",
-    "GeminiOAuthTokenSet",
-    "store_gemini_oauth_profile",
+    "headers_for_credentials",
+    "headers_for_profile",
+    "resolve_via_adc",
+    "resolve_via_service_account",
+    "store_gemini_adc_profile",
+    "store_gemini_service_account_profile",
 ]

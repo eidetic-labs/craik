@@ -400,8 +400,8 @@ def _discord_signature_valid(
     except Exception:
         return False
     try:
-        from cryptography.exceptions import InvalidSignature  # type: ignore[import-not-found]
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # type: ignore[import-not-found]
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PublicKey,
         )
 

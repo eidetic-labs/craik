@@ -72,6 +72,24 @@ def test_oauth_auth_profile_round_trips_through_json() -> None:
     assert restored.oauth_refresh_keyring_handle == "craik:openai:subscription:refresh"
 
 
+def test_gemini_adc_oauth_profile_allows_google_managed_credentials() -> None:
+    profile = AuthProfile(
+        id="gemini:vertex",
+        kind=CredentialKind.OAUTH,
+        provider_family="gemini",
+        metadata={
+            "credential_source": "adc",
+            "gcp_project_id": "craik-project",
+        },
+        created_at=datetime(2026, 5, 24, tzinfo=UTC),
+        oauth_scope_list=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+    assert profile.oauth_token_keyring_handle is None
+    assert profile.oauth_refresh_keyring_handle is None
+    assert profile.metadata["credential_source"] == "adc"
+
+
 def test_legacy_local_cli_oauth_token_profiles_do_not_require_provider_oauth_fields() -> None:
     profile = AuthProfile(
         id="openai:local-cli",

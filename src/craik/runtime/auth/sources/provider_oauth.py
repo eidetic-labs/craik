@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from craik.runtime.auth.profile import AuthProfile, CredentialStatus
 from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthClient, AnthropicOAuthError
-from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthClient, GeminiOAuthError
+from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError, headers_for_profile
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthClient, OpenAIOAuthError
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.providers.provider_url_safety import (
@@ -39,6 +39,16 @@ class ProviderOAuthCredentialSource:
                 "profile provider family mismatch. "
                 f"Re-run: craik auth login {self.profile.provider_family}"
             )
+        if self.profile.provider_family == "gemini" and self.profile.metadata.get(
+            "credential_source"
+        ) in {"adc", "service_account"}:
+            try:
+                return headers_for_profile(self.profile)
+            except GeminiOAuthError as exc:
+                raise ProviderOAuthCredentialError(
+                    "Your Gemini OAuth credential could not be resolved. "
+                    "Re-run: craik auth login gemini"
+                ) from exc
         access_token = self._access_token()
         if self._is_expired():
             access_token = self._refresh_access_token()
@@ -132,7 +142,7 @@ class ProviderOAuthCredentialSource:
         put_cached_credential(refresh_handle, refresh_token)
         return token_set.access_token
 
-    def _client(self) -> OpenAIOAuthClient | AnthropicOAuthClient | GeminiOAuthClient:
+    def _client(self) -> OpenAIOAuthClient | AnthropicOAuthClient:
         token_endpoint = self.profile.oauth_token_endpoint
         client_id = self.profile.oauth_client_id
         scope = tuple(self.profile.oauth_scope_list or ())
@@ -150,12 +160,6 @@ class ProviderOAuthCredentialSource:
             )
         if self.profile.provider_family == "anthropic":
             return AnthropicOAuthClient(
-                token_endpoint=token_endpoint,
-                client_id=client_id,
-                scope=scope,
-            )
-        if self.profile.provider_family == "gemini":
-            return GeminiOAuthClient(
                 token_endpoint=token_endpoint,
                 client_id=client_id,
                 scope=scope,

@@ -156,6 +156,53 @@ def test_auth_login_oauth_mode_uses_browser_oauth_flow(monkeypatch, tmp_path) ->
     assert "access-token" not in result.output
 
 
+def test_auth_login_gemini_oauth_uses_adc_or_service_account_flow(monkeypatch, tmp_path) -> None:
+    profile = _oauth_profile(provider="gemini")
+    service_account = tmp_path / "service-account.json"
+    service_account.write_text("{}", encoding="utf-8")
+
+    def _login(**kwargs):
+        assert kwargs["profile_id"] is None
+        assert kwargs["project_id"] == "craik-project"
+        assert kwargs["service_account_path"] == service_account
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="gemini",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="google-auth",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="gcloud auth application-default login",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _login)
+    result = runner.invoke(
+        app,
+        [
+            "auth",
+            "login",
+            "gemini",
+            "--mode=oauth",
+            "--project-id",
+            "craik-project",
+            "--service-account",
+            str(service_account),
+            "--json",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["provider"] == "gemini"
+    assert payload["authorization_url"] == "gcloud auth application-default login"
+
+
 def profile_runtime_ok():
     from craik.runtime.auth.profile import CredentialStatus
 

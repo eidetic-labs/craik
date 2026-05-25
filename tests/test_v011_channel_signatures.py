@@ -2,7 +2,7 @@ import builtins
 import json
 from datetime import UTC, datetime, timedelta
 
-from craik.runtime.channels import webhook_ingress
+from craik.runtime.channels import real_adapters, webhook_ingress
 from craik.runtime.channels.real_adapters import diagnose_channel_adapter
 from craik.runtime.channels.webhook_ingress import (
     slack_webhook_signature,
@@ -226,7 +226,9 @@ def test_discord_invalid_signature_reports_correct_error(monkeypatch) -> None:
     assert result.reason == "webhook signature is missing or invalid"
 
 
-def test_channel_doctor_warns_when_discord_signature_verifier_unavailable() -> None:
+def test_channel_doctor_warns_when_discord_signature_verifier_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(real_adapters, "discord_signature_verifier_available", lambda: False)
+
     payload = diagnose_channel_adapter("discord", env={}).as_dict()
 
     assert any("signature verifier" in warning for warning in payload["warnings"])
