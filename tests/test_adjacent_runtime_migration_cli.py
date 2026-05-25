@@ -50,7 +50,10 @@ def test_migrate_inspect_json_cli(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["migrate", "inspect", "--source", str(source), "--json"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["kind"] == "agent-runtime"
     assert payload["record_count"] == 4
@@ -58,15 +61,21 @@ def test_migrate_inspect_json_cli(tmp_path: Path) -> None:
     assert "sk_live" not in result.stdout
 
 
-def test_migrate_plan_text_cli(tmp_path: Path) -> None:
+def test_migrate_plan_cli_emits_single_command_result_json(tmp_path: Path) -> None:
     source = _fixture_source(tmp_path)
 
     result = runner.invoke(app, ["migrate", "plan", "--source", str(source)])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert "Migration dry run:" in result.stdout
-    assert "Mutated source: no" in result.stdout
-    assert "craik.agent_profile" in result.stdout
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["mutated_state"] is False
+    assert any(
+        record["target_schema"] == "craik.agent_profile"
+        for record in payload["mapped_records"]
+    )
     assert "sk_live" not in result.stdout
 
 
@@ -89,9 +98,15 @@ def test_migrate_import_defaults_to_dry_run_and_applies_with_yes(tmp_path: Path)
     agents = runner.invoke(app, ["agent", "list"], env={"CRAIK_HOME": str(home)})
 
     after = sorted(path.read_text(encoding="utf-8") for path in source.rglob("*.json"))
+    assert dry_run.exception is None, dry_run.output
     assert dry_run.exit_code == 0
+    assert dry_run.stdout.strip().startswith("{")
+    assert dry_run.stdout.strip().endswith("}")
     assert json.loads(dry_run.stdout)["mutated_state"] is False
+    assert apply.exception is None, apply.output
     assert apply.exit_code == 0, apply.output
+    assert apply.stdout.strip().startswith("{")
+    assert apply.stdout.strip().endswith("}")
     apply_payload = json.loads(apply.stdout)
     assert apply_payload["mutated_state"] is True
     assert apply_payload["mutated_source"] is False
@@ -159,7 +174,10 @@ def test_migrate_import_apply_include_records_filter(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert [record["source_id"] for record in payload["applied_records"]] == [selected]
     assert payload["applied_records"][0]["status"] == "applied"
@@ -193,7 +211,10 @@ def test_migrate_import_apply_include_non_agent_record_is_explicitly_skipped(
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert [record["source_id"] for record in payload["applied_records"]] == [selected]
     record = payload["applied_records"][0]

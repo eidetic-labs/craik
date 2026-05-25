@@ -121,6 +121,8 @@ def test_adjacent_runtime_report_cli_is_redacted(tmp_path: Path) -> None:
     assert report.skipped_secrets[0].secret_fields == ["api_key"]
     assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["skipped_secrets"][0]["secret_fields"] == ["api_key"]
     assert "sk_live_should_not_escape" not in result.stdout

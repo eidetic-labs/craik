@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from craik.cli import migrate_app
+from craik.cli_output import emit_command_result
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.projects.migration.adjacent_runtime import (
     dry_run_payload,
     format_dry_run_text,
@@ -27,6 +28,7 @@ from craik.runtime.projects.migration.reports import format_migration_report
 
 
 @migrate_app.command("inspect")
+@craik_command(payload_shape="card")
 def migrate_inspect(
     source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
     kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (
@@ -36,20 +38,24 @@ def migrate_inspect(
         bool,
         typer.Option("--json", help="Emit machine-readable JSON output."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Inspect an adjacent runtime source without mutating it."""
     _validate_kind(kind)
     try:
         inspection = inspect_adjacent_runtime_source(source, kind="agent-runtime")
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
-    if json_output:
-        typer.echo(json.dumps(inspection_payload(inspection), indent=2, sort_keys=True))
-        return
-    typer.echo("\n".join(format_inspection_text(inspection)))
+    result = CommandResult(
+        payload=inspection_payload(inspection),
+        shape="card",
+        text=None if json_output else "\n".join(format_inspection_text(inspection)),
+    )
+    emit_command_result(result)
+    return result
 
 
 @migrate_app.command("plan")
+@craik_command(payload_shape="card")
 def migrate_plan(
     source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
     kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (
@@ -59,20 +65,24 @@ def migrate_plan(
         bool,
         typer.Option("--json", help="Emit machine-readable JSON output."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Plan an adjacent runtime migration without mutating source or Craik state."""
     _validate_kind(kind)
     try:
         report = plan_adjacent_runtime_migration(source, kind="agent-runtime")
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
-    if json_output:
-        typer.echo(json.dumps(dry_run_payload(report), indent=2, sort_keys=True))
-        return
-    typer.echo("\n".join(format_dry_run_text(report)))
+    result = CommandResult(
+        payload=dry_run_payload(report),
+        shape="card",
+        text=None if json_output else "\n".join(format_dry_run_text(report)),
+    )
+    emit_command_result(result)
+    return result
 
 
 @migrate_app.command("import")
+@craik_command(payload_shape="card")
 def migrate_import(
     source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
     kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (
@@ -104,7 +114,7 @@ def migrate_import(
             help="Acknowledge secret-bearing records; secret values are still not copied.",
         ),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Run an adjacent runtime import dry-run or explicitly apply importable records."""
     _validate_kind(kind)
     try:
@@ -123,20 +133,26 @@ def migrate_import(
                 include_records=selected,
                 include_secrets=include_secrets,
             )
-            if json_output:
-                typer.echo(json.dumps(apply_payload(result), indent=2, sort_keys=True))
-                return
-            typer.echo("\n".join(format_apply_text(result)))
-            return
+            command_result = CommandResult(
+                payload=apply_payload(result),
+                shape="card",
+                text=None if json_output else "\n".join(format_apply_text(result)),
+            )
+            emit_command_result(command_result)
+            return command_result
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
-    if json_output:
-        typer.echo(json.dumps(dry_run_payload(report), indent=2, sort_keys=True))
-        return
-    typer.echo("\n".join(format_dry_run_text(report)))
+    command_result = CommandResult(
+        payload=dry_run_payload(report),
+        shape="card",
+        text=None if json_output else "\n".join(format_dry_run_text(report)),
+    )
+    emit_command_result(command_result)
+    return command_result
 
 
 @migrate_app.command("report")
+@craik_command(payload_shape="card")
 def migrate_report(
     source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
     kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (
@@ -150,17 +166,20 @@ def migrate_report(
         str | None,
         typer.Option("--locale", help="Locale for text output. Defaults to CRAIK_LOCALE."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Render a safe-to-share adjacent runtime migration report."""
     _validate_kind(kind)
     try:
         report = report_adjacent_runtime_migration(source, kind="agent-runtime")
     except (FileNotFoundError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
-    if json_output:
-        typer.echo(json.dumps(report.model_dump(mode="json"), indent=2, sort_keys=True))
-        return
-    typer.echo("\n".join(format_migration_report(report, locale=locale)))
+    result = CommandResult(
+        payload=report.model_dump(mode="json"),
+        shape="card",
+        text=None if json_output else "\n".join(format_migration_report(report, locale=locale)),
+    )
+    emit_command_result(result)
+    return result
 
 
 def _validate_kind(kind: str) -> None:
