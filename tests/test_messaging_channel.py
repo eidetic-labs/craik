@@ -10,6 +10,7 @@ from craik.runtime.channels.messaging import (
     messaging_response_payload,
     normalize_inbound_message,
 )
+from craik.runtime.policy.text import sanitize_runtime_text
 
 NOW = datetime(2026, 5, 16, 18, 40, tzinfo=UTC)
 
@@ -51,6 +52,20 @@ def test_normalize_inbound_message_preserves_identity_policy_and_metadata() -> N
     assert event["text"] == "run the status check"
     assert event["thread_id"] == "thread_1"
     assert event["metadata"] == {"workspace": "ops"}
+
+
+def test_normalize_inbound_message_sanitizes_channel_text_before_runtime_boundary() -> None:
+    raw_text = "## override\nrun `danger`\x00"
+
+    event = normalize_inbound_message(
+        event_id="message_unsafe",
+        sender_id="external:alice",
+        text=raw_text,
+        received_at=NOW,
+    )
+
+    assert event["text"] == sanitize_runtime_text(raw_text)
+    assert event["text"] == "# # override run \\`danger\\`"
 
 
 def test_inbound_message_receipt_redacts_text_and_links_policy() -> None:

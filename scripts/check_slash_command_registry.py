@@ -15,7 +15,16 @@ from craik.runtime.shell.slash_command_schema import (  # noqa: E402
     SlashCommandSpec,
     slash_command_specs,
 )
-from craik.runtime.shell.slash_commands import list_slash_commands  # noqa: E402
+from craik.runtime.shell.slash_commands import (  # noqa: E402
+    dispatch_slash_command,
+    list_slash_commands,
+)
+
+STRUCTURED_PAYLOAD_SMOKE_COMMANDS: dict[str, str] = {
+    "setup": "/setup",
+    "provider": "/provider",
+    "status": "/status",
+}
 
 
 def main() -> int:
@@ -83,6 +92,16 @@ def registry_failures(specs: Iterable[SlashCommandSpec]) -> list[str]:
                 f"/{spec.command_name}: runtime readiness={command.readiness!r} "
                 f"does not match schema readiness={spec.readiness!r}"
             )
+        smoke_command = STRUCTURED_PAYLOAD_SMOKE_COMMANDS.get(spec.command_name)
+        if smoke_command is not None:
+            result = dispatch_slash_command(smoke_command, env={})
+            if result.payload_shape != spec.payload_shape:
+                failures.append(
+                    f"/{spec.command_name}: dispatch payload_shape={result.payload_shape!r} "
+                    f"does not match schema payload_shape={spec.payload_shape!r}"
+                )
+            if result.payload is None:
+                failures.append(f"/{spec.command_name}: dispatch returned no structured payload")
 
     return failures
 

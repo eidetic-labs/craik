@@ -11,6 +11,7 @@ from craik.runtime.shell.slash_command_schema import (
     slash_command_spec_by_name,
     slash_command_specs,
 )
+from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check_slash_command_registry.py"
@@ -60,6 +61,26 @@ def test_registry_guard_reports_runtime_metadata_mismatch() -> None:
     failures = registry_failures(specs)
 
     assert any("/provider: runtime usage" in failure for failure in failures)
+
+
+def test_registry_guard_reports_structured_payload_shape_mismatch(monkeypatch) -> None:
+    def _unstructured_dispatch(
+        _text: str,
+        *,
+        env: dict[str, str] | None = None,
+    ) -> SlashCommandResult:
+        return SlashCommandResult("plain text", command_name="provider")
+
+    monkeypatch.setattr(
+        check_slash_command_registry,
+        "dispatch_slash_command",
+        _unstructured_dispatch,
+    )
+
+    failures = registry_failures(slash_command_specs())
+
+    assert any("/provider: dispatch payload_shape" in failure for failure in failures)
+    assert "/provider: dispatch returned no structured payload" in failures
 
 
 def test_registry_guard_script_passes_on_current_tree() -> None:
