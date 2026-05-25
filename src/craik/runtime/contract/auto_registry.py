@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,6 +24,7 @@ class CommandInventoryEntry:
     slash_name: str | None
     exempt_reason: str | None
     metadata: CraikCommandMetadata | None
+    callback: Callable[..., Any] | None = None
 
 
 def _iter_typer_commands(app: typer.Typer, prefix: str = "") -> list[tuple[str, Any]]:
@@ -111,6 +113,7 @@ class AutoSlashRegistry:
                         slash_name=None,
                         exempt_reason=None,
                         metadata=None,
+                        callback=callback,
                     )
                 )
                 continue
@@ -122,6 +125,7 @@ class AutoSlashRegistry:
                     slash_name=slash_name,
                     exempt_reason=metadata.tui_exempt_reason,
                     metadata=metadata,
+                    callback=callback,
                 )
             )
         return cls(slash_specs=tuple(specs), inventory=tuple(inventory))
