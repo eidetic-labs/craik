@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Annotated
 
 import typer
 
-from craik.runtime.doctor import run_doctor
-from craik.runtime.paths import resolve_craik_paths
-from craik.runtime.projects.update_guidance import update_guidance_payload
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.diagnostics.commands import doctor_result, update_guidance_result
 
 
+@craik_command(slash_alias="doctor", payload_shape="tree")
 def doctor_command(
     fix: Annotated[
         bool,
@@ -33,28 +32,28 @@ def doctor_command(
         bool,
         typer.Option("--json", help="Print the diagnostic report as JSON."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Run diagnostics for local and gateway readiness."""
-    payload = run_doctor(
-        resolve_craik_paths(),
-        env=dict(os.environ),
+    result = doctor_result(
         fix=fix,
         dry_run=dry_run,
         confirm_unsafe=yes,
     )
     _ = json_output
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
+@craik_command(payload_shape="tree")
 def update_command(
     check: Annotated[
         bool,
         typer.Option("--check", help="Check for update guidance without changing installation."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Print safe update guidance without modifying the installation."""
     from craik.cli import package_version
 
-    payload = update_guidance_payload(installed_version=package_version())
-    payload["mode"] = "check" if check else "manual"
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = update_guidance_result(installed_version=package_version(), check=check)
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
