@@ -11,16 +11,22 @@ import typer
 
 from craik.cli import app, model_app, profile_app, session_app
 from craik.cli_prompt_safety import resolve_cli_prompt
-from craik.runtime.auth import AuthProfileStore
-from craik.runtime.auth.visibility import active_operator_session_from_env, visible_auth_profiles
+from craik.runtime.auth.visibility import active_operator_session_from_env
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.model_commands import (
+    model_alias_result,
+    model_fallback_result,
+    model_list_result,
+    model_probe_result,
+    model_set_result,
+    model_status_result,
+)
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
-from craik.runtime.shell.model_settings import ModelSettings, ModelSettingsStore
 from craik.runtime.shell.profile_settings import (
     CraikUserProfile,
     ProfileSettings,
     ProfileSettingsStore,
 )
-from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.store import LocalStore
 
@@ -55,119 +61,70 @@ def slash_command(command: str) -> None:
 
 
 @model_app.command("list")
-def model_list() -> None:
+@craik_command(slash_alias="model-list", payload_shape="kv")
+def model_list() -> CommandResult:
     """List configured provider/model choices and local presets."""
-    settings = ModelSettingsStore.from_env().load()
-    try:
-        auth_profiles = [
-            {
-                "id": profile.id,
-                "provider_family": profile.provider_family,
-                "last_status": profile.last_status,
-            }
-            for profile in visible_auth_profiles(
-                AuthProfileStore.from_env().list(), active_operator_session_from_env()
-            )
-        ]
-    except Exception:
-        auth_profiles = []
-    payload = {
-        "active_model": settings.active_model,
-        "aliases": settings.aliases,
-        "fallbacks": settings.fallbacks,
-        "configured_profiles": auth_profiles,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = model_list_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("status")
-def model_status() -> None:
+@craik_command(slash_alias="model", payload_shape="kv")
+def model_status() -> CommandResult:
     """Show active model state and readiness."""
-    settings = ModelSettingsStore.from_env().load()
-    readiness = resolve_readiness()
-    payload = {
-        "active_model": settings.active_model,
-        "readiness": readiness.as_dict(),
-        "aliases": settings.aliases,
-        "fallbacks": settings.fallbacks,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = model_status_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("set")
-def model_set(model: str) -> None:
+@craik_command(payload_shape="kv")
+def model_set(model: str) -> CommandResult:
     """Set the active model as <provider>/<model>."""
-    _validate_model_ref(model)
-    store = ModelSettingsStore.from_env()
-    settings = store.load()
-    updated = ModelSettings(
-        active_model=model,
-        aliases=settings.aliases,
-        fallbacks=settings.fallbacks,
-    )
-    store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    try:
+        result = model_set_result(model)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("probe")
-def model_probe() -> None:
+@craik_command(payload_shape="kv")
+def model_probe() -> CommandResult:
     """Probe model readiness without sending live prompts."""
-    settings = ModelSettingsStore.from_env().load()
-    readiness = resolve_readiness()
-    payload = {
-        "active_model": settings.active_model,
-        "can_execute": readiness.state == "fully-ready" and settings.active_model is not None,
-        "state": readiness.state,
-        "missing": readiness.missing,
-    }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = model_probe_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("alias")
-def model_alias(action: str, name: str | None = None, target: str | None = None) -> None:
+@craik_command(payload_shape="kv")
+def model_alias(
+    action: str,
+    name: str | None = None,
+    target: str | None = None,
+) -> CommandResult:
     """List, add, or remove model aliases."""
-    store = ModelSettingsStore.from_env()
-    settings = store.load()
-    aliases = dict(settings.aliases)
-    if action == "list":
-        typer.echo(json.dumps(aliases, indent=2, sort_keys=True))
-        return
-    if action == "add" and name and target:
-        _validate_model_ref(target)
-        aliases[name] = target
-    elif action == "remove" and name:
-        aliases.pop(name, None)
-    else:
-        raise typer.BadParameter(
-            "expected alias list, alias add <name> <target>, or alias remove <name>"
-        )
-    updated = ModelSettings(settings.active_model, aliases, settings.fallbacks)
-    store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    try:
+        result = model_alias_result(action, name, target)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("fallback")
-def model_fallback(action: str, model: str | None = None) -> None:
+@craik_command(payload_shape="kv")
+def model_fallback(action: str, model: str | None = None) -> CommandResult:
     """List, add, remove, or clear model fallback order."""
-    store = ModelSettingsStore.from_env()
-    settings = store.load()
-    fallbacks = list(settings.fallbacks)
-    if action == "list":
-        typer.echo(json.dumps(fallbacks, indent=2, sort_keys=True))
-        return
-    if action == "add" and model:
-        _validate_model_ref(model)
-        fallbacks = [item for item in fallbacks if item != model]
-        fallbacks.append(model)
-    elif action == "remove" and model:
-        fallbacks = [item for item in fallbacks if item != model]
-    elif action == "clear":
-        fallbacks = []
-    else:
-        raise typer.BadParameter("expected fallback list, add <model>, remove <model>, or clear")
-    updated = ModelSettings(settings.active_model, settings.aliases, fallbacks)
-    store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    try:
+        result = model_fallback_result(action, model)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @session_app.command("list")
@@ -433,11 +390,6 @@ def _operator_identity() -> str:
     if session is None:
         raise typer.BadParameter("active operator session required; run craik login")
     return session.subject
-
-
-def _validate_model_ref(value: str) -> None:
-    if "/" not in value or value.startswith("/") or value.endswith("/"):
-        raise typer.BadParameter("model reference must be formatted as <provider>/<model>")
 
 
 def _now() -> datetime:
