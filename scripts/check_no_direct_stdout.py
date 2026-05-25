@@ -40,7 +40,11 @@ STRICT_COMMAND_RESULT_RENDERING: frozenset[tuple[str, str]] = frozenset(
         ("src/craik/cli_onboarding.py", "onboard"),
         ("src/craik/cli_references.py", "references_list"),
         ("src/craik/cli_references.py", "references_verify"),
+        ("src/craik/cli_review.py", "review_critic"),
+        ("src/craik/cli_review.py", "review_red_team"),
         ("src/craik/cli_scope_changes.py", "scope_change_decide"),
+        ("src/craik/cli_session_portability.py", "session_export_portable"),
+        ("src/craik/cli_session_portability.py", "session_import_portable"),
         ("src/craik/cli_tasks.py", "task_resume"),
     }
 )

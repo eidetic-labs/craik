@@ -1,9 +1,14 @@
+import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
+from typer.testing import CliRunner
 
+from craik.cli import app
 from craik.contracts.models import RedTeamFinding, RuntimeCriticFinding
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.critics import (
     blocking_red_team_findings,
@@ -12,12 +17,28 @@ from craik.runtime.reviewing.critics import (
 )
 from craik.runtime.store import LocalStore
 
+runner = CliRunner()
+
 
 def _store(tmp_path: Path) -> LocalStore:
     paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
     store = LocalStore.from_paths(paths)
     store.initialize()
     return store
+
+
+def _put_operator_session(home: Path) -> None:
+    ensure_craik_home({"CRAIK_HOME": str(home)})
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator-123",
+            email="operator@example.test",
+            groups=["platform"],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
 
 
 def _critic(**overrides: object) -> RuntimeCriticFinding:
@@ -111,3 +132,75 @@ def test_adjudicated_findings_require_adjudication_link() -> None:
 
     with pytest.raises(ValidationError, match="adjudicated red-team findings"):
         _red_team(review_status="adjudicated")
+
+
+def test_review_critic_cli_emits_single_command_result_json(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            "critic",
+            "task_quality",
+            "--finding-type",
+            "unsupported_claim",
+            "--summary",
+            "The handoff claims tests passed without a receipt.",
+            "--rationale",
+            "Validation claims must be backed by observed receipts.",
+            "--severity",
+            "high",
+            "--evidence-id",
+            "evidence_handoff_quality",
+            "--proposed-action",
+            "Run validation and persist a receipt.",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exception is None, result.output
+    assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["task_id"] == "task_quality"
+    assert payload["finding_type"] == "unsupported_claim"
+    assert payload["authoritative"] is False
+    assert payload["review_status"] == "reviewable"
+
+
+def test_review_red_team_cli_emits_single_command_result_json(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            "red-team",
+            "task_quality",
+            "--finding-type",
+            "policy_bypass",
+            "--summary",
+            "A runner could bypass review.",
+            "--attack-path",
+            "Submit memory updates without review evidence.",
+            "--severity",
+            "critical",
+            "--blocking",
+            "--proposed-action",
+            "Require adjudication before promotion.",
+        ],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exception is None, result.output
+    assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["task_id"] == "task_quality"
+    assert payload["finding_type"] == "policy_bypass"
+    assert payload["blocking"] is True
