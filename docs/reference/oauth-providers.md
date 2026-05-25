@@ -71,6 +71,11 @@ manual OAuth token override when they need a separately managed Anthropic
 token. Craik never writes these environment variables or refreshes the token;
 rotate the CLI token by re-running `claude setup-token`.
 
+> **About Claude subscription billing:** `CLAUDE_CODE_OAUTH_TOKEN` routes
+> Craik usage through your Claude Pro or Max subscription quota. Use this
+> path if you have a Claude subscription and prefer subscription billing
+> over Anthropic Console per-token charges.
+
 Verify detection with:
 
 ```sh
