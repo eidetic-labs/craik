@@ -1,5 +1,6 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -10,9 +11,25 @@ from craik.runtime.agents.session_portability import (
     import_session_export,
 )
 from craik.runtime.agents.sessions import start_agent_session
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
+from craik.runtime.paths import ensure_craik_home
 from craik.runtime.store import LocalStore
 
 runner = CliRunner()
+
+
+def _put_operator_session(home: Path) -> None:
+    ensure_craik_home({"CRAIK_HOME": str(home)})
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="operator-123",
+            email="operator@example.test",
+            groups=["platform"],
+            issuer="https://issuer.example.test",
+            id_token_jti="session-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+    )
 
 
 def test_export_agent_session_redacts_events_and_preserves_provenance(tmp_path) -> None:
@@ -125,7 +142,42 @@ def test_session_import_portable_cli(tmp_path) -> None:
 
     result = runner.invoke(app, ["session", "import-portable", "--path", str(path)])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["session"]["recovery_metadata"]["imported"] is True
     assert payload["provenance"]["source_session_id"] == "conv-1"
+
+
+def test_session_export_portable_cli_emits_single_command_result_json(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    _put_operator_session(home)
+    paths = ensure_craik_home({"CRAIK_HOME": str(home)})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        start_agent_session(
+            store,
+            session_id="agent_session_docs",
+            operator_subject="operator-123",
+            provider_id="provider_openai",
+            now=datetime(2026, 5, 23, 6, 30, tzinfo=UTC),
+        )
+    finally:
+        store.close()
+
+    result = runner.invoke(
+        app,
+        ["session", "export-portable", "agent_session_docs"],
+        env={"CRAIK_HOME": str(home)},
+    )
+
+    assert result.exception is None, result.output
+    assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
+    payload = json.loads(result.stdout)
+    assert payload["schema"] == "craik.session_export"
+    assert payload["provenance"]["source_session_id"] == "agent_session_docs"

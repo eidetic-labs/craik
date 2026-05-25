@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import review_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.reviewing.critics import record_red_team_finding, record_runtime_critic_finding
 from craik.runtime.store import LocalStore
 
 
 @review_app.command("critic")
+@craik_command(payload_shape="card")
 def review_critic(
     task_id: Annotated[str, typer.Argument(help="Task id.")],
     finding_type: Annotated[str, typer.Option("--finding-type", help="Critic finding type.")],
@@ -33,7 +35,7 @@ def review_critic(
         list[str] | None,
         typer.Option("--proposed-action", help="Proposed action. May be repeated."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Persist a reviewable runtime critic finding."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -53,10 +55,16 @@ def review_critic(
         )
     finally:
         store.close()
-    _print(finding)
+    result = CommandResult(
+        payload=finding.model_dump(mode="json", by_alias=True),
+        shape="card",
+    )
+    emit_command_result(result)
+    return result
 
 
 @review_app.command("red-team")
+@craik_command(payload_shape="card")
 def review_red_team(
     task_id: Annotated[str, typer.Argument(help="Task id.")],
     finding_type: Annotated[str, typer.Option("--finding-type", help="Red-team finding type.")],
@@ -80,7 +88,7 @@ def review_red_team(
         bool,
         typer.Option("--blocking/--non-blocking", help="Whether this is a blocking finding."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Persist a reviewable red-team finding."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -101,9 +109,9 @@ def review_red_team(
         )
     finally:
         store.close()
-    _print(finding)
-
-
-def _print(model: object) -> None:
-    payload = model.model_dump(mode="json", by_alias=True)  # type: ignore[attr-defined]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(
+        payload=finding.model_dump(mode="json", by_alias=True),
+        shape="card",
+    )
+    emit_command_result(result)
+    return result
