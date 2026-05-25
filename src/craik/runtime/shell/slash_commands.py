@@ -14,6 +14,7 @@ from craik.runtime.auth.commands import (
     operator_login_guidance_result,
     provider_login_capture_result,
 )
+from craik.runtime.contract import CommandResult
 from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.memory.commands import memory_overview_result
@@ -151,8 +152,10 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
     if command.name == "auth":
         if len(tokens) > 1 and tokens[1] == "logout":
             profile = tokens[2] if len(tokens) > 2 else report.active_profile
-            result = auth_logout_confirmation_result(profile, env=env)
-            return SlashCommandResult(result.text or "")
+            return _command_result_slash_result(
+                "auth",
+                auth_logout_confirmation_result(profile, env=env),
+            )
         if len(tokens) > 1 and tokens[1] == "status":
             return _payload_result(command.name, auth_status_result(env).payload)
         if len(tokens) > 2 and tokens[1] == "login":
@@ -162,12 +165,13 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
             )
         return _payload_result(command.name, auth_summary_result(env).payload)
     if command.name == "login":
-        result = operator_login_guidance_result()
-        return SlashCommandResult(result.text or "")
+        return _command_result_slash_result("login", operator_login_guidance_result())
     if command.name == "logout":
         profile = tokens[1] if len(tokens) > 1 else report.active_profile
-        result = auth_logout_confirmation_result(profile, env=env)
-        return SlashCommandResult(result.text or "")
+        return _command_result_slash_result(
+            "logout",
+            auth_logout_confirmation_result(profile, env=env),
+        )
     if command.name == "provider" and len(tokens) >= 3 and tokens[1] == "login":
         result = provider_login_capture_result(tokens[2])
         return SlashCommandResult(result.text or "")
@@ -307,6 +311,13 @@ def _confirmation_slash_result(
 ) -> SlashCommandResult:
     result = confirmation_result(action, target_id=target_id)
     command_name = action.split(".", 1)[0]
+    return _command_result_slash_result(command_name, result)
+
+
+def _command_result_slash_result(
+    command_name: str,
+    result: CommandResult,
+) -> SlashCommandResult:
     return SlashCommandResult(
         result.text or "",
         command_name=command_name,

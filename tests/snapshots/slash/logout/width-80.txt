@@ -1,0 +1,1 @@
+Auth logout confirmation requested for `default`. The interactive TUI opens a confirmation modal for this action.

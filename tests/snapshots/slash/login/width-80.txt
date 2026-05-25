@@ -1,0 +1,1 @@
+Operator login is handled by Craik's browser/device-code flow. Start it from an outer shell, then return here and use `/status`.
