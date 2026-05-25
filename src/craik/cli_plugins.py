@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -10,8 +9,10 @@ from typing import Annotated
 import typer
 
 from craik.cli import plugins_app
+from craik.cli_output import emit_command_result
 from craik.contracts.models import CapabilityTarget, PluginCapabilityGrant
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.skills.plugins import (
     install_plugin_descriptor,
     record_plugin_capability_grant,
@@ -28,9 +29,10 @@ plugins_app.add_typer(receipts_app, name="receipts")
 
 
 @plugins_app.command("install")
+@craik_command(payload_shape="card")
 def plugins_install(
     path: Annotated[Path, typer.Argument(help="Plugin descriptor JSON manifest.")],
-) -> None:
+) -> CommandResult:
     """Install a plugin descriptor manifest."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -39,10 +41,11 @@ def plugins_install(
         descriptor = install_plugin_descriptor(store, path)
     finally:
         store.close()
-    _print(descriptor)
+    return _emit_payload(_payload(descriptor), shape="card")
 
 
 @probation_app.command("review")
+@craik_command(payload_shape="card")
 def plugins_probation_review(
     probation_id: Annotated[str, typer.Argument(help="Plugin probation id.")],
     evidence: Annotated[list[str], typer.Option("--evidence", help="Evidence id. May repeat.")],
@@ -51,7 +54,7 @@ def plugins_probation_review(
         str,
         typer.Option("--rationale", help="Review rationale."),
     ] = "Reviewed from CLI.",
-) -> None:
+) -> CommandResult:
     """Decide a plugin probation review."""
     operator = _operator_identity()
     store = LocalStore.from_env()
@@ -67,10 +70,11 @@ def plugins_probation_review(
         )
     finally:
         store.close()
-    _print(probation)
+    return _emit_payload(_payload(probation), shape="card")
 
 
 @plugins_app.command("grant")
+@craik_command(payload_shape="card")
 def plugins_grant(
     plugin_id: Annotated[str, typer.Argument(help="Plugin descriptor id.")],
     operation: Annotated[list[str], typer.Option("--operation", help="Operation. May repeat.")],
@@ -86,7 +90,7 @@ def plugins_grant(
     grant_id: Annotated[str | None, typer.Option("--id", help="Grant id.")] = None,
     repo: Annotated[str | None, typer.Option("--repo", help="Repository target.")] = None,
     reason: Annotated[str, typer.Option("--reason", help="Grant reason.")] = "Approved from CLI.",
-) -> None:
+) -> CommandResult:
     """Grant plugin capability authority."""
     operator = _operator_identity()
     grant = PluginCapabilityGrant(
@@ -111,13 +115,14 @@ def plugins_grant(
         grant = record_plugin_capability_grant(store, grant)
     finally:
         store.close()
-    _print(grant)
+    return _emit_payload(_payload(grant), shape="card")
 
 
 @grants_app.command("list")
+@craik_command(payload_shape="card_list")
 def plugin_grants_list(
     plugin: Annotated[str | None, typer.Option("--plugin", help="Plugin descriptor id.")] = None,
-) -> None:
+) -> CommandResult:
     """List plugin capability grants."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -128,13 +133,14 @@ def plugin_grants_list(
         store.close()
     if plugin:
         grants = [grant for grant in grants if grant.plugin_descriptor_id == plugin]
-    typer.echo(json.dumps([_payload(grant) for grant in grants], indent=2, sort_keys=True))
+    return _emit_payload([_payload(grant) for grant in grants], shape="card_list")
 
 
 @receipts_app.command("list")
+@craik_command(payload_shape="card_list")
 def plugin_receipts_list(
     plugin: Annotated[str | None, typer.Option("--plugin", help="Plugin descriptor id.")] = None,
-) -> None:
+) -> CommandResult:
     """List plugin receipts."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -145,7 +151,7 @@ def plugin_receipts_list(
         store.close()
     if plugin:
         receipts = [receipt for receipt in receipts if receipt.plugin_descriptor_id == plugin]
-    typer.echo(json.dumps([_payload(receipt) for receipt in receipts], indent=2, sort_keys=True))
+    return _emit_payload([_payload(receipt) for receipt in receipts], shape="card_list")
 
 
 def _operator_identity() -> str:
@@ -164,5 +170,7 @@ def _payload(model: object) -> dict[str, object]:
     return model.model_dump(mode="json", by_alias=True)  # type: ignore[attr-defined,no-any-return]
 
 
-def _print(model: object) -> None:
-    typer.echo(json.dumps(_payload(model), indent=2, sort_keys=True))
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
