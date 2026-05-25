@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from importlib import import_module
 from typing import Annotated, cast
 
@@ -10,10 +9,12 @@ import typer
 
 from craik.cli import contradictions_app, graph_app, policy_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import (
     ContradictionStatus,
     PolicyProfile,
 )
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.memory.contradictions import ContradictionManager, ContradictionNotFoundError
 from craik.runtime.policy.policy import (
     FailOpenNotAllowedError,
@@ -28,6 +29,7 @@ import_module("craik.cli_handoffs")
 
 
 @contradictions_app.command("open")
+@craik_command(payload_shape="card")
 def contradiction_open(
     summary: Annotated[str, typer.Option("--summary", help="Contradiction summary.")],
     fact: Annotated[
@@ -58,7 +60,7 @@ def contradiction_open(
         str | None,
         typer.Option("--stigmem-conflict-id", help="Optional future Stigmem conflict id."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Open and persist a local contradiction report."""
     operator_identity_or_fail()
     if len(fact) < 2:
@@ -79,10 +81,11 @@ def contradiction_open(
     finally:
         store.close()
 
-    typer.echo(json.dumps(report.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    return _emit_payload(report.model_dump(mode="json", by_alias=True), shape="card")
 
 
 @contradictions_app.command("list")
+@craik_command(payload_shape="card_list")
 def contradiction_list(
     task_id: Annotated[
         str | None,
@@ -92,7 +95,7 @@ def contradiction_list(
         str | None,
         typer.Option("--status", help="Only include reports with this status."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """List local contradiction reports."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -106,11 +109,12 @@ def contradiction_list(
         store.close()
 
     payload = [report.model_dump(mode="json", by_alias=True) for report in reports]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list")
 
 
 @contradictions_app.command("show")
-def contradiction_show(report_id: str) -> None:
+@craik_command(payload_shape="card")
+def contradiction_show(report_id: str) -> CommandResult:
     """Show one local contradiction report and linked evidence."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -128,16 +132,17 @@ def contradiction_show(report_id: str) -> None:
         "contradiction": report.model_dump(mode="json", by_alias=True),
         "evidence": [item.model_dump(mode="json", by_alias=True) for item in evidence],
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @graph_app.command("export")
+@craik_command(payload_shape="tree")
 def graph_export(
     task_id: Annotated[
         str | None,
         typer.Option("--task-id", help="Only export graph objects for this task."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Export the local work graph as deterministic JSON."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -149,10 +154,11 @@ def graph_export(
     finally:
         store.close()
 
-    typer.echo(json.dumps(export.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    return _emit_payload(export.model_dump(mode="json", by_alias=True), shape="tree")
 
 
 @policy_app.command("show")
+@craik_command(payload_shape="card")
 def policy_show(
     task_id: Annotated[
         str,
@@ -177,7 +183,7 @@ def policy_show(
         bool,
         typer.Option("--include-receipt", help="Include the fail-open receipt when applicable."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Print a generated policy envelope."""
     policy_profile = _policy_profile(profile)
     try:
@@ -201,11 +207,12 @@ def policy_show(
             reason="Policy preview requested fail-open receipt.",
         )
         payload["receipt"] = receipt.model_dump(mode="json", by_alias=True)
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @policy_app.command("test")
-def policy_test() -> None:
+@craik_command(payload_shape="card")
+def policy_test() -> CommandResult:
     """Run policy regression checks required for release gates."""
     store = LocalStore.from_env()
     try:
@@ -215,10 +222,16 @@ def policy_test() -> None:
         store.close()
 
     payload = report.to_payload()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = _emit_payload(payload, shape="card")
     if report.status != "passed":
         raise typer.Exit(code=1)
+    return result
 
+
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
 
 
 def _policy_profile(value: str) -> PolicyProfile:
