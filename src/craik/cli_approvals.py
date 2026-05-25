@@ -8,101 +8,74 @@ from typing import Annotated
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
-from craik.runtime.reviewing.approvals import (
-    ApprovalNotFoundError,
-    ApprovalStateError,
-    approval_queue_payload,
-    approval_view,
-    decide_approval,
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.reviewing.approval_commands import (
+    approvals_decide_result,
+    approvals_list_result,
+    approvals_show_result,
 )
-from craik.runtime.store import LocalStore
 
 approvals_app = typer.Typer(help="Review and decide pending approval requests.")
 
 
 @approvals_app.command("list")
+@craik_command(slash_alias="approvals", payload_shape="card_list")
 def approvals_list_command(
     include_resolved: Annotated[
         bool,
         typer.Option("--include-resolved", help="Include resolved approval records."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """List approval requests."""
     operator_identity_or_fail()
-    store = LocalStore.from_env()
-    try:
-        store.initialize()
-        if include_resolved:
-            approvals = [
-                approval_view(delegation).as_dict()
-                for delegation in store.list_human_delegations()
-                if delegation.kind == "approval"
-            ]
-            payload = {"count": len(approvals), "approvals": approvals}
-        else:
-            payload = approval_queue_payload(store)
-    finally:
-        store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = approvals_list_result(include_resolved=include_resolved)
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @approvals_app.command("show")
-def approvals_show_command(approval_id: str) -> None:
+@craik_command(payload_shape="card")
+def approvals_show_command(approval_id: str) -> CommandResult:
     """Show one approval request."""
     operator_identity_or_fail()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        delegation = store.get_human_delegation(approval_id)
-        if delegation is None or delegation.kind != "approval":
-            raise typer.BadParameter(f"unknown approval: {approval_id}")
-        payload = approval_view(delegation).as_dict()
-    finally:
-        store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+        result = approvals_show_result(approval_id)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @approvals_app.command("approve")
+@craik_command(payload_shape="card")
 def approvals_approve_command(
     approval_id: str,
     reason: Annotated[str, typer.Option("--reason", help="Approval reason.")],
-) -> None:
+) -> CommandResult:
     """Approve one request and emit a decision receipt."""
-    _decide(approval_id, decision="approved", reason=reason)
+    return _decide(approval_id, decision="approved", reason=reason)
 
 
 @approvals_app.command("deny")
+@craik_command(payload_shape="card")
 def approvals_deny_command(
     approval_id: str,
     reason: Annotated[str, typer.Option("--reason", help="Denial reason.")],
-) -> None:
+) -> CommandResult:
     """Deny one request and emit an actionable decision receipt."""
-    _decide(approval_id, decision="denied", reason=reason)
+    return _decide(approval_id, decision="denied", reason=reason)
 
 
-def _decide(approval_id: str, *, decision: str, reason: str) -> None:
+def _decide(approval_id: str, *, decision: str, reason: str) -> CommandResult:
     operator = operator_identity_or_fail()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        result = decide_approval(
-            store,
+        result = approvals_decide_result(
             approval_id,
-            decision="approved" if decision == "approved" else "denied",
+            decision=decision,
             operator=operator,
             reason=reason,
         )
-    except (ApprovalNotFoundError, ApprovalStateError) as error:
+    except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    finally:
-        store.close()
-    typer.echo(
-        json.dumps(
-            {
-                "approval": result.approval.as_dict(),
-                "receipt": result.receipt.model_dump(mode="json", by_alias=True),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result

@@ -10,17 +10,26 @@ import typer
 from craik.cli import handoff_app
 from craik.cli_operator_auth import operator_identity_or_fail
 from craik.contracts.models import RunStatus
-from craik.runtime.companions.handoff_markdown import render_markdown
-from craik.runtime.store import LocalStore
-from craik.runtime.work.handoffs import (
-    HandoffBlockedByExitDisciplineError,
-    HandoffContextError,
-    HandoffNotFoundError,
-    HandoffWriter,
+from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.work.commands.handoff_commands import (
+    handoff_create_result,
+    handoff_list_result,
+    handoff_show_result,
 )
 
 
+@handoff_app.command("list")
+@craik_command(slash_alias="handoffs", payload_shape="card_list")
+def handoff_list() -> CommandResult:
+    """List persisted handoffs."""
+    operator_identity_or_fail()
+    result = handoff_list_result()
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
+
+
 @handoff_app.command("create")
+@craik_command(payload_shape="card")
 def handoff_create(
     task_id: Annotated[str, typer.Argument(help="Task id to create a handoff for.")],
     summary: Annotated[str, typer.Option("--summary", help="Handoff summary.")],
@@ -80,14 +89,11 @@ def handoff_create(
         str | None,
         typer.Option("--blocked-exit-rationale", help="Required with --allow-blocked-exit."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Create a structured handoff for a task."""
     operator_identity_or_fail()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        writer = HandoffWriter(store)
-        handoff = writer.create(
+        result = handoff_create_result(
             task_id=task_id,
             agent=agent,
             summary=summary,
@@ -103,45 +109,39 @@ def handoff_create(
             self_audit_notes=self_audit_note,
             allow_blocked_exit=allow_blocked_exit,
             blocked_exit_rationale=blocked_exit_rationale,
+            markdown=markdown,
         )
-    except (HandoffContextError, HandoffBlockedByExitDisciplineError) as error:
+    except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    finally:
-        store.close()
 
     if markdown:
-        typer.echo(render_markdown(handoff))
+        typer.echo(result.text or "")
     else:
-        typer.echo(
-            json.dumps(handoff.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-        )
+        typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @handoff_app.command("show")
+@craik_command(payload_shape="card")
 def handoff_show(
     handoff_or_task_id: str,
     markdown: Annotated[
         bool,
         typer.Option("--markdown", help="Print Markdown instead of JSON."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Show one persisted handoff by handoff id or task id."""
     operator_identity_or_fail()
-    store = LocalStore.from_env()
     try:
-        store.initialize()
-        handoff = HandoffWriter(store).require(handoff_or_task_id)
-    except HandoffNotFoundError as error:
+        result = handoff_show_result(handoff_or_task_id, markdown=markdown)
+    except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    finally:
-        store.close()
 
     if markdown:
-        typer.echo(render_markdown(handoff))
+        typer.echo(result.text or "")
     else:
-        typer.echo(
-            json.dumps(handoff.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-        )
+        typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 def _run_status(value: str) -> RunStatus:
