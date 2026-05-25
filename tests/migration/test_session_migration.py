@@ -17,7 +17,11 @@ from craik.runtime.contract import CommandResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.paths import ensure_craik_home
-from craik.runtime.session_commands import session_list_result, session_resume_result
+from craik.runtime.session_commands import (
+    session_activate_result,
+    session_list_result,
+    session_resume_result,
+)
 from craik.runtime.store import LocalStore
 
 runner = CliRunner()
@@ -83,6 +87,22 @@ def test_session_tui_snapshot(tmp_path: Path, monkeypatch: Any) -> None:
         / "snapshots"
         / "slash"
         / "session"
+        / "width-80.txt"
+    )
+    assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
+
+
+def test_resume_tui_snapshot(tmp_path: Path) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "craik-home")}
+    result = session_activate_result("session_alpha", env=env)
+
+    output = _capture(format_command_result(result, kind="tui"), width=80)
+
+    snapshot = (
+        Path(__file__).resolve().parents[1]
+        / "snapshots"
+        / "slash"
+        / "resume"
         / "width-80.txt"
     )
     assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
