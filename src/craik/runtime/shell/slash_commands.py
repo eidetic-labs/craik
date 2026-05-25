@@ -14,7 +14,7 @@ from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.providers.commands import provider_summary_payload
 from craik.runtime.providers.model_providers import default_model_provider_registry
-from craik.runtime.reviewing.approvals import approval_queue_payload
+from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
 from craik.runtime.shell.argument_validation import argument_validation_error
 from craik.runtime.shell.model_settings import ModelSettingsStore
@@ -45,6 +45,7 @@ from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
 from craik.runtime.status import status_payload
 from craik.runtime.store import DATABASE_NAME, LocalStore
+from craik.runtime.work.commands.handoff_commands import handoff_list_result
 
 
 @dataclass(frozen=True)
@@ -193,9 +194,9 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
                 f"Approval decision requested for `{tokens[2]}`. "
                 "The interactive TUI opens the approval decision modal."
             )
-        return SlashCommandResult(_approval_text(env))
+        return _payload_result(command.name, approvals_list_result(env=env).payload)
     if command.name == "handoffs":
-        return _payload_result(command.name, _handoffs_payload(env))
+        return _payload_result(command.name, handoff_list_result(env).payload)
     if command.name == "receipts":
         return receipts_slash_result(tokens[1:], env=env)
     if command.name == "skills":
@@ -256,19 +257,6 @@ def _localized_help_text(args: list[str], *, env: dict[str, str] | None) -> str:
         + "\n\n"
         + MULTILINE_HELP_TEXT
     )
-
-
-def _approval_text(env: dict[str, str] | None) -> str:
-    paths = resolve_craik_paths(env)
-    if not (paths.state / DATABASE_NAME).exists():
-        return json.dumps({"count": 0, "approvals": []}, indent=2, sort_keys=True)
-    store = LocalStore.from_paths(paths)
-    try:
-        store.initialize()
-        payload = approval_queue_payload(store)
-    finally:
-        store.close()
-    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def _auth_summary_payload(env: dict[str, str] | None) -> dict[str, Any]:
@@ -359,11 +347,6 @@ def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashComman
     if not args:
         return SlashCommandResult(json.dumps(result.payload, indent=2, sort_keys=True))
     return SlashCommandResult(f"Theme set to `{result.payload['theme']}`.")
-
-
-def _handoffs_payload(env: dict[str, str] | None) -> dict[str, Any]:
-    handoffs = _store_list(env, "list_handoffs")
-    return {"count": len(handoffs), "handoffs": [_json_ready(item) for item in handoffs]}
 
 
 def _skills_payload(env: dict[str, str] | None) -> dict[str, Any]:
