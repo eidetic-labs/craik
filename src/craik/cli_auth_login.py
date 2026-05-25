@@ -25,6 +25,9 @@ from craik.runtime.auth.oauth_provider_login import (
     browser_oauth_login,
     gemini_oauth_login,
 )
+from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
+from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError
+from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness
@@ -113,6 +116,7 @@ def auth_login_provider(
                     profile_id=profile_id,
                     project_id=project_id,
                     browser_opener=_browser_opener(no_browser=no_browser),
+                    code_prompt=_code_prompt,
                 )
             _emit_oauth_login_result(oauth_result, json_output=json_output)
             return
@@ -145,6 +149,9 @@ def auth_login_provider(
                 allow_local_base_url=allow_local_base_url,
                 dry_run=dry_run,
             )
+    except (AnthropicOAuthError, GeminiOAuthError, OpenAIOAuthError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
     except (ProviderURLSafetyError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
 
@@ -293,6 +300,10 @@ def _browser_opener(*, no_browser: bool) -> Callable[[str], bool]:
         return opened
 
     return _open
+
+
+def _code_prompt(prompt: str) -> str:
+    return str(click.prompt(prompt, hide_input=False, err=True))
 
 
 def _emit_oauth_login_result(result: OAuthLoginResult, *, json_output: bool) -> None:

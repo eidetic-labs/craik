@@ -19,6 +19,7 @@ from craik.runtime.auth.sources.openai_oauth import (
     OpenAIOAuthClient,
     OpenAIOAuthError,
     OpenAIOAuthTokenSet,
+    raise_openai_oauth_pending_registration,
     store_openai_oauth_profile,
 )
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
@@ -53,7 +54,20 @@ def test_openai_oauth_authorization_url_uses_state_pkce_and_scope() -> None:
     assert params["state"] == ["state-value"]
     assert params["code_challenge"] == [pkce.challenge]
     assert params["code_challenge_method"] == ["S256"]
-    assert params["scope"] == [" ".join(OPENAI_OAUTH_SCOPES)]
+    assert params["scope"] == ["openid profile email offline_access"]
+
+
+def test_openai_oauth_scopes_match_public_subscription_flow() -> None:
+    assert OPENAI_OAUTH_SCOPES == ["openid", "profile", "email", "offline_access"]
+
+
+def test_openai_oauth_pending_registration_fails_with_api_key_remediation() -> None:
+    with pytest.raises(OpenAIOAuthError) as exc_info:
+        raise_openai_oauth_pending_registration()
+
+    message = str(exc_info.value)
+    assert "registered as an OAuth client with OpenAI" in message
+    assert "--mode=api-key" in message
 
 
 def test_openai_oauth_exchange_code_posts_verifier_without_persisting_it() -> None:
@@ -71,7 +85,7 @@ def test_openai_oauth_exchange_code_posts_verifier_without_persisting_it() -> No
                 "access_token": "access-token",
                 "refresh_token": "refresh-token",
                 "expires_in": 600,
-                "scope": "model.request model.read",
+                "scope": "openid profile email offline_access",
             }
         )
 
@@ -90,7 +104,7 @@ def test_openai_oauth_exchange_code_posts_verifier_without_persisting_it() -> No
     assert token_set.access_token == "access-token"
     assert refresh_value == "refresh-token"
     assert token_set.expires_at == now + timedelta(seconds=600)
-    assert token_set.scope == ["model.request", "model.read"]
+    assert token_set.scope == ["openid", "profile", "email", "offline_access"]
 
 
 def test_openai_oauth_refresh_posts_refresh_token_as_local_value() -> None:

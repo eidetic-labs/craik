@@ -182,9 +182,9 @@ def store_gemini_adc_profile(
             ),
             gcp_project_id=project_id,
             credentials=result.credentials,
-        )
+    )
     AuthProfileStore.from_env(env).put(result.profile)
-    CredentialPool.from_env().put(default_pool_for_profile(result.profile))
+    CredentialPool.from_env(env).put(default_pool_for_profile(result.profile))
     return result
 
 
@@ -201,7 +201,7 @@ def store_gemini_service_account_profile(
 
     result = resolve_via_service_account(json_path=json_path, profile_id=profile_id)
     AuthProfileStore.from_env(env).put(result.profile)
-    CredentialPool.from_env().put(default_pool_for_profile(result.profile))
+    CredentialPool.from_env(env).put(default_pool_for_profile(result.profile))
     return result
 
 
