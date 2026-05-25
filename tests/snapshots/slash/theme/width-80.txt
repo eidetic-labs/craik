@@ -1,0 +1,2 @@
+current  dark
+themes   3 items (dark, light, monochrome)

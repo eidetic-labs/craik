@@ -9,7 +9,6 @@ from typing import Any
 
 from rich.markup import escape
 
-from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.paths import resolve_craik_paths
@@ -23,7 +22,6 @@ from craik.runtime.shell.readiness import readiness_allows_action, resolve_readi
 from craik.runtime.shell.session_settings import (
     active_session_id,
     save_active_session,
-    save_shell_settings,
     shell_session_name,
 )
 from craik.runtime.shell.slash_command_schema import (
@@ -40,7 +38,7 @@ from craik.runtime.shell.slash_command_schema.results import (
     payload_result as _payload_result,
 )
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
-from craik.runtime.shell.textual_widgets.theme_settings import THEMES, current_theme, save_theme
+from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
 from craik.runtime.status import status_payload
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
@@ -343,29 +341,20 @@ def _resume_session(session_id: str, *, env: dict[str, str] | None) -> SlashComm
 
 def _rename_shell_session(name: str, *, env: dict[str, str] | None) -> SlashCommandResult:
     try:
-        display_name = validate_session_name(name)
-    except SessionNameError as error:
-        return SlashCommandResult(f"invalid session name: {error}", exit_code=2)
-    save_shell_settings(env, session_name=display_name)
-    if env is not None:
-        env["CRAIK_SESSION_NAME"] = display_name
-    return SlashCommandResult(f"Shell session renamed to `{display_name}`.")
+        result = rename_shell_session_result(name, env=env)
+    except ValueError as error:
+        return SlashCommandResult(str(error), exit_code=2)
+    return SlashCommandResult(f"Shell session renamed to `{result.payload['session_name']}`.")
 
 
 def _theme_result(args: list[str], *, env: dict[str, str] | None) -> SlashCommandResult:
-    if not args:
-        return SlashCommandResult(
-            json.dumps(
-                {"current": current_theme(env), "themes": list(THEMES)},
-                indent=2,
-                sort_keys=True,
-            )
-        )
     try:
-        settings = save_theme(args[0], env)
+        result = theme_result(args[0] if args else None, env=env)
     except ValueError as error:
         return SlashCommandResult(str(error), exit_code=2)
-    return SlashCommandResult(f"Theme set to `{settings.theme}`.")
+    if not args:
+        return SlashCommandResult(json.dumps(result.payload, indent=2, sort_keys=True))
+    return SlashCommandResult(f"Theme set to `{result.payload['theme']}`.")
 
 
 def _handoffs_payload(env: dict[str, str] | None) -> dict[str, Any]:

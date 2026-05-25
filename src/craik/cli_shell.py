@@ -36,6 +36,7 @@ from craik.runtime.shell.profile_settings import (
     ProfileSettingsStore,
 )
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
 from craik.runtime.store import LocalStore
 
 
@@ -66,6 +67,30 @@ def slash_command(command: str) -> None:
     result = dispatch_slash_command(command)
     typer.echo(result.text)
     raise typer.Exit(result.exit_code)
+
+
+@app.command("theme")
+@craik_command(slash_alias="theme", payload_shape="kv")
+def theme_command(theme: str | None = None) -> CommandResult:
+    """Inspect or set the terminal UI theme."""
+    try:
+        result = theme_result(theme)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
+
+
+@app.command("rename")
+@craik_command(slash_alias="rename", payload_shape="kv")
+def rename_command(name: str) -> CommandResult:
+    """Set the operator-visible shell session name."""
+    try:
+        result = rename_shell_session_result(name)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    return result
 
 
 @model_app.command("list")
