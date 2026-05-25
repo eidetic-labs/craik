@@ -10,22 +10,40 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from craik.runtime.auth.oauth_loopback import PKCEChallenge, authorization_url
+from craik.runtime.auth.oauth_loopback import (
+    PKCEChallenge,
+    authorization_url,
+    generate_oauth_state,
+    generate_pkce_challenge,
+)
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.shell import credential_storage
 
 ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT = "https://claude.ai/oauth/authorize"
 ANTHROPIC_OAUTH_TOKEN_ENDPOINT = "https://console.anthropic.com/v1/oauth/token"  # nosec B105
 ANTHROPIC_OAUTH_CLIENT_ID = "craik-cli"
+ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID = ""
 ANTHROPIC_OAUTH_SCOPES = ["models.read", "messages.create"]
 ANTHROPIC_OAUTH_BILLING_SURFACE = "subscription"
+ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback"
 DEFAULT_TOKEN_TIMEOUT_SECONDS = 10.0
 
 UrlOpen = Callable[..., Any]
+BrowserOpener = Callable[[str], bool]
+CodePrompt = Callable[[str], str]
 
 
 class AnthropicOAuthError(RuntimeError):
     """Raised when Anthropic OAuth exchange or storage fails."""
+
+
+@dataclass(frozen=True)
+class AnthropicBootstrapResult:
+    """Anthropic OAuth-to-API-key bootstrap result without exposing logs."""
+
+    api_key: str
+    authorization_url: str
+    browser_opened: bool
 
 
 @dataclass(frozen=True)
@@ -133,6 +151,81 @@ class AnthropicOAuthClient:
         return _token_set_from_response(data, scope=list(self.scope), now=now)
 
 
+def bootstrap_anthropic_api_key(
+    *,
+    browser_opener: BrowserOpener,
+    code_prompt: CodePrompt,
+    opener: UrlOpen = urlopen,
+) -> AnthropicBootstrapResult:
+    """Run Anthropic's browser OAuth bootstrap and return the minted API key."""
+    pkce = generate_pkce_challenge()
+    authorization = _bootstrap_authorization_url(
+        redirect_uri=ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI,
+        state=generate_oauth_state(),
+        pkce=pkce,
+    )
+    browser_opened = browser_opener(authorization)
+    code = code_prompt("Anthropic one-time code").strip()
+    if not code:
+        raise AnthropicOAuthError("Anthropic OAuth bootstrap requires a one-time code")
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI,
+        "code_verifier": pkce.verifier,
+    }
+    if ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID:
+        payload["client_id"] = ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID
+    request = Request(
+        ANTHROPIC_OAUTH_TOKEN_ENDPOINT,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with opener(request, timeout=DEFAULT_TOKEN_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except TimeoutError as exc:
+        raise AnthropicOAuthError("Anthropic OAuth bootstrap token request timed out") from exc
+    except OSError as exc:
+        raise AnthropicOAuthError("Anthropic OAuth bootstrap token request failed") from exc
+    except json.JSONDecodeError as exc:
+        raise AnthropicOAuthError("Anthropic OAuth bootstrap token response was invalid") from exc
+    if not isinstance(payload, dict):
+        raise AnthropicOAuthError("Anthropic OAuth bootstrap token response was invalid")
+    api_key = payload.get("api_key") or payload.get("access_token")
+    if not isinstance(api_key, str) or not api_key:
+        raise AnthropicOAuthError(
+            "Anthropic OAuth bootstrap returned no API key. Re-run: craik auth login anthropic"
+        )
+    return AnthropicBootstrapResult(
+        api_key=api_key,
+        authorization_url=authorization,
+        browser_opened=browser_opened,
+    )
+
+
+def _bootstrap_authorization_url(
+    *,
+    redirect_uri: str,
+    state: str,
+    pkce: PKCEChallenge,
+) -> str:
+    params = {
+        "response_type": "code",
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "code_challenge": pkce.challenge,
+        "code_challenge_method": pkce.method,
+    }
+    if ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID:
+        params["client_id"] = ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID
+    return f"{ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT}?{urlencode(params)}"
+
+
 def store_anthropic_oauth_profile(
     token_set: AnthropicOAuthTokenSet,
     refresh_token: str,
@@ -218,11 +311,15 @@ def _scope(value: Any, *, fallback: list[str]) -> list[str]:
 __all__ = [
     "ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT",
     "ANTHROPIC_OAUTH_BILLING_SURFACE",
+    "ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID",
+    "ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI",
     "ANTHROPIC_OAUTH_CLIENT_ID",
     "ANTHROPIC_OAUTH_SCOPES",
     "ANTHROPIC_OAUTH_TOKEN_ENDPOINT",
+    "AnthropicBootstrapResult",
     "AnthropicOAuthClient",
     "AnthropicOAuthError",
     "AnthropicOAuthTokenSet",
+    "bootstrap_anthropic_api_key",
     "store_anthropic_oauth_profile",
 ]

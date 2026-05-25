@@ -14,12 +14,15 @@ from craik.runtime.auth.sources import anthropic_oauth
 from craik.runtime.auth.sources.anthropic_oauth import (
     ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT,
     ANTHROPIC_OAUTH_BILLING_SURFACE,
+    ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID,
+    ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI,
     ANTHROPIC_OAUTH_CLIENT_ID,
     ANTHROPIC_OAUTH_SCOPES,
     ANTHROPIC_OAUTH_TOKEN_ENDPOINT,
     AnthropicOAuthClient,
     AnthropicOAuthError,
     AnthropicOAuthTokenSet,
+    bootstrap_anthropic_api_key,
     store_anthropic_oauth_profile,
 )
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
@@ -131,6 +134,57 @@ def test_anthropic_oauth_rejects_token_response_without_refresh_token() -> None:
 
     with pytest.raises(AnthropicOAuthError, match="refresh token"):
         AnthropicOAuthClient().refresh_access_token(refresh_token="old", opener=_opener)
+
+
+def test_anthropic_oauth_bootstrap_posts_code_and_returns_api_key() -> None:
+    seen: dict[str, Any] = {}
+
+    def _browser_opener(url: str) -> bool:
+        seen["authorization_url"] = url
+        return False
+
+    def _code_prompt(prompt: str) -> str:
+        seen["prompt"] = prompt
+        return "one-time-code"
+
+    def _opener(request: Request, *, timeout: float) -> _FakeResponse:
+        seen["url"] = request.full_url
+        seen["timeout"] = timeout
+        seen["payload"] = json.loads((request.data or b"").decode("utf-8"))
+        seen["content_type"] = request.get_header("Content-type")
+        return _FakeResponse({"api_key": "sk-ant-api-key"})
+
+    result = bootstrap_anthropic_api_key(
+        browser_opener=_browser_opener,
+        code_prompt=_code_prompt,
+        opener=_opener,
+    )
+
+    params = parse_qs(urlparse(str(seen["authorization_url"])).query)
+    assert params["redirect_uri"] == [ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI]
+    assert "client_id" not in params
+    assert ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID == ""
+    assert seen["url"] == ANTHROPIC_OAUTH_TOKEN_ENDPOINT
+    assert seen["content_type"] == "application/json"
+    assert seen["payload"]["grant_type"] == "authorization_code"
+    assert "client_id" not in seen["payload"]
+    assert seen["payload"]["code"] == "one-time-code"
+    assert seen["payload"]["redirect_uri"] == ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI
+    assert seen["payload"]["code_verifier"]
+    assert result.api_key == "sk-ant-api-key"
+    assert result.browser_opened is False
+
+
+def test_anthropic_oauth_bootstrap_rejects_missing_api_key() -> None:
+    def _opener(request: Request, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse({"access_token": ""})
+
+    with pytest.raises(AnthropicOAuthError, match="returned no API key"):
+        bootstrap_anthropic_api_key(
+            browser_opener=lambda url: False,
+            code_prompt=lambda prompt: "one-time-code",
+            opener=_opener,
+        )
 
 
 def test_store_anthropic_oauth_profile_writes_access_and_refresh_handles(monkeypatch) -> None:

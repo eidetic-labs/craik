@@ -17,7 +17,7 @@ from craik.runtime.shell import credential_storage
 OPENAI_OAUTH_AUTHORIZATION_ENDPOINT = "https://auth.openai.com/oauth/authorize"
 OPENAI_OAUTH_TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"  # nosec B105
 OPENAI_OAUTH_CLIENT_ID = "craik-cli"
-OPENAI_OAUTH_SCOPES = ["model.request", "model.read"]
+OPENAI_OAUTH_SCOPES = ["openid", "profile", "email", "offline_access"]
 OPENAI_OAUTH_BILLING_SURFACE = "subscription"
 DEFAULT_TOKEN_TIMEOUT_SECONDS = 10.0
 
@@ -26,6 +26,16 @@ UrlOpen = Callable[..., Any]
 
 class OpenAIOAuthError(RuntimeError):
     """Raised when OpenAI OAuth exchange or storage fails."""
+
+
+def raise_openai_oauth_pending_registration() -> None:
+    """Fail closed for OpenAI OAuth until Craik has a registered OAuth client."""
+    raise OpenAIOAuthError(
+        "OpenAI subscription-OAuth requires craik to be registered as an OAuth "
+        "client with OpenAI. Registration is pending.\n\n"
+        "Use --mode=api-key to authenticate with a Platform API key from "
+        "https://platform.openai.com/api-keys."
+    )
 
 
 @dataclass(frozen=True)
@@ -224,5 +234,6 @@ __all__ = [
     "OpenAIOAuthClient",
     "OpenAIOAuthError",
     "OpenAIOAuthTokenSet",
+    "raise_openai_oauth_pending_registration",
     "store_openai_oauth_profile",
 ]

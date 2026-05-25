@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+import pytest
 from typer.testing import CliRunner
 
 from craik.cli import app
+from craik.runtime.auth import oauth_provider_login
 from craik.runtime.auth.login import AuthCaptureResult, auth_status_rows
-from craik.runtime.auth.oauth_provider_login import OAuthLoginResult
+from craik.runtime.auth.oauth_provider_login import OAuthLoginResult, browser_oauth_login
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.sources import (
     ProviderOAuthCredentialSource,
     provider_oauth,
     source_for_auth_profile,
 )
-from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthTokenSet
+from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError, OpenAIOAuthTokenSet
 from craik.runtime.shell.credential_storage import CredentialStorageStatus, StoredCredential
 
 runner = CliRunner()
@@ -154,6 +157,50 @@ def test_auth_login_oauth_mode_uses_browser_oauth_flow(monkeypatch, tmp_path) ->
     assert payload["browser_opened"] is False
     assert payload["authorization_url"] == "https://auth.example.test/authorize"
     assert "access-token" not in result.output
+
+
+def test_browser_oauth_login_openai_fails_with_pending_registration() -> None:
+    with pytest.raises(OpenAIOAuthError, match="registered as an OAuth client"):
+        browser_oauth_login(
+            "openai",
+            browser_opener=lambda url: False,
+        )
+
+
+def test_anthropic_oauth_bootstrap_stores_keyring_profile(monkeypatch, tmp_path) -> None:
+    stored: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        oauth_provider_login,
+        "bootstrap_anthropic_api_key",
+        lambda **kwargs: SimpleNamespace(
+            api_key="sk-ant-api-key",
+            authorization_url="https://claude.ai/oauth/authorize",
+            browser_opened=False,
+        ),
+    )
+    monkeypatch.setattr(
+        oauth_provider_login,
+        "put_cached_credential",
+        lambda ref, value, *, env=None: (
+            stored.__setitem__(ref, value)
+            or CredentialStorageStatus(backend="test-keyring", status="available", secure=True)
+        ),
+    )
+
+    result = browser_oauth_login(
+        "anthropic",
+        browser_opener=lambda url: False,
+        code_prompt=lambda prompt: "one-time-code",
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.capture.profile.kind is CredentialKind.KEYRING_REF
+    assert result.capture.profile.id == "anthropic:default"
+    assert result.capture.profile.metadata["source"] == "anthropic-oauth-bootstrap"
+    assert result.capture.profile.metadata["ref"] == "anthropic:default:api-key"
+    assert stored == {"anthropic:default:api-key": "sk-ant-api-key"}
+    assert result.authorization_url == "https://claude.ai/oauth/authorize"
 
 
 def test_auth_login_gemini_oauth_uses_adc_or_service_account_flow(monkeypatch, tmp_path) -> None:
