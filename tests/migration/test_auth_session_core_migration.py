@@ -88,6 +88,22 @@ def test_sessions_slash_uses_shared_session_helpers(tmp_path: Path) -> None:
     assert json.loads(sessions.text) == session_shell_status_result(env).payload
 
 
+def test_sessions_tui_snapshot(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    result = session_shell_status_result(env)
+
+    output = _capture(format_command_result(result, kind="tui"), width=80)
+
+    snapshot = (
+        Path(__file__).resolve().parents[1]
+        / "snapshots"
+        / "slash"
+        / "sessions"
+        / "width-80.txt"
+    )
+    assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
+
+
 def test_core_auth_session_helpers_return_command_results(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
