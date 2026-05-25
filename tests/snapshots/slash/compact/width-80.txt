@@ -1,0 +1,7 @@
+Coming in v0.14.0
+
+Conversation compression will let you manually compress the conversation when context tightens. Craik will summarize prior turns into a structured digest while preserving enough state to answer follow-up questions about earlier conversation turns.
+
+This slash command is registered as a placeholder so it appears in /help. The full implementation lands with v0.14.0 G1.
+
+Workaround until then: start a new session with /clear, or use session export to checkpoint manually.

@@ -31,7 +31,11 @@ from craik.runtime.session_commands import (
     session_shell_status_result,
 )
 from craik.runtime.shell.argument_validation import argument_validation_error
-from craik.runtime.shell.commands import confirmation_result
+from craik.runtime.shell.commands import (
+    compact_stub_result,
+    confirmation_result,
+    share_stub_result,
+)
 from craik.runtime.shell.readiness import readiness_allows_action, resolve_readiness
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
@@ -223,6 +227,10 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
         return gateway_slash_result(tokens[1:], env=env)
+    if command.name == "compact":
+        return _command_result_slash_result(command.name, compact_stub_result())
+    if command.name == "share":
+        return _command_result_slash_result(command.name, share_stub_result())
     if command.name == "doctor":
         return _payload_result(command.name, doctor_result(env=env).payload)
     if command.name == "policy":
@@ -320,6 +328,7 @@ def _command_result_slash_result(
 ) -> SlashCommandResult:
     return SlashCommandResult(
         result.text or "",
+        exit_code=result.exit_code,
         command_name=command_name,
         payload_shape=result.shape,
         payload=result.payload,

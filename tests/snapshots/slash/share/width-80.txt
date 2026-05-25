@@ -1,0 +1,7 @@
+Coming in v0.13.0
+
+Transcript sharing will generate a shareable link to the current session, served from the public docs domain. Recipients will read the transcript without authenticating against the source operator's Craik instance.
+
+This slash command is registered as a placeholder. The full implementation lands when v0.13.0 G8 brings the public docs site live.
+
+Workaround until then: use craik session export-portable for a redacted shareable bundle.

@@ -25,6 +25,8 @@
 - `/memory` - Inspect memory proposals and facts.
 - `/mcp` - Inspect configured MCP clients.
 - `/gateway` - Inspect gateway state.
+- `/compact` - Compact the current conversation.
+- `/share` - Share the current transcript.
 - `/exit` - Exit the shell.
 
 Multi-line: Shift+Enter (native), `\`+Enter (universal), Ctrl+J (any terminal), Option/Alt+Enter (macOS Meta).
