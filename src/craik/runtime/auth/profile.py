@@ -19,6 +19,7 @@ class CredentialKind(StrEnum):
     """Supported credential acquisition modes."""
 
     API_KEY = "api-key"
+    OAUTH = "oauth"
     OAUTH_TOKEN = "oauth-token"
     SECRET_REF = "secret-ref"
     KEYRING_REF = "keyring-ref"
@@ -49,6 +50,13 @@ class AuthProfile(CraikModel):
     authorized_operator_groups: list[str] | None = None
     authorization_provenance: list[CapabilityReceipt] = Field(default_factory=list)
     redaction_patterns: list[str] = Field(default_factory=list)
+    oauth_authorization_endpoint: str | None = None
+    oauth_token_endpoint: str | None = None
+    oauth_client_id: str | None = None
+    oauth_scope_list: list[str] | None = None
+    oauth_token_keyring_handle: str | None = None
+    oauth_refresh_keyring_handle: str | None = None
+    oauth_last_refreshed_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_profile_id(self) -> AuthProfile:
@@ -62,6 +70,34 @@ class AuthProfile(CraikModel):
             raise ValueError("auth profile id requires a non-empty profile name")
         if self.id.strip() != self.id or any(char.isspace() for char in self.id):
             raise ValueError("auth profile id must not contain whitespace")
+        return self
+
+    @model_validator(mode="after")
+    def validate_oauth_fields(self) -> AuthProfile:
+        """Require complete OAuth metadata for provider OAuth profiles."""
+        if self.kind is not CredentialKind.OAUTH:
+            return self
+
+        required_strings = {
+            "oauth_authorization_endpoint": self.oauth_authorization_endpoint,
+            "oauth_token_endpoint": self.oauth_token_endpoint,
+            "oauth_client_id": self.oauth_client_id,
+            "oauth_token_keyring_handle": self.oauth_token_keyring_handle,
+            "oauth_refresh_keyring_handle": self.oauth_refresh_keyring_handle,
+        }
+        missing = [
+            field
+            for field, value in required_strings.items()
+            if not value or not value.strip()
+        ]
+        if self.oauth_scope_list is None or not self.oauth_scope_list:
+            missing.append("oauth_scope_list")
+        elif any(not scope.strip() for scope in self.oauth_scope_list):
+            raise ValueError("oauth_scope_list entries must be non-empty")
+
+        if missing:
+            formatted = ", ".join(missing)
+            raise ValueError(f"oauth auth profiles require: {formatted}")
         return self
 
     @field_validator("redaction_patterns")

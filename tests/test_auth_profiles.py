@@ -37,6 +37,87 @@ def test_auth_profile_round_trips_through_json() -> None:
     assert restored.redaction_patterns == [r"work-account@example\.test"]
 
 
+def test_oauth_auth_profile_requires_complete_oauth_metadata() -> None:
+    with pytest.raises(ValidationError, match="oauth auth profiles require"):
+        AuthProfile(
+            id="openai:subscription",
+            kind=CredentialKind.OAUTH,
+            provider_family="openai",
+            created_at=datetime(2026, 5, 24, tzinfo=UTC),
+            oauth_authorization_endpoint="https://auth.openai.example/authorize",
+        )
+
+
+def test_oauth_auth_profile_round_trips_through_json() -> None:
+    profile = AuthProfile(
+        id="openai:subscription",
+        kind=CredentialKind.OAUTH,
+        provider_family="openai",
+        created_at=datetime(2026, 5, 24, tzinfo=UTC),
+        oauth_authorization_endpoint="https://auth.openai.example/authorize",
+        oauth_token_endpoint="https://auth.openai.example/token",
+        oauth_client_id="craik-public-client",
+        oauth_scope_list=["models.read", "responses.write"],
+        oauth_token_keyring_handle="craik:openai:subscription:access",
+        oauth_refresh_keyring_handle="craik:openai:subscription:refresh",
+        oauth_last_refreshed_at=datetime(2026, 5, 24, 12, 0, tzinfo=UTC),
+    )
+
+    restored = AuthProfile.model_validate_json(profile.model_dump_json())
+
+    assert restored == profile
+    assert restored.kind is CredentialKind.OAUTH
+    assert restored.oauth_scope_list == ["models.read", "responses.write"]
+    assert restored.oauth_token_keyring_handle == "craik:openai:subscription:access"
+    assert restored.oauth_refresh_keyring_handle == "craik:openai:subscription:refresh"
+
+
+def test_legacy_local_cli_oauth_token_profiles_do_not_require_provider_oauth_fields() -> None:
+    profile = AuthProfile(
+        id="openai:local-cli",
+        kind=CredentialKind.OAUTH_TOKEN,
+        provider_family="openai",
+        metadata={"source": "local-cli"},
+        created_at=datetime(2026, 5, 24, tzinfo=UTC),
+    )
+
+    assert profile.oauth_authorization_endpoint is None
+    assert profile.oauth_refresh_keyring_handle is None
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("oauth_authorization_endpoint", ""),
+        ("oauth_token_endpoint", " "),
+        ("oauth_client_id", "\t"),
+        ("oauth_scope_list", []),
+        ("oauth_scope_list", ["models.read", ""]),
+        ("oauth_token_keyring_handle", "\n"),
+        ("oauth_refresh_keyring_handle", ""),
+    ],
+)
+def test_oauth_auth_profile_rejects_blank_oauth_metadata(field: str, value: object) -> None:
+    kwargs: dict[str, object] = {
+        "oauth_authorization_endpoint": "https://auth.openai.example/authorize",
+        "oauth_token_endpoint": "https://auth.openai.example/token",
+        "oauth_client_id": "craik-public-client",
+        "oauth_scope_list": ["models.read"],
+        "oauth_token_keyring_handle": "craik:openai:subscription:access",
+        "oauth_refresh_keyring_handle": "craik:openai:subscription:refresh",
+    }
+    kwargs[field] = value
+
+    with pytest.raises(ValidationError, match="oauth"):
+        AuthProfile(
+            id="openai:subscription",
+            kind=CredentialKind.OAUTH,
+            provider_family="openai",
+            created_at=datetime(2026, 5, 24, tzinfo=UTC),
+            **kwargs,
+        )
+
+
 def test_auth_profile_rejects_id_without_profile_name() -> None:
     with pytest.raises(ValidationError, match="<provider_family>:<name>"):
         AuthProfile(
