@@ -18,8 +18,14 @@ SRC = ROOT / "src" / "craik"
 
 STRICT_COMMAND_RESULT_RENDERING: frozenset[tuple[str, str]] = frozenset(
     {
+        ("src/craik/cli_auth.py", "auth_add"),
+        ("src/craik/cli_auth.py", "auth_approve"),
+        ("src/craik/cli_auth.py", "auth_grant"),
         ("src/craik/cli_auth.py", "auth_list"),
+        ("src/craik/cli_auth.py", "auth_remove"),
+        ("src/craik/cli_auth.py", "auth_setup"),
         ("src/craik/cli_auth.py", "auth_status"),
+        ("src/craik/cli_auth.py", "auth_test"),
     }
 )
 

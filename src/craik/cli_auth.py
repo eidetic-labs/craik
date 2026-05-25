@@ -64,6 +64,7 @@ def auth_list() -> CommandResult:
 
 
 @auth_app.command("add")
+@craik_command(payload_shape="card")
 def auth_add(
     profile_id: str,
     kind: Annotated[
@@ -94,7 +95,7 @@ def auth_add(
         bool,
         typer.Option("--allow-local-base-url", help="Allow loopback HTTP provider URLs."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Add or replace an auth profile."""
     operator_identity_or_fail()
     try:
@@ -142,10 +143,13 @@ def auth_add(
         raise typer.BadParameter(str(error)) from None
 
     AuthProfileStore.from_env().put(profile)
-    typer.echo(json.dumps(_profile_payload(profile), indent=2, sort_keys=True))
+    result = CommandResult(payload=_profile_payload(profile), shape="card")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("setup")
+@craik_command(payload_shape="card")
 def auth_setup(
     provider: Annotated[
         str,
@@ -187,7 +191,7 @@ def auth_setup(
         bool,
         typer.Option("--dry-run", help="Validate and print redacted setup without writing state."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Guided setup for provider authentication profiles."""
     operator_identity_or_fail()
     try:
@@ -223,19 +227,25 @@ def auth_setup(
         "credential_pool": pool_config.model_dump(mode="json") if pool_config is not None else None,
         "redacted": True,
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("remove")
-def auth_remove(profile_id: str) -> None:
+@craik_command(payload_shape="kv")
+def auth_remove(profile_id: str) -> CommandResult:
     """Remove an auth profile."""
     operator_identity_or_fail()
     AuthProfileStore.from_env().delete(profile_id)
-    typer.echo(json.dumps({"removed": profile_id}, indent=2, sort_keys=True))
+    result = CommandResult(payload={"removed": profile_id}, shape="kv")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("test")
-def auth_test(profile_id: str) -> None:
+@craik_command(payload_shape="card")
+def auth_test(profile_id: str) -> CommandResult:
     """Check whether an auth profile can resolve credential material."""
     operator_identity_or_fail()
     store = AuthProfileStore.from_env()
@@ -251,10 +261,13 @@ def auth_test(profile_id: str) -> None:
         "provider_family": profile.provider_family,
         "status": status.model_dump(mode="json"),
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("approve")
+@craik_command(payload_shape="card")
 def auth_approve(
     profile_id: str,
     run_id: Annotated[
@@ -265,7 +278,7 @@ def auth_approve(
         str,
         typer.Option("--approved-by", help="Operator or approver recording approval."),
     ] = "operator:local",
-) -> None:
+) -> CommandResult:
     """Approve first live use of an auth profile for a run."""
     operator_identity_or_fail()
     try:
@@ -276,10 +289,13 @@ def auth_approve(
         )
     except (AuthProfileNotFoundError, AuthProfileStoreError) as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(_profile_payload(profile), indent=2, sort_keys=True))
+    result = CommandResult(payload=_profile_payload(profile), shape="card")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("grant")
+@craik_command(payload_shape="card")
 def auth_grant(
     profile_id: str,
     to_subject: Annotated[
@@ -294,7 +310,7 @@ def auth_grant(
         str,
         typer.Option("--granted-by", help="Operator or approver recording the grant."),
     ] = "operator:local",
-) -> None:
+) -> CommandResult:
     """Grant an operator subject or group access to an auth profile."""
     operator_identity_or_fail()
     try:
@@ -306,7 +322,9 @@ def auth_grant(
         )
     except (AuthProfileNotFoundError, AuthProfileStoreError) as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(_profile_payload(profile), indent=2, sort_keys=True))
+    result = CommandResult(payload=_profile_payload(profile), shape="card")
+    emit_command_result(result)
+    return result
 
 
 @auth_app.command("status")
