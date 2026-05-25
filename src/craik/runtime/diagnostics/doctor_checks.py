@@ -85,6 +85,29 @@ def provider_auth_check(payloads: list[dict[str, Any]]) -> DiagnosticCheck:
     )
 
 
+def provider_billing_surface_checks(payloads: list[dict[str, Any]]) -> list[DiagnosticCheck]:
+    """Report billing surfaces for usable provider credentials."""
+    checks: list[DiagnosticCheck] = []
+    for item in payloads:
+        health = item.get("health")
+        if not isinstance(health, dict) or health.get("status") != "ok":
+            continue
+        provider = item.get("provider_family")
+        billing_surface = item.get("billing_surface")
+        if not isinstance(provider, str) or not isinstance(billing_surface, str):
+            continue
+        credential_source = item.get("credential_source")
+        source = credential_source if isinstance(credential_source, str) else str(item.get("kind"))
+        checks.append(
+            DiagnosticCheck(
+                name=f"billing_surface:{provider}",
+                status="pass",
+                summary=f"{provider.title()} credential: {source} -> {billing_surface}.",
+            )
+        )
+    return checks
+
+
 def anthropic_env_credential_check(env: dict[str, str]) -> DiagnosticCheck:
     """Report Anthropic's documented environment-token integration state."""
     credential = resolve_anthropic_credential_from_env(env)
@@ -101,8 +124,21 @@ def anthropic_env_credential_check(env: dict[str, str]) -> DiagnosticCheck:
     return DiagnosticCheck(
         name="anthropic_env_credential",
         status="pass",
-        summary=f"Anthropic credential detected: {credential.display}.",
+        summary=(
+            f"Anthropic credential detected: {credential.display} -> "
+            f"{_anthropic_billing_surface_for(credential.source)}."
+        ),
     )
+
+
+def _anthropic_billing_surface_for(source: str) -> str:
+    if source == "env:CLAUDE_CODE_OAUTH_TOKEN":
+        return "Claude Pro/Max subscription"
+    if source == "env:ANTHROPIC_TOKEN":
+        return "operator-supplied token"
+    if source in {"env:ANTHROPIC_API_KEY", "env:CRAIK_ANTHROPIC_API_KEY"}:
+        return "Anthropic Console API (per-token)"
+    return "unknown"
 
 
 def secure_credential_store_check(paths: CraikPaths) -> DiagnosticCheck:

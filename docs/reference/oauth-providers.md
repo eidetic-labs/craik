@@ -4,13 +4,33 @@
 
 <div className="craik-lead">
 
-Craik v0.12.7 uses the strongest provider login flow that is usable
-without a private Craik-owned provider client registration. Anthropic and
-Gemini support OAuth-backed setup today. OpenAI keeps the OAuth foundation
-in place, but defaults to API-key capture until client registration is
-available.
+Craik v0.12.7 uses provider login flows that preserve the operator's intended
+billing route. OpenAI and Anthropic can route through subscription-backed
+credentials, while API-key paths remain available for per-token billing,
+automation, and CI.
 
 </div>
+
+## Billing Routing At A Glance
+
+Every credential source routes Craik usage to a specific billing surface.
+Match your source to your preferred billing model:
+
+| Provider | Source | Billing surface | Use when |
+| --- | --- | --- | --- |
+| **Anthropic** | `CLAUDE_CODE_OAUTH_TOKEN` env var | Claude Pro / Max subscription | You have a Claude subscription and want subscription billing |
+| Anthropic | `ANTHROPIC_TOKEN` env var | Depends on the exported token | You need a manual override matching the token issuer |
+| Anthropic | `ANTHROPIC_API_KEY` env var | Anthropic Console API (per-token) | You have a Console API key and want per-token billing |
+| Anthropic | `CRAIK_ANTHROPIC_API_KEY` env var | Anthropic Console API (per-token) | You want a Craik-specific env-var slot |
+| Anthropic | Keyring after `craik auth login anthropic` | Anthropic Console API (per-token) | You want browser bootstrap to mint a Console API key |
+| **Gemini** | Application Default Credentials | GCP project (Vertex AI) | You use Google Cloud project billing |
+| Gemini | Service-account JSON | GCP project (Vertex AI) | You need headless or organization-managed credentials |
+| Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY` env var | Google AI Studio (per-token) | You want lightweight AI Studio credentials |
+| **OpenAI** | `craik auth login openai` OAuth flow | OpenAI subscription quota | You have an OpenAI consumer or workspace subscription and want subscription billing |
+| OpenAI | `OPENAI_API_KEY` env var | OpenAI Platform API (per-token) | You have a Platform API key and want per-token billing |
+
+`craik doctor` and `craik auth status` report the active billing surface for
+resolved profiles so operators can verify which route their next call will use.
 
 ## OpenAI
 
@@ -19,28 +39,43 @@ available.
 | Authorization endpoint | `https://auth.openai.com/oauth/authorize` |
 | Token endpoint | `https://auth.openai.com/oauth/token` |
 | Scopes | `openid profile email offline_access` |
-| Billing surface | OpenAI Platform API key |
-| v0.12.7 status | API-key login is supported; production OAuth is pending client registration |
+| Billing surface | OpenAI subscription quota or Platform API |
+| v0.12.7 status | Browser PKCE OAuth and API-key login are supported |
 
-Use the default API-key flow:
+Craik supports two OpenAI credential sources.
+
+### 1. Platform API key (per-token billing)
+
+```sh
+export OPENAI_API_KEY=sk-...
+```
+
+Generate a key at `platform.openai.com` -> API Keys. This path is billed
+per-token through the OpenAI Platform.
+
+### 2. OpenAI subscription OAuth (subscription billing)
 
 ```sh
 craik auth login openai
 ```
 
-`craik auth login openai --mode=oauth` exits with remediation text instead
-of launching a placeholder client. Once Craik has a registered OpenAI OAuth
-client, the existing OAuth profile and loopback infrastructure can be enabled
-without changing the auth-profile contract.
+Opens a browser-based PKCE OAuth flow against `auth.openai.com`. After
+operator authorization, Craik stores access and refresh tokens in the OS
+keyring. Subsequent Craik usage routes through the operator's OpenAI
+consumer or workspace subscription quota.
 
-> **About OpenAI subscription billing:** Craik currently authenticates
-> against OpenAI's Platform API only, which is billed per-token regardless
-> of any OpenAI consumer or workspace subscription the operator may hold.
-> OpenAI has not published a third-party reuse interface for the
-> subscription-billed access token its first-party clients obtain through
-> their hosted sign-in flow. Tracking
-> [openai/codex#10974](https://github.com/openai/codex/issues/10974) for
-> the eventual published interface.
+The OAuth consent screen identifies the requesting application as "Codex"
+because Craik uses OpenAI's public Codex OAuth client. Craik discloses this
+in the pre-flight notice before opening the browser.
+
+If port 1455, the registered loopback callback, is in use by another
+in-flight OAuth login, close that flow and retry.
+
+### Precedence
+
+`craik auth login openai` defaults to OAuth when the operator has not set
+`OPENAI_API_KEY` and has not requested `--no-browser`. Use `--mode=api-key`,
+`--no-browser`, or `OPENAI_API_KEY` to force Platform API key billing.
 
 ## Anthropic
 

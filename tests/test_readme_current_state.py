@@ -29,7 +29,7 @@ def test_readme_coverage_badge_renders_before_release_pages_publish(
 ) -> None:
     assert (
         "[![Coverage](https://img.shields.io/badge/coverage-87%25-green)]"
-        "(https://eidetic-labs.github.io/craik/)"
+        "(docs/guides/coverage.md)"
     ) in readme_content
     assert "img.shields.io/endpoint" not in readme_content
     assert "coverage-badge.svg)]" not in readme_content

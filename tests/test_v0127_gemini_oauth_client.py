@@ -87,7 +87,7 @@ def test_resolve_via_service_account_returns_project_profile(tmp_path: Path) -> 
 def test_headers_for_credentials_refreshes_expired_credentials() -> None:
     credentials = _FakeCredentials(token=None, expired=True)
 
-    headers = headers_for_credentials(credentials, refresh_request_factory=lambda: object())
+    headers = headers_for_credentials(credentials, refresh_request_factory=object)
 
     assert headers == {"Authorization": "Bearer fresh-access-token"}
     assert credentials.refresh_count == 1
@@ -102,7 +102,7 @@ def test_headers_for_credentials_rejects_missing_token_after_refresh() -> None:
     with pytest.raises(GeminiOAuthError, match="access token"):
         headers_for_credentials(
             _BrokenCredentials(token=None, expired=True),
-            refresh_request_factory=lambda: object(),
+            refresh_request_factory=object,
         )
 
 

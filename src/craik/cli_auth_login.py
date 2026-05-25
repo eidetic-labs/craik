@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
@@ -97,7 +98,16 @@ def auth_login_provider(
         normalized_provider = provider.strip().lower()
         if mode is None:
             normalized_mode = (
-                "oauth" if normalized_provider in DEFAULT_OAUTH_PROVIDERS else "api-key"
+                "oauth"
+                if _default_login_mode_is_oauth(
+                    normalized_provider,
+                    no_browser=no_browser,
+                    env_var=env_var,
+                    secret_ref=secret_ref,
+                    base_url=base_url,
+                    dry_run=dry_run,
+                )
+                else "api-key"
             )
         else:
             normalized_mode = mode.strip().lower()
@@ -123,7 +133,10 @@ def auth_login_provider(
                     provider,
                     profile_id=profile_id,
                     project_id=project_id,
-                    browser_opener=_browser_opener(no_browser=no_browser),
+                    browser_opener=_browser_opener(
+                        no_browser=no_browser,
+                        disclose_openai=normalized_provider == "openai",
+                    ),
                     code_prompt=_code_prompt,
                 )
             _emit_oauth_login_result(oauth_result, json_output=json_output)
@@ -253,6 +266,22 @@ def _default_env_var(provider: str) -> str:
     return "CRAIK_OPENAI_API_KEY"
 
 
+def _default_login_mode_is_oauth(
+    provider: str,
+    *,
+    no_browser: bool,
+    env_var: str | None,
+    secret_ref: str | None,
+    base_url: str | None,
+    dry_run: bool,
+) -> bool:
+    if env_var is not None or secret_ref is not None or base_url is not None or dry_run:
+        return False
+    if provider == "openai":
+        return not no_browser and not bool(os.environ.get("OPENAI_API_KEY"))
+    return provider in DEFAULT_OAUTH_PROVIDERS
+
+
 def _provider_setup_url(provider: str) -> str | None:
     normalized = provider.lower()
     if normalized == "openai":
@@ -297,17 +326,41 @@ def _credential_location_message(result: AuthCaptureResult) -> str:
     return f"Cached in {result.credential_storage.backend}."
 
 
-def _browser_opener(*, no_browser: bool) -> Callable[[str], bool]:
+def _browser_opener(*, no_browser: bool, disclose_openai: bool = False) -> Callable[[str], bool]:
     def _open(url: str) -> bool:
         if no_browser:
             typer.echo(f"Open this URL to continue: {url}", err=True)
             return False
+        if disclose_openai:
+            _emit_openai_oauth_disclosure()
         opened = webbrowser.open(url)
         if not opened:
             typer.echo(f"Open this URL to continue: {url}", err=True)
         return opened
 
     return _open
+
+
+def _emit_openai_oauth_disclosure() -> None:
+    """Tell the operator what the OpenAI consent screen will show."""
+    typer.echo(
+        "\n"
+        "Opening browser to OpenAI authorization.\n"
+        "\n"
+        '  - The consent page will identify the requesting application as "Codex".\n'
+        "    Craik uses OpenAI's public Codex OAuth client for subscription billing.\n"
+        "  - The resulting token will be billed against your OpenAI subscription quota.\n"
+        "  - If you prefer per-token Platform API billing, cancel this flow and\n"
+        "    use: craik auth login openai --mode=api-key\n"
+        "\n"
+        "Press Enter to continue, or Ctrl-C to cancel.",
+        err=True,
+    )
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        typer.echo("Aborted.", err=True)
+        raise typer.Exit(2) from None
 
 
 def _code_prompt(prompt: str) -> str:

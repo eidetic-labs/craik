@@ -16,7 +16,18 @@ from craik.runtime.shell import credential_storage
 
 OPENAI_OAUTH_AUTHORIZATION_ENDPOINT = "https://auth.openai.com/oauth/authorize"
 OPENAI_OAUTH_TOKEN_ENDPOINT = "https://auth.openai.com/oauth/token"  # nosec B105
-OPENAI_OAUTH_CLIENT_ID = "craik-cli"
+# Public Codex OAuth client for auth.openai.com. OpenAI has not formally
+# sanctioned third-party use of this client id; the CLI discloses that the
+# consent screen identifies the requesting application as "Codex" before
+# opening the browser.
+OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"  # nosec B105
+OPENAI_OAUTH_REDIRECT_HOST = "127.0.0.1"  # nosec B104 - loopback OAuth callback bind.
+OPENAI_OAUTH_REDIRECT_PORT = 1455
+OPENAI_OAUTH_REDIRECT_PATH = "/auth/callback"
+OPENAI_OAUTH_REDIRECT_URI = (
+    f"http://{OPENAI_OAUTH_REDIRECT_HOST}:{OPENAI_OAUTH_REDIRECT_PORT}"
+    f"{OPENAI_OAUTH_REDIRECT_PATH}"
+)
 OPENAI_OAUTH_SCOPES = ["openid", "profile", "email", "offline_access"]
 OPENAI_OAUTH_BILLING_SURFACE = "subscription"
 DEFAULT_TOKEN_TIMEOUT_SECONDS = 10.0
@@ -26,16 +37,6 @@ UrlOpen = Callable[..., Any]
 
 class OpenAIOAuthError(RuntimeError):
     """Raised when OpenAI OAuth exchange or storage fails."""
-
-
-def raise_openai_oauth_pending_registration() -> None:
-    """Fail closed for OpenAI OAuth until Craik has a registered OAuth client."""
-    raise OpenAIOAuthError(
-        "OpenAI subscription-OAuth requires craik to be registered as an OAuth "
-        "client with OpenAI. Registration is pending.\n\n"
-        "Use --mode=api-key to authenticate with a Platform API key from "
-        "https://platform.openai.com/api-keys."
-    )
 
 
 @dataclass(frozen=True)
@@ -229,11 +230,14 @@ __all__ = [
     "OPENAI_OAUTH_AUTHORIZATION_ENDPOINT",
     "OPENAI_OAUTH_BILLING_SURFACE",
     "OPENAI_OAUTH_CLIENT_ID",
+    "OPENAI_OAUTH_REDIRECT_HOST",
+    "OPENAI_OAUTH_REDIRECT_PATH",
+    "OPENAI_OAUTH_REDIRECT_PORT",
+    "OPENAI_OAUTH_REDIRECT_URI",
     "OPENAI_OAUTH_SCOPES",
     "OPENAI_OAUTH_TOKEN_ENDPOINT",
     "OpenAIOAuthClient",
     "OpenAIOAuthError",
     "OpenAIOAuthTokenSet",
-    "raise_openai_oauth_pending_registration",
     "store_openai_oauth_profile",
 ]

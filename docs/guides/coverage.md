@@ -18,13 +18,15 @@ published new artifacts.
 
 The release coverage workflow runs on tag pushes and manual dispatch. It runs
 the pytest suite with `pytest-cov`, writes terminal, HTML, XML, and badge
-endpoint reports, publishes `htmlcov/` to GitHub Pages, and attaches
-`coverage.xml` to the matching GitHub Release.
+endpoint reports, uploads `htmlcov/` as the `craik-coverage` workflow
+artifact, and attaches `coverage.xml` to the matching GitHub Release.
 
-The README badge links to the published HTML report:
+Coverage does not deploy to GitHub Pages. The `craik.eidetic-labs.com` Pages
+target is reserved for the product landing page built from `site/`.
 
 ```text
-https://eidetic-labs.github.io/craik/
+.github/workflows/pages.yml deploys site/
+.github/workflows/coverage.yml uploads htmlcov/ as an artifact only
 ```
 
 ## Local Equivalent
@@ -41,8 +43,8 @@ The default local threshold is configured in `pyproject.toml`.
 
 The release workflow enforces a minimum overall coverage of **80%**. If a
 release-tag push drops total coverage below this threshold, the coverage
-workflow fails before publishing the Pages report or attaching `coverage.xml`
-to the GitHub Release.
+workflow fails before uploading the artifact or attaching `coverage.xml` to the
+GitHub Release.
 
 The threshold is set below the current measured full-suite coverage to allow
 normal variance from feature work. Raise it only after `main` has stayed green

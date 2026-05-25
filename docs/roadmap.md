@@ -666,11 +666,10 @@ migration policy, and localized operator-facing surfaces.
 
 The v0.12.7 goal workflow shipped provider OAuth contracts, loopback
 PKCE helpers, Anthropic OAuth-to-API-key bootstrap, Gemini/Vertex ADC
-and service-account login through `google-auth`, OpenAI OAuth foundation
-with API-key default pending client registration, provider-specific
-header handling, `craik auth login <provider> --mode=api-key|oauth`,
-status metadata, callback-safety CI, and current authentication docs
-through milestone issues
+and service-account login through `google-auth`, OpenAI browser PKCE OAuth,
+provider-specific header handling, `craik auth login <provider>
+--mode=api-key|oauth`, billing-surface status metadata, callback-safety CI,
+and current authentication docs through milestone issues
 <a href="https://github.com/eidetic-labs/craik/issues/936">#936</a>,
 <a href="https://github.com/eidetic-labs/craik/issues/937">#937</a>,
 <a href="https://github.com/eidetic-labs/craik/issues/940">#940</a>,

@@ -29,11 +29,20 @@ within the `0.x.0` stability expectations described in
   material.
 - Added Gemini/Vertex OAuth login through Google Application Default
   Credentials and service-account JSON profiles via `google-auth`.
-- Added OpenAI OAuth profile and token-client foundations while keeping OpenAI
-  login on API-key capture until Craik has a registered OpenAI OAuth client.
+- Added OpenAI PKCE OAuth login against `auth.openai.com` using the public
+  Codex OAuth client, with access and refresh tokens stored in the OS keyring
+  and calls routed through OpenAI subscription quota.
+- Added a pre-flight disclosure before OpenAI OAuth login explaining that the
+  consent screen identifies the requesting application as "Codex".
 - Added `craik auth login <provider> --mode=api-key` and `--mode=oauth`
-  selectors, with Anthropic and Gemini defaulting to OAuth-backed setup and
-  OpenAI defaulting to API-key capture.
+  selectors, with OpenAI, Anthropic, and Gemini defaulting to OAuth-backed
+  setup when their subscription or provider-managed route is available. Use
+  `--mode=api-key` to force per-token API-key billing.
+- Added billing-surface visibility to `craik doctor` and `craik auth status`
+  so operators can verify whether a resolved credential routes to subscription
+  quota, Platform API billing, Anthropic Console billing, Google AI Studio, or
+  a GCP project.
+- Added a billing-routing matrix to `docs/reference/oauth-providers.md`.
 - Added `docs/reference/oauth-providers.md` and refreshed authentication,
   security, roadmap, and release-readiness documentation for the shipped
   provider-specific OAuth behavior.
