@@ -34,6 +34,8 @@ from craik.runtime.shell.argument_validation import argument_validation_error
 from craik.runtime.shell.commands import (
     compact_stub_result,
     confirmation_result,
+    cost_result,
+    quota_result,
     share_stub_result,
     who_result,
 )
@@ -228,6 +230,10 @@ def dispatch_slash_command(text: str, *, env: dict[str, str] | None = None) -> S
         return SlashCommandResult(text, exit_code=exit_code)
     if command.name == "gateway":
         return gateway_slash_result(tokens[1:], env=env)
+    if command.name == "cost":
+        return _command_result_slash_result(command.name, cost_result(env))
+    if command.name == "quota":
+        return _command_result_slash_result(command.name, quota_result(env))
     if command.name == "who":
         return _command_result_slash_result(command.name, who_result(env))
     if command.name == "compact":

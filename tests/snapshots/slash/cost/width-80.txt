@@ -1,0 +1,13 @@
+Cost And Usage
+Tokens in: 0
+Tokens out: 0
+Tokens total: 0
+Total cost USD: unknown
+Model: unknown
+Last reset: unknown
+Last provider call: unknown
+Receipts scanned: 0
+Missing data:
+- total_cost_usd
+- model
+- last_reset
