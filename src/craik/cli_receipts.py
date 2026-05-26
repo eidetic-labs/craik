@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.work.receipts import (
     receipts_list_result,
@@ -38,7 +38,7 @@ def receipts_list(
     """Print persisted capability receipts as JSON."""
     operator_identity_or_fail()
     result = receipts_list_result(task_id=task_id, policy_id=policy_id, handoff_id=handoff_id)
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -51,7 +51,7 @@ def receipts_show(receipt_id: str) -> CommandResult:
         result = receipts_show_result(receipt_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -85,7 +85,7 @@ def receipts_verify(
         )
     except OSError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     if result.exit_code:
         raise typer.Exit(result.exit_code)
     return result

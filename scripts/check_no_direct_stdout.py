@@ -173,15 +173,21 @@ def main() -> int:
 
 
 def direct_stdout_failures(root: Path) -> list[str]:
-    """Return direct stdout violations for strict shared command callbacks."""
+    """Return direct stdout violations for shared command callbacks."""
     failures: list[str] = []
-    for path in sorted((root / "src" / "craik").glob("cli*.py")):
+    for path in _cli_files(root):
         relative = path.relative_to(root).as_posix()
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):
                 continue
+            if _has_tui_eligible_craik_command(node):
+                for call in _direct_json_stdout_calls(node):
+                    failures.append(
+                        f"{relative}:{call.lineno} {node.name} emits JSON directly; "
+                        "use craik.cli_output.emit_command_result(result)"
+                    )
             key = (relative, node.name)
             if key not in STRICT_COMMAND_RESULT_RENDERING:
                 continue
@@ -200,8 +206,30 @@ def direct_stdout_failures(root: Path) -> list[str]:
     return failures
 
 
+def _cli_files(root: Path) -> list[Path]:
+    src = root / "src" / "craik"
+    files = [*src.glob("cli*.py"), *(src / "cli_new").glob("*.py")]
+    return sorted({path for path in files if path.is_file()})
+
+
 def _has_craik_command_decorator(node: ast.FunctionDef) -> bool:
     return any(_decorator_name(decorator) == "craik_command" for decorator in node.decorator_list)
+
+
+def _has_tui_eligible_craik_command(node: ast.FunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        if _decorator_name(decorator) != "craik_command":
+            continue
+        if isinstance(decorator, ast.Call):
+            for keyword in decorator.keywords:
+                if (
+                    keyword.arg == "tui_eligible"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is False
+                ):
+                    return False
+        return True
+    return False
 
 
 def _decorator_name(node: ast.AST) -> str | None:
@@ -224,6 +252,16 @@ def _direct_stdout_calls(node: ast.FunctionDef) -> list[ast.Call]:
         parts = name.rsplit(".", 1)
         if len(parts) == 2 and (parts[0], parts[1]) in _DIRECT_STDOUT_ATTRS:
             calls.append(child)
+    return calls
+
+
+def _direct_json_stdout_calls(node: ast.FunctionDef) -> list[ast.Call]:
+    calls: list[ast.Call] = []
+    for call in _direct_stdout_calls(node):
+        if not call.args or not isinstance(call.args[0], ast.Call):
+            continue
+        if _callable_name(call.args[0].func) == "json.dumps":
+            calls.append(call)
     return calls
 
 

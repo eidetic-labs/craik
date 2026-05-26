@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.reviewing.approval_commands import (
     approvals_decide_result,
@@ -29,7 +29,7 @@ def approvals_list_command(
     """List approval requests."""
     operator_identity_or_fail()
     result = approvals_list_result(include_resolved=include_resolved)
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -42,7 +42,7 @@ def approvals_show_command(approval_id: str) -> CommandResult:
         result = approvals_show_result(approval_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -77,5 +77,5 @@ def _decide(approval_id: str, *, decision: str, reason: str) -> CommandResult:
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result

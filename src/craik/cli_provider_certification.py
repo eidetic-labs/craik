@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import provider_app
+from craik.cli_output import emit_command_result
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.commands import provider_certification_result
 
@@ -25,5 +25,5 @@ def provider_certification(
         result = provider_certification_result(provider_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result

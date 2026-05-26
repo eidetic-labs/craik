@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from craik.cli import skills_app
+from craik.cli_output import emit_command_result
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.skills.commands import (
@@ -34,7 +34,7 @@ def skills_install(
     """Install a skill package manifest."""
     _operator_identity()
     result = skills_install_result(path)
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -49,7 +49,7 @@ def skills_list(
     """List installed skill packages."""
     _operator_identity()
     result = skills_list_result(scope=scope)
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -84,7 +84,7 @@ def skills_show(
         result = skills_show_result(package_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -94,7 +94,7 @@ def skills_telemetry() -> CommandResult:
     """Summarize redacted skill invocation telemetry inputs."""
     _operator_identity()
     result = skills_telemetry_result()
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -104,7 +104,7 @@ def skills_proposals() -> CommandResult:
     """List reviewable learning-loop proposal sources."""
     _operator_identity()
     result = skills_proposals_result()
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -116,7 +116,7 @@ def skills_eval(
     """Report replay/eval readiness for skill promotion gates."""
     _operator_identity()
     result = skills_eval_result(package_id=package_id)
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -129,7 +129,7 @@ def skills_promote(
     """Preview a skill promotion decision; promotion remains approval-gated."""
     _operator_identity()
     result = skills_promote_result(proposal_id, dry_run=dry_run)
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -142,7 +142,7 @@ def skills_rollback(
     """Preview rollback posture for a skill package."""
     _operator_identity()
     result = skills_rollback_result(package_id, dry_run=dry_run)
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -152,7 +152,7 @@ def skills_history() -> CommandResult:
     """Show skill package and learning-loop receipt history."""
     _operator_identity()
     result = skills_history_result()
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -166,7 +166,7 @@ def _set_active(entry_id: str, *, active: bool) -> CommandResult:
         result = skills_set_active_result(entry_id, active=active)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    _print_payload(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -176,7 +176,3 @@ def _operator_identity() -> str:
     except OperatorSessionNotFoundError:
         raise typer.BadParameter("active operator session required; run craik login") from None
     return session.subject
-
-
-def _print_payload(payload: object) -> None:
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
+from craik.cli_output import emit_command_result
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.diagnostics.commands import doctor_result, update_guidance_result
 
@@ -40,7 +40,7 @@ def doctor_command(
         confirm_unsafe=yes,
     )
     _ = json_output
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -55,5 +55,5 @@ def update_command(
     from craik.cli import package_version
 
     result = update_guidance_result(installed_version=package_version(), check=check)
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result

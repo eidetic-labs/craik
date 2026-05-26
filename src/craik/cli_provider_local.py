@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import provider_app
+from craik.cli_output import emit_command_result
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.commands import (
     provider_local_health_result,
@@ -20,7 +20,7 @@ from craik.runtime.providers.commands import (
 def provider_local_presets() -> CommandResult:
     """Print local model routing presets as JSON."""
     result = provider_local_presets_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -46,5 +46,5 @@ def provider_local_health(
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
