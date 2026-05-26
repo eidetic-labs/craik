@@ -192,6 +192,12 @@ jobs:
         run: python scripts/check_no_direct_stdout.py
       - name: Check contract dispatch consumption
         run: python scripts/check_contract_dispatch_consumed.py
+      - name: Check legacy modal pushes
+        run: python scripts/check_no_legacy_modal_pushes.py
+      - name: Check slash command specs consumption
+        run: python scripts/check_no_slash_command_specs_consumption.py
+      - name: Check interactive prompts runtime consumption
+        run: python scripts/check_interactive_prompts_runtime_consumed.py
       - name: Check modal screen mappings
         run: python scripts/check_modal_screen_mappings.py
       - name: Check modal screen security
