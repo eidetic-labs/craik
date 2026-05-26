@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, Any, NoReturn, get_args
 
 import typer
 
 from craik.cli import instructions_app
+from craik.cli_output import emit_command_result
 from craik.contracts.models import DistilledInstructionCategory, InstructionSourceKind
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.instruction_approval import (
     InstructionApprovalError,
     approve_instruction,
@@ -29,6 +30,7 @@ from craik.runtime.store import LocalStore
 
 
 @instructions_app.command("register")
+@craik_command(payload_shape="card")
 def instructions_register(
     kind: Annotated[str, typer.Argument(help="Instruction source kind.")],
     path: Annotated[str, typer.Argument(help="Path inside the project repository.")],
@@ -40,7 +42,7 @@ def instructions_register(
         str | None,
         typer.Option("--owner", help="Owning team or operator. Defaults to active operator."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Register an instruction source idempotently and print its receipt."""
     store = LocalStore.from_env()
     try:
@@ -77,10 +79,11 @@ def instructions_register(
             }
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @instructions_app.command("ingest")
+@craik_command(payload_shape="kv")
 def instructions_ingest(
     project: Annotated[
         str | None,
@@ -90,7 +93,7 @@ def instructions_ingest(
         bool,
         typer.Option("--json/--table", help="Print JSON instead of a table."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Ingest registered instruction sources into reviewable proposals."""
     store = LocalStore.from_env()
     try:
@@ -115,13 +118,15 @@ def instructions_ingest(
         }
     finally:
         store.close()
-    if as_json:
-        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    _print_ingest_summary(payload)
+    return _emit_payload(
+        payload,
+        shape="kv",
+        text=None if as_json else _render_ingest_summary(payload),
+    )
 
 
 @instructions_app.command("list")
+@craik_command(payload_shape="table")
 def instructions_list(
     status: Annotated[
         str | None,
@@ -142,7 +147,7 @@ def instructions_list(
         bool,
         typer.Option("--json/--table", help="Print JSON instead of a table."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """List distilled instruction proposals."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -156,13 +161,15 @@ def instructions_list(
         )]
     finally:
         store.close()
-    if as_json:
-        typer.echo(json.dumps(items, indent=2, sort_keys=True))
-        return
-    _print_table(items)
+    return _emit_payload(
+        items,
+        shape="table",
+        text=None if as_json else _render_table(items),
+    )
 
 
 @instructions_app.command("approve")
+@craik_command(payload_shape="card")
 def instructions_approve(
     item_id: Annotated[str, typer.Argument(help="Distilled instruction proposal id.")],
     rationale: Annotated[
@@ -177,7 +184,7 @@ def instructions_approve(
         str | None,
         typer.Option("--override-rationale", help="Required rationale for override approval."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Approve a distilled instruction and make it governing."""
     store = LocalStore.from_env()
     try:
@@ -203,17 +210,18 @@ def instructions_approve(
         }
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @instructions_app.command("reject")
+@craik_command(payload_shape="card")
 def instructions_reject(
     item_id: Annotated[str, typer.Argument(help="Distilled instruction proposal id.")],
     rationale: Annotated[
         str,
         typer.Option("--rationale", help="Rejection rationale."),
     ] = "",
-) -> None:
+) -> CommandResult:
     """Reject a distilled instruction with an auditable receipt."""
     store = LocalStore.from_env()
     try:
@@ -234,13 +242,14 @@ def instructions_reject(
         }
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @instructions_app.command("show")
+@craik_command(payload_shape="card")
 def instructions_show(
     item_id: Annotated[str, typer.Argument(help="Distilled instruction proposal id.")],
-) -> None:
+) -> CommandResult:
     """Show one distilled instruction with provenance and freshness."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -265,7 +274,7 @@ def instructions_show(
         ]
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 def _operator_identity() -> str:
@@ -361,27 +370,27 @@ def _provenance_payload(store: LocalStore, provenance_id: str) -> dict[str, Any]
     }
 
 
-def _print_table(items: list[dict[str, Any]]) -> None:
+def _render_table(items: list[dict[str, Any]]) -> str:
     if not items:
-        typer.echo("ID  STATUS  CATEGORY  SOURCE  STATEMENT")
-        return
-    typer.echo("ID\tSTATUS\tCATEGORY\tSOURCE\tSTATEMENT")
+        return "ID  STATUS  CATEGORY  SOURCE  STATEMENT"
+    lines = ["ID\tSTATUS\tCATEGORY\tSOURCE\tSTATEMENT"]
     for item in items:
-        typer.echo(
+        lines.append(
             "\t".join(
-                [
+                (
                     str(item["id"]),
                     str(item["status"]),
                     str(item["category"]),
                     str(item["source_id"]),
                     str(item["statement"]),
-                ]
+                )
             )
         )
+    return "\n".join(lines)
 
 
-def _print_ingest_summary(payload: dict[str, Any]) -> None:
-    typer.echo("FIELD\tVALUE")
+def _render_ingest_summary(payload: dict[str, Any]) -> str:
+    lines = ["FIELD\tVALUE"]
     for key in (
         "project_id",
         "source_count",
@@ -393,9 +402,21 @@ def _print_ingest_summary(payload: dict[str, Any]) -> None:
         "skipped_existing_count",
         "unclassified_count",
     ):
-        typer.echo(f"{key}\t{payload[key]}")
+        lines.append(f"{key}\t{payload[key]}")
     for warning in payload["warnings"]:
-        typer.echo(f"warning\t{warning}")
+        lines.append(f"warning\t{warning}")
+    return "\n".join(lines)
+
+
+def _emit_payload(
+    payload: object,
+    *,
+    shape: PayloadShape,
+    text: str | None = None,
+) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape, text=text)
+    emit_command_result(result)
+    return result
 
 
 def _instruction_source_kind(value: str) -> InstructionSourceKind:
