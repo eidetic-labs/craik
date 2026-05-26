@@ -24,17 +24,7 @@ from craik.runtime.shell.contract_runtime.registry_provider import get_tui_regis
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.external_editor import edit_text_externally
 from craik.runtime.shell.inline_actions import handle_inline_action
-from craik.runtime.shell.modals.auth_capture import (
-    AuthCaptureModal,
-    AuthCaptureRequest,
-    AuthCaptureResult,
-)
-from craik.runtime.shell.modals.auth_logout import (
-    AuthLogoutModal,
-    AuthLogoutRequest,
-    AuthLogoutResult,
-)
-from craik.runtime.shell.modals.receipt_detail import ReceiptDetailModal
+from craik.runtime.shell.modals.textual_flow import open_textual_modal_flow
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.shell_invocation import (
@@ -43,10 +33,6 @@ from craik.runtime.shell.shell_invocation import (
 )
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.shell.slash_completer import complete_slash_input
-from craik.runtime.shell.textual_modals import (
-    ApprovalDecisionModal,
-    ModalFlowResult,
-)
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest, ConfirmModal
 from craik.runtime.shell.textual_widgets.craik_input import (
@@ -395,35 +381,7 @@ class CraikApp(App[None]):
         self.notify(message, severity=severity, timeout=8)
 
     def _open_modal_flow(self, text: str) -> bool:
-        tokens = text.split()
-        if not tokens:
-            return False
-        if tokens[:2] in (["/auth", "login"], ["/provider", "login"]):
-            provider = tokens[2] if len(tokens) > 2 else "openai"
-            self.push_screen(
-                AuthCaptureModal(AuthCaptureRequest(provider=provider, env=self.env)),
-                self._auth_capture_complete,
-            )
-            return True
-        if tokens[:2] == ["/auth", "logout"] or tokens[0] == "/logout":
-            profile = tokens[2] if len(tokens) > 2 else self._active_profile()
-            if tokens[0] == "/logout":
-                profile = tokens[1] if len(tokens) > 1 else self._active_profile()
-            self.push_screen(
-                AuthLogoutModal(AuthLogoutRequest(profile_id=profile, env=self.env)),
-                self._auth_logout_complete,
-            )
-            return True
-        if len(tokens) >= 3 and tokens[:2] == ["/approvals", "decide"]:
-            self.push_screen(
-                ApprovalDecisionModal(tokens[2], env=self.env),
-                self._modal_complete,
-            )
-            return True
-        if len(tokens) >= 3 and tokens[:2] == ["/receipts", "detail"]:
-            self.push_screen(ReceiptDetailModal(tokens[2], env=self.env))
-            return True
-        return False
+        return open_textual_modal_flow(self, text)
 
     def _complete_confirmation(
         self,
@@ -458,37 +416,6 @@ class CraikApp(App[None]):
                 error,
                 severity="error",
             )
-
-    def _modal_complete(self, result: ModalFlowResult | None) -> None:
-        if result is None:
-            return
-        self._write_transcript(linkify_text(result.message), plain_text=result.message)
-        if result.severity != "information":
-            self.notify(result.message, severity=result.severity, timeout=8)
-
-    def _auth_capture_complete(self, result: AuthCaptureResult | None) -> None:
-        if result is None:
-            return
-        if result.message:
-            self._write_transcript(linkify_text(result.message), plain_text=result.message)
-        if result.severity != "information":
-            self.notify(
-                result.message or "Auth capture failed.",
-                severity=result.severity,
-                timeout=8,
-            )
-        if result.saved:
-            self._refresh_status_bar()
-
-    def _auth_logout_complete(self, result: AuthLogoutResult | None) -> None:
-        if result is None:
-            return
-        if result.message:
-            self._write_transcript(linkify_text(result.message), plain_text=result.message)
-        if result.severity != "information":
-            self.notify(result.message or "Logout failed.", severity=result.severity, timeout=8)
-        if result.removed:
-            self._refresh_status_bar()
 
     def _write_transcript(self, value: object, *, plain_text: str | None = None) -> None:
         self.query_one("#transcript", RichLog).write(value)
