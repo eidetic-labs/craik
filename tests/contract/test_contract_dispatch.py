@@ -9,7 +9,11 @@ from rich.console import Console
 
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.contract.dispatch import dispatch_slash_command, invoke_slash_command
+from craik.runtime.contract.dispatch import (
+    InteractivePromptRequest,
+    dispatch_slash_command,
+    invoke_slash_command,
+)
 
 
 def _capture(renderable: Any) -> str:
@@ -115,3 +119,69 @@ def test_invoke_slash_command_suppresses_callback_stdout(capsys: Any) -> None:
 
     assert result.payload == {"clean": True}
     assert capsys.readouterr().out == ""
+
+
+def test_invoke_slash_command_intercepts_metadata_backed_confirm() -> None:
+    app = typer.Typer()
+    requests: list[InteractivePromptRequest] = []
+
+    @app.command("apply")
+    @craik_command(payload_shape="kv", interactive_prompts={"apply_import": "ConfirmModal"})
+    def apply() -> CommandResult:
+        if not typer.confirm("Apply importable records?", default=False):
+            return CommandResult(payload={"applied": False}, shape="kv")
+        return CommandResult(payload={"applied": True}, shape="kv")
+
+    def _handler(request: InteractivePromptRequest) -> object:
+        requests.append(request)
+        return True
+
+    result = invoke_slash_command(
+        "/apply",
+        registry=AutoSlashRegistry.from_typer(app),
+        interactive_prompt_handler=_handler,
+    )
+
+    assert result.payload == {"applied": True}
+    assert requests == [
+        InteractivePromptRequest(
+            kind="confirm",
+            prompt_name="apply_import",
+            modal_name="ConfirmModal",
+            text="Apply importable records?",
+            default=False,
+        )
+    ]
+
+
+def test_invoke_slash_command_intercepts_metadata_backed_prompt() -> None:
+    app = typer.Typer()
+    requests: list[InteractivePromptRequest] = []
+
+    @app.command("capture")
+    @craik_command(payload_shape="kv", interactive_prompts={"api_key": "TextInputModal"})
+    def capture() -> CommandResult:
+        secret = typer.prompt("Provider key", hide_input=True)
+        return CommandResult(payload={"secret": secret}, shape="kv")
+
+    def _handler(request: InteractivePromptRequest) -> object:
+        requests.append(request)
+        return "provider-secret"
+
+    result = invoke_slash_command(
+        "/capture",
+        registry=AutoSlashRegistry.from_typer(app),
+        interactive_prompt_handler=_handler,
+    )
+
+    assert result.payload == {"secret": "provider-secret"}
+    assert requests == [
+        InteractivePromptRequest(
+            kind="prompt",
+            prompt_name="api_key",
+            modal_name="TextInputModal",
+            text="Provider key",
+            default=None,
+            hide_input=True,
+        )
+    ]

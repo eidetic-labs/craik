@@ -314,7 +314,6 @@ def _provider_setup_url(provider: str) -> str | None:
     return None
 
 
-# craik-interactive-prompt-owner: auth login reauthenticate ConfirmModal
 def _confirm_reauthentication(provider: str, *, profile_id: str | None) -> None:
     store = AuthProfileStore.from_env()
     target = profile_id or _default_profile_id(provider)
