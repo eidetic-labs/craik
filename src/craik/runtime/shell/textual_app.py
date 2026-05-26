@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 
 from textual import events
@@ -14,7 +15,12 @@ from textual.widgets import OptionList, RichLog
 from craik import __version__
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
-from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
+from craik.runtime.contract.dispatch import (
+    InteractivePromptRequest,
+)
+from craik.runtime.contract.dispatch import (
+    invoke_slash_command as _contract_invoke,
+)
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.shell.confirmations import (
     confirmation_request_for_text,
@@ -58,6 +64,7 @@ from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSev
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
+from craik.runtime.shell.tui_interactive_prompts import open_interactive_prompt_modal
 from craik.runtime.status import auto_approve_status_payload
 
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
@@ -189,7 +196,6 @@ class CraikApp(App[None]):
                 lambda confirmed: self._complete_confirmation(confirmation, confirmed),
             )
             return
-        transcript = self.query_one("#transcript", RichLog)
         self._write_transcript(f"> {text}")
         append_history(text, env=self.env)
         if is_shell_invocation_text(text):
@@ -208,10 +214,10 @@ class CraikApp(App[None]):
             self.query_one("#slash-popup", Container).display = False
             return
         if text.startswith("/"):
-            contract_result = self._dispatch_contract(text)
-            transcript.write(format_command_result(contract_result, kind="tui"))
-            result = to_slash_command_result(contract_result)
-            self._transcript_lines.append(result.text)
+            self._dispatch_slash_async(text)
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
         else:
             result = self._dispatch(text)
             self._write_transcript(linkify_text(result.text), plain_text=result.text)
@@ -359,7 +365,49 @@ class CraikApp(App[None]):
 
     def _dispatch_contract(self, text: str) -> CommandResult:
         """Dispatch slash text through the CLI/TUI contract layer."""
-        return _contract_invoke(text, registry=self.registry, env=self.env)
+        return _contract_invoke(
+            text,
+            registry=self.registry,
+            env=self.env,
+            interactive_prompt_handler=self._open_modal_for_request,
+        )
+
+    def _dispatch_slash_async(self, text: str) -> None:
+        """Dispatch slash commands off the UI thread so modal prompts can block safely."""
+        # Interactive prompt interception is synchronous from Typer's point of view.
+        # Keep the callback on a worker thread and marshal modal pushes/results
+        # through call_from_thread so waiting for modal completion never freezes Textual.
+        thread = threading.Thread(
+            target=self._dispatch_slash_worker,
+            args=(text,),
+            name="craik-tui-slash-dispatch",
+            daemon=True,
+        )
+        thread.start()
+
+    def _dispatch_slash_worker(self, text: str) -> None:
+        try:
+            contract_result = self._dispatch_contract(text)
+        except Exception as error:
+            contract_result = CommandResult(
+                payload=str(error),
+                shape="markdown",
+                text=str(error),
+                exit_code=2,
+            )
+        self.call_from_thread(self._complete_slash_dispatch, contract_result)
+
+    def _complete_slash_dispatch(self, contract_result: CommandResult) -> None:
+        transcript = self.query_one("#transcript", RichLog)
+        transcript.write(format_command_result(contract_result, kind="tui"))
+        result = to_slash_command_result(contract_result)
+        self._transcript_lines.append(result.text)
+        if result.exit_shell:
+            self.exit()
+
+    def _open_modal_for_request(self, request: InteractivePromptRequest) -> object:
+        """Push a canonical modal for an intercepted prompt and wait for completion."""
+        return open_interactive_prompt_modal(self, request)
 
     def _flash_accent(self, kind: str) -> None:
         self.query_one("#accent-emission", AccentEmission).flash(kind)

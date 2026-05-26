@@ -78,6 +78,7 @@ def test_interactive_prompts_guard_allows_current_dispatch() -> None:
     guard = _load_script("check_interactive_prompts_runtime_consumed")
 
     assert guard.validate_dispatch(ROOT / "src/craik/runtime/contract/dispatch.py") == []
+    assert guard.validate_shell_callers(ROOT) == []
 
 
 def test_interactive_prompts_guard_requires_intercept_around_callback(tmp_path: Path) -> None:
@@ -109,3 +110,44 @@ def _call_entry():
     findings = guard.validate_dispatch(dispatch)
 
     assert any("does not wrap `_call_entry`" in finding for finding in findings)
+
+
+def test_interactive_prompts_guard_requires_shell_prompt_handler(tmp_path: Path) -> None:
+    guard = _load_script("check_interactive_prompts_runtime_consumed")
+    source = tmp_path / "src" / "craik" / "runtime" / "shell" / "textual_app.py"
+    _write(
+        source,
+        """
+from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
+
+
+def dispatch(text, registry, env):
+    return _contract_invoke(text, registry=registry, env=env)
+""",
+    )
+
+    findings = guard.validate_shell_callers(tmp_path)
+
+    assert any("non-None interactive_prompt_handler" in finding for finding in findings)
+
+
+def test_interactive_prompts_guard_accepts_shell_prompt_handler(tmp_path: Path) -> None:
+    guard = _load_script("check_interactive_prompts_runtime_consumed")
+    source = tmp_path / "src" / "craik" / "runtime" / "shell" / "textual_app.py"
+    _write(
+        source,
+        """
+from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
+
+
+def dispatch(text, registry, env, handler):
+    return _contract_invoke(
+        text,
+        registry=registry,
+        env=env,
+        interactive_prompt_handler=handler,
+    )
+""",
+    )
+
+    assert guard.validate_shell_callers(tmp_path) == []

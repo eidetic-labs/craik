@@ -45,6 +45,29 @@ def validate_dispatch(path: Path = DISPATCH_PATH) -> list[str]:
     ]
 
 
+def validate_shell_callers(root: Path = ROOT) -> list[str]:
+    """Return findings when no production shell caller provides a prompt handler."""
+    shell_root = root / "src" / "craik" / "runtime" / "shell"
+    if not shell_root.exists():
+        return [f"{_display_path(shell_root)}: shell runtime package is missing"]
+    for path in shell_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        aliases = _dispatch_aliases(tree)
+        if not aliases:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and _call_name(node.func) in aliases
+                and _has_non_none_prompt_handler(node)
+            ):
+                return []
+    return [
+        f"{_display_path(shell_root)}: no shell call site invokes `{REQUIRED_INVOKER}` "
+        "with a non-None interactive_prompt_handler"
+    ]
+
+
 def _display_path(path: Path) -> str:
     try:
         return str(path.relative_to(ROOT))
@@ -76,8 +99,31 @@ def _call_name(node: ast.expr) -> str | None:
     return None
 
 
+def _dispatch_aliases(tree: ast.AST) -> set[str]:
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "craik.runtime.contract.dispatch"
+        ):
+            for alias in node.names:
+                if alias.name == REQUIRED_INVOKER:
+                    aliases.add(alias.asname or alias.name)
+    return aliases
+
+
+def _has_non_none_prompt_handler(node: ast.Call) -> bool:
+    for keyword in node.keywords:
+        if keyword.arg != "interactive_prompt_handler":
+            continue
+        return not (
+            isinstance(keyword.value, ast.Constant) and keyword.value.value is None
+        )
+    return False
+
+
 def main() -> int:
-    failures = validate_dispatch()
+    failures = [*validate_dispatch(), *validate_shell_callers()]
     if failures:
         print("Interactive prompts runtime guard FAILED:", file=sys.stderr)
         for failure in failures:
