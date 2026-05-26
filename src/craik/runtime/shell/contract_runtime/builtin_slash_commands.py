@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from rich.markup import escape
 
 from craik.runtime.auth.commands import (
@@ -23,94 +21,58 @@ from craik.runtime.providers.commands import provider_list_result
 from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
 from craik.runtime.session_commands import session_activate_result, session_shell_status_result
+from craik.runtime.setup import setup_command_result
 from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
+from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
     receipts_slash_result,
 )
-from craik.runtime.shell.slash_command_schema import (
-    SlashCommandSpec,
-    slash_command_spec_by_name,
-    slash_command_specs,
-)
+from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 from craik.runtime.shell.slash_command_schema.detail_help import command_detail_help
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
+from craik.runtime.shell.slash_command_schema.lookup import find_slash_command_spec
 from craik.runtime.shell.textual_widgets.craik_input import MULTILINE_HELP_TEXT
 from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
 from craik.runtime.skills.commands import skills_overview_result
+from craik.runtime.status.command import status_command_result
 from craik.runtime.work.commands.handoff_commands import handoff_list_result
 
+_ACTIVE_SPECS: tuple[SlashCommandSpec, ...] = ()
+_HELP_SPEC_NAMES: frozenset[str] = frozenset()
 
-def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlashRegistry:
-    """Return ``registry`` extended with shell-only slash commands."""
-    builtins = (
-        ("/help", help_command, "Show slash-command help.", "markdown"),
-        ("/clear", clear_command, "Clear the current transcript.", "markdown"),
-        ("/exit", exit_command, "Exit the shell.", "markdown"),
-        ("/quit", exit_command, "Exit the shell.", "markdown"),
-        ("/auth", auth_command, "Manage operator and provider auth.", "table"),
-        ("/login", login_command, "Start operator-session login guidance.", "markdown"),
-        ("/logout", logout_command, "Remove a provider credential profile.", "markdown"),
-        ("/policy", policy_command, "Manage local policy state.", "markdown"),
-        ("/migrate", migrate_command, "Apply migration plans.", "markdown"),
-        ("/provider", provider_command, "Inspect or configure provider credentials.", "table"),
-        ("/model", model_command, "Inspect or select the active model.", "kv"),
-        ("/sessions", sessions_command, "List persistent sessions.", "table"),
-        ("/resume", resume_command, "Resume a persistent session.", "kv"),
-        ("/approvals", approvals_command, "Inspect pending approvals.", "table"),
-        ("/handoffs", handoffs_command, "Inspect handoffs.", "table"),
-        ("/skills", skills_command, "Inspect learning-loop skill controls.", "tree"),
-        ("/memory", memory_command, "Inspect memory proposals and facts.", "tree"),
-        ("/gateway", gateway_command, "Inspect gateway state.", "tree"),
-        ("/doctor", doctor_command, "Run diagnostics inline.", "tree"),
-        ("/theme", theme_command, "Inspect or switch the TUI theme.", "kv"),
-        ("/rename", rename_command, "Rename the current shell session.", "kv"),
-        ("/note", note_command_builtin, "Add an operator note to the active session.", "kv"),
-        ("/mcp", mcp_command, "Inspect configured MCP clients.", "table"),
-        ("/receipts", receipts_command, "Inspect receipts.", "table"),
-        ("/agent", agent_command, "Manage agent records.", "markdown"),
-        ("/session", session_command, "Manage persistent sessions.", "markdown"),
-    )
-    builtin_names = {name for name, *_ in builtins}
-    entries: list[CommandInventoryEntry] = [
-        entry for entry in registry.inventory if entry.slash_name not in builtin_names
+
+def set_active_specs(specs: tuple[SlashCommandSpec, ...]) -> None:
+    global _ACTIVE_SPECS
+    _ACTIVE_SPECS = specs
+
+
+def set_help_spec_names(names: set[str]) -> None:
+    global _HELP_SPEC_NAMES
+    _HELP_SPEC_NAMES = frozenset(names)
+
+
+def _active_specs() -> tuple[SlashCommandSpec, ...]:
+    return _ACTIVE_SPECS
+
+
+def _help_specs() -> list[SlashCommandSpec]:
+    specs_by_name = {spec.name: spec for spec in _ACTIVE_SPECS}
+    return [
+        help_spec(specs_by_name[name])
+        for name in HELP_SPEC_ORDER
+        if name in _HELP_SPEC_NAMES and name in specs_by_name
     ]
-    specs: list[SlashCommandSpec] = [
-        spec for spec in registry.slash_specs if spec.name not in builtin_names
-    ]
-    for name, callback, summary, shape in builtins:
-        bare = name.removeprefix("/")
-        specs.append(
-            slash_command_spec_by_name(name)
-            or SlashCommandSpec(
-                name=name,
-                summary=summary,
-                usage=name,
-                payload_shape=shape,  # type: ignore[arg-type]
-                help=summary,
-            )
-        )
-        entries.append(
-            CommandInventoryEntry(
-                command_name=bare,
-                is_slash=True,
-                slash_name=name,
-                exempt_reason=None,
-                metadata=None,
-                callback=callback,
-            )
-        )
-    return replace(registry, slash_specs=tuple(specs), inventory=tuple(entries))
 
 
 def help_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Return slash-command help text."""
     topic = args[0].removeprefix("/") if args else None
     if topic:
-        text = command_detail_help(topic, env=env)
+        text = command_detail_help(topic, env=env, specs=_active_specs())
     else:
-        rows = [f"- `{spec.name}` - {spec.summary}" for spec in slash_command_specs()]
+        rows = [f"- `{spec.name}` - {spec.summary}" for spec in _help_specs()]
         text = (
             f"## {localized_text('slash.help.title', env=env)}\n\n"
             + "\n".join(rows)
@@ -118,6 +80,17 @@ def help_command(*args: str, env: dict[str, str] | None = None) -> CommandResult
             + MULTILINE_HELP_TEXT
         )
     return CommandResult(payload=text, shape="markdown", text=text, command_name="help")
+
+
+def setup_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
+    """Return progressive setup guidance."""
+    _ = env
+    return _named_result(setup_command_result(), "setup")
+
+
+def status_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
+    """Return current readiness state."""
+    return _named_result(status_command_result(env=env), "status")
 
 
 def clear_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
@@ -246,7 +219,7 @@ def sessions_command(*_args: str, env: dict[str, str] | None = None) -> CommandR
 def resume_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Resume a persistent session."""
     if not args:
-        spec = slash_command_spec_by_name("resume")
+        spec = find_slash_command_spec(_active_specs(), "resume")
         text = argument_help_markdown(spec) if spec is not None else "resume requires a session id"
         return CommandResult(payload=text, shape="markdown", text=text, command_name="help")
     try:
@@ -468,7 +441,7 @@ def _subcommand_listing(command_name: str, subcommands: tuple[str, ...]) -> str:
 
 
 def _argument_help(command_name: str) -> CommandResult:
-    spec = slash_command_spec_by_name(command_name)
+    spec = find_slash_command_spec(_active_specs(), command_name)
     text = (
         argument_help_markdown(spec)
         if spec is not None

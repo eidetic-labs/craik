@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from craik.contracts.models import CapabilityReceipt, ReceiptResult
 from craik.runtime.paths import resolve_craik_paths
-from craik.runtime.shell.slash_command_schema import slash_command_spec_by_name
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest
 from craik.runtime.store import LocalStore
 
@@ -40,7 +39,9 @@ def confirmation_request_for_text(
             "remain stored."
         )
         return ConfirmationRequest(text, "Confirm: clear transcript", message)
-    spec = slash_command_spec_by_name(tokens[0])
+    from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
+
+    spec = get_tui_slash_spec(tokens[0])
     if spec is not None and spec.requires_confirmation and _destructive_subcommand(tokens):
         message = spec.confirm_message or "This command changes local Craik state."
         return ConfirmationRequest(text, f"Confirm: {text}", message)

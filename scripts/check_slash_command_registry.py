@@ -11,10 +11,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from craik.runtime.shell.slash_command_schema import (  # noqa: E402
-    SlashCommandSpec,
-    slash_command_specs,
-)
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs  # noqa: E402
+from craik.runtime.shell.slash_command_schema import SlashCommandSpec  # noqa: E402
 from craik.runtime.shell.slash_commands import (  # noqa: E402
     dispatch_slash_command,
     list_slash_commands,
@@ -28,7 +26,7 @@ STRUCTURED_PAYLOAD_SMOKE_COMMANDS: dict[str, str] = {
 
 
 def main() -> int:
-    failures = registry_failures(slash_command_specs())
+    failures = registry_failures(get_tui_slash_specs())
     if failures:
         print("Slash command registry checks failed:", file=sys.stderr)
         for failure in failures:

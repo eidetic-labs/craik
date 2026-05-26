@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from craik.runtime.shell.slash_command_schema import slash_command_specs
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 
 
@@ -19,7 +19,7 @@ def test_help_with_command_renders_detail_page() -> None:
 
     assert result.command_name == "help"
     assert "## /provider" in result.text
-    assert "Inspect provider credentials" in result.text
+    assert "Inspect or configure provider credentials" in result.text
     assert "Usage: /provider [login <provider>]" in result.text
     assert "Output: `table`" in result.text
     assert "Examples:" in result.text
@@ -41,7 +41,7 @@ def test_help_unknown_command_suggests_near_match() -> None:
 
 
 def test_all_registered_commands_have_detail_pages() -> None:
-    for spec in slash_command_specs():
+    for spec in get_tui_slash_specs():
         result = dispatch_slash_command(f"/help {spec.name}")
 
         assert f"## {spec.name}" in result.text

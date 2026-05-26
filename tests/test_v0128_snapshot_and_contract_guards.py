@@ -252,11 +252,14 @@ def test_cli_tui_contract_guard_accepts_marked_legacy_command(tmp_path: Path) ->
 
 
 def test_snapshot_coverage_guard_accepts_current_slash_specs() -> None:
-    from craik.runtime.shell.slash_command_schema import slash_command_specs
+    from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 
     assert (
         check_snapshot_coverage.snapshot_coverage_failures(
-            slash_command_specs(),
+            check_snapshot_coverage.specs_with_snapshot_baselines(
+                get_tui_slash_specs(),
+                snapshot_root=ROOT / "tests" / "snapshots" / "slash",
+            ),
             snapshot_root=ROOT / "tests" / "snapshots" / "slash",
         )
         == []

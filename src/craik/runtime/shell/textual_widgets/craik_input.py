@@ -6,7 +6,7 @@ import re
 
 from textual.widgets import Input
 
-from craik.runtime.shell.slash_command_schema import is_known_command_name
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
 
 PASTE_COLLAPSE_THRESHOLD = 3
 MULTILINE_HELP_TEXT = (
@@ -58,7 +58,7 @@ def slash_command_conversion(text: str) -> str | None:
         return None
     first, separator, rest = stripped.partition(" ")
     normalized = first.lower()
-    if not is_known_command_name(normalized):
+    if get_tui_slash_spec(normalized) is None:
         return None
     if separator and normalized in _NATURAL_LANGUAGE_SAFE_COMMANDS:
         return None

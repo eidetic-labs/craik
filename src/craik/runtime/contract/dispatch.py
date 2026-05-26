@@ -20,8 +20,8 @@ from craik.runtime.contract.format import format_command_result
 from craik.runtime.contract.output_context import slash_dispatch_context
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import unknown_command_result
 from craik.runtime.shell.modals import canonical_modal_registry, resolve_modal_class
-from craik.runtime.shell.slash_command_schema import slash_command_spec_by_name
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
+from craik.runtime.shell.slash_command_schema.lookup import find_slash_command_spec
 
 _INVOCATION_COUNTER = {"count": 0}
 
@@ -70,7 +70,7 @@ def invoke_slash_command(
     if entry is None or entry.callback is None:
         return unknown_command_result(text, registry)
     if _missing_required_args(entry, args):
-        return _argument_help_result(tokens)
+        return _argument_help_result(tokens, registry)
 
     with (
         _patched_environ(env),
@@ -266,11 +266,12 @@ def _missing_required_args(entry: CommandInventoryEntry, args: list[str]) -> boo
     return len(args) < len(required)
 
 
-def _argument_help_result(tokens: list[str]) -> CommandResult:
+def _argument_help_result(tokens: list[str], registry: AutoSlashRegistry) -> CommandResult:
     topic = tokens[0].removeprefix("/") if tokens else ""
-    spec = slash_command_spec_by_name(topic)
+    spec = find_slash_command_spec(registry.slash_specs, topic)
     if spec is None and len(tokens) > 1:
-        spec = slash_command_spec_by_name(
+        spec = find_slash_command_spec(
+            registry.slash_specs,
             "-".join(part.removeprefix("/") for part in tokens[:2])
         )
     text = argument_help_markdown(spec) if spec is not None else f"{topic} requires arguments"
