@@ -13,11 +13,13 @@ from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialSt
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.approvals import open_approval_request
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
+from craik.runtime.shell.modals.auth_capture import AuthCaptureModal, AuthCaptureRequest
+from craik.runtime.shell.modals.auth_logout import AuthLogoutModal
+from craik.runtime.shell.modals.confirm import ConfirmModal
+from craik.runtime.shell.modals.select_choice import SelectChoiceModal
 from craik.runtime.shell.textual_app import CraikApp
 from craik.runtime.shell.textual_modals import (
     ApprovalDecisionModal,
-    AuthCaptureModal,
-    AuthLogoutModal,
 )
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput
 from craik.runtime.store import LocalStore
@@ -33,7 +35,8 @@ def test_auth_login_slash_opens_capture_modal(tmp_path: Path) -> None:
             await pilot.press("/", "a", "u", "t", "h", " ", "l", "o", "g", "i", "n")
             await pilot.press(" ", "o", "p", "e", "n", "a", "i", "enter")
 
-            assert isinstance(pilot.app.screen, AuthCaptureModal)
+            assert isinstance(pilot.app.screen_stack[-2], AuthCaptureModal)
+            assert isinstance(pilot.app.screen, SelectChoiceModal)
 
     asyncio.run(run())
 
@@ -66,14 +69,20 @@ def test_auth_capture_modal_redacts_secret_from_result(
             ),
         )
 
-    monkeypatch.setattr("craik.runtime.shell.textual_modals.capture_and_cache_login", _capture)
+    monkeypatch.setattr("craik.runtime.shell.modals.auth_capture.capture_and_cache_login", _capture)
 
     async def run() -> None:
         async with CraikApp(env=_env(tmp_path)).run_test() as pilot:
-            await pilot.app.push_screen(AuthCaptureModal("openai", env=_env(tmp_path)))
+            await pilot.app.push_screen(
+                AuthCaptureModal(AuthCaptureRequest(provider="openai", env=_env(tmp_path)))
+            )
             await pilot.pause()
-            pilot.app.screen.query_one("#auth-secret", Input).value = "provider-secret"
-            await pilot.click("#auth-save")
+            await pilot.click("#choice-submit")
+            await pilot.pause()
+            pilot.app.screen.query_one("#text-input", Input).value = "provider-secret"
+            await pilot.click("#text-submit")
+            await pilot.pause()
+            await pilot.click("#confirm-accept")
             await pilot.pause()
 
             assert captured == {"provider": "openai", "credential": "provider-secret"}
@@ -87,7 +96,8 @@ def test_auth_logout_slash_opens_confirmation_modal(tmp_path: Path) -> None:
             pilot.app.query_one("#input", CraikInput).value = "/auth logout openai:default"
             await pilot.press("enter")
 
-            assert isinstance(pilot.app.screen, AuthLogoutModal)
+            assert isinstance(pilot.app.screen_stack[-2], AuthLogoutModal)
+            assert isinstance(pilot.app.screen, ConfirmModal)
 
     asyncio.run(run())
 
