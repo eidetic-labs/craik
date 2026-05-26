@@ -5,20 +5,40 @@ from __future__ import annotations
 import io
 import os
 import shlex
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from inspect import Parameter, signature
+from typing import Any, Literal, cast
+
+import typer
 
 from craik.runtime.contract.auto_registry import AutoSlashRegistry, CommandInventoryEntry
 from craik.runtime.contract.command_result import CommandResult
+from craik.runtime.contract.craik_command import CraikCommandMetadata
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.contract.output_context import slash_dispatch_context
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import unknown_command_result
+from craik.runtime.shell.modals import canonical_modal_registry, resolve_modal_class
 from craik.runtime.shell.slash_command_schema import slash_command_spec_by_name
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
 
 _INVOCATION_COUNTER = {"count": 0}
+
+
+@dataclass(frozen=True, slots=True)
+class InteractivePromptRequest:
+    """One prompt request intercepted during slash dispatch."""
+
+    kind: Literal["confirm", "prompt"]
+    prompt_name: str
+    modal_name: str
+    text: str
+    default: object | None = None
+    hide_input: bool = False
+
+
+InteractivePromptHandler = Callable[[InteractivePromptRequest], object]
 
 
 def _bump_invocation_counter() -> None:
@@ -36,6 +56,7 @@ def invoke_slash_command(
     *,
     registry: AutoSlashRegistry,
     env: dict[str, str] | None = None,
+    interactive_prompt_handler: InteractivePromptHandler | None = None,
 ) -> CommandResult:
     """Resolve slash text through a registry and invoke the decorated callback."""
     _bump_invocation_counter()
@@ -51,7 +72,12 @@ def invoke_slash_command(
     if _missing_required_args(entry, args):
         return _argument_help_result(tokens)
 
-    with _patched_environ(env), slash_dispatch_context(), redirect_stdout(io.StringIO()):
+    with (
+        _patched_environ(env),
+        slash_dispatch_context(),
+        intercept_interactive_prompts(entry.metadata, interactive_prompt_handler),
+        redirect_stdout(io.StringIO()),
+    ):
         result = _call_entry(entry, args, env=env)
     if isinstance(result, CommandResult):
         command_name = entry.slash_name.removeprefix("/") if entry.slash_name else None
@@ -68,10 +94,98 @@ def dispatch_slash_command(
     *,
     registry: AutoSlashRegistry,
     env: dict[str, str] | None = None,
+    interactive_prompt_handler: InteractivePromptHandler | None = None,
 ) -> object:
     """Invoke slash text and return the TUI renderer output."""
-    result = invoke_slash_command(text, registry=registry, env=env)
+    result = invoke_slash_command(
+        text,
+        registry=registry,
+        env=env,
+        interactive_prompt_handler=interactive_prompt_handler,
+    )
     return format_command_result(result, kind="tui")
+
+
+@contextmanager
+def intercept_interactive_prompts(
+    metadata: CraikCommandMetadata | None,
+    handler: InteractivePromptHandler | None,
+) -> Iterator[None]:
+    """Route typer prompt calls through metadata-backed prompt handling."""
+    if metadata is None or not metadata.interactive_prompts or handler is None:
+        yield
+        return
+
+    original_confirm = typer.confirm
+    original_prompt = typer.prompt
+
+    def confirm_intercept(
+        text: str,
+        *,
+        default: bool = False,
+        abort: bool = False,
+        **kwargs: Any,
+    ) -> bool:
+        prompt_name, modal_name = _prompt_target(metadata, "confirm", kwargs)
+        confirmed = bool(
+            handler(
+                InteractivePromptRequest(
+                    kind="confirm",
+                    prompt_name=prompt_name,
+                    modal_name=modal_name,
+                    text=text,
+                    default=default,
+                )
+            )
+        )
+        if abort and not confirmed:
+            raise typer.Abort()
+        return confirmed
+
+    def prompt_intercept(
+        text: str,
+        *,
+        default: Any = None,
+        hide_input: bool = False,
+        **kwargs: Any,
+    ) -> str:
+        prompt_name, modal_name = _prompt_target(metadata, "prompt", kwargs)
+        result = handler(
+            InteractivePromptRequest(
+                kind="prompt",
+                prompt_name=prompt_name,
+                modal_name=modal_name,
+                text=text,
+                default=default,
+                hide_input=hide_input,
+            )
+        )
+        return str(default if result is None and default is not None else result)
+
+    typer.confirm = cast(Any, confirm_intercept)
+    typer.prompt = cast(Any, prompt_intercept)
+    try:
+        yield
+    finally:
+        typer.confirm = original_confirm
+        typer.prompt = original_prompt
+
+
+def _prompt_target(
+    metadata: CraikCommandMetadata,
+    kind: Literal["confirm", "prompt"],
+    kwargs: dict[str, Any],
+) -> tuple[str, str]:
+    prompt_name = str(kwargs.get("name") or f"__{kind}__")
+    if prompt_name in metadata.interactive_prompts:
+        return prompt_name, metadata.interactive_prompts[prompt_name]
+    preferred_modal = "ConfirmModal" if kind == "confirm" else "TextInputModal"
+    for candidate_name, candidate_modal in metadata.interactive_prompts.items():
+        modal_class = resolve_modal_class(candidate_modal, canonical_modal_registry())
+        if modal_class is not None and modal_class.__name__ == preferred_modal:
+            return candidate_name, candidate_modal
+    first_name, first_modal = next(iter(metadata.interactive_prompts.items()))
+    return first_name, first_modal
 
 
 def _resolve_entry(

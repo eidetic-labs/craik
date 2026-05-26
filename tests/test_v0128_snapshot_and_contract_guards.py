@@ -197,7 +197,7 @@ def test_modal_mapping_guard_rejects_unmapped_prompt_call(tmp_path: Path) -> Non
 
     assert failures == [
         "src/craik/cli_bad.py:6 bad_command uses typer prompt/confirm "
-        "without interactive_prompts metadata or owner marker"
+        "without interactive_prompts metadata"
     ]
 
 

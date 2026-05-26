@@ -37,16 +37,21 @@ def prompt_metadata_failures(root: Path) -> list[str]:
         relative = path.relative_to(root).as_posix()
         lines = path.read_text(encoding="utf-8").splitlines()
         tree = ast.parse("\n".join(lines))
+        functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+        prompt_owner_calls = set()
+        for function in functions:
+            if _craik_command_has_interactive_prompts(function):
+                prompt_owner_calls.update(_called_function_names(function))
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef) or not _contains_typer_prompt(node):
                 continue
             if _craik_command_has_interactive_prompts(node):
                 continue
-            if _has_prompt_owner_marker(lines, node):
+            if node.name in prompt_owner_calls:
                 continue
             failures.append(
                 f"{relative}:{node.lineno} {node.name} uses typer prompt/confirm "
-                "without interactive_prompts metadata or owner marker"
+                "without interactive_prompts metadata"
             )
     return failures
 
@@ -81,10 +86,15 @@ def _craik_command_has_interactive_prompts(node: ast.FunctionDef) -> bool:
     return False
 
 
-def _has_prompt_owner_marker(lines: list[str], node: ast.FunctionDef) -> bool:
-    start = max(0, node.lineno - 4)
-    end = max(0, node.lineno - 1)
-    return any("craik-interactive-prompt-owner:" in line for line in lines[start:end])
+def _called_function_names(node: ast.FunctionDef) -> set[str]:
+    calls: set[str] = set()
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        name = _name(child.func)
+        if name is not None:
+            calls.add(name.rsplit(".", 1)[-1])
+    return calls
 
 
 def _name(node: ast.AST) -> str | None:
