@@ -929,7 +929,10 @@ def test_home_show_does_not_create_home(tmp_path) -> None:
 
     result = runner.invoke(app, ["home", "show"], env={"CRAIK_HOME": str(home)})
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     assert str(home) in result.stdout
     assert not home.exists()
 
@@ -939,7 +942,10 @@ def test_home_init_creates_home_layout(tmp_path) -> None:
 
     result = runner.invoke(app, ["home", "init"], env={"CRAIK_HOME": str(home)})
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    assert result.stdout.strip().endswith("}")
     assert (home / "config").is_dir()
     assert (home / "secrets").is_dir()
     assert (home / "case-files").is_dir()
@@ -1098,9 +1104,15 @@ def test_project_commands_round_trip_registered_repo(tmp_path) -> None:
     listed = runner.invoke(app, ["project", "list"], env={"CRAIK_HOME": str(home)})
     shown = runner.invoke(app, ["project", "show", "Example"], env={"CRAIK_HOME": str(home)})
 
+    assert add.exception is None, add.output
+    assert listed.exception is None, listed.output
+    assert shown.exception is None, shown.output
     assert add.exit_code == 0
     assert listed.exit_code == 0
     assert shown.exit_code == 0
+    assert add.stdout.strip().startswith("{")
+    assert listed.stdout.strip().startswith("[")
+    assert shown.stdout.strip().startswith("{")
     assert '"id": "project_example"' in shown.stdout
     assert '"immutable_paths": [' in shown.stdout
     assert '"discovery_include": [' in shown.stdout
@@ -1175,12 +1187,22 @@ def test_task_and_case_commands_round_trip(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert project.exception is None, project.output
+    assert task.exception is None, task.output
+    assert built.exception is None, built.output
+    assert shown.exception is None, shown.output
+    assert prompt.exception is None, prompt.output
+    assert graph.exception is None, graph.output
     assert project.exit_code == 0
     assert task.exit_code == 0
     assert built.exit_code == 0
     assert shown.exit_code == 0
     assert prompt.exit_code == 0
     assert graph.exit_code == 0
+    assert task.stdout.strip().startswith("{")
+    assert built.stdout.strip().startswith("{")
+    assert shown.stdout.strip().startswith("{")
+    assert prompt.stdout.strip().startswith("{")
     assert graph.stdout.strip().startswith("{")
     assert graph.stdout.strip().endswith("}")
     task_payload = json.loads(task.stdout)
@@ -1740,7 +1762,9 @@ def test_intent_show_reports_task_intent_lock(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home)},
     )
 
+    assert shown.exception is None, shown.output
     assert shown.exit_code == 0
+    assert shown.stdout.strip().startswith("{")
     payload = json.loads(shown.stdout)
     assert payload["id"] == "intent_review_docs"
     assert payload["accepted_interpretation"] == "Review documentation only."
