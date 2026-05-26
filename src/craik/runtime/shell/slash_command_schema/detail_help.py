@@ -3,22 +3,37 @@
 from __future__ import annotations
 
 import difflib
+from collections.abc import Iterable
 from typing import Any
 
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.shell.slash_command_schema import (
     ActionKeySet,
+    SlashCommandSpec,
+)
+from craik.runtime.shell.slash_command_schema.lookup import (
+    find_slash_command_spec,
     slash_command_names,
-    slash_command_spec_by_name,
 )
 
 
-def command_detail_help(name: str, *, env: dict[str, str] | None = None) -> str:
+def command_detail_help(
+    name: str,
+    *,
+    env: dict[str, str] | None = None,
+    specs: Iterable[SlashCommandSpec] | None = None,
+) -> str:
     """Render a full Markdown help page for one slash command."""
     normalized = name.removeprefix("/")
-    spec = slash_command_spec_by_name(normalized)
+    if specs is None:
+        from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
+
+        spec_list = get_tui_slash_specs()
+    else:
+        spec_list = tuple(specs)
+    spec = find_slash_command_spec(spec_list, normalized)
     if spec is None:
-        suggestion = _suggest(normalized)
+        suggestion = _suggest(normalized, spec_list)
         suffix = f" Did you mean `{suggestion}`?" if suggestion else ""
         return f"No such slash command: `/{normalized}`.{suffix}"
     lines = [
@@ -54,6 +69,11 @@ def _action_key_help(action_keys: ActionKeySet) -> str:
     return " · ".join(f"`{key}`={value}" for key, value in values.items())
 
 
-def _suggest(name: str) -> str | None:
-    matches = difflib.get_close_matches(name, slash_command_names(), n=1, cutoff=0.65)
+def _suggest(name: str, specs: Iterable[SlashCommandSpec]) -> str | None:
+    matches = difflib.get_close_matches(
+        name,
+        slash_command_names(specs),
+        n=1,
+        cutoff=0.65,
+    )
     return f"/{matches[0]}" if matches else None

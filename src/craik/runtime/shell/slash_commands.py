@@ -14,7 +14,7 @@ from rich.markup import escape
 from craik.runtime.contract.dispatch import invoke_slash_command
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
-from craik.runtime.shell.slash_command_schema import ReadinessRequirement, slash_command_specs
+from craik.runtime.shell.slash_command_schema import ReadinessRequirement
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 
 __all__ = [
@@ -50,16 +50,16 @@ class SlashCommand:
 def list_slash_commands() -> list[SlashCommand]:
     """Return stable operator-facing slash commands from schema metadata."""
     return [
-            SlashCommand(
-                spec.command_name,
-                spec.summary,
-                spec.usage,
-                spec.examples,
-                aliases=spec.aliases,
-                readiness=spec.readiness,
-                mutating=spec.mutating,
-            )
-            for spec in slash_command_specs()
+        SlashCommand(
+            spec.command_name,
+            spec.summary,
+            spec.usage,
+            spec.examples,
+            aliases=spec.aliases,
+            readiness=spec.readiness,
+            mutating=spec.mutating,
+        )
+        for spec in get_tui_registry().slash_specs
     ]
 
 

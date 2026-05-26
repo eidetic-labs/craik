@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 
 from craik.runtime.contract.command_result import CommandResult
-from craik.runtime.shell.slash_command_schema import slash_command_spec_by_name
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 
 
 def to_slash_command_result(result: CommandResult) -> SlashCommandResult:
     """Wrap a CommandResult for transitional TUI surfaces."""
+    from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
+
     text = result.text
     if text is None:
         text = (
@@ -18,7 +19,7 @@ def to_slash_command_result(result: CommandResult) -> SlashCommandResult:
             if not isinstance(result.payload, str)
             else result.payload
         )
-    spec = slash_command_spec_by_name(result.command_name or "")
+    spec = get_tui_slash_spec(result.command_name or "")
     payload_shape = spec.payload_shape if spec is not None else result.shape
     empty_state_message = None
     empty_state_remediation = None

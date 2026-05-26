@@ -13,7 +13,7 @@ if str(SRC) not in sys.path:
 
 from craik.cli import app  # noqa: E402
 from craik.runtime.contract.auto_registry import AutoSlashRegistry  # noqa: E402
-from craik.runtime.shell.slash_command_schema import slash_command_specs  # noqa: E402
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs  # noqa: E402
 
 
 def main() -> int:
@@ -56,10 +56,11 @@ def next_action_validity_failures(root: Path, slash_names: set[str]) -> list[str
 
 def _registered_slash_names() -> set[str]:
     auto_names = {spec.name for spec in AutoSlashRegistry.from_typer(app).slash_specs}
-    canonical_names = {spec.name for spec in slash_command_specs()}
+    registry_specs = get_tui_slash_specs()
+    canonical_names = {spec.name for spec in registry_specs}
     alias_names = {
         f"/{alias}"
-        for spec in slash_command_specs()
+        for spec in registry_specs
         for alias in spec.aliases
     }
     return auto_names | canonical_names | alias_names

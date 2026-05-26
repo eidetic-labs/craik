@@ -5,11 +5,12 @@ import sys
 from importlib import util
 from pathlib import Path
 
+from craik.runtime.shell.contract_runtime.registry_provider import (
+    get_tui_slash_spec,
+    get_tui_slash_specs,
+)
 from craik.runtime.shell.slash_command_schema import (
     SlashCommandSpec,
-    is_known_command_name,
-    slash_command_spec_by_name,
-    slash_command_specs,
 )
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 
@@ -24,20 +25,20 @@ registry_failures = check_slash_command_registry.registry_failures
 
 
 def test_slash_command_schema_covers_runtime_registry() -> None:
-    assert registry_failures(slash_command_specs()) == []
+    assert registry_failures(get_tui_slash_specs()) == []
 
 
 def test_slash_command_lookup_accepts_bare_slash_and_alias_names() -> None:
-    assert slash_command_spec_by_name("provider") is not None
-    assert slash_command_spec_by_name("/provider") is not None
-    assert slash_command_spec_by_name("quit") is not None
-    assert is_known_command_name("/quit")
-    assert not is_known_command_name("missing-command")
+    assert get_tui_slash_spec("provider") is not None
+    assert get_tui_slash_spec("/provider") is not None
+    assert get_tui_slash_spec("quit") is not None
+    assert get_tui_slash_spec("/quit") is not None
+    assert get_tui_slash_spec("missing-command") is None
 
 
 def test_registry_guard_reports_schema_without_runtime_command() -> None:
     specs = [
-        *slash_command_specs(),
+        *get_tui_slash_specs(),
         SlashCommandSpec(
             name="/missing",
             summary="Missing runtime command.",
@@ -53,10 +54,13 @@ def test_registry_guard_reports_schema_without_runtime_command() -> None:
 
 
 def test_registry_guard_reports_runtime_metadata_mismatch() -> None:
-    provider = slash_command_spec_by_name("provider")
+    provider = get_tui_slash_spec("provider")
     assert provider is not None
     changed = provider.model_copy(update={"usage": "/provider changed"})
-    specs = [changed if spec.command_name == "provider" else spec for spec in slash_command_specs()]
+    specs = [
+        changed if spec.command_name == "provider" else spec
+        for spec in get_tui_slash_specs()
+    ]
 
     failures = registry_failures(specs)
 
@@ -77,7 +81,7 @@ def test_registry_guard_reports_structured_payload_shape_mismatch(monkeypatch) -
         _unstructured_dispatch,
     )
 
-    failures = registry_failures(slash_command_specs())
+    failures = registry_failures(get_tui_slash_specs())
 
     assert any("/provider: dispatch payload_shape" in failure for failure in failures)
     assert "/provider: dispatch returned no structured payload" in failures

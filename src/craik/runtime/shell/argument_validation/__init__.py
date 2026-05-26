@@ -4,12 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from craik.runtime.shell.slash_command_schema import (
-    ModelArgs,
-    NamedArg,
-    ThemeArgs,
-    slash_command_spec_by_name,
-)
+from craik.runtime.shell.slash_command_schema import ModelArgs, NamedArg, ThemeArgs
 
 
 class SlashCommandSurface(Protocol):
@@ -23,7 +18,9 @@ class SlashCommandSurface(Protocol):
 
 def argument_validation_error(command: SlashCommandSurface, args: list[str]) -> str | None:
     """Return operator-facing validation guidance for command args."""
-    spec = slash_command_spec_by_name(command.name)
+    from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
+
+    spec = get_tui_slash_spec(command.name)
     if spec is None or spec.args_schema is None:
         return None
     if spec.args_schema is ThemeArgs:

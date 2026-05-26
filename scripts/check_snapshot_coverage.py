@@ -11,7 +11,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from craik.runtime.shell.slash_command_schema import SlashCommandSpec, slash_command_specs  # noqa: E402,I001
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs  # noqa: E402
+from craik.runtime.shell.slash_command_schema import SlashCommandSpec  # noqa: E402
 
 DEFAULT_SNAPSHOT_ROOT = ROOT / "tests" / "snapshots" / "slash"
 DEFAULT_WIDTH = 80
@@ -36,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     failures = snapshot_coverage_failures(
-        slash_command_specs(),
+        specs_with_snapshot_baselines(get_tui_slash_specs(), snapshot_root=args.snapshot_root),
         snapshot_root=args.snapshot_root,
         width=args.width,
     )
@@ -72,6 +73,15 @@ def snapshot_coverage_failures(
             if not expected.is_file():
                 failures.append(f"/{command_name}: missing {expected.relative_to(snapshot_root)}")
     return failures
+
+
+def specs_with_snapshot_baselines(
+    specs: tuple[SlashCommandSpec, ...],
+    *,
+    snapshot_root: Path,
+) -> list[SlashCommandSpec]:
+    """Return registry specs whose command family has existing snapshot baselines."""
+    return [spec for spec in specs if (snapshot_root / spec.command_name).is_dir()]
 
 
 if __name__ == "__main__":

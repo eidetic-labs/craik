@@ -6,10 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from craik.runtime.shell.slash_command_schema import (
-    PayloadShape,
-    slash_command_spec_by_name,
-)
+from craik.runtime.shell.slash_command_schema import PayloadShape
 
 
 @dataclass(frozen=True)
@@ -28,7 +25,9 @@ class SlashCommandResult:
 
 def payload_result(command_name: str, payload: Any) -> SlashCommandResult:
     """Build a dispatch result with structured payload metadata."""
-    spec = slash_command_spec_by_name(command_name)
+    from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
+
+    spec = get_tui_slash_spec(command_name)
     is_empty = _payload_is_empty(payload)
     return SlashCommandResult(
         json.dumps(payload, indent=2, sort_keys=True) if not isinstance(payload, str) else payload,
