@@ -23,7 +23,9 @@ def test_channel_setup_persists_all_adapter_artifacts(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home), "CRAIK_SLACK_BOT_TOKEN": "secret-token"},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert _single_json_payload(result.stdout)
     payload = json.loads(result.stdout)
     assert payload["persisted"] == {
         "adapter_contract_id": "channel_adapter_slack",
@@ -61,6 +63,7 @@ def test_channel_doctor_reports_persisted_adapter_state(tmp_path: Path) -> None:
         ["channels", "setup", "webchat"],
         env={"CRAIK_HOME": str(home), "CRAIK_WEBCHAT_TOKEN": "secret-token"},
     )
+    assert setup.exception is None, setup.output
     assert setup.exit_code == 0, setup.output
 
     result = runner.invoke(
@@ -69,7 +72,9 @@ def test_channel_doctor_reports_persisted_adapter_state(tmp_path: Path) -> None:
         env={"CRAIK_HOME": str(home), "CRAIK_WEBCHAT_TOKEN": "secret-token"},
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0, result.output
+    assert _single_json_payload(result.stdout)
     payload = json.loads(result.stdout)
     assert payload["persisted"] == {
         "adapter_contract": True,
@@ -90,3 +95,8 @@ def _put_operator_session(home: Path) -> None:
             expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
     )
+
+
+def _single_json_payload(stdout: str) -> bool:
+    stripped = stdout.strip()
+    return stripped.startswith(("{", "[")) and stripped.endswith(("}", "]"))

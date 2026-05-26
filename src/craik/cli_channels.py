@@ -10,6 +10,7 @@ from typing import Annotated, cast
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.runtime.channels.persistence import persist_gateway_channel_artifacts
 from craik.runtime.channels.real_adapters import (
     RealChannelService,
@@ -22,6 +23,7 @@ from craik.runtime.channels.real_adapters import (
     supported_real_channel_services,
 )
 from craik.runtime.channels.setup_artifacts import channel_setup_artifacts
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.store import LocalStore
 
 channels_app = typer.Typer(help="Configure and inspect real channel adapters.")
@@ -37,17 +39,19 @@ class ChannelService(str, Enum):
 
 
 @channels_app.command("list")
-def channel_list_command() -> None:
+@craik_command(payload_shape="card_list")
+def channel_list_command() -> CommandResult:
     """List supported real channel adapters."""
     payload = [
         real_channel_adapter_contract(service).model_dump(mode="json", by_alias=True)
         for service in supported_real_channel_services()
     ]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list")
 
 
 @channels_app.command("setup")
-def channel_setup_command(service: ChannelService) -> None:
+@craik_command(payload_shape="card")
+def channel_setup_command(service: ChannelService) -> CommandResult:
     """Persist channel adapter setup artifacts and show a redacted setup plan."""
     operator_subject = operator_identity_or_fail()
     channel_service = _service_value(service)
@@ -75,11 +79,12 @@ def channel_setup_command(service: ChannelService) -> None:
         "allowlist_id": allowlist.id,
         "policy_envelope_id": policy.id,
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @channels_app.command("doctor")
-def channel_doctor_command(service: ChannelService) -> None:
+@craik_command(payload_shape="card")
+def channel_doctor_command(service: ChannelService) -> CommandResult:
     """Show redacted channel adapter diagnostics."""
     operator_identity_or_fail()
     channel_service = _service_value(service)
@@ -106,10 +111,11 @@ def channel_doctor_command(service: ChannelService) -> None:
         store.close()
     payload = diagnostic.as_dict()
     payload["persisted"] = persisted
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @channels_app.command("normalize-fixture")
+@craik_command(payload_shape="card")
 def channel_normalize_fixture_command(
     service: ChannelService,
     raw_json: Annotated[
@@ -118,29 +124,31 @@ def channel_normalize_fixture_command(
             help="Provider event JSON object. Run `craik channels fixture-schema SERVICE` first."
         ),
     ],
-) -> None:
+) -> CommandResult:
     """Normalize a provider event fixture without contacting the provider."""
     raw = json.loads(raw_json)
     if not isinstance(raw, dict):
         raise typer.BadParameter("raw_json must be a JSON object")
     event = normalize_real_channel_inbound(_service_value(service), raw)
-    typer.echo(json.dumps(event, indent=2, sort_keys=True))
+    return _emit_payload(event, shape="card")
 
 
 @channels_app.command("fixture-schema")
-def channel_fixture_schema_command(service: ChannelService) -> None:
+@craik_command(payload_shape="card")
+def channel_fixture_schema_command(service: ChannelService) -> CommandResult:
     """Print the expected inbound fixture JSON shape for a channel service."""
-    typer.echo(json.dumps(_fixture_schema(_service_value(service)), indent=2, sort_keys=True))
+    return _emit_payload(_fixture_schema(_service_value(service)), shape="card")
 
 
 @channels_app.command("respond-fixture")
+@craik_command(payload_shape="card")
 def channel_respond_fixture_command(
     service: ChannelService,
     event_id: str,
     response_id: str,
     summary: str,
     delivered: Annotated[bool, typer.Option("--delivered/--failed")] = True,
-) -> None:
+) -> CommandResult:
     """Build a redacted outbound response fixture and delivery receipt."""
     response = channel_outbound_response(
         _service_value(service),
@@ -162,7 +170,7 @@ def channel_respond_fixture_command(
         "response": response,
         "receipt": receipt.model_dump(mode="json", by_alias=True),
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 def _service_value(service: ChannelService) -> RealChannelService:
@@ -222,3 +230,9 @@ def _fixture_schema(service: RealChannelService) -> dict[str, object]:
         },
     }
     return {"service": service, "schema": examples[service]}
+
+
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
