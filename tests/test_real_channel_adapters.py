@@ -192,9 +192,22 @@ def test_channels_cli_exposes_setup_and_fixture_paths(tmp_path: Path) -> None:
         ["channels", "setup", "webchat"],
         env={"CRAIK_HOME": str(home), "CRAIK_WEBCHAT_TOKEN": "super-secret-value"},
     )
+    assert setup.exception is None, setup.output
     assert setup.exit_code == 0
+    assert _single_json_payload(setup.stdout)
     assert "CRAIK_WEBCHAT_TOKEN" in setup.stdout
     assert "super-secret-value" not in setup.stdout
+
+    listed = runner.invoke(app, ["channels", "list"])
+    assert listed.exception is None, listed.output
+    assert listed.exit_code == 0
+    listed_payload = json.loads(listed.stdout)
+    assert [item["identity"]["service"] for item in listed_payload] == [
+        "webchat",
+        "telegram",
+        "discord",
+        "slack",
+    ]
 
     normalized = runner.invoke(
         app,
@@ -205,14 +218,27 @@ def test_channels_cli_exposes_setup_and_fixture_paths(tmp_path: Path) -> None:
             '{"message_id":"m1","user_id":"u1","text":"hello"}',
         ],
     )
+    assert normalized.exception is None, normalized.output
     assert normalized.exit_code == 0
-    assert "webchat:u1" in normalized.stdout
+    normalized_payload = json.loads(normalized.stdout)
+    assert normalized_payload["sender"]["external_id"] == "webchat:u1"
 
     schema = runner.invoke(app, ["channels", "fixture-schema", "webchat"])
+    assert schema.exception is None, schema.output
     assert schema.exit_code == 0
     payload = json.loads(schema.stdout)
     assert payload["service"] == "webchat"
     assert "message_id" in payload["schema"]["required"]
+
+    responded = runner.invoke(
+        app,
+        ["channels", "respond-fixture", "webchat", "event_1", "response_1", "done"],
+    )
+    assert responded.exception is None, responded.output
+    assert responded.exit_code == 0
+    responded_payload = json.loads(responded.stdout)
+    assert responded_payload["response"]["response_id"] == "response_1"
+    assert responded_payload["receipt"]["capability"] == MESSAGE_RESPOND_CAPABILITY
 
 
 def _put_operator_session(home: Path) -> None:
@@ -227,3 +253,8 @@ def _put_operator_session(home: Path) -> None:
             expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
     )
+
+
+def _single_json_payload(stdout: str) -> bool:
+    stripped = stdout.strip()
+    return stripped.startswith(("{", "[")) and stripped.endswith(("}", "]"))
