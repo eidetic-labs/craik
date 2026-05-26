@@ -7,10 +7,11 @@ from typing import Any
 
 from craik.runtime.auth.guided_setup import GUIDED_PROVIDER_DEFAULTS
 from craik.runtime.auth.login import auth_status_payload
+from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.providers.model_providers import default_model_provider_registry
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.model_settings import ModelSettingsStore
-from craik.runtime.shell.slash_commands import list_slash_commands
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 
@@ -26,8 +27,11 @@ def complete_slash_input(
     text: str,
     *,
     env: dict[str, str] | None = None,
+    registry: AutoSlashRegistry | None = None,
 ) -> list[CompletionCandidate]:
     """Return command or argument completions for a slash input buffer."""
+    if registry is None:
+        registry = get_tui_registry()
     if not text.startswith("/"):
         return []
     if text.endswith(" "):
@@ -39,9 +43,9 @@ def complete_slash_input(
     command = tokens[0].removeprefix("/") if tokens else ""
     if len(tokens) <= 1 and not text.endswith(" "):
         return [
-            CompletionCandidate(f"/{item.name}", item.summary)
-            for item in list_slash_commands()
-            if item.name.startswith(partial)
+            candidate
+            for candidate in _command_candidates(registry)
+            if candidate.value.removeprefix("/").startswith(partial)
         ]
     if command in {"auth", "provider"} and len(tokens) >= 2 and tokens[1] == "login":
         return _filter_candidates(
@@ -78,6 +82,16 @@ def _model_candidates(env: dict[str, str] | None) -> list[CompletionCandidate]:
                 )
             )
     return candidates
+
+
+def _command_candidates(registry: AutoSlashRegistry) -> list[CompletionCandidate]:
+    candidates: dict[str, CompletionCandidate] = {}
+    for spec in registry.slash_specs:
+        value = spec.name
+        if "-" in value.removeprefix("/"):
+            value = "/" + value.removeprefix("/").split("-", 1)[0]
+        candidates.setdefault(value, CompletionCandidate(value, spec.summary))
+    return [candidates[value] for value in sorted(candidates)]
 
 
 def _session_candidates(env: dict[str, str] | None) -> list[CompletionCandidate]:

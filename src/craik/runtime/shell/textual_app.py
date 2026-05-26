@@ -431,7 +431,7 @@ class CraikApp(App[None]):
         popup = self.query_one("#slash-popup", Container)
         options = self.query_one("#slash-options", OptionList)
         options.clear_options()
-        for candidate in complete_slash_input(prefix, env=self.env)[:12]:
+        for candidate in complete_slash_input(prefix, env=self.env, registry=self.registry)[:12]:
             label = candidate.value
             if candidate.description:
                 label = f"{candidate.value}  {candidate.description}"
