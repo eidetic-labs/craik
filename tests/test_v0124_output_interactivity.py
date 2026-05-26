@@ -6,8 +6,8 @@ from pathlib import Path
 
 from craik.contracts.models import CapabilityReceipt, ReceiptResult
 from craik.runtime.paths import ensure_craik_home
+from craik.runtime.shell.modals.receipt_detail import receipt_detail_record
 from craik.runtime.shell.textual_app import CraikApp
-from craik.runtime.shell.textual_modals import ReceiptDetailModal
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.store import LocalStore
 
@@ -68,12 +68,15 @@ def test_receipt_detail_modal_reads_redacted_receipt(tmp_path: Path) -> None:
     finally:
         store.close()
 
-    detail = ReceiptDetailModal("receipt_interactive", env=env)._detail_text()
+    detail = receipt_detail_record("receipt_interactive", env=env)
 
-    assert "ID: receipt_interactive" in detail
-    assert "Integrity: verified receipt chain" in detail
-    assert "Status: passed" in detail
-    assert "Summary: Interactive receipt detail." in detail
+    assert detail == {
+        "id": "receipt_interactive",
+        "found": True,
+        "integrity": "verified receipt chain",
+        "status": "passed",
+        "summary": "Interactive receipt detail.",
+    }
 
 
 def test_receipt_detail_modal_reports_missing_receipt(tmp_path: Path) -> None:
@@ -82,10 +85,11 @@ def test_receipt_detail_modal_reports_missing_receipt(tmp_path: Path) -> None:
     store.initialize()
     store.close()
 
-    detail = ReceiptDetailModal("missing_receipt", env=env)._detail_text()
+    detail = receipt_detail_record("missing_receipt", env=env)
 
-    assert "missing_receipt" in detail
-    assert "not found" in detail
+    assert detail["id"] == "missing_receipt"
+    assert detail["found"] is False
+    assert detail["message"] == "receipt not found"
 
 
 def _receipt(receipt_id: str) -> CapabilityReceipt:

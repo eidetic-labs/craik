@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from craik.runtime.shell.modals.approval_decision import (
+    ApprovalDecisionModal,
+    ApprovalDecisionResult,
+)
 from craik.runtime.shell.modals.auth_capture import (
     AuthCaptureModal,
     AuthCaptureRequest,
@@ -15,7 +19,6 @@ from craik.runtime.shell.modals.auth_logout import (
     AuthLogoutResult,
 )
 from craik.runtime.shell.modals.receipt_detail import ReceiptDetailModal
-from craik.runtime.shell.textual_modals import ApprovalDecisionModal, ModalFlowResult
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 
 
@@ -52,7 +55,7 @@ def open_textual_modal_flow(app: Any, text: str) -> bool:
     return False
 
 
-def _modal_complete(app: Any, result: ModalFlowResult | None) -> None:
+def _modal_complete(app: Any, result: ApprovalDecisionResult | None) -> None:
     if result is None:
         return
     app._write_transcript(linkify_text(result.message), plain_text=result.message)

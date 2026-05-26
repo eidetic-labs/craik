@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from craik.runtime.shell.textual_modals import ReceiptDetailModal, _receipt_integrity_status
+from craik.runtime.shell.modals.receipt_detail import (
+    _receipt_integrity_status,
+    receipt_detail_record,
+)
+from craik.runtime.shell.modals.record_display import _format_record
 
 
 class _FakeReceipt:
@@ -27,7 +31,7 @@ def test_receipt_integrity_status_calls_hmac_verifier() -> None:
     receipt = _FakeReceipt(receipt_hmac="valid-hmac")
 
     with patch(
-        "craik.runtime.shell.textual_modals.contract_receipt_hmac_status",
+        "craik.runtime.shell.modals.receipt_detail.contract_receipt_hmac_status",
         return_value="verified",
     ) as verify:
         result = _receipt_integrity_status(store, receipt)  # type: ignore[arg-type]
@@ -41,7 +45,7 @@ def test_receipt_integrity_status_reports_tampered_hmac() -> None:
     receipt = _FakeReceipt(receipt_hmac="tampered-hmac")
 
     with patch(
-        "craik.runtime.shell.textual_modals.contract_receipt_hmac_status",
+        "craik.runtime.shell.modals.receipt_detail.contract_receipt_hmac_status",
         side_effect=ValueError("HMAC mismatch"),
     ):
         result = _receipt_integrity_status(store, receipt)  # type: ignore[arg-type]
@@ -63,7 +67,7 @@ def test_receipt_integrity_status_treats_verifier_exceptions_as_tamper() -> None
 
     for exception_type in (AttributeError, TypeError, ValueError):
         with patch(
-            "craik.runtime.shell.textual_modals.contract_receipt_hmac_status",
+            "craik.runtime.shell.modals.receipt_detail.contract_receipt_hmac_status",
             side_effect=exception_type("boom"),
         ):
             result = _receipt_integrity_status(store, receipt)  # type: ignore[arg-type]
@@ -73,21 +77,24 @@ def test_receipt_integrity_status_treats_verifier_exceptions_as_tamper() -> None
 
 def test_receipt_detail_escapes_adversarial_receipt_id(tmp_path: Path) -> None:
     adversarial_id = "[red blink]injection[/red blink]"
-    modal = ReceiptDetailModal(adversarial_id, env={"CRAIK_HOME": str(tmp_path)})
 
-    with patch("craik.runtime.shell.textual_modals._open_store", return_value=_FakeStore()):
+    with patch(
+        "craik.runtime.shell.modals.receipt_detail._open_store",
+        return_value=_FakeStore(),
+    ):
         with patch(
-            "craik.runtime.shell.textual_modals._find_receipt",
+            "craik.runtime.shell.modals.receipt_detail._find_receipt",
             return_value=None,
         ):
-            text = modal._detail_text()
+            text = _format_record(
+                receipt_detail_record(adversarial_id, env={"CRAIK_HOME": str(tmp_path)})
+            )
 
     assert "\\[red blink]" in text
     assert "`[red blink]" not in text
 
 
 def test_receipt_detail_escapes_result_fields(tmp_path: Path) -> None:
-    modal = ReceiptDetailModal("receipt-1", env={"CRAIK_HOME": str(tmp_path)})
     receipt = type(
         "Receipt",
         (),
@@ -102,12 +109,17 @@ def test_receipt_detail_escapes_result_fields(tmp_path: Path) -> None:
         },
     )()
 
-    with patch("craik.runtime.shell.textual_modals._open_store", return_value=_FakeStore()):
+    with patch(
+        "craik.runtime.shell.modals.receipt_detail._open_store",
+        return_value=_FakeStore(),
+    ):
         with patch(
-            "craik.runtime.shell.textual_modals._find_receipt",
+            "craik.runtime.shell.modals.receipt_detail._find_receipt",
             return_value=receipt,
         ):
-            text = modal._detail_text()
+            text = _format_record(
+                receipt_detail_record("receipt-1", env={"CRAIK_HOME": str(tmp_path)})
+            )
 
     assert "[red]passed[/red]" not in text
     assert "\\[red]passed\\[/red]" in text
