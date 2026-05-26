@@ -23,9 +23,6 @@ _CANONICAL_MODALS: dict[str, ModalClass] = {
     "FilePickerModal": FilePickerModal,
 }
 
-CANONICAL_MODAL_NAMES: tuple[str, ...] = tuple(sorted(_CANONICAL_MODALS))
-
-
 def canonical_modal_registry() -> Mapping[str, ModalClass]:
     """Return canonical modal names plus stable lowercase aliases."""
     registry: dict[str, ModalClass] = {}

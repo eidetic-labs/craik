@@ -1,28 +1,45 @@
 # Release Readiness Validation
 
-<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-25</span></p>
+<p className="craik-meta"><span>5 min read</span><span>For maintainers</span><span>Updated 2026-05-26</span></p>
 
 <div className="craik-lead">
 
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.7`; historical sign-offs remain below for
+pre-release gate is `0.12.8`; historical sign-offs remain below for
 audit continuity.
 
 </div>
 
-## Upcoming v0.12.8 Canonical CLI/TUI Contract
+## v0.12.8 CLI/TUI Contract
 
 <div className="craik-keypoint">
 
-**v0.12.8 extends the slash-command migration with structural guards for
-shared CLI/TUI callbacks.**
+**v0.12.8 makes the shared command contract release-ready across CLI, slash,
+JSON, and TUI surfaces.**
 
 `0.12.8` keeps migrated commands on the `CommandResult` contract, prevents
 strictly migrated shared callbacks from writing directly to stdout during
-slash dispatch, and adds CI gates so future migrations stay aligned with
-the canonical renderer flow.
+slash dispatch, adds canonical modal metadata for prompt-backed commands,
+expands slash snapshots across the standard width matrix, and adds CI gates so
+future migrations stay aligned with the canonical renderer flow.
+
+</div>
+
+### v0.12.8 Acceptance Status
+
+<div className="craik-fields">
+
+<div><dt>Command contract</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Migrated CLI/TUI callbacks declare <code>@craik_command</code>, return <code>CommandResult</code>, and use shared renderers.</dd></div>
+
+<div><dt>Interactive prompts</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Current prompt-backed commands declare <code>interactive_prompts</code> metadata and modal mapping guards reject drift.</dd></div>
+
+<div><dt>Snapshot coverage</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Table, card, and card-list slash command snapshots cover widths 60, 80, 100, 120, 160, and 200.</dd></div>
+
+<div><dt>Structural guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Payload shape, NextAction target, format coverage, direct stdout, modal, return annotation, CLI/TUI metadata, and snapshot guards run in CI.</dd></div>
+
+<div><dt>Legacy command posture</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Commands that cannot safely return <code>CommandResult</code> are documented with explicit legacy markers.</dd></div>
 
 </div>
 
@@ -40,6 +57,9 @@ uv run python scripts/check_command_result_return.py
 uv run python scripts/check_no_direct_stdout.py
 uv run python scripts/check_modal_screen_mappings.py
 uv run python scripts/check_modal_screen_security.py
+uv run python scripts/check_payload_shape_validity.py
+uv run python scripts/check_next_actions_validity.py
+uv run python scripts/check_format_flag_coverage.py
 uv run python scripts/generate_snapshots.py /status --name status --width 80 --check
 uv run python scripts/check_snapshot_coverage.py
 uv run python scripts/check_dead_code.py

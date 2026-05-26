@@ -7,7 +7,6 @@ import typer
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.shell.modals import (
-    CANONICAL_MODAL_NAMES,
     ConfirmModal,
     FilePickerModal,
     MultilineInputModal,
@@ -23,7 +22,8 @@ from craik.runtime.shell.modals.guards import modal_mapping_failures, modal_secu
 def test_canonical_modal_registry_resolves_required_classes() -> None:
     registry = canonical_modal_registry()
 
-    assert set(CANONICAL_MODAL_NAMES) == {
+    canonical_names = {name for name in registry if name.endswith("Modal")}
+    assert canonical_names == {
         "ConfirmModal",
         "FilePickerModal",
         "MultilineInputModal",
