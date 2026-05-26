@@ -25,6 +25,7 @@ def _load_script(name: str) -> ModuleType:
 
 check_cli_tui_contract = _load_script("check_cli_tui_contract")
 check_format_flag_coverage = _load_script("check_format_flag_coverage")
+check_modal_screen_mappings = _load_script("check_modal_screen_mappings")
 check_next_actions_validity = _load_script("check_next_actions_validity")
 check_payload_shape_validity = _load_script("check_payload_shape_validity")
 check_snapshot_coverage = _load_script("check_snapshot_coverage")
@@ -168,6 +169,35 @@ def test_format_coverage_guard_reports_missing_text_test(tmp_path: Path) -> None
 
     assert failures == [
         "tests/contract/test_format.py: missing format_command_result kind='text' test"
+    ]
+
+
+def test_modal_mapping_guard_accepts_current_prompt_metadata() -> None:
+    assert check_modal_screen_mappings.prompt_metadata_failures(ROOT) == []
+
+
+def test_modal_mapping_guard_rejects_unmapped_prompt_call(tmp_path: Path) -> None:
+    target = tmp_path / "src" / "craik"
+    target.mkdir(parents=True)
+    (target / "cli_bad.py").write_text(
+        textwrap.dedent(
+            """
+        import typer
+        from craik.runtime.contract import craik_command
+
+        @craik_command(payload_shape="card")
+        def bad_command():
+            typer.confirm("Proceed?")
+        """
+        ),
+        encoding="utf-8",
+    )
+
+    failures = check_modal_screen_mappings.prompt_metadata_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_bad.py:6 bad_command uses typer prompt/confirm "
+        "without interactive_prompts metadata or owner marker"
     ]
 
 

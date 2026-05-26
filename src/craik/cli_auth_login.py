@@ -41,7 +41,10 @@ DEFAULT_OAUTH_PROVIDERS = {"anthropic", "gemini"}
 
 
 @auth_app.command("login")
-@craik_command(payload_shape="card")
+@craik_command(
+    payload_shape="card",
+    interactive_prompts={"reauthenticate": "ConfirmModal"},
+)
 def auth_login_provider(
     provider: Annotated[
         str,
@@ -311,6 +314,7 @@ def _provider_setup_url(provider: str) -> str | None:
     return None
 
 
+# craik-interactive-prompt-owner: auth login reauthenticate ConfirmModal
 def _confirm_reauthentication(provider: str, *, profile_id: str | None) -> None:
     store = AuthProfileStore.from_env()
     target = profile_id or _default_profile_id(provider)
