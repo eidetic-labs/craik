@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
+from rich.console import Console
 
 from craik.runtime.auth.commands import (
     auth_logout_confirmation_result,
@@ -13,6 +15,16 @@ from craik.runtime.auth.commands import (
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 
 SNAPSHOT_ROOT = Path(__file__).resolve().parents[1] / "snapshots" / "slash"
+
+
+def _capture(renderable: Any, *, width: int = 80) -> str:
+    console = Console(color_system=None, force_terminal=False, record=True, width=width)
+    console.print(renderable)
+    return console.export_text()
+
+
+def _rstrip_lines(value: str) -> str:
+    return "\n".join(line.rstrip() for line in value.splitlines())
 
 
 @pytest.mark.parametrize(
@@ -35,7 +47,8 @@ def test_control_slash_command_snapshots(
 
     snapshot = SNAPSHOT_ROOT / snapshot_name / "width-80.txt"
 
-    assert result.text + "\n" == snapshot.read_text(encoding="utf-8")
+    output = _capture(result.text) if snapshot_name == "mcp" else result.text
+    assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
 
 
 def test_login_slash_preserves_shared_payload() -> None:

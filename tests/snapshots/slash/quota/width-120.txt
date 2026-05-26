@@ -1,0 +1,15 @@
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ provider id        ┃ provider         ┃ budget ref         ┃ quota ref          ┃ quota remaining ┃ budget remaining ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ provider_anthropic │ anthropic        │ budget_anthropic_… │ quota_anthropic_d… │                 │                  │
+│ provider_anthropi… │ anthropic        │ budget_anthropic_… │ quota_anthropic_d… │                 │                  │
+│ provider_fixture_… │ fixture          │ budget_fixture_mo… │ quota_fixture_dai… │                 │                  │
+│ provider_gemini    │ gemini           │ budget_gemini_mon… │ quota_gemini_daily │                 │                  │
+│ provider_local_lm… │ chat_completions │ budget_local_lm_s… │ quota_local_lm_st… │                 │                  │
+│ provider_local_ol… │ chat_completions │ budget_local_olla… │ quota_local_ollam… │                 │                  │
+│ provider_local_op… │ chat_completions │ budget_local_mont… │ quota_local_daily  │                 │                  │
+│ provider_local_vl… │ chat_completions │ budget_local_vllm… │ quota_local_vllm_… │                 │                  │
+│ provider_openai    │ openai           │ budget_openai_mon… │ quota_openai_daily │                 │                  │
+│ provider_openai_c… │ chat_completions │ budget_openai_mon… │ quota_openai_daily │                 │                  │
+│ provider_openai_r… │ openai           │ budget_openai_mon… │ quota_openai_daily │                 │                  │
+└────────────────────┴──────────────────┴────────────────────┴────────────────────┴─────────────────┴──────────────────┘

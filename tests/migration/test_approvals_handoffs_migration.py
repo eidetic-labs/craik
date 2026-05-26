@@ -10,9 +10,12 @@ from rich.console import Console
 
 from craik.runtime.contract import CommandResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.contract.format import format_command_result
 from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import (
+    _empty_state_payload,
+    render_slash_payload,
+)
 from craik.runtime.work.commands.handoff_commands import handoff_list_result
 
 
@@ -24,6 +27,15 @@ def _capture(renderable: Any, *, width: int = 80) -> str:
 
 def _rstrip_lines(value: str) -> str:
     return "\n".join(line.rstrip() for line in value.splitlines())
+
+
+def _slash_output(command: str, *, env: dict[str, str] | None = None) -> str:
+    result = dispatch_slash_command(command, env=env)
+    if result.empty_state_message is not None:
+        return _capture(_empty_state_payload(result), width=80)
+    assert result.payload is not None
+    assert result.payload_shape is not None
+    return _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=80)
 
 
 def test_approvals_and_handoffs_slash_share_helper_payloads(tmp_path: Path) -> None:
@@ -64,15 +76,8 @@ def test_approvals_and_handoff_commands_are_registered() -> None:
     assert registry.spec_by_name("/handoff-show") is not None
 
 
-def test_approvals_tui_snapshot() -> None:
-    output = _capture(
-        format_command_result(
-            CommandResult(payload={"count": 0, "approvals": []}, shape="card_list"),
-            kind="tui",
-        ),
-        width=80,
-    )
-
+def test_approvals_tui_snapshot(tmp_path: Path) -> None:
+    output = _slash_output("/approvals", env={"CRAIK_HOME": str(tmp_path / "home")})
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"
@@ -83,15 +88,8 @@ def test_approvals_tui_snapshot() -> None:
     assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
 
 
-def test_handoffs_tui_snapshot() -> None:
-    output = _capture(
-        format_command_result(
-            CommandResult(payload={"count": 0, "handoffs": []}, shape="card_list"),
-            kind="tui",
-        ),
-        width=80,
-    )
-
+def test_handoffs_tui_snapshot(tmp_path: Path) -> None:
+    output = _slash_output("/handoffs", env={"CRAIK_HOME": str(tmp_path / "home")})
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"

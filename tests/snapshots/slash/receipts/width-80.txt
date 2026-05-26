@@ -1,3 +1,2 @@
-╭──────────────────────────────────────────────────────────────────────────────╮
-│ empty  No values.                                                            │
-╰──────────────────────────────────────────────────────────────────────────────╯
+`/receipts` requires a subcommand: `/receipts list`, `/receipts detail`,
+`/receipts verify`. See `/help receipts` for details.

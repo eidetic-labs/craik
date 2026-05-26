@@ -13,12 +13,13 @@ from typer.testing import CliRunner
 from craik.cli import app
 from craik.runtime.contract import CommandResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.contract.format import format_command_result
 from craik.runtime.providers.commands import (
     provider_list_result,
     provider_local_presets_result,
     provider_show_result,
 )
+from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import render_slash_payload
 
 runner = CliRunner()
 
@@ -73,9 +74,10 @@ def test_provider_commands_are_registered_as_derived_slash_commands() -> None:
 
 @pytest.mark.parametrize("width", [80, 100])
 def test_provider_tui_snapshot(width: int) -> None:
-    result = provider_show_result("provider_openai")
-    result.payload.pop("created_at", None)
-    output = _capture(format_command_result(result, kind="tui"), width=width)
+    result = dispatch_slash_command("/provider")
+    assert result.payload is not None
+    assert result.payload_shape is not None
+    output = _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=width)
 
     snapshot = (
         Path(__file__).resolve().parents[1]

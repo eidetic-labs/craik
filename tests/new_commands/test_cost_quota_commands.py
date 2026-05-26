@@ -4,15 +4,29 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+
+from rich.console import Console
 
 from craik.cli import app
 from craik.contracts.models import CapabilityReceipt, ReceiptResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.shell.commands import cost_result, quota_result
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import render_slash_payload
 from craik.runtime.store import LocalStore
 
 SNAPSHOT_ROOT = Path(__file__).resolve().parents[1] / "snapshots" / "slash"
+
+
+def _capture(renderable: Any, *, width: int = 80) -> str:
+    console = Console(color_system=None, force_terminal=False, record=True, width=width)
+    console.print(renderable)
+    return console.export_text()
+
+
+def _rstrip_lines(value: str) -> str:
+    return "\n".join(line.rstrip() for line in value.splitlines())
 
 
 def test_cost_slash_command_renders_missing_data_snapshot(tmp_path: Path) -> None:
@@ -21,6 +35,7 @@ def test_cost_slash_command_renders_missing_data_snapshot(tmp_path: Path) -> Non
     snapshot = SNAPSHOT_ROOT / "cost" / "width-80.txt"
 
     assert result.exit_code == 0
+    assert isinstance(result.payload, dict)
     assert result.payload["tokens_total"] == 0
     assert result.payload["total_cost_usd"] is None
     assert result.text + "\n" == snapshot.read_text(encoding="utf-8")
@@ -32,9 +47,12 @@ def test_quota_slash_command_renders_provider_refs_snapshot(tmp_path: Path) -> N
     snapshot = SNAPSHOT_ROOT / "quota" / "width-80.txt"
 
     assert result.exit_code == 0
+    assert isinstance(result.payload, dict)
     assert result.payload["providers"]
     assert result.payload["missing"] == ["quota_remaining", "budget_remaining"]
-    assert result.text + "\n" == snapshot.read_text(encoding="utf-8")
+    assert result.payload_shape is not None
+    output = _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=80)
+    assert _rstrip_lines(output) == _rstrip_lines(snapshot.read_text(encoding="utf-8"))
 
 
 def test_cost_result_aggregates_provider_receipt_usage(tmp_path: Path) -> None:

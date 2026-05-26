@@ -1,0 +1,2 @@
+No MCP clients configured. Run `craik mcp client import --path <config.json>` from your operator
+shell to add one.

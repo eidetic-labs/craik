@@ -58,11 +58,9 @@ def test_cli_tui_contract_guard_accepts_current_registry() -> None:
 def test_snapshot_coverage_guard_accepts_current_slash_specs() -> None:
     from craik.runtime.shell.slash_command_schema import slash_command_specs
 
-    command_names = [spec.command_name for spec in slash_command_specs()]
-
     assert (
         check_snapshot_coverage.snapshot_coverage_failures(
-            command_names,
+            slash_command_specs(),
             snapshot_root=ROOT / "tests" / "snapshots" / "slash",
         )
         == []
@@ -79,6 +77,35 @@ def test_snapshot_coverage_guard_reports_missing_snapshot(tmp_path: Path) -> Non
     )
 
     assert failures == ["/beta: missing beta/width-80.txt"]
+
+
+def test_snapshot_coverage_guard_requires_full_widths_for_table_specs(tmp_path: Path) -> None:
+    from craik.runtime.shell.slash_command_schema import SlashCommandSpec
+
+    target = tmp_path / "alpha"
+    target.mkdir()
+    (target / "width-80.txt").write_text("ok\n", encoding="utf-8")
+
+    failures = check_snapshot_coverage.snapshot_coverage_failures(
+        [
+            SlashCommandSpec(
+                name="/alpha",
+                summary="Alpha.",
+                usage="/alpha",
+                payload_shape="table",
+                help="Alpha.",
+            )
+        ],
+        snapshot_root=tmp_path,
+    )
+
+    assert failures == [
+        "/alpha: missing alpha/width-60.txt",
+        "/alpha: missing alpha/width-100.txt",
+        "/alpha: missing alpha/width-120.txt",
+        "/alpha: missing alpha/width-160.txt",
+        "/alpha: missing alpha/width-200.txt",
+    ]
 
 
 def test_snapshot_writer_creates_expected_width_files(tmp_path: Path) -> None:
@@ -121,3 +148,12 @@ def test_snapshot_check_reports_missing_and_stale_files(tmp_path: Path) -> None:
 
 def test_snapshot_name_uses_first_slash_token() -> None:
     assert generate_snapshots._snapshot_name("/model set openai/gpt-5") == "model"
+
+
+def test_snapshot_generator_can_seed_operator_session(tmp_path: Path) -> None:
+    from craik.runtime.auth.operator import OperatorSessionStore
+
+    generate_snapshots._seed_operator_session(tmp_path)
+
+    session = OperatorSessionStore(tmp_path).get()
+    assert session.subject == "snapshot-operator"

@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +19,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from craik.cli import app  # noqa: E402
-from craik.runtime.contract.auto_registry import AutoSlashRegistry  # noqa: E402
-from craik.runtime.contract.dispatch import dispatch_slash_command  # noqa: E402
+from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore  # noqa: E402
+from craik.runtime.shell.slash_commands import dispatch_slash_command  # noqa: E402
+from craik.runtime.shell.textual_widgets.slash_renderers import (  # noqa: E402
+    _empty_state_payload,
+    render_slash_payload,
+)
 
 DEFAULT_WIDTHS: tuple[int, ...] = (60, 80, 100, 120, 160, 200)
 DEFAULT_OUTPUT_ROOT = ROOT / "tests" / "snapshots" / "slash"
@@ -41,6 +45,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         temp_home = tempfile.TemporaryDirectory(dir="/tmp", prefix="craik-snap-")
         env_updates["CRAIK_HOME"] = temp_home.name
     try:
+        if args.with_operator_session:
+            _seed_operator_session(Path(env_updates["CRAIK_HOME"]))
         snapshots = render_snapshots(
             args.command,
             widths=widths,
@@ -75,10 +81,8 @@ def render_snapshots(
     previous = {key: os.environ.get(key) for key in (env_updates or {})}
     os.environ.update(env_updates or {})
     try:
-        renderable = dispatch_slash_command(
-            command,
-            registry=AutoSlashRegistry.from_typer(app),
-        )
+        result = dispatch_slash_command(command, env=os.environ.copy())
+        renderable = _result_renderable(result)
         rendered = {width: _capture(renderable, width=width) for width in widths}
     finally:
         for key, value in previous.items():
@@ -96,6 +100,16 @@ def render_snapshots(
     return rendered
 
 
+def _result_renderable(result: Any) -> object:
+    if getattr(result, "empty_state_message", None) is not None:
+        return _empty_state_payload(result)
+    payload = getattr(result, "payload", None)
+    shape = getattr(result, "payload_shape", None)
+    if payload is not None and shape is not None:
+        return render_slash_payload(payload, shape=shape)
+    return getattr(result, "text", result)
+
+
 def write_or_check_snapshots(
     snapshots: dict[int, str],
     *,
@@ -110,16 +124,16 @@ def write_or_check_snapshots(
         target_dir.mkdir(parents=True, exist_ok=True)
     for width, text in sorted(snapshots.items()):
         path = target_dir / f"width-{width}.txt"
+        normalized = _rstrip_lines(text)
         if check:
             if not path.exists():
                 failures.append(f"{_display_path(path)} is missing")
                 continue
             expected = _rstrip_lines(path.read_text(encoding="utf-8"))
-            actual = _rstrip_lines(text)
-            if actual != expected:
+            if normalized != expected:
                 failures.append(f"{_display_path(path)} is stale")
             continue
-        path.write_text(text, encoding="utf-8")
+        path.write_text(f"{normalized}\n", encoding="utf-8")
     return failures
 
 
@@ -152,6 +166,21 @@ def _replace_all(value: str, needles: set[str], replacement: str) -> str:
     return value
 
 
+def _seed_operator_session(home: Path) -> None:
+    """Write a deterministic non-refreshing operator session for snapshot renders."""
+    OperatorSessionStore(home).put(
+        OperatorSession(
+            subject="snapshot-operator",
+            email="snapshot@example.invalid",
+            display_name="Snapshot Operator",
+            groups=["snapshot"],
+            issuer="https://snapshot.example.invalid",
+            id_token_jti="snapshot-token",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        ),
+    )
+
+
 def _snapshot_name(command: str) -> str:
     tokens = command.strip().split()
     if not tokens:
@@ -177,6 +206,11 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Root directory for slash snapshots.",
     )
     parser.add_argument("--craik-home", type=Path, help="CRAIK_HOME to use while rendering.")
+    parser.add_argument(
+        "--with-operator-session",
+        action="store_true",
+        help="Seed a deterministic operator session before rendering.",
+    )
     parser.add_argument("--check", action="store_true", help="Check existing snapshots for drift.")
     return parser.parse_args(argv)
 

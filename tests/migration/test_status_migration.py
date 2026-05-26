@@ -12,7 +12,8 @@ from typer.testing import CliRunner
 from craik.cli import app
 from craik.runtime.contract import CommandResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.contract.format import format_command_result
+from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import render_slash_payload
 from craik.runtime.status import status_command_result, status_payload
 
 runner = CliRunner()
@@ -66,10 +67,11 @@ def test_status_command_is_registered_as_derived_slash_command() -> None:
 
 def test_status_tui_snapshot(tmp_path: Path) -> None:
     home = tmp_path / "craik-home"
-    result = status_command_result({"CRAIK_HOME": str(home)})
+    result = dispatch_slash_command("/status", env={"CRAIK_HOME": str(home)})
+    assert result.payload_shape is not None
+    assert result.payload is not None
     result.payload["home"] = "<craik-home>"
-
-    output = _capture(format_command_result(result, kind="tui"), width=80)
+    output = _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=80)
 
     snapshot = (
         Path(__file__).resolve().parents[1]

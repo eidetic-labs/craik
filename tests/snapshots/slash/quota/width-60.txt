@@ -1,0 +1,16 @@
+┏━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┓
+┃ provid… ┃         ┃ budget  ┃ quota   ┃ quota   ┃ budget ┃
+┃ id      ┃ provid… ┃ ref     ┃ ref     ┃ remain… ┃ remai… ┃
+┡━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━┩
+│ provid… │ anthro… │ budget… │ quota_… │         │        │
+│ provid… │ anthro… │ budget… │ quota_… │         │        │
+│ provid… │ fixture │ budget… │ quota_… │         │        │
+│ provid… │ gemini  │ budget… │ quota_… │         │        │
+│ provid… │ chat_c… │ budget… │ quota_… │         │        │
+│ provid… │ chat_c… │ budget… │ quota_… │         │        │
+│ provid… │ chat_c… │ budget… │ quota_… │         │        │
+│ provid… │ chat_c… │ budget… │ quota_… │         │        │
+│ provid… │ openai  │ budget… │ quota_… │         │        │
+│ provid… │ chat_c… │ budget… │ quota_… │         │        │
+│ provid… │ openai  │ budget… │ quota_… │         │        │
+└─────────┴─────────┴─────────┴─────────┴─────────┴────────┘

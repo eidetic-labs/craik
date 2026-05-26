@@ -1,13 +1,30 @@
-state                   ✗ unconfigured                                          
-home                    <craik-home>                        
-initialized             ✗                                                       
-operator required       ✗                                                       
-operator authenticated  ✗  ->  run /login                                       
-provider configured     ✗  ->  run /auth login <provider>                       
-local model configured  ✗                                                       
-active profile          default                                                 
-active model            ✗  ->  run /model set <provider/model>                  
-missing                 2 items (provider credentials, active model)            
-next actions            2 items (run craik auth login <provider>, run craik     
-                        model set <provider/model>)                             
-warnings                0 items                                                 
+result
+├── state
+│   └── unconfigured
+├── home
+│   └── <craik-home>
+├── initialized
+│   └── False
+├── operator required
+│   └── False
+├── operator authenticated
+│   └── False
+├── provider configured
+│   └── False
+├── local model configured
+│   └── False
+├── active profile
+│   └── default
+├── active model
+│   └──
+├── missing
+│   ├── [1]
+│   │   └── provider credentials
+│   └── [2]
+│       └── active model
+├── next actions
+│   ├── [1]
+│   │   └── run craik auth login <provider>
+│   └── [2]
+│       └── run craik model set <provider/model>
+└── warnings
