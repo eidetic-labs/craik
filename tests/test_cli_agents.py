@@ -40,6 +40,8 @@ def test_agent_lifecycle_cli_launch_status_stop_restart(tmp_path: Path) -> None:
         ],
         env=env,
     )
+    listed = runner.invoke(app, ["agent", "list"], env=env)
+    renamed = runner.invoke(app, ["agent", "rename", "agent_docs", "Docs Agent"], env=env)
     status = runner.invoke(app, ["agent", "status", "agent_docs"], env=env)
     stopped = runner.invoke(
         app,
@@ -52,18 +54,35 @@ def test_agent_lifecycle_cli_launch_status_stop_restart(tmp_path: Path) -> None:
         env=env,
     )
 
+    assert launched.exception is None, launched.output
+    assert listed.exception is None, listed.output
+    assert renamed.exception is None, renamed.output
+    assert status.exception is None, status.output
+    assert stopped.exception is None, stopped.output
+    assert restarted.exception is None, restarted.output
     assert launched.exit_code == 0, launched.output
+    assert listed.exit_code == 0, listed.output
+    assert renamed.exit_code == 0, renamed.output
     assert status.exit_code == 0, status.output
     assert stopped.exit_code == 0, stopped.output
     assert restarted.exit_code == 0, restarted.output
+    assert launched.stdout.strip().startswith("{")
+    assert listed.stdout.strip().startswith("[")
+    assert renamed.stdout.strip().startswith("{")
+    assert status.stdout.strip().startswith("{")
     launch_payload = json.loads(launched.stdout)
+    list_payload = json.loads(listed.stdout)
+    rename_payload = json.loads(renamed.stdout)
     status_payload = json.loads(status.stdout)
     stopped_payload = json.loads(stopped.stdout)
     restarted_payload = json.loads(restarted.stdout)
     assert launch_payload["launched"] is True
     assert launch_payload["boundary"]["one_shot_run"].endswith(" run execute")
+    assert [item["id"] for item in list_payload] == ["agent_docs"]
+    assert rename_payload["session"]["display_name"] == "Docs Agent"
     assert status_payload["hmac_status"] == "verified"
     assert status_payload["session"]["id"] == "agent_docs"
+    assert status_payload["session"]["display_name"] == "Docs Agent"
     assert status_payload["session"]["operator_subject"] == "operator-123"
     assert stopped_payload["session"]["status"] == "stopped"
     assert stopped_payload["session"]["pid"] is None
@@ -113,12 +132,15 @@ def test_agent_status_surfaces_tampered_session_hmac(tmp_path: Path) -> None:
         ["agent", "launch", "--session-id", "agent_docs"],
         env=env,
     )
+    assert launched.exception is None, launched.output
     assert launched.exit_code == 0, launched.output
     _tamper_agent_session(home, "agent_docs")
 
     status = runner.invoke(app, ["agent", "status", "agent_docs"], env=env)
 
+    assert status.exception is None, status.output
     assert status.exit_code == 0, status.output
+    assert status.stdout.strip().startswith("{")
     payload = json.loads(status.stdout)
     assert payload["hmac_status"] == "tampered"
     assert payload["session"]["provider_id"] == "provider_tampered"
@@ -149,8 +171,11 @@ def test_agent_cli_prompt_runs_provider_backed_session(tmp_path: Path) -> None:
         env=env,
     )
 
+    assert launched.exception is None, launched.output
+    assert prompted.exception is None, prompted.output
     assert launched.exit_code == 0, launched.output
     assert prompted.exit_code == 0, prompted.output
+    assert prompted.stdout.strip().startswith("{")
     payload = json.loads(prompted.stdout)
     assert payload["schema"] == "craik.agent_prompt_execution"
     assert payload["exit_behavior"] == "completed"
@@ -190,9 +215,14 @@ def test_agent_cli_recover_marks_failure_and_resume(tmp_path: Path) -> None:
         env=env,
     )
 
+    assert launched.exception is None, launched.output
+    assert recovered.exception is None, recovered.output
+    assert resumed.exception is None, resumed.output
     assert launched.exit_code == 0, launched.output
     assert recovered.exit_code == 0, recovered.output
     assert resumed.exit_code == 0, resumed.output
+    assert recovered.stdout.strip().startswith("{")
+    assert resumed.stdout.strip().startswith("{")
     recovery_payload = json.loads(recovered.stdout)
     resume_payload = json.loads(resumed.stdout)
     assert recovery_payload["session"]["status"] == "auth_expired"

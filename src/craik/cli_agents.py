@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Annotated, Any
 
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.cli_run_support import provider_run_payload
 from craik.contracts.models import AgentSessionState
 from craik.runtime.agents import (
@@ -26,12 +26,14 @@ from craik.runtime.agents import (
 )
 from craik.runtime.agents.session_naming import SessionNameError, validate_session_name
 from craik.runtime.auth.operator import OperatorSessionStore
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.store import LocalStore
 
 agent_app = typer.Typer(help="Launch and manage persistent Craik agent sessions.")
 
 
 @agent_app.command("launch")
+@craik_command(payload_shape="card")
 def agent_launch(
     session_id: Annotated[
         str | None,
@@ -68,7 +70,7 @@ def agent_launch(
         str | None,
         typer.Option("--name", "-n", help="Operator-visible session display name."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Launch a foreground persistent agent session control record."""
     operator_subject = operator_identity_or_fail()
     operator = OperatorSessionStore.from_env().get()
@@ -103,14 +105,15 @@ def agent_launch(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @agent_app.command("rename")
+@craik_command(payload_shape="card")
 def agent_rename(
     session_id: Annotated[str, typer.Argument(help="Agent session id.")],
     name: Annotated[str, typer.Argument(help="New operator-visible display name.")],
-) -> None:
+) -> CommandResult:
     """Rename a persistent agent session."""
     operator_identity_or_fail()
     try:
@@ -129,11 +132,12 @@ def agent_rename(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps({"renamed": True, "session": _session_payload(updated)}, indent=2))
+    return _emit_payload({"renamed": True, "session": _session_payload(updated)}, shape="card")
 
 
 @agent_app.command("list")
-def agent_list() -> None:
+@craik_command(payload_shape="card_list")
+def agent_list() -> CommandResult:
     """List persisted persistent agent sessions."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -147,11 +151,14 @@ def agent_list() -> None:
         payload = [_session_payload(session) for session in sessions]
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list")
 
 
 @agent_app.command("status")
-def agent_status(session_id: Annotated[str, typer.Argument(help="Agent session id.")]) -> None:
+@craik_command(payload_shape="card")
+def agent_status(
+    session_id: Annotated[str, typer.Argument(help="Agent session id.")],
+) -> CommandResult:
     """Inspect one persistent agent session."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -176,17 +183,18 @@ def agent_status(session_id: Annotated[str, typer.Argument(help="Agent session i
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @agent_app.command("stop")
+@craik_command(payload_shape="card")
 def agent_stop(
     session_id: Annotated[str, typer.Argument(help="Agent session id.")],
     reason: Annotated[
         str,
         typer.Option("--reason", help="Operator-visible lifecycle reason."),
     ] = "stopped by operator",
-) -> None:
+) -> CommandResult:
     """Stop an active persistent agent session."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -202,10 +210,11 @@ def agent_stop(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @agent_app.command("restart")
+@craik_command(payload_shape="card")
 def agent_restart(
     session_id: Annotated[str, typer.Argument(help="Agent session id.")],
     reason: Annotated[
@@ -216,7 +225,7 @@ def agent_restart(
         str | None,
         typer.Option("--endpoint-url", help="Replacement endpoint URL when one is exposed."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Restart a stopped or failed persistent agent session."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -233,10 +242,11 @@ def agent_restart(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @agent_app.command("prompt")
+@craik_command(payload_shape="card")
 def agent_prompt(
     session_id: Annotated[str, typer.Argument(help="Agent session id.")],
     prompt: Annotated[str, typer.Argument(help="Prompt text, or /exit to stop the loop.")],
@@ -255,7 +265,7 @@ def agent_prompt(
         int | None,
         typer.Option("--provider-token-budget", min=1, help="Optional provider token budget."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Send one provider-backed prompt to an active persistent agent session."""
     operator_subject = operator_identity_or_fail()
     operator = OperatorSessionStore.from_env().get()
@@ -277,10 +287,11 @@ def agent_prompt(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @agent_app.command("recover")
+@craik_command(payload_shape="card")
 def agent_recover(
     session_id: Annotated[str, typer.Argument(help="Agent session id.")],
     reason: Annotated[
@@ -301,7 +312,7 @@ def agent_recover(
         str | None,
         typer.Option("--detail", help="Redacted operator recovery detail."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Mark or perform a persistent agent recovery transition."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -329,7 +340,13 @@ def agent_recover(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
+
+
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
 
 
 def _session_payload(state: AgentSessionState) -> dict[str, Any]:
