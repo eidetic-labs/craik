@@ -54,12 +54,19 @@ from craik.runtime.shell.textual_widgets.inline_action_table import InlineAction
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.text_selection_hint import first_launch_selection_hint
-from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
+from craik.runtime.shell.textual_widgets.theme_settings import (
+    resolve_textual_theme as resolve_textual_theme,
+)
+from craik.runtime.shell.textual_widgets.theme_settings import (
+    terminal_supports_textual as terminal_supports_textual,
+)
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
 from craik.runtime.status import auto_approve_status_payload
+
+__all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
 
 class CraikApp(App[None]):
@@ -465,38 +472,6 @@ class CraikApp(App[None]):
                 label = f"{candidate.value}  {candidate.description}"
             options.add_option(label)
         popup.display = True
-
-
-def resolve_textual_theme(env: dict[str, str] | None = None) -> str:
-    """Resolve dark, light, or monochrome theme from env hints."""
-    values = dict(os.environ) if env is None else env
-    override = values.get("CRAIK_THEME", "").strip().lower()
-    if override in {"dark", "light", "monochrome"}:
-        return override
-    if values.get("NO_COLOR") == "1":
-        return "monochrome"
-    if env is None or "CRAIK_HOME" in values or "HOME" in values:
-        stored = configured_theme(values)
-        if stored is not None:
-            return stored
-    colorfgbg = values.get("COLORFGBG", "")
-    if ";" in colorfgbg:
-        try:
-            background = int(colorfgbg.rsplit(";", 1)[1])
-        except ValueError:
-            return "dark"
-        return "light" if background >= 7 else "dark"
-    return "dark"
-
-
-def terminal_supports_textual(env: dict[str, str] | None = None) -> bool:
-    """Return whether the current terminal should launch the Textual UI."""
-    values = dict(os.environ) if env is None else env
-    if values.get("CRAIK_NO_TUI") == "1":
-        return False
-    if values.get("TERM") == "dumb":
-        return False
-    return True
 
 
 def run_textual_tui(*, env: dict[str, str] | None = None) -> int:
