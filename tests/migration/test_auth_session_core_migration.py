@@ -12,11 +12,14 @@ from craik.cli import app
 from craik.runtime.auth.commands import auth_status_result, auth_summary_result
 from craik.runtime.contract import CommandResult
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.contract.format import format_command_result
 from craik.runtime.model_commands import model_list_result, model_set_result, model_status_result
 from craik.runtime.providers.commands import provider_list_result
 from craik.runtime.session_commands import session_activate_result, session_shell_status_result
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import (
+    _empty_state_payload,
+    render_slash_payload,
+)
 
 
 def _env(tmp_path: Path) -> dict[str, str]:
@@ -33,6 +36,15 @@ def _rstrip_lines(value: str) -> str:
     return "\n".join(line.rstrip() for line in value.splitlines())
 
 
+def _slash_output(command: str, *, env: dict[str, str]) -> str:
+    result = dispatch_slash_command(command, env=env)
+    if result.empty_state_message is not None:
+        return _capture(_empty_state_payload(result), width=80)
+    assert result.payload is not None
+    assert result.payload_shape is not None
+    return _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=80)
+
+
 def test_auth_slash_uses_shared_payloads(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
@@ -45,13 +57,7 @@ def test_auth_slash_uses_shared_payloads(tmp_path: Path) -> None:
 
 def test_auth_tui_snapshot(tmp_path: Path) -> None:
     env = _env(tmp_path)
-    result = auth_summary_result(env)
-
-    output = _capture(format_command_result(result, kind="tui"), width=80).replace(
-        env["CRAIK_HOME"],
-        "<craik-home>",
-    )
-
+    output = _slash_output("/auth", env=env)
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"
@@ -90,10 +96,7 @@ def test_sessions_slash_uses_shared_session_helpers(tmp_path: Path) -> None:
 
 def test_sessions_tui_snapshot(tmp_path: Path) -> None:
     env = _env(tmp_path)
-    result = session_shell_status_result(env)
-
-    output = _capture(format_command_result(result, kind="tui"), width=80)
-
+    output = _slash_output("/sessions", env=env)
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"

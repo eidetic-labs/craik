@@ -1,0 +1,16 @@
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃               ┃                ┃               ┃                ┃ quota         ┃ budget         ┃
+┃ provider id   ┃ provider       ┃ budget ref    ┃ quota ref      ┃ remaining     ┃ remaining      ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ provider_ant… │ anthropic      │ budget_anthr… │ quota_anthrop… │               │                │
+│ provider_ant… │ anthropic      │ budget_anthr… │ quota_anthrop… │               │                │
+│ provider_fix… │ fixture        │ budget_fixtu… │ quota_fixture… │               │                │
+│ provider_gem… │ gemini         │ budget_gemin… │ quota_gemini_… │               │                │
+│ provider_loc… │ chat_completi… │ budget_local… │ quota_local_l… │               │                │
+│ provider_loc… │ chat_completi… │ budget_local… │ quota_local_o… │               │                │
+│ provider_loc… │ chat_completi… │ budget_local… │ quota_local_d… │               │                │
+│ provider_loc… │ chat_completi… │ budget_local… │ quota_local_v… │               │                │
+│ provider_ope… │ openai         │ budget_opena… │ quota_openai_… │               │                │
+│ provider_ope… │ chat_completi… │ budget_opena… │ quota_openai_… │               │                │
+│ provider_ope… │ openai         │ budget_opena… │ quota_openai_… │               │                │
+└───────────────┴────────────────┴───────────────┴────────────────┴───────────────┴────────────────┘

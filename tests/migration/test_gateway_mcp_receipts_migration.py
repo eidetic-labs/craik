@@ -21,6 +21,10 @@ from craik.runtime.sandbox.mcp_commands import (
 )
 from craik.runtime.services.gateway_commands import gateway_status_result
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.slash_renderers import (
+    _empty_state_payload,
+    render_slash_payload,
+)
 from craik.runtime.work.receipts import receipts_list_result
 
 runner = CliRunner()
@@ -34,6 +38,15 @@ def _capture(renderable: Any, *, width: int = 80) -> str:
 
 def _rstrip_lines(value: str) -> str:
     return "\n".join(line.rstrip() for line in value.splitlines())
+
+
+def _slash_output(command: str) -> str:
+    result = dispatch_slash_command(command, env={})
+    if result.empty_state_message is not None:
+        return _capture(_empty_state_payload(result), width=80)
+    if result.payload is not None and result.payload_shape is not None:
+        return _capture(render_slash_payload(result.payload, shape=result.payload_shape), width=80)
+    return _capture(result.text, width=80)
 
 
 def test_gateway_cli_and_slash_share_status_payload(tmp_path: Path) -> None:
@@ -135,14 +148,7 @@ def test_gateway_tui_snapshot() -> None:
 
 
 def test_receipts_tui_snapshot() -> None:
-    output = _capture(
-        format_command_result(
-            CommandResult(payload=[], shape="card_list", empty_state_message="No receipts."),
-            kind="tui",
-        ),
-        width=80,
-    )
-
+    output = _slash_output("/receipts")
     snapshot = (
         Path(__file__).resolve().parents[1]
         / "snapshots"
