@@ -25,5 +25,7 @@ class CommandResult:
     shape: PayloadShape = "auto"
     text: str | None = None
     exit_code: int = 0
+    exit_shell: bool = False
+    command_name: str | None = None
     next_actions: list[NextAction] = field(default_factory=list)
     empty_state_message: str | None = None

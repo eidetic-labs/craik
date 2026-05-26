@@ -26,6 +26,38 @@ def current_theme(env: dict[str, str] | None = None) -> ThemeName:
     return configured or "dark"
 
 
+def resolve_textual_theme(env: dict[str, str] | None = None) -> str:
+    """Resolve dark, light, or monochrome theme from env hints."""
+    values = dict(os.environ) if env is None else env
+    override = values.get("CRAIK_THEME", "").strip().lower()
+    if override in THEMES:
+        return override
+    if values.get("NO_COLOR") == "1":
+        return "monochrome"
+    if env is None or "CRAIK_HOME" in values or "HOME" in values:
+        stored = configured_theme(values)
+        if stored is not None:
+            return stored
+    colorfgbg = values.get("COLORFGBG", "")
+    if ";" in colorfgbg:
+        try:
+            background = int(colorfgbg.rsplit(";", 1)[1])
+        except ValueError:
+            return "dark"
+        return "light" if background >= 7 else "dark"
+    return "dark"
+
+
+def terminal_supports_textual(env: dict[str, str] | None = None) -> bool:
+    """Return whether the current terminal should launch the Textual UI."""
+    values = dict(os.environ) if env is None else env
+    if values.get("CRAIK_NO_TUI") == "1":
+        return False
+    if values.get("TERM") == "dumb":
+        return False
+    return True
+
+
 def configured_theme(env: dict[str, str] | None = None) -> ThemeName | None:
     """Return an explicit theme from env or disk, if one has been configured."""
     values = dict(os.environ) if env is None else env

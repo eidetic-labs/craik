@@ -8,17 +8,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from craik.runtime.auth.login import auth_status_payload
+from craik.runtime.contract.auto_registry import AutoSlashRegistry
+from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
 from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
 from craik.runtime.shell.agent_shell import one_shot_response
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
+from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
-from craik.runtime.shell.slash_commands import (
-    SlashCommandResult,
-    command_names,
-    dispatch_slash_command,
-)
+from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 
@@ -78,8 +78,13 @@ class MultilineComposer:
         return True, None
 
 
-def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
+def build_tui_snapshot(
+    env: dict[str, str] | None = None,
+    *,
+    registry: AutoSlashRegistry | None = None,
+) -> TuiSnapshot:
     """Build a deterministic TUI snapshot that can render before auth or setup."""
+    registry = registry or get_tui_registry()
     readiness = resolve_readiness(env)
     summary = _store_summary(env)
     panels = (
@@ -96,7 +101,7 @@ def build_tui_snapshot(env: dict[str, str] | None = None) -> TuiSnapshot:
     return TuiSnapshot(
         readiness=readiness,
         panels=panels,
-        autocomplete=tuple(f"/{name}" for name in command_names()),
+        autocomplete=_autocomplete_names(registry),
     )
 
 
@@ -149,9 +154,9 @@ def complete_tui_command(prefix: str) -> list[str]:
     """Return slash-command completions for TUI autocomplete."""
     normalized = prefix if prefix.startswith("/") else f"/{prefix}"
     return [
-        f"/{name}"
-        for name in command_names()
-        if f"/{name}".startswith(normalized)
+        name
+        for name in _autocomplete_names(get_tui_registry())
+        if name.startswith(normalized)
     ]
 
 
@@ -172,7 +177,8 @@ def run_tui(
         if terminal_supports_textual(env):
             return run_textual_tui(env=env)
 
-    output_func(render_tui_snapshot(build_tui_snapshot(env)))
+    registry = get_tui_registry()
+    output_func(render_tui_snapshot(build_tui_snapshot(env, registry=registry)))
     if not interactive and scripted is None:
         return 0
 
@@ -195,24 +201,39 @@ def run_tui(
             text = text.strip()
         if not text:
             continue
-        result = dispatch_tui_input(text, env=env)
+        result = dispatch_tui_input(text, env=env, registry=registry)
         output_func(result.text)
         if result.exit_shell:
             return result.exit_code
 
 
-def dispatch_tui_input(text: str, *, env: dict[str, str] | None = None) -> SlashCommandResult:
+def dispatch_tui_input(
+    text: str,
+    *,
+    env: dict[str, str] | None = None,
+    registry: AutoSlashRegistry | None = None,
+) -> SlashCommandResult:
     """Dispatch one TUI input line through slash commands or prompt execution."""
+    registry = registry or get_tui_registry()
     if text in {"/interrupt", "/stop"}:
         return SlashCommandResult("TUI interrupt requested; current run will stop at boundary.")
     if text.startswith("/redirect "):
         target = _safe(text.removeprefix("/redirect ").strip())
         return SlashCommandResult(f"TUI redirect queued for {target}.")
     if text == "/redraw":
-        return SlashCommandResult(render_tui_snapshot(build_tui_snapshot(env)))
+        return SlashCommandResult(render_tui_snapshot(build_tui_snapshot(env, registry=registry)))
     if text.startswith("/"):
-        return dispatch_slash_command(text, env=env)
+        result = _contract_invoke(text, registry=registry, env=env)
+        return to_slash_command_result(result)
     return SlashCommandResult("Streaming output\n" + one_shot_response(text, env=env))
+
+
+def _autocomplete_names(registry: AutoSlashRegistry) -> tuple[str, ...]:
+    return tuple(
+        entry.slash_name
+        for entry in registry.all_commands_including_exempt()
+        if entry.is_slash and entry.slash_name is not None
+    )
 
 
 def _status_panel(readiness: ReadinessReport, env: dict[str, str] | None) -> TuiPanel:

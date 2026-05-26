@@ -7,10 +7,76 @@
 **What you'll find here**
 
 The repository-owned readiness record for Craik releases. The current
-pre-release gate is `0.12.8`; historical sign-offs remain below for
+pre-release gate is `0.12.9`; historical sign-offs remain below for
 audit continuity.
 
 </div>
+
+## v0.12.9 TUI Cutover
+
+<div className="craik-keypoint">
+
+**v0.12.9 completes the runtime consumption path for the CLI/TUI command
+contract.**
+
+`0.12.9` wires the three TUI entry points to the contract dispatcher, routes
+Textual slash output through the new renderer pipeline, replaces the legacy
+dispatcher implementation with a compatibility shim, and adds a
+runtime-consumption CI guard so future contract infrastructure cannot ship
+without live TUI use.
+
+</div>
+
+### v0.12.9 Acceptance Status
+
+<div className="craik-fields">
+
+<div><dt>Runtime dispatch</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>textual_app.py</code>, <code>tui.py</code>, and <code>agent_shell.py</code> dispatch slash commands through <code>craik.runtime.contract.dispatch</code>.</dd></div>
+
+<div><dt>Registry consumption</dt><dt><span className="craik-fields__type">ready</span></dt><dd>The TUI runtime consumes a cached <code>AutoSlashRegistry</code> from the live Typer app plus shell-only slash built-ins.</dd></div>
+
+<div><dt>Renderer consumption</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Textual slash output and inline actions render through <code>format_command_result(..., kind="tui")</code>.</dd></div>
+
+<div><dt>Regression guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>check_contract_dispatch_consumed.py</code> verifies runtime imports, and smoke tests assert contract-dispatch invocation across the TUI entry points.</dd></div>
+
+</div>
+
+### v0.12.9 Validation Commands
+
+Run the standard release gate from a clean checkout before signed tag
+creation:
+
+```bash
+uv run python scripts/check_version_consistency.py
+uv run python scripts/check_release_version.py
+uv run python scripts/check_release_readiness.py
+uv run python scripts/check_cli_tui_contract.py
+uv run python scripts/check_command_result_return.py
+uv run python scripts/check_no_direct_stdout.py
+uv run python scripts/check_contract_dispatch_consumed.py
+uv run python scripts/check_modal_screen_mappings.py
+uv run python scripts/check_modal_screen_security.py
+uv run python scripts/check_payload_shape_validity.py
+uv run python scripts/check_next_actions_validity.py
+uv run python scripts/check_format_flag_coverage.py
+uv run python scripts/generate_snapshots.py /status --name status --width 80 --check
+uv run python scripts/check_snapshot_coverage.py
+uv run python scripts/check_dead_code.py
+uv run python scripts/check_oauth_callback_safety.py
+uv run python scripts/check_dock_bottom_snapshot_coverage.py
+uv run python scripts/check_text_selection_wiring.py
+python3 scripts/check_codebase_brand_hygiene.py
+uv run python scripts/check_slash_command_registry.py
+uv run python scripts/check_changed_file_strictness.py
+uv run python scripts/check_public_docs_hygiene.py
+uv run python scripts/check_doc_links.py
+uv run python scripts/generate_cli_reference.py --check
+uv run ruff check
+uv run mypy
+uv run pytest
+uv run pytest --cov=craik --cov-report=term --cov-fail-under=80
+(cd docs && npm run build)
+```
 
 ## v0.12.8 CLI/TUI Contract
 

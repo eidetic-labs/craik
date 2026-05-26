@@ -546,7 +546,7 @@ I18N_REQUIRED_SURFACES = {
     "src/craik/runtime/shell/agent_shell.py": "shell readiness and one-shot messages",
     "src/craik/runtime/shell/tui.py": "terminal UI panels",
     "src/craik/runtime/dashboard/server.py": "dashboard status and errors",
-    "src/craik/runtime/shell/slash_commands.py": "slash command help",
+    "src/craik/runtime/shell/contract_runtime/builtin_slash_commands.py": "slash command help",
     "src/craik/runtime/projects/migration/reports.py": "migration reports",
 }
 

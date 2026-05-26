@@ -13,6 +13,7 @@ from craik.cli_output import emit_command_result
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.runtime.auth.visibility import active_operator_session_from_env
 from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.contract.dispatch import invoke_slash_command
 from craik.runtime.model_commands import (
     model_alias_result,
     model_fallback_result,
@@ -31,12 +32,12 @@ from craik.runtime.session_commands import (
     session_show_result,
 )
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.profile_settings import (
     CraikUserProfile,
     ProfileSettings,
     ProfileSettingsStore,
 )
-from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.shell_preferences import rename_shell_session_result, theme_result
 from craik.runtime.store import LocalStore
 
@@ -67,17 +68,16 @@ def chat_command(
 @app.command("slash")
 def slash_command(command: str) -> CommandResult:
     """Dispatch one slash command for tests and shell integrations."""
-    slash_result = dispatch_slash_command(command)
-    _emit_raw_text(slash_result.text)
-    if slash_result.exit_code:
-        raise typer.Exit(slash_result.exit_code)
-    return CommandResult(
-        payload=slash_result.payload if slash_result.payload is not None else slash_result.text,
-        shape=slash_result.payload_shape or "auto",
-        text=slash_result.text,
-        exit_code=slash_result.exit_code,
-        empty_state_message=slash_result.empty_state_message,
+    result = invoke_slash_command(command, registry=get_tui_registry())
+    text = (
+        result.text
+        if result.text is not None
+        else json.dumps(result.payload, indent=2, sort_keys=True)
     )
+    _emit_raw_text(text)
+    if result.exit_code:
+        raise typer.Exit(result.exit_code)
+    return result
 
 
 @app.command("theme")

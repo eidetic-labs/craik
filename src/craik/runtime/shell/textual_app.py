@@ -12,10 +12,16 @@ from textual.reactive import reactive
 from textual.widgets import OptionList, RichLog
 
 from craik import __version__
+from craik.runtime.contract.auto_registry import AutoSlashRegistry
+from craik.runtime.contract.command_result import CommandResult
+from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
+from craik.runtime.contract.format import format_command_result
 from craik.runtime.shell.confirmations import (
     confirmation_request_for_text,
     record_confirmation_decision,
 )
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
+from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.external_editor import edit_text_externally
 from craik.runtime.shell.inline_actions import handle_inline_action
 from craik.runtime.shell.readiness import ReadinessReport
@@ -24,10 +30,7 @@ from craik.runtime.shell.shell_invocation import (
     is_shell_invocation_text,
     run_shell_invocation,
 )
-from craik.runtime.shell.slash_commands import (
-    SlashCommandResult,
-    dispatch_slash_command,
-)
+from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.shell.slash_completer import complete_slash_input
 from craik.runtime.shell.textual_modals import (
     ApprovalDecisionModal,
@@ -49,15 +52,21 @@ from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
 from craik.runtime.shell.textual_widgets.inline_action_table import InlineActionTable
 from craik.runtime.shell.textual_widgets.inline_link import linkify_text
-from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.text_selection_hint import first_launch_selection_hint
-from craik.runtime.shell.textual_widgets.theme_settings import configured_theme
+from craik.runtime.shell.textual_widgets.theme_settings import (
+    resolve_textual_theme as resolve_textual_theme,
+)
+from craik.runtime.shell.textual_widgets.theme_settings import (
+    terminal_supports_textual as terminal_supports_textual,
+)
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.tui import dispatch_tui_input
 from craik.runtime.status import auto_approve_status_payload
+
+__all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
 
 class CraikApp(App[None]):
@@ -79,9 +88,15 @@ class CraikApp(App[None]):
 
     readiness: reactive[ReadinessReport | None] = reactive(None)
 
-    def __init__(self, *, env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        env: dict[str, str] | None = None,
+        registry: AutoSlashRegistry | None = None,
+    ) -> None:
         super().__init__()
         self.env = dict(os.environ) if env is None else dict(env)
+        self.registry = registry or get_tui_registry()
         self._editor_prefix_pending = False
         self._forgot_slash_pending: tuple[str, str] | None = None
         self._transcript_lines: list[str] = []
@@ -198,11 +213,13 @@ class CraikApp(App[None]):
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
-        result = self._dispatch(text)
         if text.startswith("/"):
-            write_slash_command_result(transcript, result)
+            contract_result = self._dispatch_contract(text)
+            transcript.write(format_command_result(contract_result, kind="tui"))
+            result = to_slash_command_result(contract_result)
             self._transcript_lines.append(result.text)
         else:
+            result = self._dispatch(text)
             self._write_transcript(linkify_text(result.text), plain_text=result.text)
         input_widget.value = ""
         self.query_one("#slash-popup", Container).display = False
@@ -338,13 +355,17 @@ class CraikApp(App[None]):
 
     def _dispatch(self, text: str) -> SlashCommandResult:
         if text.startswith("/"):
-            result = dispatch_slash_command(text, env=self.env)
+            result = to_slash_command_result(self._dispatch_contract(text))
         else:
-            result = dispatch_tui_input(text, env=self.env)
+            result = dispatch_tui_input(text, env=self.env, registry=self.registry)
         if text.startswith("/rename") or text.startswith("/theme"):
             self._refresh_status_bar()
             self._flash_accent("state")
         return result
+
+    def _dispatch_contract(self, text: str) -> CommandResult:
+        """Dispatch slash text through the CLI/TUI contract layer."""
+        return _contract_invoke(text, registry=self.registry, env=self.env)
 
     def _flash_accent(self, kind: str) -> None:
         self.query_one("#accent-emission", AccentEmission).flash(kind)
@@ -451,38 +472,6 @@ class CraikApp(App[None]):
                 label = f"{candidate.value}  {candidate.description}"
             options.add_option(label)
         popup.display = True
-
-
-def resolve_textual_theme(env: dict[str, str] | None = None) -> str:
-    """Resolve dark, light, or monochrome theme from env hints."""
-    values = dict(os.environ) if env is None else env
-    override = values.get("CRAIK_THEME", "").strip().lower()
-    if override in {"dark", "light", "monochrome"}:
-        return override
-    if values.get("NO_COLOR") == "1":
-        return "monochrome"
-    if env is None or "CRAIK_HOME" in values or "HOME" in values:
-        stored = configured_theme(values)
-        if stored is not None:
-            return stored
-    colorfgbg = values.get("COLORFGBG", "")
-    if ";" in colorfgbg:
-        try:
-            background = int(colorfgbg.rsplit(";", 1)[1])
-        except ValueError:
-            return "dark"
-        return "light" if background >= 7 else "dark"
-    return "dark"
-
-
-def terminal_supports_textual(env: dict[str, str] | None = None) -> bool:
-    """Return whether the current terminal should launch the Textual UI."""
-    values = dict(os.environ) if env is None else env
-    if values.get("CRAIK_NO_TUI") == "1":
-        return False
-    if values.get("TERM") == "dumb":
-        return False
-    return True
 
 
 def run_textual_tui(*, env: dict[str, str] | None = None) -> int:

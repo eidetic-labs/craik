@@ -25,6 +25,8 @@ def _format_json(result: CommandResult) -> str:
             "shape": result.shape,
             "text": result.text,
             "exit_code": result.exit_code,
+            "exit_shell": result.exit_shell,
+            "command_name": result.command_name,
             "next_actions": [
                 {
                     "text": action.text,
