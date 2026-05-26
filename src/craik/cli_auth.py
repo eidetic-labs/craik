@@ -336,6 +336,7 @@ def auth_status() -> CommandResult:
     return result
 
 
+# craik-legacy-command: legacy OIDC device-code flow writes polling status before session exists.
 @app.command("login")
 def login(
     issuer: Annotated[

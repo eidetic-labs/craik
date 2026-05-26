@@ -41,6 +41,7 @@ from craik.runtime.shell_preferences import rename_shell_session_result, theme_r
 from craik.runtime.store import LocalStore
 
 
+# craik-legacy-command: launches the interactive shell or streams one-shot chat text.
 @app.command("chat")
 def chat_command(
     prompt: Annotated[
@@ -62,6 +63,7 @@ def chat_command(
     raise typer.Exit(run_shell())
 
 
+# craik-legacy-command: raw slash bridge used by tests and shell integrations.
 @app.command("slash")
 def slash_command(command: str) -> CommandResult:
     """Dispatch one slash command for tests and shell integrations."""

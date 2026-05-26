@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import textwrap
 from pathlib import Path
 from types import ModuleType
 
@@ -53,6 +54,56 @@ def test_cli_tui_contract_guard_accepts_current_registry() -> None:
     registry = check_cli_tui_contract.registry_from_app(app)
 
     assert check_cli_tui_contract.cli_tui_contract_failures(registry) == []
+
+
+def test_cli_tui_contract_guard_requires_legacy_marker(tmp_path: Path) -> None:
+    target = tmp_path / "src" / "craik"
+    target.mkdir(parents=True)
+    (target / "cli_auth.py").write_text(
+        textwrap.dedent(
+            """
+        import typer
+        from craik.cli import app
+
+        @app.command("login")
+        def login() -> None:
+            typer.echo("legacy")
+        """
+        ),
+        encoding="utf-8",
+    )
+    for name in ("cli_shell.py", "cli_onboarding.py", "cli_status.py"):
+        (target / name).write_text("", encoding="utf-8")
+
+    failures = check_cli_tui_contract.legacy_command_marker_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_auth.py:6 login is a Typer command without "
+        "@craik_command or craik-legacy-command: marker"
+    ]
+
+
+def test_cli_tui_contract_guard_accepts_marked_legacy_command(tmp_path: Path) -> None:
+    target = tmp_path / "src" / "craik"
+    target.mkdir(parents=True)
+    (target / "cli_auth.py").write_text(
+        textwrap.dedent(
+            """
+        import typer
+        from craik.cli import app
+
+        # craik-legacy-command: fixture legacy flow
+        @app.command("login")
+        def login() -> None:
+            typer.echo("legacy")
+        """
+        ),
+        encoding="utf-8",
+    )
+    for name in ("cli_shell.py", "cli_onboarding.py", "cli_status.py"):
+        (target / name).write_text("", encoding="utf-8")
+
+    assert check_cli_tui_contract.legacy_command_marker_failures(tmp_path) == []
 
 
 def test_snapshot_coverage_guard_accepts_current_slash_specs() -> None:
