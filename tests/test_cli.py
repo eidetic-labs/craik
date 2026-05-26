@@ -196,6 +196,17 @@ def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
         ],
         env=env,
     )
+    scratchpad = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "scratchpad",
+            "task_knowledge",
+            "--note",
+            "Keep this temporary validation note.",
+        ],
+        env=env,
+    )
     request = runner.invoke(
         app,
         [
@@ -206,6 +217,36 @@ def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
             "Need current validation state.",
             "--needed-for",
             "Release readiness.",
+        ],
+        env=env,
+    )
+    trap = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "trap",
+            "--kind",
+            "workflow",
+            "--statement",
+            "Do not tag before checks pass.",
+            "--avoidance",
+            "Wait for green CI.",
+            "--evidence-id",
+            "evidence_release_check",
+        ],
+        env=env,
+    )
+    negative = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "negative",
+            "--statement",
+            "Coverage badge is the product site.",
+            "--scope",
+            "docs",
+            "--evidence-id",
+            "evidence_pages_fix",
         ],
         env=env,
     )
@@ -227,10 +268,24 @@ def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
     finally:
         store.close()
 
+    assert unknown.exception is None, unknown.output
+    assert scratchpad.exception is None, scratchpad.output
+    assert request.exception is None, request.output
+    assert trap.exception is None, trap.output
+    assert negative.exception is None, negative.output
     assert unknown.exit_code == 0
+    assert scratchpad.exit_code == 0
     assert request.exit_code == 0
+    assert trap.exit_code == 0
+    assert negative.exit_code == 0
+    assert scratchpad.stdout.strip().startswith("{")
+    assert trap.stdout.strip().startswith("{")
+    assert negative.stdout.strip().startswith("{")
     unknown_id = json.loads(unknown.stdout)["id"]
     request_id = json.loads(request.stdout)["id"]
+    assert json.loads(scratchpad.stdout)["note"] == "Keep this temporary validation note."
+    assert json.loads(trap.stdout)["statement"] == "Do not tag before checks pass."
+    assert json.loads(negative.stdout)["statement"] == "Coverage badge is the product site."
 
     resolved_unknown = runner.invoke(
         app,
@@ -260,9 +315,15 @@ def test_knowledge_resolution_commands_link_receipts(tmp_path: Path) -> None:
         env=env,
     )
 
+    assert resolved_unknown.exception is None, resolved_unknown.output
+    assert fulfilled_request.exception is None, fulfilled_request.output
+    assert resolved_debt.exception is None, resolved_debt.output
     assert resolved_unknown.exit_code == 0
     assert fulfilled_request.exit_code == 0
     assert resolved_debt.exit_code == 0
+    assert resolved_unknown.stdout.strip().startswith("{")
+    assert fulfilled_request.stdout.strip().startswith("{")
+    assert resolved_debt.stdout.strip().startswith("{")
     assert json.loads(resolved_unknown.stdout)["resolved_by_receipt_id"]
     assert json.loads(fulfilled_request.stdout)["fulfilled_by_receipt_id"]
     assert json.loads(resolved_debt.stdout)["resolved_by_receipt_id"]
