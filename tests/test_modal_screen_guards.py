@@ -7,9 +7,13 @@ import typer
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.shell.modals import (
+    AuthCaptureModal,
+    AuthLogoutModal,
     ConfirmModal,
     FilePickerModal,
     MultilineInputModal,
+    ReceiptDetailModal,
+    RecordDisplayModal,
     SelectChoiceModal,
     TextInputModal,
     canonical_modal_registry,
@@ -27,14 +31,22 @@ def test_canonical_modal_registry_resolves_required_classes() -> None:
         "ConfirmModal",
         "FilePickerModal",
         "MultilineInputModal",
+        "AuthCaptureModal",
+        "AuthLogoutModal",
+        "ReceiptDetailModal",
+        "RecordDisplayModal",
         "SelectChoiceModal",
         "TextInputModal",
     }
+    assert resolve_modal_class("auth_capture", registry) is AuthCaptureModal
+    assert resolve_modal_class("auth_logout", registry) is AuthLogoutModal
     assert resolve_modal_class("ConfirmModal", registry) is ConfirmModal
     assert resolve_modal_class("text_input", registry) is TextInputModal
     assert resolve_modal_class("select_choice", registry) is SelectChoiceModal
     assert resolve_modal_class("multiline_input", registry) is MultilineInputModal
     assert resolve_modal_class("file_picker", registry) is FilePickerModal
+    assert resolve_modal_class("receipt_detail", registry) is ReceiptDetailModal
+    assert resolve_modal_class("record_display", registry) is RecordDisplayModal
 
 
 def test_only_text_input_modal_supports_secret_capture() -> None:
