@@ -37,6 +37,7 @@ def test_auth_login_captures_keyring_ref_without_leaking_secret(
     )
 
     assert result.exit_code == 0, result.output
+    assert result.exception is None
     assert "sk-test-captured" not in result.output
     payload = _json_payload(result.stdout)
     assert payload["kind"] == "keyring-ref"
