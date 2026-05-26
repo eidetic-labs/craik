@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import handoff_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import RunStatus
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.work.commands.handoff_commands import (
@@ -24,7 +24,7 @@ def handoff_list() -> CommandResult:
     """List persisted handoffs."""
     operator_identity_or_fail()
     result = handoff_list_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -117,7 +117,7 @@ def handoff_create(
     if markdown:
         typer.echo(result.text or "")
     else:
-        typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+        emit_command_result(result)
     return result
 
 
@@ -140,7 +140,7 @@ def handoff_show(
     if markdown:
         typer.echo(result.text or "")
     else:
-        typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+        emit_command_result(result)
     return result
 
 

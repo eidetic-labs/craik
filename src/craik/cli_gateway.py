@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from craik.cli_output import emit_command_result
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.gateway import GatewayDaemonError
@@ -35,7 +35,7 @@ def gateway_start_command() -> CommandResult:
         result = gateway_start_result()
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -56,7 +56,7 @@ def gateway_stop_command(
         result = gateway_stop_result(signal_process=signal_process)
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -69,7 +69,7 @@ def gateway_restart_command() -> CommandResult:
         result = gateway_restart_result()
     except GatewayDaemonError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -78,7 +78,7 @@ def gateway_restart_command() -> CommandResult:
 def gateway_status_command() -> CommandResult:
     """Show gateway config, runtime state, pid, bind, and stale-pid status."""
     result = gateway_status_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -90,7 +90,7 @@ def gateway_logs_command(
     """Show recent gateway log lines."""
     _operator_identity()
     result = gateway_logs_result(tail=tail)
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -99,7 +99,7 @@ def gateway_logs_command(
 def gateway_doctor_command() -> CommandResult:
     """Run gateway-focused diagnostics."""
     result = gateway_doctor_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -144,7 +144,7 @@ def gateway_install_command(
     if dry_run or output == "-":
         typer.echo(result.text or "", nl=False)
         return result
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -153,7 +153,7 @@ def gateway_install_command(
 def gateway_uninstall_command() -> CommandResult:
     """Remove generated gateway service definitions."""
     result = gateway_uninstall_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 

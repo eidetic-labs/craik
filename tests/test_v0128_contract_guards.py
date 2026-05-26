@@ -69,6 +69,53 @@ def test_no_direct_stdout_guard_accepts_emit_helper(tmp_path: Path) -> None:
     assert check_no_direct_stdout.direct_stdout_failures(tmp_path) == []
 
 
+def test_no_direct_stdout_guard_catches_direct_json_echo_for_tui_commands(
+    tmp_path: Path,
+) -> None:
+    _write(
+        tmp_path,
+        "src/craik/cli_example.py",
+        """
+        import json
+        import typer
+        from craik.runtime.contract import CommandResult, craik_command
+
+        @craik_command(payload_shape="kv")
+        def example_status() -> CommandResult:
+            result = CommandResult(payload={"ok": True})
+            typer.echo(json.dumps(result.payload))
+            return result
+        """,
+    )
+
+    failures = check_no_direct_stdout.direct_stdout_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_example.py:9 example_status emits JSON directly; "
+        "use craik.cli_output.emit_command_result(result)"
+    ]
+
+
+def test_no_direct_stdout_guard_allows_direct_json_echo_for_protocol_handlers(
+    tmp_path: Path,
+) -> None:
+    _write(
+        tmp_path,
+        "src/craik/cli_mcp.py",
+        """
+        import json
+        import typer
+        from craik.runtime.contract import craik_command
+
+        @craik_command(tui_eligible=False, tui_exempt_reason="streams JSON-RPC stdout")
+        def server_handle_command() -> None:
+            typer.echo(json.dumps({"jsonrpc": "2.0"}))
+        """,
+    )
+
+    assert check_no_direct_stdout.direct_stdout_failures(tmp_path) == []
+
+
 def test_command_result_return_guard_catches_missing_annotation(tmp_path: Path) -> None:
     _write(
         tmp_path,

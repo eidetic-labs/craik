@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, cast
 
 import typer
 
 from craik.cli import memory_app
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import MemoryScope, ProposalOperation, TrustClass
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.memory.commands import (
@@ -78,7 +78,7 @@ def memory_propose(
         trust_class=_trust_class(trust_class),
         operation=_proposal_operation(operation),
     )
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -97,7 +97,7 @@ def memory_list(
     """List local memory proposals."""
     operator_identity_or_fail()
     result = memory_list_result(task_id=task_id, status=status)
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -110,7 +110,7 @@ def memory_show(proposal_id: str) -> CommandResult:
         result = memory_show_result(proposal_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -156,7 +156,7 @@ def memory_search(query: str) -> CommandResult:
     """Search approved local memory facts."""
     operator_identity_or_fail()
     result = memory_search_result(query)
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -166,7 +166,7 @@ def memory_diff(task_id: str) -> CommandResult:
     """Print a run-scoped memory diff for local proposal activity."""
     operator_identity_or_fail()
     result = memory_diff_result(task_id)
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -176,7 +176,7 @@ def memory_preview(task_id: str) -> CommandResult:
     """Preview local memory impact before promotion or direct writes."""
     operator_identity_or_fail()
     result = memory_preview_result(task_id)
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -196,7 +196,7 @@ def _decide(
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    _print(result.payload)
+    emit_command_result(result)
     return result
 
 
@@ -217,7 +217,3 @@ def _proposal_operation(value: str) -> ProposalOperation:
     if value not in {"add", "update", "invalidate"}:
         raise typer.BadParameter(f"unsupported proposal operation: {value}")
     return cast(ProposalOperation, value)
-
-
-def _print(payload: object) -> None:
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))

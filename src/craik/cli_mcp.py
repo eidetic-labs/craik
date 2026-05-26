@@ -10,6 +10,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import mcp_app
+from craik.cli_output import emit_command_result
 from craik.cli_typer import craik_typer
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.sandbox.mcp_commands import (
@@ -38,7 +39,7 @@ def server_manifest_command(
 ) -> CommandResult:
     """Print the Craik MCP server compatibility manifest."""
     result = mcp_server_manifest_result(include_write_tools=include_write_tools)
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -89,7 +90,7 @@ def client_import_command(
         result = mcp_client_import_result(path)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -103,5 +104,5 @@ def client_export_command(
         result = mcp_client_export_result(path)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
