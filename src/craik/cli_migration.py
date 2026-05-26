@@ -82,7 +82,10 @@ def migrate_plan(
 
 
 @migrate_app.command("import")
-@craik_command(payload_shape="card")
+@craik_command(
+    payload_shape="card",
+    interactive_prompts={"apply_import": "ConfirmModal"},
+)
 def migrate_import(
     source: Annotated[Path, typer.Option("--source", help="Adjacent runtime source path.")],
     kind: Annotated[str, typer.Option("--kind", help="Migration source kind.")] = (

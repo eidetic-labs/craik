@@ -66,6 +66,20 @@ def test_modal_mapping_guard_accepts_canonical_target() -> None:
     assert modal_mapping_failures(AutoSlashRegistry.from_typer(app)) == []
 
 
+def test_current_prompt_backed_commands_declare_modal_metadata() -> None:
+    from craik.cli import app
+
+    registry = AutoSlashRegistry.from_typer(app)
+    prompts_by_command = {
+        entry.command_name: entry.metadata.interactive_prompts
+        for entry in registry.inventory
+        if entry.metadata is not None
+    }
+
+    assert prompts_by_command["auth login"] == {"reauthenticate": "ConfirmModal"}
+    assert prompts_by_command["migrate import"] == {"apply_import": "ConfirmModal"}
+
+
 def test_modal_security_guard_rejects_sensitive_prompt_without_masked_input() -> None:
     app = typer.Typer()
 
