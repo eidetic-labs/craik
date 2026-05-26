@@ -10,7 +10,9 @@ runner = CliRunner()
 def test_provider_list_prints_redacted_registry() -> None:
     result = runner.invoke(app, ["provider", "list"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("[")
     payload = json.loads(result.stdout)
     providers = {item["id"]: item for item in payload}
     assert set(providers) >= {
@@ -31,7 +33,9 @@ def test_provider_list_prints_redacted_registry() -> None:
 def test_provider_show_prints_one_provider() -> None:
     result = runner.invoke(app, ["provider", "show", "provider_fixture_local"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
     payload = json.loads(result.stdout)
     assert payload["id"] == "provider_fixture_local"
     assert payload["trust_boundary"] == "local"
@@ -40,7 +44,9 @@ def test_provider_show_prints_one_provider() -> None:
 def test_provider_show_prints_certified_openai_metadata() -> None:
     result = runner.invoke(app, ["provider", "show", "provider_openai"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
     payload = json.loads(result.stdout)
     assert payload["id"] == "provider_openai"
     assert payload["provider"] == "openai"
@@ -64,7 +70,9 @@ def test_provider_select_prints_policy_and_receipt_context() -> None:
         ],
     )
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
     payload = json.loads(result.stdout)
     assert payload["provider_id"] == "provider_fixture_local"
     assert payload["mode"] == "runner"

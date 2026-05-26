@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from importlib import import_module
 from pathlib import Path
@@ -21,8 +20,9 @@ from craik.cli import (
     task_app,
 )
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.contracts.models import Priority, TaskMode
-from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.github import GitHubClient, GitHubConfig, GitHubReadAdapter
 from craik.runtime.paths import CraikPaths, ensure_craik_home, resolve_craik_paths
 from craik.runtime.policy.intent_locks import IntentLockManager, IntentLockNotFoundError
@@ -61,12 +61,13 @@ for _module_name in (
 
 
 @runners_app.command("matrix")
+@craik_command(payload_shape="card_list")
 def runners_matrix(
     runner_id: Annotated[
         str | None,
         typer.Option("--runner", help="Runner id to inspect. Prints all runners when omitted."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Print runner capability matrix entries as JSON."""
     payload: Any
     if runner_id is None:
@@ -83,7 +84,7 @@ def runners_matrix(
         except KeyError as error:
             raise typer.BadParameter(str(error)) from None
 
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list" if runner_id is None else "card")
 
 
 @provider_app.command("list")
@@ -91,7 +92,7 @@ def runners_matrix(
 def provider_list() -> CommandResult:
     """Print registered model providers as JSON."""
     result = provider_list_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -103,7 +104,7 @@ def provider_show(provider_id: str) -> CommandResult:
         result = provider_show_result(provider_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -134,11 +135,12 @@ def provider_select(
         )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
 @prompt_app.command("compile")
+@craik_command(payload_shape="card")
 def prompt_compile(
     task_id: str,
     runner_id: Annotated[
@@ -149,7 +151,7 @@ def prompt_compile(
         list[str] | None,
         typer.Option("--expected-output-schema", help="Expected output schema. May repeat."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Compile a deterministic policy-aware prompt for a task and runner."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -170,23 +172,23 @@ def prompt_compile(
     finally:
         store.close()
 
-    typer.echo(
-        json.dumps(compiled.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-    )
+    return _emit_payload(compiled.model_dump(mode="json", by_alias=True), shape="card")
 
 
 @home_app.command("show")
-def home_show() -> None:
+@craik_command(payload_shape="card")
+def home_show() -> CommandResult:
     """Print resolved Craik local state paths without creating directories."""
     paths = resolve_craik_paths()
-    typer.echo(json.dumps(_paths_payload(paths), indent=2, sort_keys=True))
+    return _emit_payload(_paths_payload(paths), shape="card")
 
 
 @home_app.command("init")
-def home_init() -> None:
+@craik_command(payload_shape="card")
+def home_init() -> CommandResult:
     """Create Craik local state directories."""
     paths = ensure_craik_home()
-    typer.echo(json.dumps(_paths_payload(paths), indent=2, sort_keys=True))
+    return _emit_payload(_paths_payload(paths), shape="card")
 
 
 def _paths_payload(paths: CraikPaths) -> dict[str, str]:
@@ -205,6 +207,7 @@ def _paths_payload(paths: CraikPaths) -> dict[str, str]:
 
 
 @project_app.command("add")
+@craik_command(payload_shape="card")
 def project_add(
     path: Annotated[
         Path,
@@ -236,7 +239,7 @@ def project_add(
             help="Context discovery exclude override. May be repeated.",
         ),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Register a Git project."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -256,11 +259,12 @@ def project_add(
     finally:
         store.close()
 
-    typer.echo(json.dumps(project.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    return _emit_payload(project.model_dump(mode="json", by_alias=True), shape="card")
 
 
 @project_app.command("list")
-def project_list() -> None:
+@craik_command(payload_shape="card_list")
+def project_list() -> CommandResult:
     """List registered projects."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -272,11 +276,12 @@ def project_list() -> None:
         store.close()
 
     payload = [project.model_dump(mode="json", by_alias=True) for project in projects]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list")
 
 
 @project_app.command("show")
-def project_show(project: str) -> None:
+@craik_command(payload_shape="card")
+def project_show(project: str) -> CommandResult:
     """Show one registered project by id or name."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -289,10 +294,11 @@ def project_show(project: str) -> None:
 
     if profile is None:
         raise typer.BadParameter(f"unknown project: {project}")
-    typer.echo(json.dumps(profile.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True))
+    return _emit_payload(profile.model_dump(mode="json", by_alias=True), shape="card")
 
 
 @task_app.command("create")
+@craik_command(payload_shape="card")
 def task_create(
     title: Annotated[str, typer.Option("--title", help="Task title.")],
     objective: Annotated[str, typer.Option("--objective", help="Task objective.")],
@@ -341,7 +347,7 @@ def task_create(
         list[str] | None,
         typer.Option("--expected-output", help="Expected output. May be repeated."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Create a task request for a registered project."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -378,11 +384,12 @@ def task_create(
         "task": task.model_dump(mode="json", by_alias=True),
         "intent_lock": intent_lock.model_dump(mode="json", by_alias=True),
     }
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @intent_app.command("show")
-def intent_show(intent_or_task_id: str) -> None:
+@craik_command(payload_shape="card")
+def intent_show(intent_or_task_id: str) -> CommandResult:
     """Show one persisted intent lock by intent lock id or task id."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -394,12 +401,11 @@ def intent_show(intent_or_task_id: str) -> None:
     finally:
         store.close()
 
-    typer.echo(
-        json.dumps(intent_lock.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-    )
+    return _emit_payload(intent_lock.model_dump(mode="json", by_alias=True), shape="card")
 
 
 @case_app.command("build")
+@craik_command(payload_shape="card")
 def case_build(
     task_id: Annotated[str, typer.Argument(help="Task id to build a case file for.")],
     max_tokens: Annotated[
@@ -424,7 +430,7 @@ def case_build(
             help="One-off context discovery exclude override. May be repeated.",
         ),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Build and persist a deterministic case file for a task."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -445,9 +451,7 @@ def case_build(
     finally:
         store.close()
 
-    typer.echo(
-        json.dumps(case_file.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-    )
+    return _emit_payload(case_file.model_dump(mode="json", by_alias=True), shape="card")
 
 
 def _github_adapter() -> GitHubReadAdapter:
@@ -456,7 +460,8 @@ def _github_adapter() -> GitHubReadAdapter:
 
 
 @case_app.command("show")
-def case_show(case_or_task_id: str) -> None:
+@craik_command(payload_shape="card")
+def case_show(case_or_task_id: str) -> CommandResult:
     """Show one persisted case file by case id or task id."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -469,9 +474,13 @@ def case_show(case_or_task_id: str) -> None:
 
     if case_file is None:
         raise typer.BadParameter(f"unknown case file or task: {case_or_task_id}")
-    typer.echo(
-        json.dumps(case_file.model_dump(mode="json", by_alias=True), indent=2, sort_keys=True)
-    )
+    return _emit_payload(case_file.model_dump(mode="json", by_alias=True), shape="card")
+
+
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
 
 
 def _priority(value: str) -> Priority:
