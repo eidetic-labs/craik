@@ -855,15 +855,29 @@ def test_operator_run_delta_cli_json_resolves_by_task(tmp_path: Path) -> None:
 def test_schema_list_includes_task_request() -> None:
     result = runner.invoke(app, ["schema", "list"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
-    assert "craik.task_request" in result.stdout
+    assert result.stdout.strip().startswith("[")
+    assert "craik.task_request" in json.loads(result.stdout)
 
 
 def test_schema_show_prints_json_schema() -> None:
     result = runner.invoke(app, ["schema", "show", "craik.task_request"])
 
+    assert result.exception is None, result.output
     assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
     assert '"title": "TaskRequest"' in result.stdout
+
+
+def test_dashboard_dry_run_prints_launch_metadata() -> None:
+    result = runner.invoke(app, ["dashboard", "--dry-run", "--auth-token", "dashboard-token"])
+
+    assert result.exception is None, result.output
+    assert result.exit_code == 0
+    assert result.stdout.strip().startswith("{")
+    payload = json.loads(result.stdout)
+    assert payload["url"] == "http://127.0.0.1:8787/"
 
 
 def test_runners_matrix_lists_built_in_trust_profiles() -> None:

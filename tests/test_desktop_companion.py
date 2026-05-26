@@ -235,12 +235,23 @@ def test_desktop_cli_surfaces_status_menu_actions_and_notifications(tmp_path: Pa
     )
     update = runner.invoke(app, ["desktop", "update-check"], env=env)
 
+    assert status.exception is None, status.output
     assert status.exit_code == 0
+    assert status.stdout.strip().startswith("{")
     assert json.loads(status.stdout)["surface_id"] == "desktop_companion_mvp"
+    assert menu.exception is None, menu.output
     assert menu.exit_code == 0
+    assert menu.stdout.strip().startswith("[")
     assert any(item["id"] == "gateway_status" for item in json.loads(menu.stdout))
+    assert action.exception is None, action.output
+    assert action.exit_code == 0
+    assert action.stdout.strip().startswith("{")
     assert json.loads(action.stdout)["command"] == "craik doctor"
+    assert notification.exception is None, notification.output
     assert notification.exit_code == 0
+    assert notification.stdout.strip().startswith("{")
     assert "secret-value" not in notification.stdout
+    assert update.exception is None, update.output
     assert update.exit_code == 0
+    assert update.stdout.strip().startswith("{")
     assert json.loads(update.stdout)["installed_version"]
