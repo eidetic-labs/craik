@@ -6,11 +6,11 @@ from typing import Any
 
 from textual.widgets import RichLog
 
+from craik.runtime.contract.format import format_command_result
 from craik.runtime.shell.confirmations import InlineActionSpec, resolve_inline_action
-from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
+from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest, ConfirmModal
 from craik.runtime.shell.textual_widgets.inline_action_table import InlineActionTable
-from craik.runtime.shell.textual_widgets.slash_renderers import write_slash_command_result
 
 
 def handle_inline_action(
@@ -55,7 +55,8 @@ def complete_inline_action(
 
 def dispatch_inline_action(app: Any, command_text: str) -> None:
     """Dispatch a resolved inline action command and append it to the transcript."""
-    result: SlashCommandResult = app._dispatch(command_text)
+    contract_result = app._dispatch_contract(command_text)
+    result = to_slash_command_result(contract_result)
     transcript = app.query_one("#transcript", RichLog)
-    write_slash_command_result(transcript, result)
+    transcript.write(format_command_result(contract_result, kind="tui"))
     app._transcript_lines.append(result.text)

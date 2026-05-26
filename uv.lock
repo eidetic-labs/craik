@@ -257,7 +257,7 @@ wheels = [
 
 [[package]]
 name = "craik"
-version = "0.12.8"
+version = "0.12.9"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

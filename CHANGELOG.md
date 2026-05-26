@@ -10,7 +10,43 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.9 — 2026-05-26
+
+### Changed
+
+- Wired the TUI runtime to consume the CLI/TUI command contract introduced in
+  v0.12.8. `textual_app.py`, `tui.py`, and `agent_shell.py` now route slash
+  commands through `craik.runtime.contract.dispatch` with the shared
+  `AutoSlashRegistry`.
+- Cut `slash_commands.py` down to a compatibility shim over the contract
+  dispatcher, removing the legacy dispatch implementation while preserving the
+  import surface for existing tests and library callers.
+- Switched Textual slash rendering and inline actions to the new
+  `format_command_result(..., kind="tui")` renderer pipeline.
+
+### Added
+
+- Added a cached TUI registry provider with shell-only slash built-ins for
+  `/help`, `/clear`, `/exit`, grouped slash forms, and compatibility aliases
+  that are not one-to-one Typer callbacks.
+- Added `scripts/check_contract_dispatch_consumed.py`, a runtime-consumption
+  guard that fails CI if the TUI entry points stop importing the contract
+  dispatcher or reintroduce the legacy dispatcher import.
+- Added end-to-end smoke coverage proving the Textual app, dependency-free TUI,
+  and agent shell route slash commands through the contract dispatcher.
+
+### Fixed
+
+- Completed the v0.12.8 CLI/TUI Contract runtime cutover. v0.12.8 shipped the
+  contract infrastructure and guards, but the TUI runtime still had legacy
+  dispatcher and renderer consumption paths. v0.12.9 is the strict upgrade path
+  for operator-visible TUI contract behavior.
+
 ## 0.12.8 — 2026-05-26
+
+> **Errata:** v0.12.8 shipped the CLI/TUI Contract infrastructure but did not
+> fully wire it into the TUI runtime. v0.12.9 completes the runtime consumption
+> path and leaves v0.12.8 as a historical artifact.
 
 ### Added
 

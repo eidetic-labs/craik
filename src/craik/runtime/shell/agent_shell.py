@@ -5,9 +5,12 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Iterable
 
+from craik.runtime.contract.auto_registry import AutoSlashRegistry
+from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
 from craik.runtime.i18n.messages import text as localize_text
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
+from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
-from craik.runtime.shell.slash_commands import dispatch_slash_command
 
 
 def render_status_card(report: ReadinessReport, *, env: dict[str, str] | None = None) -> str:
@@ -58,12 +61,14 @@ def run_shell(
     output_func: Callable[[str], None] = print,
     stdin_isatty: bool | None = None,
     lines: Iterable[str] | None = None,
+    registry: AutoSlashRegistry | None = None,
 ) -> int:
     """Run the Craik shell, falling back to a status card for noninteractive launch."""
     report = resolve_readiness(env)
     output_func(render_status_card(report, env=env))
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
     scripted = iter(lines) if lines is not None else None
+    registry = registry or get_tui_registry()
     if not interactive and scripted is None:
         return 0
 
@@ -79,7 +84,9 @@ def run_shell(
             output_func("Session ended.")
             return 0
         if text.startswith("/"):
-            result = dispatch_slash_command(text, env=env)
+            result = to_slash_command_result(
+                _contract_invoke(text, registry=registry, env=env)
+            )
             output_func(result.text)
             if result.exit_shell:
                 return result.exit_code
