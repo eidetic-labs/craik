@@ -29,25 +29,75 @@ def _write(root: Path, relative: str, source: str) -> None:
     path.write_text(textwrap.dedent(source), encoding="utf-8")
 
 
-def test_no_direct_stdout_guard_catches_strict_command_echo(tmp_path: Path) -> None:
+def test_no_direct_stdout_guard_catches_typer_json_echo(tmp_path: Path) -> None:
     _write(
         tmp_path,
         "src/craik/cli_auth.py",
         """
         from craik.runtime.contract import CommandResult, craik_command
         import typer
+        import json
 
         @craik_command(payload_shape="card_list")
         def auth_list() -> CommandResult:
-            typer.echo("{}")
+            typer.echo(json.dumps({}))
             return CommandResult(payload={})
         """,
     )
 
     failures = check_no_direct_stdout.direct_stdout_failures(tmp_path)
 
-    assert failures
-    assert "auth_list writes directly to stdout" in failures[0]
+    assert failures == [
+        "src/craik/cli_auth.py:8 auth_list emits JSON directly; "
+        "use craik.cli_output.emit_command_result(result)"
+    ]
+
+
+def test_no_direct_stdout_guard_catches_print_json(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "src/craik/cli_example.py",
+        """
+        import json
+        from craik.runtime.contract import CommandResult, craik_command
+
+        @craik_command(payload_shape="kv")
+        def example_status() -> CommandResult:
+            print(json.dumps({"ok": True}))
+            return CommandResult(payload={})
+        """,
+    )
+
+    failures = check_no_direct_stdout.direct_stdout_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_example.py:7 example_status emits JSON directly; "
+        "use craik.cli_output.emit_command_result(result)"
+    ]
+
+
+def test_no_direct_stdout_guard_catches_sys_stdout_json_write(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "src/craik/cli_example.py",
+        """
+        import json
+        import sys
+        from craik.runtime.contract import CommandResult, craik_command
+
+        @craik_command(payload_shape="kv")
+        def example_status() -> CommandResult:
+            sys.stdout.write(json.dumps({"ok": True}))
+            return CommandResult(payload={})
+        """,
+    )
+
+    failures = check_no_direct_stdout.direct_stdout_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_example.py:8 example_status emits JSON directly; "
+        "use craik.cli_output.emit_command_result(result)"
+    ]
 
 
 def test_no_direct_stdout_guard_accepts_emit_helper(tmp_path: Path) -> None:

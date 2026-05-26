@@ -461,9 +461,10 @@ def resolve_textual_theme(env: dict[str, str] | None = None) -> str:
         return override
     if values.get("NO_COLOR") == "1":
         return "monochrome"
-    stored = configured_theme(values)
-    if stored is not None:
-        return stored
+    if env is None or "CRAIK_HOME" in values or "HOME" in values:
+        stored = configured_theme(values)
+        if stored is not None:
+            return stored
     colorfgbg = values.get("COLORFGBG", "")
     if ";" in colorfgbg:
         try:
