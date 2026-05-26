@@ -2290,6 +2290,9 @@ def test_run_commands_inspect_persisted_run_state(tmp_path: Path) -> None:
     assert listed.exit_code == 0
     assert shown.exit_code == 0
     assert shown_alias.exit_code == 0
+    assert listed.exception is None
+    assert shown.exception is None
+    assert shown.stdout.lstrip().startswith("{")
     assert [item["id"] for item in json.loads(listed.stdout)] == ["run_docs"]
     payload = json.loads(shown.stdout)
     alias_payload = json.loads(shown_alias.stdout)

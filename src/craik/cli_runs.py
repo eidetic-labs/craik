@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, NoReturn
 
 import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
+from craik.cli_output import emit_command_result
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload, role_kind
 from craik.contracts.models import (
     RecoverySession,
@@ -19,6 +19,7 @@ from craik.runtime.companions.operator_views import (
     RunDeltaSnapshot,
     format_run_delta_view,
 )
+from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.model_providers import ModelProviderNotFoundError
 from craik.runtime.providers.provider_runner import (
     ProviderBackedRunExecutor,
@@ -32,6 +33,7 @@ run_app = typer.Typer(help="Execute, inspect, and recover single-agent task runs
 
 
 @run_app.command("execute")
+@craik_command(payload_shape="card")
 def run_execute(
     task_id: Annotated[str, typer.Argument(help="Task id to execute.")],
     provider_id: Annotated[
@@ -63,14 +65,14 @@ def run_execute(
         str | None,
         typer.Option("--role-runner", help="Override the default runner for the selected role."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Execute a deterministic provider-backed MVP runner path for a task."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
     try:
         store.initialize()
         grants = [fixture_shell_grant(task_id)] if allow_fixture_action else []
-        result = ProviderBackedRunExecutor(store).execute(
+        execution_result = ProviderBackedRunExecutor(store).execute(
             task_id=task_id,
             provider_id=provider_id,
             grants=grants,
@@ -78,7 +80,7 @@ def run_execute(
             role_kind=role_kind(role) if role is not None else None,
             role_runner_id=role_runner,
         )
-        payload = provider_run_payload(result)
+        payload = provider_run_payload(execution_result)
     except (
         ModelProviderNotFoundError,
         ProjectNotFoundError,
@@ -89,16 +91,19 @@ def run_execute(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("list")
+@craik_command(payload_shape="card_list")
 def run_list(
     task_id: Annotated[
         str | None,
         typer.Option("--task-id", help="Only include runs for this task id."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """List persisted task runs."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -110,10 +115,13 @@ def run_list(
     if task_id is not None:
         runs = [run for run in runs if run.task_id == task_id]
     payload = [run.model_dump(mode="json", by_alias=True) for run in runs]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card_list")
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("inspect")
+@craik_command(payload_shape="card")
 def run_inspect(
     run_id_or_task_id: str,
     include_outputs: Annotated[
@@ -123,13 +131,16 @@ def run_inspect(
             help="Include full captured output payloads.",
         ),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Inspect one persisted task run and linked local state."""
     operator_identity_or_fail()
-    _echo_run_inspection(run_id_or_task_id, include_outputs=include_outputs)
+    result = _run_inspection_result(run_id_or_task_id, include_outputs=include_outputs)
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("show")
+@craik_command(payload_shape="card")
 def run_show(
     run_id_or_task_id: str,
     include_outputs: Annotated[
@@ -139,13 +150,16 @@ def run_show(
             help="Include full captured output payloads.",
         ),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Show one persisted task run and linked local state."""
     operator_identity_or_fail()
-    _echo_run_inspection(run_id_or_task_id, include_outputs=include_outputs)
+    result = _run_inspection_result(run_id_or_task_id, include_outputs=include_outputs)
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("resume")
+@craik_command(payload_shape="card")
 def run_resume(
     run_id_or_task_id: str,
     provider_id: Annotated[
@@ -166,7 +180,7 @@ def run_resume(
         int,
         typer.Option("--max-iterations", help="Maximum single-agent loop iterations."),
     ] = 5,
-) -> None:
+) -> CommandResult:
     """Resume an interrupted provider-backed run from durable phase boundaries."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -176,20 +190,16 @@ def run_resume(
         if run is None:
             raise typer.BadParameter(f"unknown run or task: {run_id_or_task_id}")
         if run.status != "interrupted":
-            typer.echo(
-                f"run {run.id} is {run.status}; only interrupted runs can be resumed",
-                err=True,
-            )
-            raise typer.Exit(1)
+            _reject_run_state(f"run {run.id} is {run.status}; only interrupted runs can be resumed")
         grants = [fixture_shell_grant(run.task_id)] if allow_fixture_action else []
-        result = ProviderBackedRunExecutor(store).execute(
+        execution_result = ProviderBackedRunExecutor(store).execute(
             task_id=run.task_id,
             provider_id=provider_id or run.runner_id,
             grants=grants,
             max_iterations=max_iterations,
             resume_run_id=run.id,
         )
-        payload = provider_run_payload(result)
+        payload = provider_run_payload(execution_result)
     except (
         ModelProviderNotFoundError,
         ProjectNotFoundError,
@@ -199,17 +209,20 @@ def run_resume(
         raise typer.BadParameter(str(error)) from None
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("cancel")
+@craik_command(payload_shape="card")
 def run_cancel(
     run_id_or_task_id: str,
     reason: Annotated[
         str,
         typer.Option("--reason", help="Reason recorded on the interrupted run."),
     ] = "cancelled by operator",
-) -> None:
+) -> CommandResult:
     """Cancel a non-terminal run by persisting an interrupted stop state."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -219,11 +232,7 @@ def run_cancel(
         if run is None:
             raise typer.BadParameter(f"unknown run or task: {run_id_or_task_id}")
         if run.status in TERMINAL_RUN_STATUSES:
-            typer.echo(
-                f"run {run.id} is {run.status}; terminal runs cannot be cancelled",
-                err=True,
-            )
-            raise typer.Exit(1)
+            _reject_run_state(f"run {run.id} is {run.status}; terminal runs cannot be cancelled")
         run = TaskRunManager(store).transition(
             run.id,
             RunTransition(
@@ -237,10 +246,12 @@ def run_cancel(
         payload = {"cancelled": True, "run": run.model_dump(mode="json", by_alias=True)}
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
-def _echo_run_inspection(run_id_or_task_id: str, *, include_outputs: bool) -> None:
+def _run_inspection_result(run_id_or_task_id: str, *, include_outputs: bool) -> CommandResult:
     store = LocalStore.from_env()
     try:
         store.initialize()
@@ -250,10 +261,16 @@ def _echo_run_inspection(run_id_or_task_id: str, *, include_outputs: bool) -> No
         payload = _run_inspection_payload(store, run, include_outputs=include_outputs)
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return CommandResult(payload=payload, shape="card")
+
+
+def _reject_run_state(message: str) -> NoReturn:
+    typer.echo(message, err=True)
+    raise typer.Exit(1)
 
 
 @run_app.command("recover")
+@craik_command(payload_shape="card")
 def run_recover(
     run_id_or_task_id: str,
     dry_run: Annotated[
@@ -264,7 +281,7 @@ def run_recover(
         str | None,
         typer.Option("--reason", help="Reason for recovery."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Print a deterministic recovery plan for an interrupted run."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -274,25 +291,26 @@ def run_recover(
         if run is None:
             raise typer.BadParameter(f"unknown run or task: {run_id_or_task_id}")
         if run.status != "interrupted":
-            typer.echo(
-                f"run {run.id} is {run.status}; only interrupted runs can be recovered",
-                err=True,
+            _reject_run_state(
+                f"run {run.id} is {run.status}; only interrupted runs can be recovered"
             )
-            raise typer.Exit(1)
         payload = _run_recovery_payload(store, run, dry_run=dry_run, reason=reason)
     finally:
         store.close()
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("delta")
+@craik_command(payload_shape="card")
 def run_delta(
     delta_id_or_run_id_or_task_id: str,
     json_output: Annotated[
         bool,
         typer.Option("--json/--view", help="Print JSON instead of the operator view."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Show what changed since the previous usable handoff or resume point."""
     operator_identity_or_fail()
     store = LocalStore.from_env()
@@ -307,10 +325,10 @@ def run_delta(
         payload = _run_delta_payload(delta, recovery_sessions)
     finally:
         store.close()
-    if json_output:
-        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    typer.echo("\n".join(payload["lines"]))
+    text = None if json_output else "\n".join(payload["lines"])
+    result = CommandResult(payload=payload, shape="card", text=text)
+    emit_command_result(result)
+    return result
 
 
 def _find_run(store: LocalStore, run_id_or_task_id: str) -> TaskRun | None:
