@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 
 from craik.cli import knowledge_app
+from craik.cli_output import emit_command_result
 from craik.runtime.auth.operator import OperatorSessionNotFoundError, OperatorSessionStore
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.store import LocalStore
 from craik.runtime.work.context_debt import resolve_context_debt
 from craik.runtime.work.known_traps import record_known_trap, record_negative_knowledge
@@ -22,6 +23,7 @@ from craik.runtime.work.scratchpad import (
 
 
 @knowledge_app.command("scratchpad")
+@craik_command(payload_shape="card")
 def knowledge_scratchpad(
     task_id: Annotated[str, typer.Argument(help="Task id.")],
     note: Annotated[str, typer.Option("--note", help="Temporary note to persist.")],
@@ -30,7 +32,7 @@ def knowledge_scratchpad(
         list[str] | None,
         typer.Option("--evidence-id", help="Evidence id. May be repeated."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Persist an expiring scratchpad note."""
     store = LocalStore.from_env()
     try:
@@ -45,10 +47,11 @@ def knowledge_scratchpad(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("unknown")
+@craik_command(payload_shape="card")
 def knowledge_unknown(
     task_id: Annotated[str, typer.Argument(help="Task id.")],
     question: Annotated[str, typer.Option("--question", help="Unknown question.")],
@@ -62,7 +65,7 @@ def knowledge_unknown(
         list[str] | None,
         typer.Option("--evidence-id", help="Evidence id. May be repeated."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Persist an unresolved unknown."""
     store = LocalStore.from_env()
     try:
@@ -79,10 +82,11 @@ def knowledge_unknown(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("context-request")
+@craik_command(payload_shape="card")
 def knowledge_context_request(
     task_id: Annotated[str, typer.Argument(help="Task id.")],
     question: Annotated[str, typer.Option("--question", help="Requested context.")],
@@ -93,7 +97,7 @@ def knowledge_context_request(
         str | None,
         typer.Option("--unknown-id", help="Linked unknown id."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Persist a context request that blocks continuation until fulfilled."""
     store = LocalStore.from_env()
     try:
@@ -110,14 +114,15 @@ def knowledge_context_request(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("resolve-unknown")
+@craik_command(payload_shape="card")
 def knowledge_resolve_unknown(
     unknown_id: Annotated[str, typer.Argument(help="Unknown record id.")],
     answer: Annotated[str, typer.Option("--answer", help="Resolution answer.")],
-) -> None:
+) -> CommandResult:
     """Resolve an unknown and link the operator receipt."""
     operator = _operator_identity()
     store = LocalStore.from_env()
@@ -131,13 +136,14 @@ def knowledge_resolve_unknown(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("fulfill-context-request")
+@craik_command(payload_shape="card")
 def knowledge_fulfill_context_request(
     request_id: Annotated[str, typer.Argument(help="Context request id.")],
-) -> None:
+) -> CommandResult:
     """Fulfill a context request and link the operator receipt."""
     operator = _operator_identity()
     store = LocalStore.from_env()
@@ -150,17 +156,18 @@ def knowledge_fulfill_context_request(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("resolve-context-debt")
+@craik_command(payload_shape="card")
 def knowledge_resolve_context_debt(
     debt_id: Annotated[str, typer.Argument(help="Context debt record id.")],
     summary: Annotated[
         str | None,
         typer.Option("--summary", help="Resolution summary."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Resolve a context debt record and link the operator receipt."""
     operator = _operator_identity()
     store = LocalStore.from_env()
@@ -174,10 +181,11 @@ def knowledge_resolve_context_debt(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("trap")
+@craik_command(payload_shape="card")
 def knowledge_trap(
     kind: Annotated[str, typer.Option("--kind", help="Trap kind.")],
     statement: Annotated[str, typer.Option("--statement", help="Trap statement.")],
@@ -188,7 +196,7 @@ def knowledge_trap(
     ],
     project_id: Annotated[str | None, typer.Option("--project", help="Project id.")] = None,
     task_id: Annotated[str | None, typer.Option("--task", help="Task id.")] = None,
-) -> None:
+) -> CommandResult:
     """Persist an evidence-backed known trap."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -205,10 +213,11 @@ def knowledge_trap(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 @knowledge_app.command("negative")
+@craik_command(payload_shape="card")
 def knowledge_negative(
     statement: Annotated[str, typer.Option("--statement", help="Negative knowledge statement.")],
     scope: Annotated[str, typer.Option("--scope", help="Scope of the assertion.")],
@@ -223,7 +232,7 @@ def knowledge_negative(
         str | None,
         typer.Option("--contradicted-fact", help="Existing positive assertion contradicted."),
     ] = None,
-) -> None:
+) -> CommandResult:
     """Persist evidence-backed negative knowledge."""
     _operator_identity()
     store = LocalStore.from_env()
@@ -241,7 +250,7 @@ def knowledge_negative(
         )
     finally:
         store.close()
-    _print(record)
+    return _emit_model(record, shape="card")
 
 
 def _operator_identity() -> str:
@@ -252,6 +261,8 @@ def _operator_identity() -> str:
     return session.subject
 
 
-def _print(model: object) -> None:
+def _emit_model(model: object, *, shape: PayloadShape) -> CommandResult:
     payload = model.model_dump(mode="json", by_alias=True)  # type: ignore[attr-defined]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
