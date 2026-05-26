@@ -9,7 +9,6 @@ from craik.runtime.shell.modals.multiline_input import (
     MultilineInputRequest,
 )
 from craik.runtime.shell.modals.registry import (
-    CANONICAL_MODAL_NAMES,
     ModalClass,
     canonical_modal_registry,
     modal_supports_secret_capture,
@@ -19,7 +18,6 @@ from craik.runtime.shell.modals.select_choice import Choice, SelectChoiceModal, 
 from craik.runtime.shell.modals.text_input import TextInputModal, TextInputRequest
 
 __all__ = [
-    "CANONICAL_MODAL_NAMES",
     "Choice",
     "ConfirmModal",
     "ConfirmRequest",

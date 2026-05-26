@@ -10,6 +10,40 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+## 0.12.8 — 2026-05-26
+
+### Added
+
+- Added the v0.12.8 CLI/TUI command contract surface, with migrated
+  `@craik_command` callbacks returning `CommandResult` payloads for shared
+  CLI, slash-command, JSON, and TUI rendering.
+- Added canonical modal metadata for prompt-backed commands and strengthened
+  modal mapping checks so future prompt or confirmation call sites require
+  explicit TUI ownership.
+- Added structural CI guards for payload-shape validity, NextAction slash
+  targets, centralized format coverage, direct stdout writes, modal mappings,
+  modal security, command-result return annotations, CLI/TUI contract
+  metadata, and slash snapshot coverage.
+- Added canonical slash snapshots across the standard terminal-width matrix
+  for table, card, and card-list command shapes.
+
+### Changed
+
+- Hardened migrated command output so shared callbacks emit through
+  `emit_command_result()` and stay silent during slash dispatch.
+- Expanded slash snapshot generation to dispatch through the canonical slash
+  command registry and verify all required widths for shape-sensitive commands.
+- Documented intentional legacy CLI entry points with explicit
+  `craik-legacy-command:` markers and guard coverage.
+
+### Fixed
+
+- Fixed dual-output regressions where migrated CLI commands could write JSON
+  directly instead of using the shared renderer flow.
+- Fixed v0.12.8 remediation gaps F-1 through F-4: interactive prompt metadata,
+  missing structural guards, snapshot-width coverage, and mixed-state command
+  cleanup.
+
 ## 0.12.7 — 2026-05-25
 
 ### Added
