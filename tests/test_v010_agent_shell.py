@@ -258,6 +258,8 @@ def test_model_profile_session_and_usage_commands(tmp_path: Path) -> None:
     assert json.loads(model_status.stdout)["active_model"] == "openai/gpt-5"
     assert profile_create.exit_code == 0
     assert profile_use.exit_code == 0
+    assert profile_create.exception is None
+    assert usage.exception is None
     assert json.loads(sessions.stdout)[0]["id"] == "agent_session_docs"
     assert json.loads(session_export.stdout)["redacted"] is True
     assert json.loads(usage.stdout)["token_usage"] == "unknown"

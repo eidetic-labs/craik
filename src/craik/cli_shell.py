@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 
 from craik.cli import app, model_app, profile_app, session_app
+from craik.cli_output import emit_command_result
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.runtime.auth.visibility import active_operator_session_from_env
 from craik.runtime.contract import CommandResult, craik_command
@@ -62,11 +63,19 @@ def chat_command(
 
 
 @app.command("slash")
-def slash_command(command: str) -> None:
+def slash_command(command: str) -> CommandResult:
     """Dispatch one slash command for tests and shell integrations."""
-    result = dispatch_slash_command(command)
-    typer.echo(result.text)
-    raise typer.Exit(result.exit_code)
+    slash_result = dispatch_slash_command(command)
+    _emit_raw_text(slash_result.text)
+    if slash_result.exit_code:
+        raise typer.Exit(slash_result.exit_code)
+    return CommandResult(
+        payload=slash_result.payload if slash_result.payload is not None else slash_result.text,
+        shape=slash_result.payload_shape or "auto",
+        text=slash_result.text,
+        exit_code=slash_result.exit_code,
+        empty_state_message=slash_result.empty_state_message,
+    )
 
 
 @app.command("theme")
@@ -77,7 +86,7 @@ def theme_command(theme: str | None = None) -> CommandResult:
         result = theme_result(theme)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -89,7 +98,7 @@ def rename_command(name: str) -> CommandResult:
         result = rename_shell_session_result(name)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -98,7 +107,7 @@ def rename_command(name: str) -> CommandResult:
 def model_list() -> CommandResult:
     """List configured provider/model choices and local presets."""
     result = model_list_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -107,7 +116,7 @@ def model_list() -> CommandResult:
 def model_status() -> CommandResult:
     """Show active model state and readiness."""
     result = model_status_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -119,7 +128,7 @@ def model_set(model: str) -> CommandResult:
         result = model_set_result(model)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -128,7 +137,7 @@ def model_set(model: str) -> CommandResult:
 def model_probe() -> CommandResult:
     """Probe model readiness without sending live prompts."""
     result = model_probe_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -144,7 +153,7 @@ def model_alias(
         result = model_alias_result(action, name, target)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -156,7 +165,7 @@ def model_fallback(action: str, model: str | None = None) -> CommandResult:
         result = model_fallback_result(action, model)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -166,7 +175,7 @@ def session_list() -> CommandResult:
     """List persistent agent sessions."""
     _operator_identity()
     result = session_list_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -179,7 +188,7 @@ def session_show(session_id: str) -> CommandResult:
         result = session_show_result(session_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -192,7 +201,7 @@ def session_resume(session_id: str) -> CommandResult:
         result = session_resume_result(session_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -205,7 +214,7 @@ def session_rename(session_id: str, name: str) -> CommandResult:
         result = session_rename_result(session_id, name)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -218,7 +227,7 @@ def session_export(session_id: str) -> CommandResult:
         result = session_export_result(session_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -232,7 +241,7 @@ def session_prune(
     if not yes:
         raise typer.BadParameter("session prune requires --yes")
     result = session_prune_result()
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
@@ -250,19 +259,23 @@ def session_delete(
         result = session_delete_result(session_id)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2))
+    emit_command_result(result)
     return result
 
 
 @profile_app.command("list")
-def profile_list() -> None:
+@craik_command(payload_shape="card")
+def profile_list() -> CommandResult:
     """List local Craik profiles."""
     settings = ProfileSettingsStore.from_env().load()
-    typer.echo(json.dumps(settings.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(settings)
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("use")
-def profile_use(name: str) -> None:
+@craik_command(payload_shape="card")
+def profile_use(name: str) -> CommandResult:
     """Set the active local Craik profile."""
     store = ProfileSettingsStore.from_env()
     settings = store.load()
@@ -270,14 +283,17 @@ def profile_use(name: str) -> None:
         raise typer.BadParameter(f"unknown profile: {name}")
     updated = ProfileSettings(active=name, profiles=settings.profiles)
     store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(updated)
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("create")
+@craik_command(payload_shape="card")
 def profile_create(
     name: str,
     description: Annotated[str, typer.Option("--description")] = "",
-) -> None:
+) -> CommandResult:
     """Create a local Craik profile."""
     store = ProfileSettingsStore.from_env()
     settings = store.load()
@@ -285,11 +301,14 @@ def profile_create(
     profiles[name] = CraikUserProfile(name=name, description=description)
     updated = ProfileSettings(active=settings.active, profiles=profiles)
     store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(updated)
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("show")
-def profile_show(name: str | None = None) -> None:
+@craik_command(payload_shape="card")
+def profile_show(name: str | None = None) -> CommandResult:
     """Show one local Craik profile."""
     settings = ProfileSettingsStore.from_env().load()
     selected = name or settings.active
@@ -297,11 +316,14 @@ def profile_show(name: str | None = None) -> None:
         profile = settings.profiles[selected]
     except KeyError:
         raise typer.BadParameter(f"unknown profile: {selected}") from None
-    typer.echo(json.dumps(profile.as_dict(), indent=2, sort_keys=True))
+    result = CommandResult(payload=profile.as_dict(), shape="card")
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("rename")
-def profile_rename(old: str, new: str) -> None:
+@craik_command(payload_shape="card")
+def profile_rename(old: str, new: str) -> CommandResult:
     """Rename a local Craik profile."""
     store = ProfileSettingsStore.from_env()
     settings = store.load()
@@ -313,14 +335,17 @@ def profile_rename(old: str, new: str) -> None:
     active = new if settings.active == old else settings.active
     updated = ProfileSettings(active=active, profiles=profiles)
     store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(updated)
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("delete")
+@craik_command(payload_shape="card")
 def profile_delete(
     name: str,
     yes: Annotated[bool, typer.Option("--yes", help="Confirm profile deletion.")] = False,
-) -> None:
+) -> CommandResult:
     """Delete a local Craik profile."""
     if name == "default":
         raise typer.BadParameter("default profile cannot be deleted")
@@ -333,19 +358,25 @@ def profile_delete(
     active = "default" if settings.active == name else settings.active
     updated = ProfileSettings(active=active, profiles=profiles)
     store.save(updated)
-    typer.echo(json.dumps(updated.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(updated)
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("export")
-def profile_export() -> None:
+@craik_command(payload_shape="card")
+def profile_export() -> CommandResult:
     """Export profile settings without secrets."""
     payload = ProfileSettingsStore.from_env().load().as_dict()
     payload["redacted"] = True
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @profile_app.command("import")
-def profile_import(path: str) -> None:
+@craik_command(payload_shape="card")
+def profile_import(path: str) -> CommandResult:
     """Import profile settings from a redacted JSON export."""
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     profiles = {
@@ -360,21 +391,29 @@ def profile_import(path: str) -> None:
         profiles["default"] = CraikUserProfile("default")
     settings = ProfileSettings(active=str(payload.get("active", "default")), profiles=profiles)
     ProfileSettingsStore.from_env().save(settings)
-    typer.echo(json.dumps(settings.as_dict(), indent=2, sort_keys=True))
+    result = _profile_settings_result(settings)
+    emit_command_result(result)
+    return result
 
 
 @app.command("insights")
-def insights_command() -> None:
+@craik_command(payload_shape="kv")
+def insights_command() -> CommandResult:
     """Show high-level runtime activity insights."""
     _operator_identity()
-    typer.echo(json.dumps(_usage_payload(), indent=2, sort_keys=True))
+    result = CommandResult(payload=_usage_payload(), shape="kv")
+    emit_command_result(result)
+    return result
 
 
 @app.command("usage")
-def usage_command() -> None:
+@craik_command(payload_shape="kv")
+def usage_command() -> CommandResult:
     """Show provider, approval, and session usage summary."""
     _operator_identity()
-    typer.echo(json.dumps(_usage_payload(), indent=2, sort_keys=True))
+    result = CommandResult(payload=_usage_payload(), shape="kv")
+    emit_command_result(result)
+    return result
 
 
 def _operator_identity() -> str:
@@ -409,3 +448,11 @@ def _usage_payload() -> dict[str, object]:
         "receipts": len(receipts),
         "handoffs": len(handoffs),
     }
+
+
+def _profile_settings_result(settings: ProfileSettings) -> CommandResult:
+    return CommandResult(payload=settings.as_dict(), shape="card")
+
+
+def _emit_raw_text(text: str) -> None:
+    typer.echo(text)
