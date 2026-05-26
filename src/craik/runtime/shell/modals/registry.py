@@ -7,9 +7,13 @@ from typing import Any, cast
 
 from textual.screen import ModalScreen
 
+from craik.runtime.shell.modals.auth_capture import AuthCaptureModal
+from craik.runtime.shell.modals.auth_logout import AuthLogoutModal
 from craik.runtime.shell.modals.confirm import ConfirmModal
 from craik.runtime.shell.modals.file_picker import FilePickerModal
 from craik.runtime.shell.modals.multiline_input import MultilineInputModal
+from craik.runtime.shell.modals.receipt_detail import ReceiptDetailModal
+from craik.runtime.shell.modals.record_display import RecordDisplayModal
 from craik.runtime.shell.modals.select_choice import SelectChoiceModal
 from craik.runtime.shell.modals.text_input import TextInputModal
 
@@ -21,6 +25,10 @@ _CANONICAL_MODALS: dict[str, ModalClass] = {
     "SelectChoiceModal": SelectChoiceModal,
     "MultilineInputModal": MultilineInputModal,
     "FilePickerModal": FilePickerModal,
+    "RecordDisplayModal": RecordDisplayModal,
+    "AuthCaptureModal": AuthCaptureModal,
+    "AuthLogoutModal": AuthLogoutModal,
+    "ReceiptDetailModal": ReceiptDetailModal,
 }
 
 def canonical_modal_registry() -> Mapping[str, ModalClass]:
