@@ -10,11 +10,12 @@ from typer.testing import CliRunner
 from craik.cli import app
 from craik.contracts.models import PluginReceipt, ReceiptResult
 from craik.runtime.paths import ensure_craik_home
-from craik.runtime.shell.textual_app import CraikApp
-from craik.runtime.shell.textual_modals import (
-    ReceiptDetailModal,
+from craik.runtime.shell.modals.receipt_detail import (
     _receipt_integrity_status,
+    receipt_detail_record,
 )
+from craik.runtime.shell.modals.record_display import _format_record
+from craik.runtime.shell.textual_app import CraikApp
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput, slash_command_conversion
 from craik.runtime.shell.textual_widgets.slash_renderers import render_slash_payload
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
@@ -72,7 +73,8 @@ def test_receipt_detail_and_logout_markup_escape(tmp_path: Path) -> None:
     store.initialize()
     store.close()
 
-    assert "\\[red]" in ReceiptDetailModal(malicious, env=env)._detail_text()
+    detail = _format_record(receipt_detail_record(malicious, env=env))
+    assert "\\[red]" in detail
 
 
 def test_toast_and_structured_renderer_escape_markup() -> None:

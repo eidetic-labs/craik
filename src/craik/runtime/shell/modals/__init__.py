@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from craik.runtime.shell.modals.approval_decision import (
+    ApprovalDecisionModal,
+    ApprovalDecisionResult,
+)
 from craik.runtime.shell.modals.auth_capture import (
     AuthCaptureModal,
     AuthCaptureRequest,
@@ -36,6 +40,8 @@ __all__ = [
     "AuthLogoutModal",
     "AuthLogoutRequest",
     "AuthLogoutResult",
+    "ApprovalDecisionModal",
+    "ApprovalDecisionResult",
     "Choice",
     "ConfirmModal",
     "ConfirmRequest",

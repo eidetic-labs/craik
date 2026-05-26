@@ -7,6 +7,7 @@ import typer
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.shell.modals import (
+    ApprovalDecisionModal,
     AuthCaptureModal,
     AuthLogoutModal,
     ConfirmModal,
@@ -33,6 +34,7 @@ def test_canonical_modal_registry_resolves_required_classes() -> None:
         "MultilineInputModal",
         "AuthCaptureModal",
         "AuthLogoutModal",
+        "ApprovalDecisionModal",
         "ReceiptDetailModal",
         "RecordDisplayModal",
         "SelectChoiceModal",
@@ -46,6 +48,7 @@ def test_canonical_modal_registry_resolves_required_classes() -> None:
     assert resolve_modal_class("multiline_input", registry) is MultilineInputModal
     assert resolve_modal_class("file_picker", registry) is FilePickerModal
     assert resolve_modal_class("receipt_detail", registry) is ReceiptDetailModal
+    assert resolve_modal_class("approval_decision", registry) is ApprovalDecisionModal
     assert resolve_modal_class("record_display", registry) is RecordDisplayModal
 
 

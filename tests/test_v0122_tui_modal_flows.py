@@ -13,14 +13,12 @@ from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialSt
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.approvals import open_approval_request
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
+from craik.runtime.shell.modals.approval_decision import ApprovalDecisionModal
 from craik.runtime.shell.modals.auth_capture import AuthCaptureModal, AuthCaptureRequest
 from craik.runtime.shell.modals.auth_logout import AuthLogoutModal
 from craik.runtime.shell.modals.confirm import ConfirmModal
 from craik.runtime.shell.modals.select_choice import SelectChoiceModal
 from craik.runtime.shell.textual_app import CraikApp
-from craik.runtime.shell.textual_modals import (
-    ApprovalDecisionModal,
-)
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput
 from craik.runtime.store import LocalStore
 

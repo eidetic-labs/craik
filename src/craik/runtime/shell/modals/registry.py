@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from textual.screen import ModalScreen
 
+from craik.runtime.shell.modals.approval_decision import ApprovalDecisionModal
 from craik.runtime.shell.modals.auth_capture import AuthCaptureModal
 from craik.runtime.shell.modals.auth_logout import AuthLogoutModal
 from craik.runtime.shell.modals.confirm import ConfirmModal
@@ -28,6 +29,7 @@ _CANONICAL_MODALS: dict[str, ModalClass] = {
     "RecordDisplayModal": RecordDisplayModal,
     "AuthCaptureModal": AuthCaptureModal,
     "AuthLogoutModal": AuthLogoutModal,
+    "ApprovalDecisionModal": ApprovalDecisionModal,
     "ReceiptDetailModal": ReceiptDetailModal,
 }
 
