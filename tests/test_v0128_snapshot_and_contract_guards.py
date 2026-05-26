@@ -24,6 +24,9 @@ def _load_script(name: str) -> ModuleType:
 
 
 check_cli_tui_contract = _load_script("check_cli_tui_contract")
+check_format_flag_coverage = _load_script("check_format_flag_coverage")
+check_next_actions_validity = _load_script("check_next_actions_validity")
+check_payload_shape_validity = _load_script("check_payload_shape_validity")
 check_snapshot_coverage = _load_script("check_snapshot_coverage")
 generate_snapshots = _load_script("generate_snapshots")
 
@@ -54,6 +57,118 @@ def test_cli_tui_contract_guard_accepts_current_registry() -> None:
     registry = check_cli_tui_contract.registry_from_app(app)
 
     assert check_cli_tui_contract.cli_tui_contract_failures(registry) == []
+
+
+def test_payload_shape_validity_guard_accepts_current_cli_metadata() -> None:
+    assert check_payload_shape_validity.payload_shape_validity_failures(ROOT) == []
+
+
+def test_payload_shape_validity_guard_rejects_unknown_shape(tmp_path: Path) -> None:
+    target = tmp_path / "src" / "craik"
+    target.mkdir(parents=True)
+    (target / "cli_bad.py").write_text(
+        textwrap.dedent(
+            """
+        from craik.runtime.contract import craik_command
+
+        @craik_command(payload_shape="spreadsheet")
+        def bad_command():
+            pass
+        """
+        ),
+        encoding="utf-8",
+    )
+
+    failures = check_payload_shape_validity.payload_shape_validity_failures(tmp_path)
+
+    assert failures == [
+        "src/craik/cli_bad.py:4 payload_shape='spreadsheet' is not legal; "
+        "expected one of ['auto', 'card', 'card_list', 'kv', 'markdown', 'table', 'tree']"
+    ]
+
+
+def test_next_action_validity_guard_accepts_current_source() -> None:
+    slash_names = check_next_actions_validity._registered_slash_names()
+
+    assert check_next_actions_validity.next_action_validity_failures(
+        ROOT,
+        slash_names,
+    ) == []
+
+
+def test_next_action_validity_guard_rejects_unknown_slash(tmp_path: Path) -> None:
+    target = tmp_path / "src" / "craik" / "runtime"
+    target.mkdir(parents=True)
+    (target / "actions.py").write_text(
+        textwrap.dedent(
+            """
+        from craik.runtime.contract import NextAction
+
+        ACTION = NextAction(text="Do it", command="/missing now", field="status")
+        """
+        ),
+        encoding="utf-8",
+    )
+
+    failures = check_next_actions_validity.next_action_validity_failures(
+        tmp_path,
+        slash_names={"/status"},
+    )
+
+    assert failures == [
+        "src/craik/runtime/actions.py:4 NextAction.command='/missing now' "
+        "does not resolve to a registered slash command"
+    ]
+
+
+def test_format_coverage_guard_accepts_current_contract_tests() -> None:
+    assert check_format_flag_coverage.format_coverage_failures(ROOT) == []
+
+
+def test_format_coverage_guard_reports_missing_text_test(tmp_path: Path) -> None:
+    output = tmp_path / "src" / "craik"
+    tests = tmp_path / "tests" / "contract"
+    output.mkdir(parents=True)
+    tests.mkdir(parents=True)
+    (output / "cli_output.py").write_text(
+        textwrap.dedent(
+            """
+        import typer
+
+        def emit_command_result(result):
+            output_format = detect_default_format()
+            if output_format == "json":
+                return "{}"
+            rendered = format_command_result(result, kind=output_format)
+            typer.echo(rendered)
+        """
+        ),
+        encoding="utf-8",
+    )
+    (tests / "test_format.py").write_text(
+        textwrap.dedent(
+            """
+        def test_detect_default_format_tty():
+            pass
+
+        def test_detect_default_format_non_tty():
+            pass
+
+        def test_json_format():
+            format_command_result(object(), kind="json")
+
+        def test_tui_format():
+            format_command_result(object(), kind="tui")
+        """
+        ),
+        encoding="utf-8",
+    )
+
+    failures = check_format_flag_coverage.format_coverage_failures(tmp_path)
+
+    assert failures == [
+        "tests/contract/test_format.py: missing format_command_result kind='text' test"
+    ]
 
 
 def test_cli_tui_contract_guard_requires_legacy_marker(tmp_path: Path) -> None:
