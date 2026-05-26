@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import sys
 from pathlib import Path
 
@@ -15,9 +16,20 @@ if str(SRC) not in sys.path:
 from craik.cli import app  # noqa: E402
 from craik.runtime.contract.auto_registry import AutoSlashRegistry  # noqa: E402
 
+LEGACY_COMMAND_MARKER = "craik-legacy-command:"
+LEGACY_MARKER_FILES: tuple[str, ...] = (
+    "src/craik/cli_auth.py",
+    "src/craik/cli_shell.py",
+    "src/craik/cli_onboarding.py",
+    "src/craik/cli_status.py",
+)
+
 
 def main() -> int:
-    failures = cli_tui_contract_failures(AutoSlashRegistry.from_typer(app))
+    failures = [
+        *cli_tui_contract_failures(AutoSlashRegistry.from_typer(app)),
+        *legacy_command_marker_failures(ROOT),
+    ]
     if failures:
         print("CLI/TUI contract guard failed:", file=sys.stderr)
         for failure in failures:
@@ -76,9 +88,60 @@ def cli_tui_contract_failures(registry: AutoSlashRegistry) -> list[str]:
     return failures
 
 
+def legacy_command_marker_failures(root: Path) -> list[str]:
+    """Require explicit markers for scoped Typer commands left outside craik_command."""
+    failures: list[str] = []
+    for relative in LEGACY_MARKER_FILES:
+        path = root / relative
+        source = path.read_text(encoding="utf-8")
+        lines = source.splitlines()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            if not _has_typer_command_decorator(node):
+                continue
+            if _has_craik_command_decorator(node):
+                continue
+            if _has_legacy_marker(lines, node):
+                continue
+            failures.append(
+                f"{relative}:{node.lineno} {node.name} is a Typer command without "
+                f"@craik_command or {LEGACY_COMMAND_MARKER} marker"
+            )
+    return failures
+
+
 def registry_from_app(test_app: typer.Typer) -> AutoSlashRegistry:
     """Build a registry for fixture apps without importing the production CLI."""
     return AutoSlashRegistry.from_typer(test_app)
+
+
+def _has_typer_command_decorator(node: ast.FunctionDef) -> bool:
+    return any(
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "command"
+        for decorator in node.decorator_list
+    )
+
+
+def _has_craik_command_decorator(node: ast.FunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        candidate = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(candidate, ast.Name) and candidate.id == "craik_command":
+            return True
+    return False
+
+
+def _has_legacy_marker(lines: list[str], node: ast.FunctionDef) -> bool:
+    first_decorator = min(
+        (decorator.lineno for decorator in node.decorator_list),
+        default=node.lineno,
+    )
+    start = max(0, first_decorator - 4)
+    end = max(0, first_decorator - 1)
+    return any(LEGACY_COMMAND_MARKER in line for line in lines[start:end])
 
 
 if __name__ == "__main__":
