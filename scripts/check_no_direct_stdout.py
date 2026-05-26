@@ -28,6 +28,7 @@ STRICT_COMMAND_RESULT_RENDERING: frozenset[tuple[str, str]] = frozenset(
         ("src/craik/cli_auth.py", "auth_test"),
         ("src/craik/cli_auth.py", "logout"),
         ("src/craik/cli_auth.py", "whoami"),
+        ("src/craik/cli_auth_login.py", "auth_login_provider"),
         ("src/craik/cli.py", "dashboard_command"),
         ("src/craik/cli.py", "desktop_action_command"),
         ("src/craik/cli.py", "desktop_menu_command"),

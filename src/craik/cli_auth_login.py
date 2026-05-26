@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import os
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 import click
 import typer
@@ -42,6 +41,7 @@ DEFAULT_OAUTH_PROVIDERS = {"anthropic", "gemini"}
 
 
 @auth_app.command("login")
+@craik_command(payload_shape="card")
 def auth_login_provider(
     provider: Annotated[
         str,
@@ -94,7 +94,7 @@ def auth_login_provider(
         bool,
         typer.Option("--json", help="Print a redacted JSON result."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Capture and cache provider credentials in local credential storage."""
     try:
         normalized_provider = provider.strip().lower()
@@ -141,8 +141,12 @@ def auth_login_provider(
                     ),
                     code_prompt=_code_prompt,
                 )
-            _emit_oauth_login_result(oauth_result, json_output=json_output)
-            return
+            command_result = _oauth_login_command_result(oauth_result)
+            if json_output:
+                emit_command_result(command_result)
+            else:
+                _emit_auth_login_text(command_result.text or "")
+            return command_result
         if project_id is not None:
             raise typer.BadParameter("--project-id is only supported by --mode=oauth")
         if service_account is not None:
@@ -173,8 +177,7 @@ def auth_login_provider(
                 dry_run=dry_run,
             )
     except (AnthropicOAuthError, GeminiOAuthError, OpenAIOAuthError) as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(2) from None
+        _raise_oauth_error(str(error))
     except (ProviderURLSafetyError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
 
@@ -183,17 +186,16 @@ def auth_login_provider(
         "setup_url": setup_url,
         "copy_paste_fallback": True,
     }
+    command_result = CommandResult(
+        payload=payload,
+        shape="card",
+        text="\n".join(_api_key_login_lines(provider, result)),
+    )
     if json_output or dry_run or result.status.status != "ok":
-        typer.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
-    provider_name = provider.title()
-    typer.echo(f"Logged into {provider_name}. {_credential_location_message(result)}")
-    if resolve_readiness().active_model is not None:
-        typer.echo("Ready to chat.")
-    else:
-        typer.echo("Set an active model with `craik model set <provider/model>`.")
-    if result.warning:
-        typer.echo(f"Warning: {result.warning}")
+        emit_command_result(command_result)
+        return command_result
+    _emit_auth_login_text(command_result.text or "")
+    return command_result
 
 
 @auth_app.command("logout")
@@ -340,6 +342,17 @@ def _credential_location_message(result: AuthCaptureResult) -> str:
     return f"Cached in {result.credential_storage.backend}."
 
 
+def _api_key_login_lines(provider: str, result: AuthCaptureResult) -> list[str]:
+    lines = [f"Logged into {provider.title()}. {_credential_location_message(result)}"]
+    if resolve_readiness().active_model is not None:
+        lines.append("Ready to chat.")
+    else:
+        lines.append("Set an active model with `craik model set <provider/model>`.")
+    if result.warning:
+        lines.append(f"Warning: {result.warning}")
+    return lines
+
+
 def _browser_opener(*, no_browser: bool, disclose_openai: bool = False) -> Callable[[str], bool]:
     def _open(url: str) -> bool:
         if no_browser:
@@ -381,16 +394,23 @@ def _code_prompt(prompt: str) -> str:
     return str(click.prompt(prompt, hide_input=False, err=True))
 
 
-def _emit_oauth_login_result(result: OAuthLoginResult, *, json_output: bool) -> None:
-    if json_output:
-        typer.echo(json.dumps(result.as_dict(), indent=2, sort_keys=True))
-        return
+def _oauth_login_command_result(result: OAuthLoginResult) -> CommandResult:
     provider_name = result.capture.provider.title()
-    typer.echo(
+    lines = [
         f"Logged into {provider_name} with OAuth. "
         f"Cached in {result.capture.credential_storage.backend}."
-    )
+    ]
     if resolve_readiness().active_model is not None:
-        typer.echo("Ready to chat.")
+        lines.append("Ready to chat.")
     else:
-        typer.echo("Set an active model with `craik model set <provider/model>`.")
+        lines.append("Set an active model with `craik model set <provider/model>`.")
+    return CommandResult(payload=result.as_dict(), shape="card", text="\n".join(lines))
+
+
+def _emit_auth_login_text(text: str) -> None:
+    typer.echo(text)
+
+
+def _raise_oauth_error(message: str) -> NoReturn:
+    typer.echo(message, err=True)
+    raise typer.Exit(2)
