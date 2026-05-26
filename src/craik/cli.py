@@ -1,7 +1,6 @@
 """Command-line interface for Craik."""
 from __future__ import annotations
 
-import json
 import os
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
@@ -16,6 +15,7 @@ from craik.cli_channels import channels_app
 from craik.cli_diagnostics import doctor_command, update_command
 from craik.cli_errors import install_craik_error_handler
 from craik.cli_gateway import gateway_app
+from craik.cli_output import emit_command_result
 from craik.cli_prompt_safety import resolve_cli_prompt
 from craik.cli_receipts import receipts_app
 from craik.cli_runs import run_app
@@ -29,7 +29,7 @@ from craik.runtime.companions.desktop_companion import (
     desktop_companion_snapshot,
     desktop_update_check_payload,
 )
-from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.contract import CommandResult, PayloadShape, craik_command
 from craik.runtime.dashboard import (
     DashboardConfig,
     DashboardConfigError,
@@ -273,11 +273,12 @@ def setup_command(
         raise typer.BadParameter("active operator session required; run craik login") from None
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
-    typer.echo(json.dumps(result.payload, indent=2, sort_keys=True))
+    emit_command_result(result)
     return result
 
 
 @app.command("dashboard")
+@craik_command(payload_shape="card")
 def dashboard_command(
     host: Annotated[
         str,
@@ -299,7 +300,7 @@ def dashboard_command(
         bool,
         typer.Option("--dry-run", help="Print dashboard launch metadata without serving."),
     ] = False,
-) -> None:
+) -> CommandResult:
     """Run the authenticated local dashboard."""
     config = DashboardConfig(
         host=host,
@@ -308,40 +309,45 @@ def dashboard_command(
         allow_unsafe_bind=allow_unsafe_dashboard_bind,
     )
     try:
+        payload = dashboard_preview_payload(config)
+        result = _emit_payload(payload, shape="card")
         if dry_run:
-            typer.echo(json.dumps(dashboard_preview_payload(config), indent=2, sort_keys=True))
-            return
-        typer.echo(json.dumps(dashboard_preview_payload(config), indent=2, sort_keys=True))
+            return result
         run_dashboard_server(config)
+        return result
     except DashboardConfigError as error:
         raise typer.BadParameter(str(error)) from None
 
 
 @desktop_app.command("status")
-def desktop_status_command() -> None:
+@craik_command(payload_shape="card")
+def desktop_status_command() -> CommandResult:
     """Show desktop companion status, dashboard link, and gateway/provider health."""
     payload = desktop_companion_snapshot().model_dump(mode="json")
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @desktop_app.command("menu")
-def desktop_menu_command() -> None:
+@craik_command(payload_shape="card_list")
+def desktop_menu_command() -> CommandResult:
     """List desktop companion tray/menu actions."""
     payload = [action.model_dump(mode="json") for action in desktop_companion_actions()]
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card_list")
 
 
 @desktop_app.command("action")
-def desktop_action_command(action_id: str) -> None:
+@craik_command(payload_shape="card")
+def desktop_action_command(action_id: str) -> CommandResult:
     """Show the command backing one desktop companion action."""
     try:
         action = desktop_companion_action(action_id)
     except KeyError:
         raise typer.BadParameter(f"unknown desktop companion action: {action_id}") from None
-    typer.echo(json.dumps(action.model_dump(mode="json"), indent=2, sort_keys=True))
+    return _emit_payload(action.model_dump(mode="json"), shape="card")
 
 
 @desktop_app.command("notify-approval")
+@craik_command(payload_shape="card")
 def desktop_notify_approval_command(
     approval_id: str,
     capability: str,
@@ -353,7 +359,7 @@ def desktop_notify_approval_command(
     retry_path: Annotated[str, typer.Option("--retry-path", help="Retry path after decision.")] = (
         "retry the blocked command after approval"
     ),
-) -> None:
+) -> CommandResult:
     """Render a desktop approval notification fixture."""
     payload = desktop_approval_notification(
         approval_id,
@@ -363,30 +369,26 @@ def desktop_notify_approval_command(
         policy=policy,
         retry_path=retry_path,
     ).model_dump(mode="json")
-    typer.echo(json.dumps(payload, indent=2, sort_keys=True))
+    return _emit_payload(payload, shape="card")
 
 
 @desktop_app.command("update-check")
-def desktop_update_check_command() -> None:
+@craik_command(payload_shape="card")
+def desktop_update_check_command() -> CommandResult:
     """Show the desktop companion update-check payload."""
-    typer.echo(
-        json.dumps(
-            desktop_update_check_payload(package_version()),
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    return _emit_payload(desktop_update_check_payload(package_version()), shape="card")
 
 
 @schema_app.command("list")
-def schema_list() -> None:
+@craik_command(payload_shape="card_list")
+def schema_list() -> CommandResult:
     """List known Craik contract schemas."""
-    for name in schema_names():
-        typer.echo(name)
+    return _emit_payload(list(schema_names()), shape="card_list")
 
 
 @schema_app.command("show")
-def schema_show(name: str) -> None:
+@craik_command(payload_shape="card")
+def schema_show(name: str) -> CommandResult:
     """Print a contract JSON Schema by name."""
     try:
         model = schema_model(name)
@@ -394,7 +396,14 @@ def schema_show(name: str) -> None:
         known = ", ".join(schema_names())
         raise typer.BadParameter(f"unknown schema {name!r}; known schemas: {known}") from None
 
-    typer.echo(json.dumps(model.model_json_schema(), indent=2, sort_keys=True))
+    return _emit_payload(model.model_json_schema(), shape="card")
+
+
+def _emit_payload(payload: object, *, shape: PayloadShape) -> CommandResult:
+    result = CommandResult(payload=payload, shape=shape)
+    emit_command_result(result)
+    return result
+
 
 def _load_cli_extensions() -> None:
     """Import command modules that register subcommands on shared Typer apps."""
