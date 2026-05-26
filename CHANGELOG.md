@@ -12,6 +12,10 @@ within the `0.x.0` stability expectations described in
 
 ## 0.12.9 — 2026-05-26
 
+The TUI Contract Cutover release. v0.12.8 shipped the shared command-contract
+foundation; v0.12.9 completes the runtime cutover so operators actually use
+that infrastructure in the shell.
+
 ### Changed
 
 - Wired the TUI runtime to consume the CLI/TUI command contract introduced in
@@ -23,17 +27,33 @@ within the `0.x.0` stability expectations described in
   import surface for existing tests and library callers.
 - Switched Textual slash rendering and inline actions to the new
   `format_command_result(..., kind="tui")` renderer pipeline.
+- Switched slash autocomplete, help, detail-help, argument validation,
+  confirmations, result adaptation, and snapshot guards to consume
+  registry-derived slash specs instead of a hand-maintained static tuple.
+- Routed `interactive_prompts={}` decorator metadata into runtime behavior:
+  slash dispatch now intercepts `typer.confirm` and `typer.prompt` while
+  invoking decorated callbacks and hands prompt requests to the TUI.
 
 ### Added
 
 - Added a cached TUI registry provider with shell-only slash built-ins for
   `/help`, `/clear`, `/exit`, grouped slash forms, and compatibility aliases
   that are not one-to-one Typer callbacks.
+- Added canonical-composed per-command modals for provider credential capture,
+  provider logout, and receipt detail display.
+- Added a record-display modal primitive for read-only structured modal flows.
 - Added `scripts/check_contract_dispatch_consumed.py`, a runtime-consumption
   guard that fails CI if the TUI entry points stop importing the contract
   dispatcher or reintroduce the legacy dispatcher import.
+- Added `scripts/check_no_legacy_modal_pushes.py`,
+  `scripts/check_no_slash_command_specs_consumption.py`, and
+  `scripts/check_interactive_prompts_runtime_consumed.py` to prevent cutover
+  regressions from reintroducing legacy modal pushes, deleted slash-spec APIs,
+  or dead interactive-prompt metadata.
 - Added end-to-end smoke coverage proving the Textual app, dependency-free TUI,
   and agent shell route slash commands through the contract dispatcher.
+- Added modal-flow and structural-guard regression coverage that exercises the
+  runtime path rather than only checking for static symbols.
 
 ### Fixed
 
@@ -41,6 +61,15 @@ within the `0.x.0` stability expectations described in
   contract infrastructure and guards, but the TUI runtime still had legacy
   dispatcher and renderer consumption paths. v0.12.9 is the strict upgrade path
   for operator-visible TUI contract behavior.
+
+### Removed
+
+- Removed `runtime/shell/textual_modals.py`; canonical modal modules under
+  `runtime/shell/modals/` now own those flows.
+- Removed `slash_command_schema.SLASH_COMMAND_SPECS` and its legacy helper
+  functions; `AutoSlashRegistry` is now the slash metadata source of truth.
+- Removed legacy interactive-prompt ownership comment markers; the runtime
+  contract consumes declared prompt metadata directly.
 
 ## 0.12.8 — 2026-05-26
 

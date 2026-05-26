@@ -21,8 +21,10 @@ contract.**
 
 `0.12.9` wires the three TUI entry points to the contract dispatcher, routes
 Textual slash output through the new renderer pipeline, replaces the legacy
-dispatcher implementation with a compatibility shim, and adds a
-runtime-consumption CI guard so future contract infrastructure cannot ship
+dispatcher implementation with a compatibility shim, replaces the
+hand-maintained slash metadata tuple with the live `AutoSlashRegistry`,
+routes prompt-backed commands through canonical modals, and adds
+runtime-consumption CI guards so future contract infrastructure cannot ship
 without live TUI use.
 
 </div>
@@ -37,7 +39,11 @@ without live TUI use.
 
 <div><dt>Renderer consumption</dt><dt><span className="craik-fields__type">ready</span></dt><dd>Textual slash output and inline actions render through <code>format_command_result(..., kind="tui")</code>.</dd></div>
 
-<div><dt>Regression guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>check_contract_dispatch_consumed.py</code> verifies runtime imports, and smoke tests assert contract-dispatch invocation across the TUI entry points.</dd></div>
+<div><dt>Canonical modals</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>/auth login</code>, <code>/auth logout</code>, and <code>/receipts detail</code> use canonical-composed modal screens under <code>runtime/shell/modals/</code>; the legacy <code>textual_modals.py</code> file is removed.</dd></div>
+
+<div><dt>Prompt runtime</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>interactive_prompts</code> metadata now drives runtime behavior by intercepting <code>typer.confirm</code> and <code>typer.prompt</code> during contract-dispatch callback invocation.</dd></div>
+
+<div><dt>Regression guards</dt><dt><span className="craik-fields__type">ready</span></dt><dd><code>check_contract_dispatch_consumed.py</code>, <code>check_no_legacy_modal_pushes.py</code>, <code>check_no_slash_command_specs_consumption.py</code>, and <code>check_interactive_prompts_runtime_consumed.py</code> verify runtime imports, block legacy cutover APIs, and assert contract-dispatch invocation across TUI entry points.</dd></div>
 
 </div>
 
@@ -54,6 +60,9 @@ uv run python scripts/check_cli_tui_contract.py
 uv run python scripts/check_command_result_return.py
 uv run python scripts/check_no_direct_stdout.py
 uv run python scripts/check_contract_dispatch_consumed.py
+uv run python scripts/check_no_legacy_modal_pushes.py
+uv run python scripts/check_no_slash_command_specs_consumption.py
+uv run python scripts/check_interactive_prompts_runtime_consumed.py
 uv run python scripts/check_modal_screen_mappings.py
 uv run python scripts/check_modal_screen_security.py
 uv run python scripts/check_payload_shape_validity.py
