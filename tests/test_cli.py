@@ -1225,8 +1225,12 @@ def test_instruction_register_cli_is_idempotent_and_requires_operator(
         env={"CRAIK_HOME": str(missing_operator_home)},
     )
 
+    assert first.exception is None, first.output
+    assert second.exception is None, second.output
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output
+    assert first.stdout.strip().startswith("{")
+    assert second.stdout.strip().startswith("{")
     first_payload = json.loads(first.stdout)
     second_payload = json.loads(second.stdout)
     assert first_payload["registered"] is True
@@ -1260,9 +1264,16 @@ def test_instruction_ingest_cli_runs_pipeline_and_is_idempotent(tmp_path: Path) 
     )
     listed = runner.invoke(app, ["instructions", "list", "--json"], env=env)
 
+    assert registered.exception is None, registered.output
+    assert first.exception is None, first.output
+    assert second.exception is None, second.output
+    assert listed.exception is None, listed.output
     assert registered.exit_code == 0, registered.output
     assert first.exit_code == 0, first.output
     assert second.exit_code == 0, second.output
+    assert first.stdout.strip().startswith("{")
+    assert second.stdout.strip().startswith("{")
+    assert listed.stdout.strip().startswith("[")
     assert json.loads(first.stdout)["proposal_count"] == 1
     assert json.loads(second.stdout)["proposal_count"] == 0
     assert json.loads(second.stdout)["skipped_existing_count"] == 1
@@ -1297,9 +1308,13 @@ def test_instruction_list_cli_filters_and_prints_json(tmp_path: Path) -> None:
         env=env,
     )
 
+    assert table.exception is None, table.output
+    assert listed.exception is None, listed.output
     assert table.exit_code == 0, table.output
+    assert table.stdout.strip().startswith("[")
     assert "distilled_instruction_policy" in table.output
     assert listed.exit_code == 0, listed.output
+    assert listed.stdout.strip().startswith("[")
     payload = json.loads(listed.stdout)
     assert [item["id"] for item in payload] == ["distilled_instruction_policy"]
 
@@ -1354,7 +1369,9 @@ def test_instruction_approve_cli_records_override_and_handles_errors(
 
     assert refused.exit_code != 0
     assert "require --override" in refused.output
+    assert approved.exception is None, approved.output
     assert approved.exit_code == 0, approved.output
+    assert approved.stdout.strip().startswith("{")
     payload = json.loads(approved.stdout)
     assert payload["status"] == "governing"
     assert payload["override_stale"] is True
@@ -1409,11 +1426,15 @@ def test_instruction_reject_and_show_cli_surface_provenance(tmp_path: Path) -> N
         env={"CRAIK_HOME": str(missing_operator_home)},
     )
 
+    assert rejected.exception is None, rejected.output
     assert rejected.exit_code == 0, rejected.output
+    assert rejected.stdout.strip().startswith("{")
     assert json.loads(rejected.stdout)["receipt_id"] == (
         "promotion_review_distilled_instruction_command"
     )
+    assert shown.exception is None, shown.output
     assert shown.exit_code == 0, shown.output
+    assert shown.stdout.strip().startswith("{")
     payload = json.loads(shown.stdout)
     assert payload["status"] == "rejected"
     assert payload["provenance"][0]["quote"] == "Run tests before merge."
