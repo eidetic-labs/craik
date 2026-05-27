@@ -52,6 +52,9 @@ within the `0.x.0` stability expectations described in
 - Changed Textual `/copy` to copy the latest response or run output by default,
   with `/copy transcript` and `/copy selection` kept for full-log and selected
   row copies.
+- Removed Textual transcript click interception and the `Ctrl+Shift+C` binding
+  so native terminal text selection and copy shortcuts remain the primary copy
+  workflow.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

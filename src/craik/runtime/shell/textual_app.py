@@ -127,7 +127,7 @@ class CraikApp(App[None]):
         ("ctrl+g", "external_editor", "Editor"),
         ("ctrl+x", "external_editor_prefix", "Editor Prefix"),
         ("ctrl+c", "interrupt_run", "Stop"),
-        ("ctrl+shift+c,ctrl+y", "copy_transcript", "Copy"),
+        ("ctrl+y", "copy_transcript", "Copy"),
         Binding(
             "backtab,shift+tab",
             "cycle_claude_permission_mode",
@@ -841,28 +841,6 @@ class CraikApp(App[None]):
                 label = f"{candidate.value}  {candidate.description}"
             options.add_option(label)
         popup.display = True
-
-    def on_click(self, event: events.Click) -> None:
-        widget = getattr(event, "widget", None)
-        if getattr(widget, "id", None) != "transcript":
-            return
-        row = self._transcript_row_from_click(event)
-        if row is None:
-            return
-        self._select_transcript_row(row, extend=bool(getattr(event, "shift", False)))
-        event.stop()
-
-    def _transcript_row_from_click(self, event: events.Click) -> int | None:
-        transcript = self.query_one("#transcript", RichLog)
-        region = transcript.region
-        relative_y = event.screen_y - region.y
-        if relative_y < 0:
-            return None
-        scroll_y = int(getattr(transcript, "scroll_y", 0) or 0)
-        row = scroll_y + relative_y
-        if row >= len(self._transcript_lines):
-            row = len(self._transcript_lines) - 1
-        return row if row >= 0 else None
 
     def _select_transcript_row(self, row: int, *, extend: bool) -> None:
         if extend and self._selection_anchor is not None:

@@ -581,6 +581,22 @@ def test_shift_tab_mode_binding_has_priority() -> None:
     assert "shift+tab" in binding.key
 
 
+def test_tui_does_not_bind_terminal_copy_shortcut() -> None:
+    keys: list[str] = []
+    for binding in CraikApp.BINDINGS:
+        if isinstance(binding, tuple):
+            key, action = binding[0], binding[1]
+        else:
+            key = getattr(binding, "key", "")
+            action = getattr(binding, "action", None)
+        if action == "copy_transcript":
+            keys.append(key)
+
+    assert keys == ["ctrl+y"]
+    assert all("ctrl+shift+c" not in key for key in keys)
+    assert not hasattr(CraikApp, "on_click")
+
+
 def test_copy_command_copies_latest_response(
     monkeypatch,
     tmp_path: Path,
