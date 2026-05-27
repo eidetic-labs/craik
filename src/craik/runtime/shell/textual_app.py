@@ -49,9 +49,6 @@ from craik.runtime.shell.textual.support import (
 from craik.runtime.shell.textual.support import (
     _user_transcript_markup as _user_transcript_markup,
 )
-from craik.runtime.shell.textual.support import (
-    _uses_model_backed_slash_execution as _uses_model_backed_slash_execution,
-)
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmModal
 from craik.runtime.shell.textual_widgets.craik_input import (
