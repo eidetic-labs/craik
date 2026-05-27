@@ -93,8 +93,11 @@ TUI-only state.
 
 `/model set <provider/model>` keeps the legacy selector for compatibility and
 also writes an active model profile with provider id, provider family, model
-id, display label, backend preference, and provider-specific options. The CLI
-mirror accepts richer profile metadata:
+id, display label, backend preference, and provider-specific options. Gateway
+prompt runs apply the active profile to provider runtime payloads, including
+token budgets, temperature, service tier, reasoning effort, and safe
+provider-specific passthrough options. The CLI mirror accepts richer profile
+metadata:
 
 ```sh
 craik model set anthropic/claude-opus-4-7 \

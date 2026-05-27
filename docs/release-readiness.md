@@ -34,7 +34,7 @@ checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
 
 <div><dt>Slash/CLI mirrors</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>/run &lt;prompt&gt;</code> and <code>craik run prompt &lt;prompt&gt;</code> share the audited Gateway path; backend-affecting slash mirrors are covered by regression tests.</dd></div>
 
-<div><dt>Model profiles</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik model set</code> keeps legacy selectors while persisting provider/model profile metadata, display labels, backend preference, common provider options, and provider-specific passthrough knobs.</dd></div>
+<div><dt>Model profiles</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik model set</code> keeps legacy selectors while persisting provider/model profile metadata, display labels, backend preference, common provider options, and provider-specific passthrough knobs. Gateway prompt runs now pass the active profile options into provider runtime requests for OpenAI, Anthropic, Chat Completions, and Gemini payloads.</dd></div>
 
 <div><dt>TUI evaluation fixtures</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd>Gateway JSONL replay fixtures and summary helpers provide a shared evaluation contract for Textual and Rust clients. The Rust <code>ratatui</code> replay prototype under <code>crates/craik-tui-rs</code> parses the same fixture and verifies lifecycle, working-state, run, task, receipt, and progress rendering.</dd></div>
 

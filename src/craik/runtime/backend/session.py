@@ -131,6 +131,7 @@ def execute_prompt(
             grants=[fixture_shell_grant(task.id)],
             live_enabled=live_provider_enabled(env),
             model=model,
+            provider_options=active_profile.options if active_profile is not None else None,
         )
         emit(
             BackendEvent(

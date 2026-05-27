@@ -20,6 +20,9 @@ within the `0.x.0` stability expectations described in
 - Added persisted model profiles alongside legacy `provider/model` selectors,
   including display labels, provider ids, backend preference, common provider
   options, and `--option key=value` passthrough knobs.
+- Wired active model profile options into provider runtime requests so token
+  budgets, temperature, service tier, reasoning effort, and safe passthrough
+  knobs reach OpenAI, Anthropic, Chat Completions, and Gemini payloads.
 - Added Gateway regression coverage for JSONL transport, model profiles,
   slash/CLI mirror policy, Claude Code marker routing, and lifecycle/progress
   events.

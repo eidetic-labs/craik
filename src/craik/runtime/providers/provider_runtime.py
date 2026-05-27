@@ -110,6 +110,13 @@ class OpenAIProviderAdapter:
             }
         if request.max_output_tokens:
             payload["max_output_tokens"] = request.max_output_tokens
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        if request.reasoning_effort:
+            payload["reasoning"] = {"effort": request.reasoning_effort}
+        payload.update(_safe_provider_options(request.provider_options))
         return payload
 
     def execute(
@@ -206,6 +213,13 @@ class AnthropicProviderAdapter:
         }
         if system_messages:
             payload["system"] = "\n\n".join(system_messages)
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        if request.reasoning_effort:
+            payload["thinking"] = {"type": "enabled", "effort": request.reasoning_effort}
+        payload.update(_safe_provider_options(request.provider_options))
         if request.tools:
             payload["tools"] = [_anthropic_tool(tool) for tool in request.tools]
             payload["tool_choice"] = {"type": "auto"}
@@ -316,6 +330,11 @@ class ChatCompletionsProviderAdapter:
             "stream": request.stream,
             "max_tokens": request.max_output_tokens,
         }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        payload.update(_safe_provider_options(request.provider_options))
         if request.tools:
             payload["tools"] = [_chat_completions_tool(tool) for tool in request.tools]
             payload["tool_choice"] = "auto"
@@ -412,6 +431,29 @@ class ChatCompletionsProviderAdapter:
                 "Chat Completions live access requires live_enabled=true and "
                 "an external secret resolver"
             )
+
+
+def _safe_provider_options(options: dict[str, Any]) -> dict[str, Any]:
+    reserved = {
+        "_fixture",
+        "_path",
+        "input",
+        "max_output_tokens",
+        "max_tokens",
+        "messages",
+        "metadata",
+        "model",
+        "reasoning",
+        "response_format",
+        "stream",
+        "temperature",
+        "text",
+        "thinking",
+        "tools",
+        "tool_choice",
+        "service_tier",
+    }
+    return {key: value for key, value in options.items() if key not in reserved}
 
 
 def adapter_for_provider(

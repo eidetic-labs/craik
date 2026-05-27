@@ -56,6 +56,29 @@ class GeminiProviderAdapter:
         generation_config: dict[str, Any] = {}
         if request.max_output_tokens:
             generation_config["maxOutputTokens"] = request.max_output_tokens
+        if request.temperature is not None:
+            generation_config["temperature"] = request.temperature
+        if request.reasoning_effort:
+            generation_config["thinkingConfig"] = {"reasoningEffort": request.reasoning_effort}
+        generation_config.update(
+            {
+                key: value
+                for key, value in request.provider_options.items()
+                if key
+                not in {
+                    "contents",
+                    "generationConfig",
+                    "maxOutputTokens",
+                    "responseMimeType",
+                    "responseSchema",
+                    "systemInstruction",
+                    "temperature",
+                    "thinkingConfig",
+                    "toolConfig",
+                    "tools",
+                }
+            }
+        )
         if request.structured_output_schema is not None:
             generation_config.update(
                 {
