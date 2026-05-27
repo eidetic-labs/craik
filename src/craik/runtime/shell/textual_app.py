@@ -21,6 +21,8 @@ from textual.reactive import reactive
 from textual.widgets import OptionList, RichLog
 
 from craik import __version__
+from craik.runtime.backend.client import GatewaySessionClient
+from craik.runtime.backend.events import BackendEvent
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
@@ -564,7 +566,17 @@ class CraikApp(App[None]):
 
     def _dispatch_prompt_worker(self, text: str) -> None:
         try:
-            result = to_slash_command_result(run_command(text, env=self.env))
+            gateway_result = GatewaySessionClient(
+                env=self.env,
+                source="tui",
+                event_handler=self._emit_gateway_event,
+            ).submit_prompt(text)
+            payload = gateway_result.payload_with_events()
+            result = SlashCommandResult(
+                _audited_run_text(payload) or "Audited run completed.",
+                payload=payload,
+                payload_shape="card",
+            )
         except Exception as error:
             result = SlashCommandResult(
                 f"Audited run failed: {error}",
@@ -580,6 +592,7 @@ class CraikApp(App[None]):
             self.query_one("#transcript", RichLog).write(
                 render_run_summary(payload, title="Audited run summary")
             )
+            self._transcript_lines.append("Audited run summary")
             self._transcript_lines.append(result.text)
         else:
             self._write_transcript(
@@ -640,6 +653,9 @@ class CraikApp(App[None]):
             _claude_progress_markup(message),
             plain_text=f"Claude Code: {message}",
         )
+
+    def _emit_gateway_event(self, event: BackendEvent) -> None:
+        self.call_from_thread(self._update_run_activity_from_gateway_event, event.as_dict())
 
     def _prepare_active_claude_code_run(self) -> None:
         with self._active_claude_lock:
@@ -964,6 +980,46 @@ class CraikApp(App[None]):
             self._run_denials += 1
         self._refresh_run_activity()
 
+    def _update_run_activity_from_gateway_event(self, event: dict[str, object]) -> None:
+        message = _gateway_event_message(event)
+        if message is None:
+            return
+        data = event.get("data")
+        event_type = str(event.get("type") or "gateway.event")
+        self._last_run_event = message
+        self._append_recent_run_event(message)
+        run_id = event.get("run_id")
+        task_id = event.get("task_id")
+        if isinstance(run_id, str) and run_id:
+            self._current_run_id = run_id
+        if isinstance(task_id, str) and task_id:
+            self._current_task_id = task_id
+        if event_type == "prompt.submitted":
+            self._current_run_phase = "submitted"
+        elif event_type == "model.selected":
+            self._current_run_phase = "thinking"
+            model_label = _gateway_model_label(data)
+            if model_label:
+                self._run_backend_label = model_label
+                self._refresh_status_bar()
+        elif event_type == "run.started":
+            self._current_run_phase = "running"
+        elif event_type == "receipt.created":
+            self._current_run_phase = "recording receipt"
+        elif event_type == "run.output":
+            self._current_run_phase = "writing output"
+        elif event_type == "run.completed":
+            self._current_run_phase = "completed"
+        elif event_type == "approval.resolved":
+            decision = _data_string(data, "decision")
+            if decision == "approved":
+                self._run_approvals += 1
+            elif decision == "denied":
+                self._run_denials += 1
+        elif event_type == "error":
+            self._current_run_phase = "error"
+        self._refresh_run_activity()
+
     def _refresh_run_activity(self) -> None:
         if not self._model_prompt_active:
             return
@@ -1063,6 +1119,83 @@ def _title_model_token(value: str) -> str:
 
 def _claude_progress_markup(text: str) -> object:
     return render_claude_event(text)
+
+
+def _gateway_event_message(event: dict[str, object]) -> str | None:
+    event_type = str(event.get("type") or "")
+    data = event.get("data")
+    if event_type == "prompt.submitted":
+        preview = _data_string(data, "prompt_preview")
+        return f"Gateway accepted prompt: {preview}" if preview else "Gateway accepted prompt."
+    if event_type == "model.selected":
+        label = _gateway_model_label(data)
+        return f"Gateway selected {label}." if label else "Gateway selected model."
+    if event_type == "run.started":
+        run_id = event.get("run_id")
+        if isinstance(run_id, str):
+            return f"Gateway run started: `{run_id}`."
+        return "Gateway run started."
+    if event_type == "receipt.created":
+        receipt_id = _data_string(data, "receipt_id")
+        if receipt_id:
+            return f"Gateway recorded receipt `{receipt_id}`."
+        return "Gateway recorded receipt."
+    if event_type == "run.output":
+        summary = _data_string(data, "summary")
+        return f"Gateway wrote output: {summary}" if summary else "Gateway wrote output."
+    if event_type == "run.completed":
+        status = _data_string(data, "status")
+        return f"Gateway run completed: {status}." if status else "Gateway run completed."
+    if event_type == "approval.resolved":
+        decision = _data_string(data, "decision")
+        return f"Gateway approval {decision}." if decision else "Gateway approval resolved."
+    if event_type == "error":
+        message = _data_string(data, "message")
+        return f"Gateway error: {message}" if message else "Gateway error."
+    return None
+
+
+def _gateway_model_label(data: object) -> str | None:
+    if not isinstance(data, dict):
+        return None
+    profile = data.get("profile")
+    if isinstance(profile, dict):
+        display_name = profile.get("display_name")
+        if isinstance(display_name, str) and display_name.strip():
+            return display_name
+    model = data.get("model")
+    provider_id = data.get("provider_id")
+    if isinstance(provider_id, str) and isinstance(model, str):
+        return _display_model_label(f"{provider_id}/{model}")
+    if isinstance(model, str):
+        return _display_model_label(model)
+    backend = data.get("backend")
+    return backend if isinstance(backend, str) and backend.strip() else None
+
+
+def _data_string(data: object, key: str) -> str | None:
+    if not isinstance(data, dict):
+        return None
+    value = data.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _audited_run_text(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    outputs = payload.get("run_outputs")
+    if not isinstance(outputs, list):
+        return ""
+    for output in outputs:
+        if not isinstance(output, dict):
+            continue
+        observed = output.get("observed_output")
+        if not isinstance(observed, dict):
+            continue
+        text = observed.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return ""
 
 
 def _uses_model_backed_slash_execution(text: str) -> bool:

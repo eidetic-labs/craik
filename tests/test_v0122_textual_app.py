@@ -11,6 +11,8 @@ from rich.panel import Panel
 
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.auth.store import AuthProfileStore
+from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.session import BackendPromptResult
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.shell.textual_app import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
@@ -42,6 +44,17 @@ def _env(tmp_path: Path) -> dict[str, str]:
     return {"CRAIK_HOME": str(tmp_path / ".craik"), "TERM": "xterm-256color"}
 
 
+def _gateway_payload(text: str) -> dict[str, object]:
+    return {
+        "schema": "craik.provider_backed_run_execution",
+        "status": "completed",
+        "run": {"id": "run_textual_gateway", "task_id": "task_textual_gateway"},
+        "handoff": {"id": "handoff_textual_gateway"},
+        "run_outputs": [{"observed_output": {"text": text}}],
+        "receipt_ids": ["receipt_textual_gateway"],
+    }
+
+
 def test_textual_app_mounts_status_bar_and_welcome(tmp_path: Path) -> None:
     async def run() -> None:
         async with CraikApp(env=_env(tmp_path)).run_test() as pilot:
@@ -66,13 +79,25 @@ def test_textual_model_prompt_shows_waiting_indicator(
     started = threading.Event()
     release = threading.Event()
 
-    def _run_command(text: str, **kwargs: object) -> CommandResult:
-        started.set()
-        assert text == "hello"
-        assert release.wait(2)
-        return CommandResult(payload="model response", shape="markdown", text="model response")
+    class _GatewayClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.event_handler = kwargs["event_handler"]
 
-    monkeypatch.setattr("craik.runtime.shell.textual_app.run_command", _run_command)
+        def submit_prompt(self, text: str) -> BackendPromptResult:
+            started.set()
+            assert text == "hello"
+            event_handler = self.event_handler
+            assert callable(event_handler)
+            event_handler(
+                BackendEvent(
+                    type="model.selected",
+                    data={"model": "openai/gpt-5.2"},
+                )
+            )
+            assert release.wait(2)
+            return BackendPromptResult(payload=_gateway_payload("model response"))
+
+    monkeypatch.setattr("craik.runtime.shell.textual_app.GatewaySessionClient", _GatewayClient)
 
     async def run() -> None:
         app = CraikApp(env={**_env(tmp_path), "CRAIK_QUICK": "1"})
@@ -86,7 +111,7 @@ def test_textual_model_prompt_shows_waiting_indicator(
             assert working.display
             assert not input_widget.disabled
             assert "Model thinking" in str(working.render())
-            assert "Model is thinking" in str(app.query_one("#run-activity").render())
+            assert "Gateway selected" in str(app.query_one("#run-activity").render())
             release.set()
             for _ in range(20):
                 await pilot.pause(0.05)
@@ -108,16 +133,20 @@ def test_textual_active_run_queues_next_input(
     first_release = threading.Event()
     second_done = threading.Event()
 
-    def _run_command(text: str, **kwargs: object) -> CommandResult:
-        calls.append(text)
-        if text == "first":
-            first_started.set()
-            assert first_release.wait(2)
-            return CommandResult(payload="first response", shape="markdown", text="first response")
-        second_done.set()
-        return CommandResult(payload="second response", shape="markdown", text="second response")
+    class _GatewayClient:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
 
-    monkeypatch.setattr("craik.runtime.shell.textual_app.run_command", _run_command)
+        def submit_prompt(self, text: str) -> BackendPromptResult:
+            calls.append(text)
+            if text == "first":
+                first_started.set()
+                assert first_release.wait(2)
+                return BackendPromptResult(payload=_gateway_payload("first response"))
+            second_done.set()
+            return BackendPromptResult(payload=_gateway_payload("second response"))
+
+    monkeypatch.setattr("craik.runtime.shell.textual_app.GatewaySessionClient", _GatewayClient)
 
     async def run() -> None:
         app = CraikApp(env=_env(tmp_path))
