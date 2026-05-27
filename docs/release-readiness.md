@@ -30,6 +30,8 @@ checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
 
 <div><dt>Gateway session</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>runtime/backend/session.py</code> owns raw prompt execution for provider and Claude Code marker paths and emits normalized lifecycle, progress, receipt, output, completion, and error events.</dd></div>
 
+<div><dt>Event history</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd>Each audited prompt run persists normalized Gateway events as a redacted <code>craik.run_output</code> artifact, giving clients replayable model, lifecycle, receipt, output, and completion evidence.</dd></div>
+
 <div><dt>Textual Gateway client</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd>Textual raw prompt submission now uses a local Gateway client and updates the activity panel from normalized Gateway events, while final transcript text preserves the model output for copy/export.</dd></div>
 
 <div><dt>JSONL protocol</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik tui-backend --jsonl</code> accepts <code>session.status</code>, <code>prompt.submit</code>, <code>slash.submit</code>, <code>model.set</code>, <code>approval.decide</code>, <code>run.interrupt</code>, and close messages over stdio for Textual/Rust/frontend evaluation.</dd></div>

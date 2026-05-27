@@ -6,10 +6,12 @@ import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
+from craik.contracts.models import RunOutput
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.modeling import ModelProfile, ModelSettingsStore
 from craik.runtime.projects.project_registry import ProjectRegistry
@@ -95,6 +97,7 @@ def execute_prompt(
                 data={"status": status, "backend": "claude-code"},
             )
         )
+        _persist_gateway_event_history(payload, events, env=env)
         return BackendPromptResult(payload=payload, events=events)
     store = LocalStore.from_env(env)
     try:
@@ -173,12 +176,62 @@ def execute_prompt(
                 data={"status": result.run.status},
             )
         )
+        _persist_gateway_event_history(payload, events, store=store)
         return BackendPromptResult(payload=payload, events=events)
     except Exception as error:
         emit(BackendEvent(type="error", data={"message": str(error)}))
         raise
     finally:
         store.close()
+
+
+def _persist_gateway_event_history(
+    payload: dict[str, object],
+    events: list[BackendEvent],
+    *,
+    store: LocalStore | None = None,
+    env: dict[str, str] | None = None,
+) -> None:
+    """Persist redacted Gateway event history as a run output artifact."""
+    run = payload.get("run")
+    task = payload.get("task")
+    if not isinstance(run, dict) or not isinstance(task, dict):
+        return
+    run_id = run.get("id")
+    task_id = task.get("id") or run.get("task_id")
+    if not isinstance(run_id, str) or not isinstance(task_id, str):
+        return
+    raw_receipt_ids = payload.get("receipt_ids")
+    receipt_ids = [
+        receipt_id for receipt_id in raw_receipt_ids if isinstance(receipt_id, str)
+    ] if isinstance(raw_receipt_ids, list) else []
+    output = RunOutput(
+        id=f"run_output_{run_id}_gateway_events",
+        run_id=run_id,
+        step_result_id="gateway_event_history",
+        task_id=task_id,
+        phase="observe",
+        summary=f"Gateway recorded {len(events)} event(s) for audited prompt run.",
+        observed_output={
+            "source": "craik.gateway",
+            "event_count": len(events),
+            "events": [event.as_dict() for event in events],
+        },
+        diagnostics=[],
+        receipt_ids=receipt_ids,
+        artifacts=[],
+        redacted=True,
+        created_at=datetime.now(UTC),
+    )
+    if store is not None:
+        store.put_run_output(output)
+        return
+    owned_store = LocalStore.from_env(env)
+    try:
+        owned_store.initialize()
+        owned_store.put_run_output(output)
+    finally:
+        owned_store.close()
 
 
 def active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | None]:

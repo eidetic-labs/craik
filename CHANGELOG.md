@@ -32,6 +32,9 @@ within the `0.x.0` stability expectations described in
   Gateway events for model selection, run lifecycle, receipts, output, and
   completion state instead of dispatching raw prompts through slash command
   internals.
+- Persisted normalized Gateway event history as a redacted run output artifact
+  for each audited prompt run so clients can replay run lifecycle, model,
+  receipt, output, and completion evidence after execution.
 - Added a Rust `ratatui` Gateway replay prototype under `crates/craik-tui-rs`
   to evaluate terminal rendering against the shared JSONL event contract.
 - Expanded the Gateway JSONL protocol with `model.set`, `approval.decide`,

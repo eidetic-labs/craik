@@ -14,6 +14,7 @@ from craik.runtime.backend.session import (
 )
 from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.store import LocalStore
 
 runner = CliRunner()
 
@@ -46,6 +47,20 @@ def test_gateway_prompt_execution_emits_audited_events(tmp_path: Path, monkeypat
     assert "receipt.created" in event_types
     assert event_types[-1] == "run.completed"
     assert payload["gateway_events"][-1]["type"] == "run.completed"
+    store = LocalStore.from_env(env)
+    try:
+        outputs = store.list_run_outputs()
+    finally:
+        store.close()
+    gateway_output = next(
+        output for output in outputs if output.step_result_id == "gateway_event_history"
+    )
+    assert gateway_output.run_id == payload["run"]["id"]
+    assert gateway_output.summary == (
+        f"Gateway recorded {len(payload['gateway_events'])} event(s) for audited prompt run."
+    )
+    assert gateway_output.observed_output["event_count"] == len(payload["gateway_events"])
+    assert gateway_output.observed_output["events"][-1]["type"] == "run.completed"
 
 
 def test_slash_run_uses_gateway_prompt_events(tmp_path: Path, monkeypatch) -> None:
