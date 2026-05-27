@@ -207,6 +207,7 @@ def _claude_cli_env(env: dict[str, str] | None) -> dict[str, str]:
         "ANTHROPIC_AUTH_TOKEN",
         "ANTHROPIC_TOKEN",
         "CRAIK_ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
     ):
         values.pop(name, None)
     return values

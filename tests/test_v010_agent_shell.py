@@ -229,7 +229,7 @@ def test_anthropic_one_shot_uses_external_claude_cli(
         "sonnet",
     ]
     assert "ANTHROPIC_API_KEY" not in seen["env"]
-    assert seen["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-from-claude-code"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in seen["env"]
 
 
 def test_anthropic_one_shot_passes_claude_permission_mode(

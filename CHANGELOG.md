@@ -46,6 +46,9 @@ within the `0.x.0` stability expectations described in
 - Added explicit CLI mirror metadata to slash command specs and regression
   coverage for backend-affecting slash commands so TUI commands stay aligned
   with non-TUI CLI entry points.
+- Changed Anthropic `claude-cli` login and Claude Code execution to delegate
+  through the local `claude` binary's own auth instead of storing or injecting
+  `CLAUDE_CODE_OAUTH_TOKEN`, avoiding stale bearer-token failures in the TUI.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

@@ -62,7 +62,6 @@ from craik.runtime.setup import setup_command_result
 from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
-from craik.runtime.shell.credential_storage import CredentialStorageError, get_cached_credential
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
     receipts_slash_result,
@@ -1662,41 +1661,11 @@ def _claude_code_env(env: dict[str, str] | None) -> dict[str, str]:
         "ANTHROPIC_AUTH_TOKEN",
         "ANTHROPIC_TOKEN",
         "CRAIK_ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
     ):
         values.pop(name, None)
-    if not values.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        token = _stored_claude_code_oauth_token(env)
-        if token:
-            values["CLAUDE_CODE_OAUTH_TOKEN"] = token
-            _emit_claude_code_progress("Using stored Craik Claude Code OAuth token.")
-        else:
-            _emit_claude_code_progress(
-                "No Craik Claude Code OAuth token found; using Claude CLI auth."
-            )
+    _emit_claude_code_progress("Using Claude CLI auth; bearer token env vars removed.")
     return values
-
-
-def _stored_claude_code_oauth_token(env: dict[str, str] | None) -> str | None:
-    try:
-        profiles = AuthProfileStore.from_env(env).list()
-    except AuthProfileStoreError:
-        return None
-    for profile in profiles:
-        if profile.provider_family != "anthropic" or profile.kind is not CredentialKind.KEYRING_REF:
-            continue
-        if profile.metadata.get("credential_mode") != "claude-cli":
-            continue
-        ref = profile.metadata.get("ref")
-        if not isinstance(ref, str) or not ref:
-            continue
-        try:
-            credential = get_cached_credential(ref, env=env)
-        except CredentialStorageError:
-            continue
-        token = credential.value.strip()
-        if token.startswith("sk-ant-oat"):
-            return token
-    return None
 
 
 def _safe_cli_detail(output: str) -> str:

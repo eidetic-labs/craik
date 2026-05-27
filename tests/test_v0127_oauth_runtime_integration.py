@@ -504,31 +504,24 @@ def test_browser_oauth_login_anthropic_is_not_supported() -> None:
         )
 
 
-def test_anthropic_claude_cli_login_stores_claude_code_token_profile(monkeypatch, tmp_path) -> None:
+def test_anthropic_claude_cli_login_stores_external_cli_marker(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        "craik.runtime.auth.oauth_provider_login.export_claude_code_oauth_token",
-        lambda: "sk-ant-oat01-from-cli",
-    )
-    monkeypatch.setattr(
-        "craik.runtime.auth.sources.anthropic_claude_cli.put_cached_credential",
-        lambda ref, value, *, env=None: CredentialStorageStatus(
-            backend="test-keyring",
-            status="available",
-            secure=True,
-        ),
+        "craik.runtime.auth.sources.anthropic_claude_cli.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
     result = oauth_provider_login.anthropic_claude_cli_login(
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
-    assert result.capture.profile.kind is CredentialKind.KEYRING_REF
+    assert result.capture.profile.kind is CredentialKind.MARKER
     assert result.capture.profile.id == "anthropic:default"
-    assert result.capture.profile.metadata["source"] == "claude-cli-setup-token"
+    assert result.capture.profile.metadata["source"] == "claude-cli-external"
+    assert result.capture.profile.metadata["external_runtime"] == "claude-cli"
     assert result.capture.profile.metadata["credential_mode"] == "claude-cli"
     assert result.capture.profile.metadata["billing_surface"] == "anthropic-claude-cli"
-    assert result.capture.credential_storage.backend == "test-keyring"
-    assert result.authorization_url == "claude setup-token"
+    assert result.capture.credential_storage.backend == "claude-cli"
+    assert result.authorization_url == "claude auth login"
 
 
 def test_auth_login_gemini_oauth_uses_adc_or_service_account_flow(monkeypatch, tmp_path) -> None:

@@ -17,7 +17,7 @@ from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
     _live_provider_enabled,
     claude_code_progress,
 )
-from craik.runtime.shell.credential_storage import CredentialStorageStatus, StoredCredential
+from craik.runtime.shell.credential_storage import CredentialStorageStatus
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.store import LocalStore
 
@@ -251,8 +251,8 @@ def test_run_claude_code_backend_creates_audited_artifacts(
     class _Process:
         def __init__(self, args, **kwargs):
             assert kwargs["env"]["CRAIK_CLAUDE_PERMISSION_MODE"] == "plan"
-            assert kwargs["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-from-claude-code"
             assert "ANTHROPIC_API_KEY" not in kwargs["env"]
+            assert "CLAUDE_CODE_OAUTH_TOKEN" not in kwargs["env"]
             prompt = args[args.index("-p") + 1]
             assert "Claude Code Execution" in prompt
             assert "Execute the task using the available Claude Code tools" in prompt
@@ -427,7 +427,7 @@ def test_run_claude_code_backend_invokes_claude_without_auth_preflight(
     assert ["claude", "auth", "status"] not in calls
 
 
-def test_run_claude_code_backend_hydrates_stored_claude_cli_token(
+def test_run_claude_code_backend_uses_cli_auth_without_stored_bearer_token(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -450,14 +450,6 @@ def test_run_claude_code_backend_hydrates_stored_claude_cli_token(
     profile = store_claude_cli_token_profile("sk-ant-oat01-from-keyring", env=env).profile
     AuthProfileStore.from_env(env).put(profile)
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.get_cached_credential",
-        lambda ref, *, env=None: StoredCredential(
-            value="sk-ant-oat01-from-keyring",
-            backend="test-keyring",
-            secure=True,
-        ),
-    )
-    monkeypatch.setattr(
         "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
@@ -471,8 +463,8 @@ def test_run_claude_code_backend_hydrates_stored_claude_cli_token(
     def _popen(args, **kwargs):
         if args[0] != "claude":
             return original_popen(args, **kwargs)
-        assert kwargs["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-from-keyring"
         assert "ANTHROPIC_API_KEY" not in kwargs["env"]
+        assert "CLAUDE_CODE_OAUTH_TOKEN" not in kwargs["env"]
         return _Process()
 
     monkeypatch.setattr(

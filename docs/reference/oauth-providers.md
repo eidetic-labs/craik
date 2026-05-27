@@ -95,12 +95,14 @@ Craik checks Anthropic credential sources in this order.
 If you have Claude CLI installed and authenticated, use:
 
 ```sh
-craik auth login anthropic
+craik auth login anthropic --mode=claude-cli
 ```
 
-Craik stores a marker profile and calls `claude -p` for live Anthropic prompts.
-It does not store or replay `CLAUDE_CODE_OAUTH_TOKEN`, which avoids routing a
-Claude subscription token through Craik's third-party HTTP client.
+Craik stores a marker profile and calls `claude -p` / Claude Code for live
+Anthropic prompts. It does not store or replay `CLAUDE_CODE_OAUTH_TOKEN` for
+the Claude subprocess, and it removes Anthropic bearer-token environment
+variables before launch so stale exported tokens do not override the local
+Claude CLI session.
 
 Verify detection with:
 
@@ -112,19 +114,21 @@ craik auth status
 ### 2. Anthropic CLI OAuth token environment override
 
 If you have Anthropic CLI installed and authenticated, reuse those
-credentials through Anthropic's documented environment-variable integration:
+credentials through Anthropic's documented environment-variable integration
+only for direct Anthropic HTTP provider calls:
 
 ```sh
 claude setup-token
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
-Craik reads `CLAUDE_CODE_OAUTH_TOKEN` automatically for Anthropic requests
-and sends `sk-ant-oat` tokens as bearer credentials with Claude Code beta
+Craik's direct Anthropic HTTP provider path can read `CLAUDE_CODE_OAUTH_TOKEN`
+and send `sk-ant-oat` tokens as bearer credentials with Claude Code beta
 headers. Operators can also set `ANTHROPIC_TOKEN` as a manual OAuth token
 override when they need a separately managed Anthropic token. Craik never
 writes these environment variables or refreshes the token; rotate the CLI
-token by re-running `claude setup-token`.
+token by re-running `claude setup-token`. The TUI Claude Code backend does not
+use this override; it delegates to the local `claude` binary's own auth.
 
 > **About Claude subscription billing:** Directly replaying
 > `CLAUDE_CODE_OAUTH_TOKEN` from a third-party HTTP client may route differently

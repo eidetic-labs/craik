@@ -17,8 +17,7 @@ from craik.runtime.auth.oauth_loopback import (
 from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.profile import AuthProfile
 from craik.runtime.auth.sources.anthropic_claude_cli import (
-    export_claude_code_oauth_token,
-    store_claude_cli_token_profile,
+    create_claude_cli_profile,
 )
 from craik.runtime.auth.sources.anthropic_oauth import (
     AnthropicOAuthClient,
@@ -154,20 +153,9 @@ def anthropic_claude_cli_login(
     run_setup_token: bool = True,
     env: dict[str, str] | None = None,
 ) -> OAuthLoginResult:
-    """Create an Anthropic profile backed by a Claude Code OAuth token."""
+    """Create an Anthropic marker profile delegated to local Claude CLI auth."""
     target_profile_id = profile_id or "anthropic:default"
-    token = (
-        export_claude_code_oauth_token()
-        if run_setup_token
-        else (token_prompt or _default_token_prompt)(
-            "Paste the CLAUDE_CODE_OAUTH_TOKEN value from `claude setup-token`: "
-        )
-    )
-    result = store_claude_cli_token_profile(
-        token,
-        profile_id=target_profile_id,
-        env=env,
-    )
+    result = create_claude_cli_profile(profile_id=target_profile_id)
     AuthProfileStore.from_env(env).put(result.profile)
     CredentialPool.from_env(env).put(default_pool_for_profile(result.profile))
     capture = AuthCaptureResult(
@@ -182,7 +170,7 @@ def anthropic_claude_cli_login(
     )
     return OAuthLoginResult(
         capture=capture,
-        authorization_url="claude setup-token",
+        authorization_url="claude auth login",
         browser_opened=False,
     )
 

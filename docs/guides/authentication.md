@@ -258,8 +258,10 @@ craik auth test anthropic:work
 ```
 
 Anthropic API-key profiles send `x-api-key`. Anthropic `claude-cli` profiles
-call the local `claude` binary. OpenAI and OpenAI-compatible Chat Completions
-profiles send `Authorization: Bearer`.
+call the local `claude` binary and strip Anthropic bearer-token environment
+variables from the subprocess so the CLI uses its own authenticated session.
+OpenAI and OpenAI-compatible Chat Completions profiles send
+`Authorization: Bearer`.
 
 <div className="craik-keypoint">
 
