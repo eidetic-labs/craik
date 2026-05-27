@@ -36,12 +36,15 @@ checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
 
 <div><dt>Model profiles</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik model set</code> keeps legacy selectors while persisting provider/model profile metadata, display labels, backend preference, common provider options, and provider-specific passthrough knobs.</dd></div>
 
+<div><dt>TUI evaluation fixtures</dt><dt><span className="craik-fields__type">partial</span></dt><dd>Gateway JSONL replay fixtures and summary helpers provide a shared evaluation contract for Textual and Rust clients. A Rust prototype cannot be built in this environment because <code>cargo</code> is not installed.</dd></div>
+
 </div>
 
 ### Gateway Cleanup Validation Commands
 
 ```bash
 uv run pytest tests/test_backend_gateway_session.py tests/test_backend_jsonl.py tests/test_slash_cli_mirrors.py
+uv run pytest tests/test_gateway_replay.py
 uv run pytest tests/test_v010_agent_shell.py tests/test_v011_tui.py tests/test_v0122_slash_inline_execution.py tests/test_v0122_textual_app.py tests/test_v0123_multiline_input_methods.py tests/test_v0125_tui_polish.py tests/test_v0127_anthropic_claude_cli.py tests/test_provider_runner.py tests/test_provider_runtime.py tests/test_cli.py
 uv run python scripts/generate_cli_reference.py --check
 ```
