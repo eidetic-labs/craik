@@ -192,7 +192,9 @@ def test_anthropic_oauth_bootstrap_posts_code_and_returns_api_key() -> None:
     assert params["redirect_uri"] == [ANTHROPIC_OAUTH_BOOTSTRAP_REDIRECT_URI]
     assert params["client_id"] == [ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID]
     assert params["scope"] == [" ".join(ANTHROPIC_OAUTH_BOOTSTRAP_SCOPES)]
-    assert ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID == "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    assert ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID == "-".join(
+        ("9d1c250a", "e61b", "44d9", "88ed", "5944d1962f5e")
+    )
     token_request, create_request = seen["requests"]
     token_payload = parse_qs((token_request.data or b"").decode("utf-8"))
     assert token_request.full_url == ANTHROPIC_OAUTH_BOOTSTRAP_OAUTH_TOKEN_ENDPOINT

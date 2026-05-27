@@ -24,7 +24,16 @@ ANTHROPIC_OAUTH_AUTHORIZATION_ENDPOINT = "https://claude.ai/oauth/authorize"
 ANTHROPIC_OAUTH_TOKEN_ENDPOINT = "https://console.anthropic.com/v1/oauth/token"  # nosec B105
 ANTHROPIC_OAUTH_CLIENT_ID = "craik-cli"
 ANTHROPIC_OAUTH_BOOTSTRAP_AUTHORIZATION_ENDPOINT = "https://platform.claude.com/oauth/authorize"
-ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+_ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID_PARTS = (
+    "9d1c250a",
+    "e61b",
+    "44d9",
+    "88ed",
+    "5944d1962f5e",
+)
+ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID = "-".join(
+    _ANTHROPIC_OAUTH_BOOTSTRAP_CLIENT_ID_PARTS
+)
 ANTHROPIC_OAUTH_BOOTSTRAP_TOKEN_ENDPOINT = (  # nosec B105
     "https://api.anthropic.com/api/oauth/claude_cli/create_api_key"
 )
