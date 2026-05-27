@@ -64,6 +64,12 @@ def execute_prompt(
     )
     if _anthropic_marker_uses_claude_code(env):
         emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
+        emit(
+            BackendEvent(
+                type="run.working",
+                data={"backend": "claude-code", "phase": "starting"},
+            )
+        )
         payload = _execute_claude_code_prompt(normalized_prompt, env=env, stream=emit)
         run = payload.get("run")
         task = payload.get("task")
@@ -126,6 +132,13 @@ def execute_prompt(
                     "profile": active_profile.as_dict() if active_profile is not None else None,
                     "live_enabled": live_provider_enabled(env),
                 },
+            )
+        )
+        emit(
+            BackendEvent(
+                type="run.working",
+                task_id=task.id,
+                data={"provider_id": provider_id, "model": model, "phase": "thinking"},
             )
         )
         result = ProviderBackedRunExecutor(store).execute(

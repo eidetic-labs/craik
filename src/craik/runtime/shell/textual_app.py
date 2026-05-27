@@ -1002,6 +1002,8 @@ class CraikApp(App[None]):
             if model_label:
                 self._run_backend_label = model_label
                 self._refresh_status_bar()
+        elif event_type == "run.working":
+            self._current_run_phase = _data_string(data, "phase") or "thinking"
         elif event_type == "run.started":
             self._current_run_phase = "running"
         elif event_type == "receipt.created":
@@ -1130,6 +1132,9 @@ def _gateway_event_message(event: dict[str, object]) -> str | None:
     if event_type == "model.selected":
         label = _gateway_model_label(data)
         return f"Gateway selected {label}." if label else "Gateway selected model."
+    if event_type == "run.working":
+        phase = _data_string(data, "phase") or "thinking"
+        return f"Gateway run is {phase}."
     if event_type == "run.started":
         run_id = event.get("run_id")
         if isinstance(run_id, str):

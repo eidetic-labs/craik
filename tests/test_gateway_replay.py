@@ -12,6 +12,7 @@ def test_gateway_replay_fixture_has_client_evaluation_contract() -> None:
 
     assert summary.has_lifecycle
     assert summary.has_working_state
+    assert "run.working" in summary.event_types
     assert summary.run_ids == ["run_review_the_plan"]
     assert summary.task_ids == ["task_review_the_plan"]
     assert summary.receipt_ids == ["receipt_run_review_the_plan_claude_code"]

@@ -28,7 +28,7 @@ checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
 
 <div className="craik-fields">
 
-<div><dt>Gateway session</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>runtime/backend/session.py</code> owns raw prompt execution for provider and Claude Code marker paths and emits normalized lifecycle, progress, receipt, output, completion, and error events.</dd></div>
+<div><dt>Gateway session</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>runtime/backend/session.py</code> owns raw prompt execution for provider and Claude Code marker paths and emits normalized lifecycle, working-state, progress, receipt, output, completion, and error events.</dd></div>
 
 <div><dt>Event history</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd>Each audited prompt run persists normalized Gateway events as a redacted <code>craik.run_output</code> artifact, giving clients replayable model, lifecycle, receipt, output, and completion evidence.</dd></div>
 

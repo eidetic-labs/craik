@@ -15,6 +15,7 @@ BackendEventType = Literal[
     "model.changed",
     "run.interrupt.requested",
     "run.started",
+    "run.working",
     "run.progress",
     "model.selected",
     "receipt.created",

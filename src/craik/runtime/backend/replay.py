@@ -27,7 +27,7 @@ class GatewayReplaySummary:
     @property
     def has_working_state(self) -> bool:
         """Return whether the replay gives clients something to show while running."""
-        return bool(self.progress_messages) or "model.selected" in self.event_types
+        return "run.working" in self.event_types or bool(self.progress_messages)
 
 
 def load_gateway_replay(path: Path) -> list[dict[str, Any]]:
