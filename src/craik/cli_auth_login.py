@@ -137,8 +137,6 @@ def auth_login_provider(
                 _confirm_reauthentication(provider, profile_id=profile_id)
                 oauth_result = anthropic_claude_cli_login(
                     profile_id=profile_id,
-                    token_prompt=_code_prompt,
-                    run_setup_token=not no_browser,
                 )
                 payload = oauth_result.capture.as_dict() | {
                     "browser_opened": oauth_result.browser_opened,

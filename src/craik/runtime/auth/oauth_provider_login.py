@@ -149,8 +149,6 @@ def _loopback_listener(provider: str, state: str) -> OAuthLoopbackListener:
 def anthropic_claude_cli_login(
     *,
     profile_id: str | None = None,
-    token_prompt: TokenPrompt | None = None,
-    run_setup_token: bool = True,
     env: dict[str, str] | None = None,
 ) -> OAuthLoginResult:
     """Create an Anthropic marker profile delegated to local Claude CLI auth."""

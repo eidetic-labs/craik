@@ -52,7 +52,7 @@ def test_anthropic_explicit_oauth_mode_uses_cli_delegation(
 
     def _claude_cli_login(**kwargs):
         called["provider"] = "anthropic"
-        called["run_setup_token"] = str(kwargs["run_setup_token"])
+        called["profile_id"] = str(kwargs["profile_id"])
         return OAuthLoginResult(
             capture=_capture_result("anthropic", CredentialKind.MARKER),
             authorization_url="claude",
@@ -68,7 +68,7 @@ def test_anthropic_explicit_oauth_mode_uses_cli_delegation(
     )
 
     assert result.exit_code == 0, result.output
-    assert called == {"provider": "anthropic", "run_setup_token": "True"}
+    assert called == {"provider": "anthropic", "profile_id": "None"}
     assert json.loads(result.stdout)["mode"] == "oauth"
     assert json.loads(result.stdout)["auth_transport"] == "claude-cli"
 
