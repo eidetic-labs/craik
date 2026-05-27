@@ -49,6 +49,9 @@ within the `0.x.0` stability expectations described in
 - Changed Anthropic `claude-cli` login and Claude Code execution to delegate
   through the local `claude` binary's own auth instead of storing or injecting
   `CLAUDE_CODE_OAUTH_TOKEN`, avoiding stale bearer-token failures in the TUI.
+- Changed Textual `/copy` to copy the latest response or run output by default,
+  with `/copy transcript` and `/copy selection` kept for full-log and selected
+  row copies.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

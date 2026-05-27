@@ -155,6 +155,7 @@ class CraikApp(App[None]):
         self._editor_prefix_pending = False
         self._forgot_slash_pending: tuple[str, str] | None = None
         self._transcript_lines: list[str] = []
+        self._last_copyable_output: str | None = None
         self._model_prompt_active = False
         self._working_started_at: float | None = None
         self._working_timer: Any | None = None
@@ -264,8 +265,8 @@ class CraikApp(App[None]):
         if warning is not None:
             self.notify(warning, severity="warning", timeout=8)
             return
-        if text in {"/copy", "/copy transcript"}:
-            self.action_copy_transcript()
+        if text in {"/copy", "/copy last", "/copy latest", "/copy response", "/copy output"}:
+            self._copy_latest_output()
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
@@ -274,8 +275,8 @@ class CraikApp(App[None]):
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
-        if text in {"/copy last", "/copy latest"}:
-            self._copy_last_transcript_row()
+        if text in {"/copy transcript", "/copy all"}:
+            self.action_copy_transcript()
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
@@ -593,6 +594,7 @@ class CraikApp(App[None]):
                 render_run_summary(payload, title="Audited run summary")
             )
             self._transcript_lines.append("Audited run summary")
+            self._last_copyable_output = result.text
             self._transcript_lines.append(result.text)
         else:
             self._write_transcript(
@@ -637,6 +639,8 @@ class CraikApp(App[None]):
             transcript.write(render_claude_run_summary(contract_result.payload))
         else:
             transcript.write(format_command_result(contract_result, kind="tui"))
+        if result.text.strip():
+            self._last_copyable_output = result.text
         self._transcript_lines.append(result.text)
         if contract_result.command_name in {"model", "mode", "rename", "theme"}:
             self._refresh_status_bar()
@@ -811,7 +815,10 @@ class CraikApp(App[None]):
 
     def _write_transcript(self, value: object, *, plain_text: str | None = None) -> None:
         self.query_one("#transcript", RichLog).write(value)
-        self._transcript_lines.append(str(value if plain_text is None else plain_text))
+        line = str(value if plain_text is None else plain_text)
+        self._transcript_lines.append(line)
+        if line.strip() and not _non_response_transcript_line(line):
+            self._last_copyable_output = line
 
     def _active_profile(self) -> str:
         report = self.readiness
@@ -888,12 +895,15 @@ class CraikApp(App[None]):
         self.copy_to_clipboard("\n".join(rows))
         self._toast(f"Copied {len(rows)} selected row(s).", severity="information")
 
-    def _copy_last_transcript_row(self) -> None:
-        if not self._transcript_lines:
-            self._toast("Transcript is empty.", severity="information")
+    def _copy_latest_output(self) -> None:
+        text = (self._last_copyable_output or "").strip()
+        if not text:
+            text = _latest_copyable_transcript_line(self._transcript_lines)
+        if not text:
+            self._toast("No response output is available to copy.", severity="information")
             return
-        self.copy_to_clipboard(self._transcript_lines[-1])
-        self._toast("Last transcript row copied.", severity="information")
+        self.copy_to_clipboard(text)
+        self._toast("Latest response copied.", severity="information")
 
     def _export_transcript(self) -> None:
         from craik.runtime.paths import ensure_craik_home
@@ -1201,6 +1211,25 @@ def _audited_run_text(payload: object) -> str:
         if isinstance(text, str) and text.strip():
             return text.strip()
     return ""
+
+
+def _latest_copyable_transcript_line(lines: list[str]) -> str:
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped and not _non_response_transcript_line(stripped):
+            return stripped
+    return ""
+
+
+def _non_response_transcript_line(line: str) -> bool:
+    stripped = line.strip()
+    return (
+        stripped.startswith(">")
+        or stripped.startswith("Queued input #")
+        or stripped.startswith("Claude Code:")
+        or stripped.startswith("Transcript exported to ")
+        or stripped in {"Audited run summary", "Transcript cleared. Receipts remain audited."}
+    )
 
 
 def _uses_model_backed_slash_execution(text: str) -> bool:

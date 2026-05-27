@@ -581,7 +581,30 @@ def test_shift_tab_mode_binding_has_priority() -> None:
     assert "shift+tab" in binding.key
 
 
-def test_copy_command_copies_plain_transcript(
+def test_copy_command_copies_latest_response(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    copied: list[str] = []
+
+    async def run() -> None:
+        app = CraikApp(env=_env(tmp_path))
+        monkeypatch.setattr(app, "copy_to_clipboard", lambda text: copied.append(text))
+        async with app.run_test() as pilot:
+            app._write_transcript("[bold]rendered[/bold]", plain_text="rendered")
+            app._write_transcript("latest response")
+            input_widget = app.query_one("#input", CraikInput)
+            input_widget.value = "/copy"
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+
+    asyncio.run(run())
+
+    assert copied
+    assert copied[-1] == "latest response"
+
+
+def test_copy_transcript_command_copies_plain_transcript(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -593,7 +616,7 @@ def test_copy_command_copies_plain_transcript(
         async with app.run_test() as pilot:
             app._write_transcript("[bold]rendered[/bold]", plain_text="rendered")
             input_widget = app.query_one("#input", CraikInput)
-            input_widget.value = "/copy"
+            input_widget.value = "/copy transcript"
             await pilot.press("enter")
             await pilot.pause(0.1)
 

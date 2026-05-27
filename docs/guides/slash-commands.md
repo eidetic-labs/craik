@@ -94,6 +94,9 @@ TUI-only state.
 Backend-affecting slash specs carry explicit `cli_mirror` metadata, and
 regression coverage checks the listed mirror against real CLI commands. Shell
 presentation helpers such as `/copy` and `/clear` remain intentionally TUI-only.
+In the Textual TUI, `/copy` copies the latest response or run output by
+default; `/copy transcript` copies the full transcript, and `/copy selection`
+copies selected transcript rows.
 
 `/model set <provider/model>` keeps the legacy selector for compatibility and
 also writes an active model profile with provider id, provider family, model

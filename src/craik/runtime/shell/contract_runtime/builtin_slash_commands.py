@@ -192,8 +192,8 @@ def clear_command(*_args: str, env: dict[str, str] | None = None) -> CommandResu
 def copy_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Return copy guidance for non-Textual shell dispatch."""
     text = (
-        "In the interactive TUI, use `/copy`, `/copy selection`, `/copy last`, "
-        "or Ctrl+Y to copy transcript text."
+        "In the interactive TUI, `/copy` copies the latest response. "
+        "Use `/copy selection` for selected rows or `/copy transcript` for everything."
     )
     return CommandResult(payload=text, shape="markdown", text=text, command_name="copy")
 
