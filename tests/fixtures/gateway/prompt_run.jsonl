@@ -1,0 +1,9 @@
+{"created_at":"2026-05-26T12:00:00+00:00","data":{"source":"jsonl","prompt_preview":"Review the plan"},"run_id":null,"task_id":null,"type":"prompt.submitted"}
+{"created_at":"2026-05-26T12:00:01+00:00","data":{"provider_id":"provider_anthropic","model":"claude-opus-4-7","profile":{"id":"anthropic-claude-opus-4-7-high","display_name":"Anthropic Claude Opus 4.7 High","provider_id":"provider_anthropic","provider_family":"anthropic","model":"claude-opus-4-7","backend":"claude-code","options":{"reasoning_effort":"high"}},"live_enabled":true},"run_id":null,"task_id":"task_review_the_plan","type":"model.selected"}
+{"created_at":"2026-05-26T12:00:01.500000+00:00","data":{"backend":"claude-code","phase":"thinking"},"run_id":null,"task_id":"task_review_the_plan","type":"run.working"}
+{"created_at":"2026-05-26T12:00:02+00:00","data":{"message":"Preparing audited Claude Code run."},"run_id":null,"task_id":null,"type":"run.progress"}
+{"created_at":"2026-05-26T12:00:03+00:00","data":{"backend":"claude-code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"run.started"}
+{"created_at":"2026-05-26T12:00:04+00:00","data":{"receipt_id":"receipt_run_review_the_plan_claude_code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"receipt.created"}
+{"created_at":"2026-05-26T12:00:05+00:00","data":{"status":"completed","backend":"claude-code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"run.completed"}
+{"created_at":"2026-05-26T12:00:06+00:00","data":{"approval_id":"approval_review_the_plan","decision":"approved"},"run_id":null,"task_id":null,"type":"approval.resolved"}
+{"created_at":"2026-05-26T12:00:07+00:00","data":{"run_id":"run_review_the_plan","reason":"operator requested stop"},"run_id":"run_review_the_plan","task_id":null,"type":"run.interrupt.requested"}

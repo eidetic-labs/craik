@@ -5,42 +5,52 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
+from typing import Any
 
 from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container
 from textual.reactive import reactive
 from textual.widgets import OptionList, RichLog
 
 from craik import __version__
+from craik.runtime.backend.claude_code import (
+    CLAUDE_CODE_RUN_APPROVED_ENV,
+    CLAUDE_PERMISSION_MODE_ENV,
+)
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
-    InteractivePromptRequest,
-)
-from craik.runtime.contract.dispatch import (
     invoke_slash_command as _contract_invoke,
 )
-from craik.runtime.contract.format import format_command_result
 from craik.runtime.shell.confirmations import (
     confirmation_request_for_text,
-    record_confirmation_decision,
 )
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
-from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.external_editor import edit_text_externally
-from craik.runtime.shell.inline_actions import handle_inline_action
-from craik.runtime.shell.modals.textual_flow import open_textual_modal_flow
 from craik.runtime.shell.readiness import ReadinessReport
 from craik.runtime.shell.shell_history import append_history
 from craik.runtime.shell.shell_invocation import (
     is_shell_invocation_text,
     run_shell_invocation,
 )
-from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
-from craik.runtime.shell.slash_completer import complete_slash_input
+from craik.runtime.shell.textual.activity import CraikAppActivityMixin
+from craik.runtime.shell.textual.dispatch import CraikAppDispatchMixin
+from craik.runtime.shell.textual.support import (
+    CLAUDE_PERMISSION_MODE_LABELS,
+    InterruptibleProcess,
+    _claude_permission_mode_label,
+    _requires_claude_code_run_approval,
+)
+from craik.runtime.shell.textual.support import (
+    _claude_code_run_approval_request as _claude_code_run_approval_request,
+)
+from craik.runtime.shell.textual.support import (
+    _user_transcript_markup as _user_transcript_markup,
+)
 from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
-from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest, ConfirmModal
+from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmModal
 from craik.runtime.shell.textual_widgets.craik_input import (
     CraikInput,
     cli_prefix_warning,
@@ -50,8 +60,9 @@ from craik.runtime.shell.textual_widgets.craik_input import (
 )
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
-from craik.runtime.shell.textual_widgets.inline_action_table import InlineActionTable
-from craik.runtime.shell.textual_widgets.inline_link import linkify_text
+from craik.runtime.shell.textual_widgets.run_activity_panel import (
+    RunActivityPanel,
+)
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.text_selection_hint import first_launch_selection_hint
 from craik.runtime.shell.textual_widgets.theme_settings import (
@@ -60,17 +71,18 @@ from craik.runtime.shell.textual_widgets.theme_settings import (
 from craik.runtime.shell.textual_widgets.theme_settings import (
     terminal_supports_textual as terminal_supports_textual,
 )
-from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
+from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue
+from craik.runtime.shell.textual_widgets.transcript_row_hint import TranscriptRowHint
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
-from craik.runtime.shell.tui import dispatch_tui_input
-from craik.runtime.shell.tui_interactive_prompts import open_interactive_prompt_modal
 from craik.runtime.status import auto_approve_status_payload
 
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
+CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
 
-class CraikApp(App[None]):
+
+class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
     """Chat-first terminal UI with transcript, input, and bottom status bar."""
 
     CSS_PATH = "textual_app_dark.tcss"
@@ -81,6 +93,14 @@ class CraikApp(App[None]):
         ("ctrl+r", "history_search", "History"),
         ("ctrl+g", "external_editor", "Editor"),
         ("ctrl+x", "external_editor_prefix", "Editor Prefix"),
+        ("ctrl+c", "interrupt_run", "Stop"),
+        ("ctrl+y", "copy_transcript", "Copy"),
+        Binding(
+            "backtab,shift+tab",
+            "cycle_claude_permission_mode",
+            "Mode",
+            priority=True,
+        ),
         ("shift+enter", "insert_newline", "Newline"),
         ("ctrl+j", "insert_newline", "Newline"),
         ("alt+enter", "insert_newline", "Newline"),
@@ -97,10 +117,43 @@ class CraikApp(App[None]):
     ) -> None:
         super().__init__()
         self.env = dict(os.environ) if env is None else dict(env)
+        self.env["CRAIK_TUI"] = "1"
         self.registry = registry or get_tui_registry()
         self._editor_prefix_pending = False
         self._forgot_slash_pending: tuple[str, str] | None = None
         self._transcript_lines: list[str] = []
+        self._last_copyable_output: str | None = None
+        self._model_prompt_active = False
+        self._working_started_at: float | None = None
+        self._working_timer: Any | None = None
+        self._active_claude_process: InterruptibleProcess | None = None
+        self._active_claude_cancel: threading.Event | None = None
+        self._active_claude_lock = threading.Lock()
+        self._claude_code_approval_inflight = False
+        self._queued_inputs: list[str] = []
+        self._selected_transcript_rows: set[int] = set()
+        self._selection_anchor: int | None = None
+        self._run_backend_label: str | None = None
+        self._last_run_event: str | None = None
+        self._current_run_tool: str | None = None
+        self._current_run_target: str | None = None
+        self._current_run_phase: str | None = None
+        self._current_run_id: str | None = None
+        self._current_task_id: str | None = None
+        self._run_files: list[str] = []
+        self._run_commands: list[str] = []
+        self._run_recent_events: list[str] = []
+        self._run_approvals = 0
+        self._run_denials = 0
+
+    def _dispatch_contract(self, text: str) -> CommandResult:
+        """Dispatch slash text through the CLI/TUI contract layer."""
+        return _contract_invoke(
+            text,
+            registry=self.registry,
+            env=self.env,
+            interactive_prompt_handler=self._open_modal_for_request,
+        )
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="transcript", markup=True, wrap=True)
@@ -113,6 +166,8 @@ class CraikApp(App[None]):
         yield AccentEmission("", id="accent-emission")
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield ToastQueue(id="toast-queue")
+        yield RunActivityPanel("", id="run-activity")
+        yield TranscriptRowHint("", id="transcript-row-hint")
         yield WorkingIndicator("", id="working")
 
     def on_mount(self) -> None:
@@ -129,11 +184,16 @@ class CraikApp(App[None]):
             cwd=Path.cwd(),
             auto_approve=auto_approve_status_payload(self.env) is not None,
             session_name=self.env.get("CRAIK_SESSION_NAME"),
+            claude_mode=_claude_permission_mode_label(self.env),
+            backend=self._run_backend_label,
+            run_state="running" if self._model_prompt_active else None,
         )
         self.query_one("#slash-popup", Container).display = False
         self.query_one("#history-search", HistorySearchOverlay).display = False
         self.query_one("#transcript-search", TranscriptSearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
+        self.query_one("#run-activity", RunActivityPanel).display = False
+        self.query_one("#transcript-row-hint", TranscriptRowHint).display = False
         self.query_one("#toast-queue", ToastQueue).display = False
         if auto_approve_status_payload(self.env) is not None:
             self._flash_accent("state")
@@ -181,6 +241,36 @@ class CraikApp(App[None]):
         if warning is not None:
             self.notify(warning, severity="warning", timeout=8)
             return
+        if text in {"/copy", "/copy last", "/copy latest", "/copy response", "/copy output"}:
+            self._copy_latest_output()
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
+        if text in {"/copy selection", "/copy selected"}:
+            self._copy_selected_transcript_rows()
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
+        if text in {"/copy transcript", "/copy all"}:
+            self.action_copy_transcript()
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
+        if text.startswith("/export transcript"):
+            self._export_transcript()
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
+        if text in {"/interrupt", "/stop"}:
+            self.action_interrupt_run()
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
+        if self._model_prompt_active and not skip_confirmation:
+            self._queue_input(text)
+            input_widget.value = ""
+            self.query_one("#slash-popup", Container).display = False
+            return
         confirmation = (
             None
             if skip_confirmation
@@ -190,13 +280,23 @@ class CraikApp(App[None]):
                 active_profile=self._active_profile(),
             )
         )
+        if (
+            confirmation is None
+            and not skip_confirmation
+            and _requires_claude_code_run_approval(text, env=self.env)
+            and self.env.get(CLAUDE_CODE_RUN_APPROVED_ENV) != "1"
+        ):
+            confirmation = _claude_code_run_approval_request(
+                text,
+                mode=_claude_permission_mode_label(self.env) or "Default",
+            )
         if confirmation is not None:
             self.push_screen(
                 ConfirmModal(confirmation),
                 lambda confirmed: self._complete_confirmation(confirmation, confirmed),
             )
             return
-        self._write_transcript(f"> {text}")
+        self._write_transcript(_user_transcript_markup(text), plain_text=f"> {text}")
         append_history(text, env=self.env)
         if is_shell_invocation_text(text):
             try:
@@ -218,13 +318,9 @@ class CraikApp(App[None]):
             input_widget.value = ""
             self.query_one("#slash-popup", Container).display = False
             return
-        else:
-            result = self._dispatch(text)
-            self._write_transcript(linkify_text(result.text), plain_text=result.text)
+        self._dispatch_prompt_async(text)
         input_widget.value = ""
         self.query_one("#slash-popup", Container).display = False
-        if result.exit_shell:
-            self.exit()
 
     def on_key(self, event: events.Key) -> None:
         if self._editor_prefix_pending:
@@ -337,10 +433,38 @@ class CraikApp(App[None]):
         self._editor_prefix_pending = True
         self.notify("Press Ctrl+E to open the external editor.", timeout=3)
 
+    def action_copy_transcript(self) -> None:
+        if self._selected_transcript_rows:
+            self._copy_selected_transcript_rows()
+            return
+        text = "\n".join(self._transcript_lines).strip()
+        if not text:
+            self._toast("Transcript is empty.", severity="information")
+            return
+        self.copy_to_clipboard(text)
+        self._toast("Transcript copied.", severity="information")
+
+    def action_interrupt_run(self) -> None:
+        if not self._interrupt_active_claude_code_run():
+            self._toast("No interruptible Claude Code run is active.", severity="information")
+
     def action_insert_newline(self) -> None:
         input_widget = self.query_one("#input", CraikInput)
         input_widget.value = continue_multiline_value(input_widget.value)
         input_widget.cursor_position = len(input_widget.value)
+
+    def action_cycle_claude_permission_mode(self) -> None:
+        current = self.env.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+        try:
+            index = CLAUDE_PERMISSION_MODE_CYCLE.index(current)
+        except ValueError:
+            index = 0
+        next_mode = CLAUDE_PERMISSION_MODE_CYCLE[(index + 1) % len(CLAUDE_PERMISSION_MODE_CYCLE)]
+        self.env[CLAUDE_PERMISSION_MODE_ENV] = next_mode
+        label = CLAUDE_PERMISSION_MODE_LABELS[next_mode]
+        self._toast(f"Claude mode: {label}", severity="information")
+        self._refresh_status_bar()
+        self._flash_accent("state")
 
     def _apply_history_selection(self, *, submit: bool) -> None:
         overlay = self.query_one("#history-search", HistorySearchOverlay)
@@ -352,140 +476,6 @@ class CraikApp(App[None]):
         overlay.dismiss()
         if selection.submit:
             self._submit_text(selection.text)
-
-    def _dispatch(self, text: str) -> SlashCommandResult:
-        if text.startswith("/"):
-            result = to_slash_command_result(self._dispatch_contract(text))
-        else:
-            result = dispatch_tui_input(text, env=self.env, registry=self.registry)
-        if text.startswith("/rename") or text.startswith("/theme"):
-            self._refresh_status_bar()
-            self._flash_accent("state")
-        return result
-
-    def _dispatch_contract(self, text: str) -> CommandResult:
-        """Dispatch slash text through the CLI/TUI contract layer."""
-        return _contract_invoke(
-            text,
-            registry=self.registry,
-            env=self.env,
-            interactive_prompt_handler=self._open_modal_for_request,
-        )
-
-    def _dispatch_slash_async(self, text: str) -> None:
-        """Dispatch slash commands off the UI thread so modal prompts can block safely."""
-        # Interactive prompt interception is synchronous from Typer's point of view.
-        # Keep the callback on a worker thread and marshal modal pushes/results
-        # through call_from_thread so waiting for modal completion never freezes Textual.
-        thread = threading.Thread(
-            target=self._dispatch_slash_worker,
-            args=(text,),
-            name="craik-tui-slash-dispatch",
-            daemon=True,
-        )
-        thread.start()
-
-    def _dispatch_slash_worker(self, text: str) -> None:
-        try:
-            contract_result = self._dispatch_contract(text)
-        except Exception as error:
-            contract_result = CommandResult(
-                payload=str(error),
-                shape="markdown",
-                text=str(error),
-                exit_code=2,
-            )
-        self.call_from_thread(self._complete_slash_dispatch, contract_result)
-
-    def _complete_slash_dispatch(self, contract_result: CommandResult) -> None:
-        transcript = self.query_one("#transcript", RichLog)
-        transcript.write(format_command_result(contract_result, kind="tui"))
-        result = to_slash_command_result(contract_result)
-        self._transcript_lines.append(result.text)
-        if result.exit_shell:
-            self.exit()
-
-    def _open_modal_for_request(self, request: InteractivePromptRequest) -> object:
-        """Push a canonical modal for an intercepted prompt and wait for completion."""
-        return open_interactive_prompt_modal(self, request)
-
-    def _flash_accent(self, kind: str) -> None:
-        self.query_one("#accent-emission", AccentEmission).flash(kind)
-
-    def _refresh_status_bar(self) -> None:
-        report = self.readiness
-        if report is None:
-            return
-        self.query_one("#status", StatusBar).update_status(
-            report,
-            cwd=Path.cwd(),
-            auto_approve=auto_approve_status_payload(self.env) is not None,
-            session_name=self.env.get("CRAIK_SESSION_NAME"),
-        )
-
-    def _toast(self, message: str, *, severity: ToastSeverity = "information") -> None:
-        toast_queue = self.query_one("#toast-queue", ToastQueue)
-        toast_queue.push(message, severity=severity)
-        self.notify(message, severity=severity, timeout=8)
-
-    def _open_modal_flow(self, text: str) -> bool:
-        return open_textual_modal_flow(self, text)
-
-    def _complete_confirmation(
-        self,
-        request: ConfirmationRequest,
-        confirmed: bool | None,
-    ) -> None:
-        self.query_one("#input", CraikInput).value = ""
-        self.query_one("#slash-popup", Container).display = False
-        decision = "confirmed" if confirmed else "declined"
-        self._record_confirmation_decision(request.command_text, decision)
-        if not confirmed:
-            self._toast(f"Canceled `{request.command_text}`.", severity="information")
-            return
-        if request.command_text == "/clear":
-            self.query_one("#transcript", RichLog).clear()
-            self._transcript_lines.clear()
-            self._write_transcript("Transcript cleared. Receipts remain audited.")
-            self._toast("Transcript cleared.", severity="information")
-            return
-        self._submit_text(request.command_text, skip_confirmation=True)
-
-    def on_inline_action_table_inline_action_requested(
-        self,
-        message: InlineActionTable.InlineActionRequested,
-    ) -> None:
-        handle_inline_action(self, message)
-
-    def _record_confirmation_decision(self, command_text: str, decision: str) -> None:
-        error = record_confirmation_decision(command_text, decision, env=self.env)
-        if error is not None:
-            self._toast(
-                error,
-                severity="error",
-            )
-
-    def _write_transcript(self, value: object, *, plain_text: str | None = None) -> None:
-        self.query_one("#transcript", RichLog).write(value)
-        self._transcript_lines.append(str(value if plain_text is None else plain_text))
-
-    def _active_profile(self) -> str:
-        report = self.readiness
-        if report is not None:
-            return report.active_profile
-        return "openai:default"
-
-    def _show_slash_popup(self, prefix: str) -> None:
-        popup = self.query_one("#slash-popup", Container)
-        options = self.query_one("#slash-options", OptionList)
-        options.clear_options()
-        for candidate in complete_slash_input(prefix, env=self.env, registry=self.registry)[:12]:
-            label = candidate.value
-            if candidate.description:
-                label = f"{candidate.value}  {candidate.description}"
-            options.add_option(label)
-        popup.display = True
-
 
 def run_textual_tui(*, env: dict[str, str] | None = None) -> int:
     """Run the Textual app and return a process-style exit code."""

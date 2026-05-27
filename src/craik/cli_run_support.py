@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import typer
 
-from craik.contracts.models import AgentRoleKind, CapabilityGrant, CapabilityTarget
+from craik.contracts.models import AgentRoleKind, CapabilityGrant, CapabilityTarget, TaskRun
 from craik.runtime.providers.provider_runner import ProviderBackedRunResult
 
 
@@ -46,11 +46,16 @@ def provider_run_payload(result: ProviderBackedRunResult) -> dict[str, Any]:
         provider_result.model_dump(mode="json", by_alias=True)
         for provider_result in result.provider_results
     ]
+    run_outputs = [
+        capture.output.model_dump(mode="json", by_alias=True)
+        for capture in (result.loop.output_captures if result.loop else [])
+    ]
     receipt_ids = sorted(
         {
             receipt_id
-            for output in (result.loop.output_captures if result.loop else [])
-            for receipt_id in output.output.receipt_ids
+            for output in run_outputs
+            for receipt_id in output.get("receipt_ids", [])
+            if isinstance(receipt_id, str)
         }
         | set(result.run.receipt_ids)
     )
@@ -61,6 +66,7 @@ def provider_run_payload(result: ProviderBackedRunResult) -> dict[str, Any]:
         "run": result.run.model_dump(mode="json", by_alias=True),
         "handoff": result.handoff.model_dump(mode="json", by_alias=True),
         "compiled_prompt": result.compiled_prompt.model_dump(mode="json", by_alias=True),
+        "run_outputs": run_outputs,
         "provider_results": provider_results,
         "provider_ids": sorted(
             {provider_result["provider_id"] for provider_result in provider_results}
@@ -76,3 +82,15 @@ def provider_run_payload(result: ProviderBackedRunResult) -> dict[str, Any]:
             f"craik receipts list --task-id {result.run.task_id}",
         ],
     }
+
+
+def next_allowed_action(run: TaskRun) -> str:
+    if run.status == "interrupted":
+        return "recover from the last safe boundary"
+    if run.status == "blocked":
+        return "resolve the blocking condition before recovery"
+    if run.status == "failed":
+        return "inspect diagnostics before deciding whether to retry"
+    if run.status == "completed":
+        return "review handoff, receipts, and memory proposals"
+    return "continue within policy and iteration limits"

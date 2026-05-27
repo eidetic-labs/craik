@@ -10,6 +10,78 @@ within the `0.x.0` stability expectations described in
 
 ## Unreleased
 
+### Added
+
+- Added the local Gateway session service and `craik tui-backend --jsonl`
+  transport for prompt, slash, status, progress, receipt, completion, and
+  error events.
+- Added `craik run prompt <prompt>` as the CLI mirror for audited raw prompt
+  execution through the same Gateway path used by `/run <prompt>`.
+- Added persisted model profiles alongside legacy `provider/model` selectors,
+  including display labels, provider ids, backend preference, common provider
+  options, and `--option key=value` passthrough knobs.
+- Wired active model profile options into provider runtime requests so token
+  budgets, temperature, service tier, reasoning effort, and safe passthrough
+  knobs reach OpenAI, Anthropic, Chat Completions, and Gemini payloads.
+- Added Gateway regression coverage for JSONL transport, model profiles,
+  slash/CLI mirror policy, Claude Code marker routing, and lifecycle/progress
+  events.
+- Added Gateway JSONL replay fixtures and summary helpers so Textual and Rust
+  TUI candidates can be evaluated against the same event contract.
+- Added a Textual Gateway client path for raw prompts so the TUI consumes
+  Gateway events for model selection, run lifecycle, receipts, output, and
+  completion state instead of dispatching raw prompts through slash command
+  internals.
+- Persisted normalized Gateway event history as a redacted run output artifact
+  for each audited prompt run so clients can replay run lifecycle, model,
+  receipt, output, and completion evidence after execution.
+- Added a Rust `ratatui` Gateway replay prototype under `crates/craik-tui-rs`
+  to evaluate terminal rendering against the shared JSONL event contract.
+- Expanded the Gateway JSONL protocol with `model.set`, `approval.decide`,
+  and `run.interrupt` inputs plus normalized `model.changed`,
+  `approval.resolved`, and `run.interrupt.requested` events.
+- Added a normalized `run.working` Gateway event so TUI, JSONL, replay, and
+  future channel clients can show an immediate thinking/working state before
+  long provider or Claude Code execution returns.
+- Added explicit CLI mirror metadata to slash command specs and regression
+  coverage for backend-affecting slash commands so TUI commands stay aligned
+  with non-TUI CLI entry points.
+- Changed Anthropic `claude-cli` login and Claude Code execution to delegate
+  through the local `claude` binary's own auth instead of storing or injecting
+  `CLAUDE_CODE_OAUTH_TOKEN`, avoiding stale bearer-token failures in the TUI.
+- Changed Textual `/copy` to copy the latest response or run output by default,
+  with `/copy transcript` and `/copy selection` kept for full-log and selected
+  row copies.
+- Removed Textual transcript click interception and the `Ctrl+Shift+C` binding
+  so native terminal text selection and copy shortcuts remain the primary copy
+  workflow.
+- Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
+  that create Craik task, case-file, run-output, receipt, and handoff records
+  while delegating execution to the local Claude Code CLI.
+- Added streamed Claude Code progress events for `/run --backend claude-code`
+  so the TUI transcript shows assistant and tool-use activity while a run is in
+  progress.
+- Added Claude Code run interruption from the TUI. `Ctrl+C` terminates the
+  active Claude subprocess and records the audited run as `interrupted`;
+  `/stop` and `/interrupt` request the same behavior when the composer is
+  available.
+- Added explicit task-scoped Claude Code run grants for repository reads,
+  documentation writes, receipt writes, and verification commands, plus
+  persisted raw/progress stream events so tool targets and permission denials
+  remain inspectable after a run.
+- Added a one-time TUI approval prompt for `/run --backend claude-code` grants.
+  Approved runs now record an `approval.decide` receipt, while direct
+  non-interactive dispatch must set `CRAIK_CLAUDE_CODE_RUN_APPROVED=1`.
+- Added structured Claude Code activity capture for tool calls, file targets,
+  shell commands, diff-like output, permission denials, and runtime approval
+  requests. Runtime approval-request events are recorded as passive activity
+  because the Claude Code `-p` stream path does not expose a reliable
+  same-process decision channel. `/run inspect` now includes run outputs,
+  receipts, and merged activity details.
+- Added a live TUI run activity panel, queued prompt submissions while a run is
+  active, `/run timeline`, `/mode`, selected-row transcript copy, `/copy last`,
+  and `/export transcript`.
+
 ## 0.12.9 — 2026-05-26
 
 The TUI Contract Cutover release. v0.12.8 shipped the shared command-contract
@@ -115,10 +187,9 @@ that infrastructure in the shell.
 
 - Added provider OAuth profile contracts, loopback PKCE safety helpers, and
   callback-safety CI coverage for browser-based provider login.
-- Added Anthropic OAuth-to-API-key bootstrap through
-  `craik auth login anthropic`; the browser setup stores the resulting API key
-  through Craik credential storage and sends provider calls with Anthropic's
-  required `x-api-key` header.
+- Added Anthropic Claude CLI delegation through `craik auth login anthropic`;
+  Craik stores a marker profile and calls the local `claude -p` binary instead
+  of replaying Claude OAuth tokens through Craik's HTTP client.
 - Added Anthropic credential resolution for `CLAUDE_CODE_OAUTH_TOKEN`, the
   documented Anthropic CLI token export path, plus `ANTHROPIC_TOKEN` for
   manual OAuth token overrides. Anthropic resolution now prefers
@@ -133,10 +204,12 @@ that infrastructure in the shell.
   and calls routed through OpenAI subscription quota.
 - Added a pre-flight disclosure before OpenAI OAuth login explaining that the
   consent screen identifies the requesting application as "Codex".
-- Added `craik auth login <provider> --mode=api-key` and `--mode=oauth`
-  selectors, with OpenAI, Anthropic, and Gemini defaulting to OAuth-backed
-  setup when their subscription or provider-managed route is available. Use
-  `--mode=api-key` to force per-token API-key billing.
+- Added `craik auth login <provider> --mode=api-key`, `--mode=oauth`, and
+  `--mode=claude-cli` selectors. Anthropic defaults to Claude CLI delegation
+  because Anthropic does not expose a supported Craik browser OAuth flow for
+  this surface. OpenAI and Gemini use OAuth-backed setup when their
+  subscription or provider-managed route is available. Use `--mode=api-key` to
+  force per-token API-key billing.
 - Added billing-surface visibility to `craik doctor` and `craik auth status`
   so operators can verify whether a resolved credential routes to subscription
   quota, Platform API billing, Anthropic Console billing, Google AI Studio, or

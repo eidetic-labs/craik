@@ -123,8 +123,10 @@ def test_env_api_key_source_prefers_claude_code_oauth_token(monkeypatch) -> None
     headers = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).headers_for("anthropic")
     status = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).status()
 
-    assert headers["x-api-key"] == "sk-ant-oat01-claude"
+    assert headers["Authorization"] == "Bearer sk-ant-oat01-claude"
+    assert headers["anthropic-beta"] == "claude-code-20250219,oauth-2025-04-20"
     assert headers["anthropic-version"] == "2023-06-01"
+    assert "x-api-key" not in headers
     assert status.status == "ok"
     assert status.detail == "Anthropic CLI OAuth token (env)"
 
@@ -137,7 +139,8 @@ def test_env_api_key_source_prefers_anthropic_token_over_api_key(monkeypatch) ->
     headers = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).headers_for("anthropic")
     status = EnvVarApiKeySource(ANTHROPIC_API_KEY_ENV).status()
 
-    assert headers["x-api-key"] == "sk-ant-oat-manual"
+    assert headers["Authorization"] == "Bearer sk-ant-oat-manual"
+    assert "x-api-key" not in headers
     assert status.status == "ok"
     assert status.detail == "ANTHROPIC_TOKEN (env)"
 

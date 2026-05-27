@@ -18,7 +18,7 @@ from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.craik_command import CraikCommandMetadata
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.contract.output_context import slash_dispatch_context
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import unknown_command_result
+from craik.runtime.shell.contract_runtime.result_helpers import unknown_command_result
 from craik.runtime.shell.modals import canonical_modal_registry, resolve_modal_class
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
 from craik.runtime.shell.slash_command_schema.lookup import find_slash_command_spec
@@ -60,7 +60,7 @@ def invoke_slash_command(
 ) -> CommandResult:
     """Resolve slash text through a registry and invoke the decorated callback."""
     _bump_invocation_counter()
-    tokens = shlex.split(text.strip())
+    tokens = _slash_tokens(text)
     if not tokens or not tokens[0].startswith("/"):
         return _error_result("slash commands must start with /")
     if tokens[0] == "/craik":
@@ -87,6 +87,14 @@ def invoke_slash_command(
             else replace(result, command_name=command_name)
         )
     return CommandResult(payload=result)
+
+
+def _slash_tokens(text: str) -> list[str]:
+    """Tokenize slash commands without rejecting free-form prompts with raw quotes."""
+    try:
+        return shlex.split(text.strip())
+    except ValueError:
+        return text.strip().split()
 
 
 def dispatch_slash_command(
@@ -202,6 +210,7 @@ def _resolve_entry(
         "/gateway",
         "/agent",
         "/session",
+        "/run",
         "/policy",
         "/migrate",
     }:

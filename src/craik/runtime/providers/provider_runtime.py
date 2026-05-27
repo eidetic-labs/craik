@@ -50,8 +50,10 @@ from craik.runtime.providers.provider_runtime_support import (
     _chat_completions_tool,
     _chat_completions_tool_calls,
     _chat_completions_usage,
+    _default_credential_pool_id,
     _fixture_context,
     _json_object_or_none,
+    _official_docs_for_family,
     _openai_message,
     _openai_tool,
     _openai_usage,
@@ -109,6 +111,13 @@ class OpenAIProviderAdapter:
             }
         if request.max_output_tokens:
             payload["max_output_tokens"] = request.max_output_tokens
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        if request.reasoning_effort:
+            payload["reasoning"] = {"effort": request.reasoning_effort}
+        payload.update(_safe_provider_options(request.provider_options))
         return payload
 
     def execute(
@@ -205,6 +214,13 @@ class AnthropicProviderAdapter:
         }
         if system_messages:
             payload["system"] = "\n\n".join(system_messages)
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        if request.reasoning_effort:
+            payload["thinking"] = {"type": "enabled", "effort": request.reasoning_effort}
+        payload.update(_safe_provider_options(request.provider_options))
         if request.tools:
             payload["tools"] = [_anthropic_tool(tool) for tool in request.tools]
             payload["tool_choice"] = {"type": "auto"}
@@ -315,6 +331,11 @@ class ChatCompletionsProviderAdapter:
             "stream": request.stream,
             "max_tokens": request.max_output_tokens,
         }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.service_tier:
+            payload["service_tier"] = request.service_tier
+        payload.update(_safe_provider_options(request.provider_options))
         if request.tools:
             payload["tools"] = [_chat_completions_tool(tool) for tool in request.tools]
             payload["tool_choice"] = "auto"
@@ -413,6 +434,29 @@ class ChatCompletionsProviderAdapter:
             )
 
 
+def _safe_provider_options(options: dict[str, Any]) -> dict[str, Any]:
+    reserved = {
+        "_fixture",
+        "_path",
+        "input",
+        "max_output_tokens",
+        "max_tokens",
+        "messages",
+        "metadata",
+        "model",
+        "reasoning",
+        "response_format",
+        "stream",
+        "temperature",
+        "text",
+        "thinking",
+        "tools",
+        "tool_choice",
+        "service_tier",
+    }
+    return {key: value for key, value in options.items() if key not in reserved}
+
+
 def adapter_for_provider(
     provider: ModelProvider, *, live_enabled: bool = False
 ) -> ProviderRuntimeAdapter:
@@ -436,6 +480,11 @@ def adapter_for_provider(
         timeout_seconds=float(provider.metadata.get("timeout_seconds", 30.0)),
         max_retries=int(provider.metadata.get("max_retries", 3)),
         live_enabled=live_configured,
+        credential_pool_id=(
+            _default_credential_pool_id(cast(ProviderFamily, family))
+            if live_configured
+            else None
+        ),
         docs_refs=_official_docs_for_family(cast(ProviderFamily, family)),
     )
     transport = _transport_for_config(config)
@@ -446,11 +495,3 @@ def adapter_for_provider(
     if family == "gemini":
         return GeminiProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)
-
-
-def _official_docs_for_family(family: ProviderFamily) -> list[str]:
-    if family == "anthropic":
-        return list(ANTHROPIC_OFFICIAL_DOCS)
-    if family == "gemini":
-        return list(GEMINI_OFFICIAL_DOCS)
-    return list(OPENAI_OFFICIAL_DOCS)

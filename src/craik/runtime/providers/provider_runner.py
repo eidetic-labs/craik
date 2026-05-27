@@ -69,6 +69,7 @@ class ProviderBackedStepRunner:
     adapter: ProviderRuntimeAdapter
     compiled_prompt: CompiledPrompt
     actor: str
+    provider_options: dict[str, object] = field(default_factory=dict)
     statuses: list[RunnerResultStatus] = field(default_factory=list)
     provider_results: list[ProviderRuntimeResult] = field(default_factory=list)
 
@@ -174,6 +175,11 @@ class ProviderBackedStepRunner:
                 )
             ],
             structured_output_schema=_runner_step_schema(),
+            max_output_tokens=_int_option(self.provider_options, "max_output_tokens") or 1024,
+            temperature=_float_option(self.provider_options, "temperature"),
+            service_tier=_str_option(self.provider_options, "service_tier"),
+            reasoning_effort=_str_option(self.provider_options, "reasoning_effort"),
+            provider_options=_passthrough_provider_options(self.provider_options),
             stream=bool(request.context.get("stream", False)),
             metadata={
                 "user_id": request.task_id,
@@ -221,10 +227,12 @@ class ProviderBackedRunExecutor:
         max_iterations: int = 5,
         provider_token_budget: int | None = None,
         live_enabled: bool | None = None,
+        model: str | None = None,
         role_kind: AgentRoleKind | None = None,
         role_runner_id: str | None = None,
         started_at: datetime | None = None,
         resume_run_id: str | None = None,
+        provider_options: dict[str, object] | None = None,
     ) -> ProviderBackedRunResult:
         """Compile the case-file prompt, run through a provider, and leave a handoff."""
         case_file = CaseFileAssembler(self.store).latest_for_task(task_id)
@@ -252,6 +260,8 @@ class ProviderBackedRunExecutor:
             if live_enabled is not None
             else bool(provider.metadata.get("live_enabled", False)),
         )
+        if model is not None:
+            adapter.config.model = model
         compiled = PromptCompiler(self.store).compile(
             task_id,
             runner_id=provider.id,
@@ -263,6 +273,7 @@ class ProviderBackedRunExecutor:
             adapter=adapter,
             compiled_prompt=compiled,
             actor=f"runner:{provider.id}",
+            provider_options=provider_options or {},
             statuses=list(statuses or []),
         )
         loop_executor = SingleAgentLoopExecutor(
@@ -389,3 +400,25 @@ def _runner_step_schema() -> dict[str, Any]:
         "required": ["phase", "status", "summary"],
         "additionalProperties": False,
     }
+
+
+def _int_option(options: dict[str, object], key: str) -> int | None:
+    value = options.get(key)
+    return value if isinstance(value, int) else None
+
+
+def _float_option(options: dict[str, object], key: str) -> float | None:
+    value = options.get(key)
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _str_option(options: dict[str, object], key: str) -> str | None:
+    value = options.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _passthrough_provider_options(options: dict[str, object]) -> dict[str, object]:
+    common = {"max_output_tokens", "temperature", "service_tier", "reasoning_effort"}
+    return {key: value for key, value in options.items() if key not in common}

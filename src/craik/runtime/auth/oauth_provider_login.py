@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +15,13 @@ from craik.runtime.auth.oauth_loopback import (
     generate_pkce_challenge,
 )
 from craik.runtime.auth.pool import CredentialPool
-from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
+from craik.runtime.auth.profile import AuthProfile
+from craik.runtime.auth.sources.anthropic_claude_cli import (
+    create_claude_cli_profile,
+)
 from craik.runtime.auth.sources.anthropic_oauth import (
     AnthropicOAuthClient,
     AnthropicOAuthError,
-    bootstrap_anthropic_api_key,
     store_anthropic_oauth_profile,
 )
 from craik.runtime.auth.sources.gemini_oauth import (
@@ -36,8 +37,8 @@ from craik.runtime.auth.sources.openai_oauth import (
 )
 from craik.runtime.auth.store import AuthProfileStore
 from craik.runtime.shell.credential_storage import (
+    CredentialStorageStatus,
     credential_storage_status,
-    put_cached_credential,
 )
 
 BrowserOpener = Callable[[str], bool]
@@ -73,11 +74,9 @@ def browser_oauth_login(
     """Create a provider OAuth profile through a loopback browser login."""
     normalized = provider.strip().lower()
     if normalized == "anthropic":
-        return anthropic_bootstrap_login(
-            profile_id=profile_id,
-            browser_opener=browser_opener,
-            code_prompt=code_prompt,
-            env=env,
+        raise AnthropicOAuthError(
+            "Anthropic browser OAuth login is not supported. Use Claude CLI delegation "
+            "or a Console API key."
         )
     if normalized == "gemini":
         return gemini_oauth_login(
@@ -146,38 +145,35 @@ def _loopback_listener(provider: str, state: str) -> OAuthLoopbackListener:
         raise
 
 
-def anthropic_bootstrap_login(
+def anthropic_claude_cli_login(
     *,
     profile_id: str | None = None,
-    browser_opener: BrowserOpener,
-    code_prompt: CodePrompt | None,
     env: dict[str, str] | None = None,
 ) -> OAuthLoginResult:
-    """Create an Anthropic keyring profile via Anthropic's browser bootstrap flow."""
-    if code_prompt is None:
-        raise AnthropicOAuthError("Anthropic OAuth bootstrap requires a one-time code prompt")
-    bootstrap = bootstrap_anthropic_api_key(
-        browser_opener=browser_opener,
-        code_prompt=code_prompt,
-    )
-    profile = _store_anthropic_bootstrap_api_key(
-        bootstrap.api_key,
-        profile_id=profile_id or "anthropic:default",
-        env=env,
-    )
-    AuthProfileStore.from_env(env).put(profile)
-    CredentialPool.from_env(env).put(default_pool_for_profile(profile))
+    """Create an Anthropic marker profile delegated to local Claude CLI auth."""
+    target_profile_id = profile_id or "anthropic:default"
+    result = create_claude_cli_profile(profile_id=target_profile_id)
+    AuthProfileStore.from_env(env).put(result.profile)
+    CredentialPool.from_env(env).put(default_pool_for_profile(result.profile))
     capture = AuthCaptureResult(
         provider="anthropic",
-        profile=profile,
-        status=CredentialStatus(status="ok"),
-        credential_storage=credential_storage_status(env),
+        profile=result.profile,
+        status=result.status,
+        credential_storage=CredentialStorageStatus(
+            backend=result.credential_storage_backend,
+            status="available",
+            secure=True,
+        ),
     )
     return OAuthLoginResult(
         capture=capture,
-        authorization_url=bootstrap.authorization_url,
-        browser_opened=bootstrap.browser_opened,
+        authorization_url="claude auth login",
+        browser_opened=False,
     )
+
+
+def _default_token_prompt(prompt: str) -> str:
+    return input(prompt)
 
 
 def gemini_oauth_login(
@@ -246,33 +242,9 @@ def _store_oauth_profile(
     raise ValueError("provider loopback OAuth login supports openai or anthropic")
 
 
-def _store_anthropic_bootstrap_api_key(
-    api_key: str,
-    *,
-    profile_id: str,
-    env: dict[str, str] | None,
-) -> AuthProfile:
-    storage_status = put_cached_credential(f"{profile_id}:api-key", api_key, env=env)
-    return AuthProfile(
-        id=profile_id,
-        kind=CredentialKind.KEYRING_REF,
-        provider_family="anthropic",
-        metadata={
-            "base_url": "https://api.anthropic.com",
-            "billing_surface": "anthropic-console-api",
-            "credential_backend": storage_status.backend,
-            "last_validated_at": datetime.now(UTC).isoformat(),
-            "provider": "anthropic",
-            "ref": f"{profile_id}:api-key",
-            "source": "anthropic-oauth-bootstrap",
-        },
-        created_at=datetime.now(UTC),
-        last_status="ok",
-    )
-
 __all__ = [
     "OAuthLoginResult",
-    "anthropic_bootstrap_login",
+    "anthropic_claude_cli_login",
     "browser_oauth_login",
     "gemini_oauth_login",
 ]

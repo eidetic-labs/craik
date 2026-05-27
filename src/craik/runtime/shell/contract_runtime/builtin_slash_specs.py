@@ -20,9 +20,13 @@ HELP_SPEC_ORDER: tuple[str, ...] = (
     "/logout",
     "/provider",
     "/model",
+    "/mode",
     "/status",
     "/clear",
+    "/copy",
+    "/export",
     "/doctor",
+    "/run",
     "/policy",
     "/migrate",
     "/agent",
@@ -60,6 +64,35 @@ _HELP_SUMMARY_OVERRIDES: dict[str, str] = {
     "/redo": "Redo the latest agent turn.",
     "/compact": "Compact the current conversation.",
     "/share": "Share the current transcript.",
+}
+
+_BUILTIN_CLI_MIRRORS: dict[str, str] = {
+    "/agent": "agent",
+    "/approvals": "approvals list",
+    "/attach": "attach",
+    "/auth": "auth status",
+    "/doctor": "doctor",
+    "/fork": "fork",
+    "/gateway": "gateway status",
+    "/handoffs": "handoff list",
+    "/login": "auth login",
+    "/logout": "auth logout",
+    "/mcp": "mcp",
+    "/memory": "memory list",
+    "/model": "model status",
+    "/note": "note",
+    "/provider": "provider list",
+    "/receipts": "receipts list",
+    "/redo": "redo",
+    "/rename": "rename",
+    "/resume": "session resume",
+    "/run": "run prompt",
+    "/session": "session list",
+    "/sessions": "session list",
+    "/setup": "setup",
+    "/skills": "skills list",
+    "/status": "status",
+    "/theme": "theme",
 }
 
 
@@ -104,6 +137,7 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         "usage": _builtin_usage(name),
         "payload_shape": shape,
         "help": summary,
+        "cli_mirror": _BUILTIN_CLI_MIRRORS.get(name),
         "empty_state": EmptyState(message=f"No {name.removeprefix('/')} results found."),
     }
     if name in {
@@ -111,6 +145,7 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         "/provider",
         "/model",
         "/logout",
+        "/export",
         "/policy",
         "/migrate",
         "/agent",
@@ -137,6 +172,9 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
     if name == "/model":
         kwargs["args_schema"] = ModelArgs
         kwargs["example"] = "/model set openai/gpt-4o-mini"
+    if name == "/mode":
+        kwargs["choices"] = {"mode": ("default", "acceptEdits", "plan", "auto")}
+        kwargs["example"] = "/mode acceptEdits"
     if name == "/provider":
         kwargs["example"] = "/provider login openai"
         kwargs["examples"] = ("/provider login openai", "/provider login local")
@@ -169,8 +207,11 @@ def _builtin_usage(name: str) -> str:
         "/setup": "/setup",
         "/status": "/status",
         "/logout": "/logout [profile]",
+        "/copy": "/copy [selection|last|transcript]",
+        "/export": "/export transcript",
         "/provider": "/provider [login <provider>]",
         "/model": "/model [set <provider/model>]",
+        "/mode": "/mode [default|acceptEdits|plan|auto]",
         "/policy": "/policy reset",
         "/migrate": "/migrate apply",
         "/sessions": "/sessions",
@@ -180,6 +221,10 @@ def _builtin_usage(name: str) -> str:
         "/rename": "/rename <name>",
         "/note": "/note <text>",
         "/receipts": "/receipts [detail <receipt-id>]",
+        "/run": (
+            "/run <prompt> | /run list | /run inspect <run-or-task-id> | "
+            "/run timeline <run-or-task-id>"
+        ),
         "/agent": "/agent [list|launch|rename|delete]",
         "/session": "/session [list|rename|delete]",
     }.get(name, name)

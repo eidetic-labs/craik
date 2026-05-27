@@ -22,6 +22,7 @@ from craik.cli_runs import run_app
 from craik.cli_session import env_with_session_name
 from craik.cli_typer import craik_typer
 from craik.contracts.registry import schema_model, schema_names
+from craik.runtime.backend.jsonl import run_jsonl_gateway
 from craik.runtime.companions.desktop_companion import (
     desktop_approval_notification,
     desktop_companion_action,
@@ -223,6 +224,23 @@ def tui_command(
 ) -> None:
     """Launch the keyboard-first terminal UI."""
     raise typer.Exit(run_tui(env=env_with_session_name(session_name)))
+
+
+@app.command("tui-backend")
+def tui_backend_command(
+    jsonl: Annotated[
+        bool,
+        typer.Option("--jsonl", help="Run the local Gateway session over JSONL stdio."),
+    ] = False,
+    session_name: Annotated[
+        str | None,
+        typer.Option("-n", "--name", help="Operator-visible backend session name."),
+    ] = None,
+) -> None:
+    """Run the backend protocol used by TUI clients."""
+    if not jsonl:
+        raise typer.BadParameter("tui-backend currently requires --jsonl")
+    raise typer.Exit(run_jsonl_gateway(env=env_with_session_name(session_name)))
 
 
 @app.command("setup")

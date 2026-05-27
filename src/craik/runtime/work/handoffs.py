@@ -226,8 +226,14 @@ class HandoffWriter:
             summary=_run_summary(run, outputs),
             status=_handoff_status(run.status),
             completed_actions=_run_completed_actions(run, outputs),
-            artifacts=_unique([output.id for output in outputs]),
-            commands_run=commands_run,
+            files_changed=_run_files_changed(outputs),
+            artifacts=_unique(
+                [
+                    *[output.id for output in outputs],
+                    *[artifact for output in outputs for artifact in output.artifacts],
+                ]
+            ),
+            commands_run=_unique([*(commands_run or []), *_run_commands(outputs)]),
             tests_run=tests_run,
             memory_proposal_ids=proposals,
             runner_metadata=runner_metadata,
@@ -378,6 +384,34 @@ def _run_diagnostics(outputs: list[RunOutput]) -> list[str]:
     return _redacted_strings(
         [diagnostic for output in outputs for diagnostic in output.diagnostics]
     )
+
+
+def _run_files_changed(outputs: list[RunOutput]) -> list[str]:
+    files: list[str] = []
+    for output in outputs:
+        observed = output.observed_output
+        activity = observed.get("activity")
+        if not isinstance(activity, dict):
+            continue
+        raw_files = activity.get("files")
+        if not isinstance(raw_files, list):
+            continue
+        files.extend(str(item) for item in raw_files if isinstance(item, str) and item)
+    return _unique(files)
+
+
+def _run_commands(outputs: list[RunOutput]) -> list[str]:
+    commands: list[str] = []
+    for output in outputs:
+        observed = output.observed_output
+        activity = observed.get("activity")
+        if not isinstance(activity, dict):
+            continue
+        raw_commands = activity.get("commands")
+        if not isinstance(raw_commands, list):
+            continue
+        commands.extend(str(item) for item in raw_commands if isinstance(item, str) and item)
+    return _redacted_strings(_unique(commands))
 
 
 def _run_risks(run: TaskRun, diagnostics: list[str]) -> list[str]:

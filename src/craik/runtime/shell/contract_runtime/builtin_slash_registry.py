@@ -17,12 +17,25 @@ from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlashRegistry:
     """Return ``registry`` extended with shell-only slash commands."""
     from craik.runtime.shell.contract_runtime import builtin_slash_commands as commands
+    from craik.runtime.shell.contract_runtime.run_helpers import run_command
 
     builtins = (
         ("/help", commands.help_command, "Show slash-command help.", "markdown"),
         ("/setup", commands.setup_command, "Show progressive setup guidance.", "tree"),
         ("/status", commands.status_command, "Show readiness state.", "tree"),
         ("/clear", commands.clear_command, "Clear the current transcript.", "markdown"),
+        (
+            "/copy",
+            commands.copy_command,
+            "Copy transcript text in the interactive TUI.",
+            "markdown",
+        ),
+        (
+            "/export",
+            commands.export_command,
+            "Export transcript or run text from the interactive TUI.",
+            "markdown",
+        ),
         ("/exit", commands.exit_command, "Exit the shell.", "markdown"),
         ("/quit", commands.exit_command, "Exit the shell.", "markdown"),
         ("/auth", commands.auth_command, "Manage operator and provider auth.", "table"),
@@ -47,6 +60,7 @@ def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlas
             "table",
         ),
         ("/model", commands.model_command, "Inspect or select the active model.", "kv"),
+        ("/mode", commands.mode_command, "Inspect or set Claude Code mode.", "kv"),
         ("/sessions", commands.sessions_command, "List persistent sessions.", "table"),
         ("/resume", commands.resume_command, "Resume a persistent session.", "kv"),
         ("/approvals", commands.approvals_command, "Inspect pending approvals.", "table"),
@@ -55,6 +69,12 @@ def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlas
         ("/memory", commands.memory_command, "Inspect memory proposals and facts.", "tree"),
         ("/gateway", commands.gateway_command, "Inspect gateway state.", "tree"),
         ("/doctor", commands.doctor_command, "Run diagnostics inline.", "tree"),
+        (
+            "/run",
+            run_command,
+            "Create and execute an audited task run.",
+            "card",
+        ),
         ("/theme", commands.theme_command, "Inspect or switch the TUI theme.", "kv"),
         ("/rename", commands.rename_command, "Rename the current shell session.", "kv"),
         (

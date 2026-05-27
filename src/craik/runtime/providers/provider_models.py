@@ -49,6 +49,10 @@ class ProviderRuntimeRequest(CraikModel):
     structured_output_schema: dict[str, Any] | None = None
     structured_output_name: str = "craik_structured_output"
     max_output_tokens: int = Field(default=1024, ge=1)
+    temperature: float | None = Field(default=None, ge=0)
+    service_tier: str | None = None
+    reasoning_effort: str | None = None
+    provider_options: dict[str, Any] = Field(default_factory=dict)
     stream: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
 

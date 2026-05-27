@@ -890,6 +890,7 @@ def test_runners_matrix_lists_built_in_trust_profiles() -> None:
     assert {
         "codex",
         "claude",
+        "claude-code",
         "gemini",
         "fixture",
         "provider_anthropic",

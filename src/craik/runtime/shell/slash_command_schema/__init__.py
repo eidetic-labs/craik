@@ -83,6 +83,7 @@ class SlashCommandSpec(BaseModel):
     usage: str
     payload_shape: PayloadShape
     help: str
+    cli_mirror: str | None = None
     example: str | None = None
     examples: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()

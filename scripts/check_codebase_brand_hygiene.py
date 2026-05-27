@@ -1,8 +1,9 @@
 """Reject private comparison-brand language from public codebase artifacts.
 
 This guard allows existing technical runner/provider identifiers such as
-``codex`` or ``claude`` when they are API contracts, but blocks public
-comparison or positioning phrases that belong only in private planning notes.
+``codex``, ``claude``, or ``Claude Code`` when they describe API/runtime
+contracts, but blocks public comparison or positioning phrases that belong only
+in private planning notes.
 """
 
 from __future__ import annotations
@@ -20,10 +21,6 @@ ALLOWLIST_CAP = 5
 _FORBIDDEN_BRAND_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(r"\bCodex CLI\b", re.IGNORECASE),
-        "private comparison reference",
-    ),
-    (
-        re.compile(r"\bClaude Code\b", re.IGNORECASE),
         "private comparison reference",
     ),
     (

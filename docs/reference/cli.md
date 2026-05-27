@@ -301,7 +301,7 @@ craik auth login [OPTIONS] PROVIDER
 
 Options:
 
-- `--no-browser`: Print provider setup URL instead of opening a browser.; default `false`
+- `--no-browser`: Do not launch provider/browser setup.; default `false`
 - `--mode`: Login mode: api-key or oauth.
 - `--profile-id`: Auth profile id to create.
 - `--env-var`: Environment variable containing the provider key.
@@ -1516,6 +1516,16 @@ Set the active model as &lt;provider&gt;/&lt;model&gt;.
 craik model set [OPTIONS] MODEL
 ```
 
+Options:
+
+- `--display-name`: Human-readable model profile label.
+- `--backend`: Backend preference for this profile.; default `provider`
+- `--reasoning-effort`: Provider reasoning effort option.
+- `--service-tier`: Provider service tier option.
+- `--temperature`: Provider temperature option.
+- `--max-output-tokens`: Provider output token limit.
+- `--option`: Provider-specific profile option as key=value.
+
 ## `craik model status`
 
 Show active model state and readiness.
@@ -2342,6 +2352,14 @@ Options:
 
 - `--task-id`: Only include runs for this task id.
 
+## `craik run prompt`
+
+Execute a raw prompt through the audited Gateway run path.
+
+```text
+craik run prompt [OPTIONS] PROMPT
+```
+
 ## `craik run recover`
 
 Print a deterministic recovery plan for an interrupted run.
@@ -2776,6 +2794,19 @@ craik tui [OPTIONS]
 Options:
 
 - `-n, --name`: Operator-visible shell session name.
+
+## `craik tui-backend`
+
+Run the backend protocol used by TUI clients.
+
+```text
+craik tui-backend [OPTIONS]
+```
+
+Options:
+
+- `--jsonl`: Run the local Gateway session over JSONL stdio.; default `false`
+- `-n, --name`: Operator-visible backend session name.
 
 ## `craik update`
 

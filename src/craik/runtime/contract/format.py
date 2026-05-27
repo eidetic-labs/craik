@@ -69,6 +69,8 @@ def _format_tui(result: CommandResult) -> Any:
     """Return the renderer pipeline output for TUI consumers."""
     render = import_module("craik.runtime.shell.renderers").render
 
+    if result.shape == "markdown" and result.text is not None:
+        return render(result.text, shape="markdown", next_actions=result.next_actions)
     return render(
         result.payload,
         shape=result.shape,

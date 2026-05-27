@@ -14,7 +14,7 @@ def readme_content() -> str:
 def test_readme_getting_started_and_operator_modes_match_v0121(
     readme_content: str,
 ) -> None:
-    assert "v0.12.1 supersedes v0.12.0" in readme_content
+    assert "v0.12.9 supersedes v0.12.8" in readme_content
     assert "## Getting Started" in readme_content
     assert "## Operator Modes" in readme_content
     assert "craik auth login openai" in readme_content

@@ -117,8 +117,8 @@ def anthropic_env_credential_check(env: dict[str, str]) -> DiagnosticCheck:
             status="warning",
             summary="No Anthropic credential was detected in environment variables.",
             action=(
-                "Run claude setup-token and export CLAUDE_CODE_OAUTH_TOKEN, "
-                "set ANTHROPIC_TOKEN or ANTHROPIC_API_KEY, or run craik auth login anthropic."
+                "Run craik auth login anthropic for Claude CLI delegation, "
+                "or set ANTHROPIC_TOKEN or ANTHROPIC_API_KEY."
             ),
         )
     return DiagnosticCheck(

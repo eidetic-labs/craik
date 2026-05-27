@@ -83,6 +83,7 @@ def derive_slash_specs(app: typer.Typer) -> list[SlashCommandSpec]:
                 usage=slash_name,
                 payload_shape=metadata.payload_shape,
                 help=summary,
+                cli_mirror=full_name,
             )
         )
     return specs

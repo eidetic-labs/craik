@@ -6,7 +6,7 @@ import typer
 
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
-from craik.runtime.shell.model_settings import ModelSettings, ModelSettingsStore
+from craik.runtime.modeling import ModelSettings, ModelSettingsStore
 from craik.runtime.shell.slash_completer import complete_slash_input
 
 

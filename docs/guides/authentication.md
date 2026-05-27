@@ -86,8 +86,8 @@ Loopback HTTP base URLs are rejected unless the selected provider is
 Use `craik auth login` for the default provider setup flow. Craik chooses
 the strongest supported flow per provider: OpenAI uses browser PKCE OAuth
 when no `OPENAI_API_KEY` is set, local-compatible providers use API-key
-capture, Anthropic uses browser OAuth bootstrap, and Gemini uses
-Google-managed ADC or service-account OAuth.
+capture, Anthropic delegates to the local Claude CLI, and Gemini
+uses Google-managed ADC or service-account OAuth.
 
 ```sh
 craik auth login openai
@@ -103,11 +103,10 @@ Craik opens the provider setup page when a browser is available, prompts for
 the key with hidden terminal input, validates the shape, stores the credential
 in the local credential backend, and writes a redacted `keyring-ref` profile.
 
-Use `--mode=api-key` to force API-key capture for providers whose default is
-OAuth-backed:
+Use `--mode=api-key` to force API-key capture where a provider otherwise uses
+OAuth-backed or subscription-backed credentials:
 
 ```sh
-craik auth login anthropic --mode=api-key
 craik auth login gemini --mode=api-key
 ```
 
@@ -154,30 +153,33 @@ Set `OPENAI_API_KEY`, pass `--no-browser`, or run
 `craik auth login openai --mode=api-key` to use Platform API key billing
 instead.
 
-### Anthropic browser bootstrap
+### Anthropic Claude CLI delegation
 
 Anthropic credential sources resolve in this order:
 
-1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable from `claude setup-token`
-2. `ANTHROPIC_TOKEN` environment variable for manual OAuth token overrides
-3. `ANTHROPIC_API_KEY` environment variable
-4. OS keyring profile from `craik auth login anthropic`
+1. Claude CLI marker profile from `craik auth login anthropic`
+2. `CLAUDE_CODE_OAUTH_TOKEN` environment variable from `claude setup-token`
+3. `ANTHROPIC_TOKEN` environment variable for manual OAuth token overrides
+4. `ANTHROPIC_API_KEY` environment variable
 
 The first source that resolves wins. `craik doctor` and `craik auth status`
 report which Anthropic source is active without printing credential material.
 
-Anthropic defaults to OAuth bootstrap when no environment credential is set:
+Anthropic defaults to `claude-cli` mode. When no environment credential is set,
+Craik delegates live prompts to Anthropic's local Claude CLI:
 
 ```sh
 craik auth login anthropic
 ```
 
-Craik opens `https://claude.ai/oauth/authorize`, asks the operator to paste
-the one-time code shown by Anthropic, exchanges that code at
-`https://console.anthropic.com/v1/oauth/token`, and stores the resulting
-long-lived API key through Craik credential storage. Anthropic provider
-requests use `x-api-key`; Anthropic rejects `Authorization: Bearer` for this
-surface.
+Craik stores a marker profile and calls `claude -p` for Anthropic prompts
+instead of replaying Claude OAuth tokens through Craik's HTTP transport. Run
+`claude` first if Claude CLI is not already authenticated.
+
+Use `craik auth login anthropic --mode=api-key --no-browser` to skip browser
+token export and paste a traditional Console API key directly. `--mode=oauth`
+is not used for this flow because Anthropic does not provide a supported Craik
+browser OAuth flow.
 
 ### Gemini and Vertex OAuth
 
@@ -208,9 +210,9 @@ service-account file; Craik does not store Google refresh tokens.
 
 Provider OAuth profiles store handles and setup metadata, not raw tokens.
 OpenAI's pending OAuth path uses separate access-token and refresh-token
-handles. Anthropic bootstrap stores the resulting API key through Craik
-credential storage. Gemini relies on Google-managed ADC or service-account
-credentials.
+handles. Anthropic Claude CLI login stores only a marker profile and delegates
+execution to `claude -p`. Gemini relies on Google-managed ADC or
+service-account credentials.
 
 </div>
 
@@ -255,24 +257,19 @@ craik auth add anthropic:work --kind=api-key --env-var=ANTHROPIC_API_KEY
 craik auth test anthropic:work
 ```
 
-Anthropic profiles send `x-api-key`. OpenAI and OpenAI-compatible Chat
-Completions profiles send `Authorization: Bearer`.
-
-Anthropic CLI users should use Anthropic's documented token export path:
-
-```sh
-claude setup-token
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
-craik doctor
-```
+Anthropic API-key profiles send `x-api-key`. Anthropic `claude-cli` profiles
+call the local `claude` binary and strip Anthropic bearer-token environment
+variables from the subprocess so the CLI uses its own authenticated session.
+OpenAI and OpenAI-compatible Chat Completions profiles send
+`Authorization: Bearer`.
 
 <div className="craik-keypoint">
 
 **Subscription tokens route differently.**
 
-Subscription OAuth tokens may route to a different billing pool than
-API-key provider calls. Receipts name the auth profile so operators
-can distinguish the credential path used by a run.
+Claude CLI delegation preserves Anthropic's first-party CLI auth and billing
+semantics. Direct API-key provider calls remain separate and are billed through
+Anthropic Console.
 
 </div>
 

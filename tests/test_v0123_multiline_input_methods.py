@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from textual import events
 
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.shell.textual_app import CraikApp
@@ -75,6 +76,18 @@ def test_shift_enter_inserts_newline_via_pilot(tmp_path: Path) -> None:
             await pilot.pause()
             await pilot.press("t", "h", "e", "r", "e")
             assert input_widget.value == "hi\nthere"
+
+    asyncio.run(run())
+
+
+def test_paste_preserves_multiline_text_via_pilot(tmp_path: Path) -> None:
+    async def run() -> None:
+        async with CraikApp(env=_env(tmp_path)).run_test() as pilot:
+            input_widget = pilot.app.query_one("#input", CraikInput)
+            input_widget.focus()
+            input_widget.post_message(events.Paste("line one\nline two\nline three"))
+            await pilot.pause()
+            assert input_widget.value == "line one\nline two\nline three"
 
     asyncio.run(run())
 

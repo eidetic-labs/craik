@@ -1,6 +1,6 @@
 # Slash Commands
 
-<p className="craik-meta"><span>7 min read</span><span>For operators</span><span>Updated 2026-05-25</span></p>
+<p className="craik-meta"><span>8 min read</span><span>For operators</span><span>Updated 2026-05-26</span></p>
 
 <div className="craik-lead">
 
@@ -53,10 +53,16 @@ the command behavior operators see outside the TUI.
 | `/auth status` | Inspect cached credential and runtime health state. |
 | `/provider` | List provider families and credential state. |
 | `/model list` | List configured provider default model selectors. |
-| `/model set <provider/model>` | Set the active provider/model selector. |
+| `/model set <provider/model>` | Set the active provider/model selector and persist a model profile. |
+| `/mode [default\|acceptEdits\|plan\|auto]` | Inspect or set Claude Code permission mode. |
+| `/run [--backend claude-code] <prompt>` | Create an audited Gateway task run; the Claude Code backend delegates execution to local `claude -p` with Claude Code tools enabled. |
+| `/run list` | List persisted task runs. |
+| `/run inspect <run-or-task-id>` | Inspect persisted run state. |
+| `/run timeline <run-or-task-id>` | Show a chronological run event timeline. |
 | `/sessions` | List persistent sessions and the active session pointer. |
 | `/rename <name>` | Rename the current shell session. |
 | `/resume <session-id>` | Set the active persistent session. |
+| `/note <text>` | Append an operator note to the active session record. |
 | `/approvals` | Inspect pending approval requests. |
 | `/approvals decide <approval-id>` | Open the approval decision modal. |
 | `/receipts` | Inspect persisted capability, plugin, and gateway receipts. |
@@ -66,11 +72,74 @@ the command behavior operators see outside the TUI.
 | `/skills` | Inspect learning-loop skill packages, registries, and proposals. |
 | `/memory` | Inspect memory proposals, diffs, and impact previews. |
 | `/theme [dark\|light\|monochrome]` | Inspect or persist the TUI theme. |
+| `/copy [selection\|last\|transcript]` | Copy transcript text from the TUI clipboard path. |
+| `/export transcript` | Write the current transcript under `$CRAIK_HOME/state/exports/`. |
 | `/clear` | Clear the visible transcript after confirmation. |
 | `/exit` | Exit the interactive shell. |
 
 `/doctor` renders the same redacted diagnostic report as `craik doctor --json`,
 including setup, gateway, channel, auth-profile, and local-store checks.
+
+`/run <prompt>` and `craik run prompt <prompt>` share the same Gateway path.
+Both create task, case-file, run-output, receipt, handoff, and normalized
+Gateway event records. Shell-only commands such as `/copy`, `/clear`, and
+`/theme` remain presentation helpers; backend-affecting commands are expected
+to have CLI mirrors.
+
+Gateway clients can also use JSONL messages for `model.set`,
+`approval.decide`, and `run.interrupt`, receiving `model.changed`,
+`approval.resolved`, and `run.interrupt.requested` events without relying on
+TUI-only state.
+
+Backend-affecting slash specs carry explicit `cli_mirror` metadata, and
+regression coverage checks the listed mirror against real CLI commands. Shell
+presentation helpers such as `/copy` and `/clear` remain intentionally TUI-only.
+In the Textual TUI, terminal-native selection is the primary copy path: select
+text in the transcript and use your terminal copy shortcut. `/copy` remains
+available for the latest response or run output, and `/copy transcript` copies
+the full transcript.
+
+`/model set <provider/model>` keeps the legacy selector for compatibility and
+also writes an active model profile with provider id, provider family, model
+id, display label, backend preference, and provider-specific options. Gateway
+prompt runs apply the active profile to provider runtime payloads, including
+token budgets, temperature, service tier, reasoning effort, and safe
+provider-specific passthrough options. The CLI mirror accepts richer profile
+metadata:
+
+```sh
+craik model set anthropic/claude-opus-4-7 \
+  --display-name "Anthropic Claude Opus 4.7 High" \
+  --reasoning-effort high \
+  --service-tier priority \
+  --max-output-tokens 8192 \
+  --option thinking=true
+```
+
+`/run --backend claude-code <prompt>` opens an approval modal before it grants
+Claude Code repository read, documentation write, receipt write, and
+verification-command authority. Approvals and denials are visible in the TUI;
+approved runs persist an `approval.decide` receipt. Direct non-interactive
+dispatch requires `CRAIK_CLAUDE_CODE_RUN_APPROVED=1` to make that authority
+explicit.
+
+During Claude Code runs, Craik parses the stream into structured activity:
+tool calls, file targets, shell commands, diff-like output, permission
+denials, and runtime approval requests. `/run inspect <run-or-task-id>`
+returns a card payload with four keys: `run` (the persisted task run row),
+`outputs` (recorded `RunOutput` records including raw and parsed Claude Code
+stream events), `receipts` (capability receipts attached to the run or its
+outputs), and `activity` (a merged summary with `tools`, `files`, `commands`,
+`permission_denials`, and `runtime_approvals` lists). `/run timeline
+<run-or-task-id>` returns `{run_id, task_id, timeline}` where each timeline
+entry has a `kind`, `message`, and the optional `tool`, `target`, `command`,
+`status`, `phase`, or `stop_reason` field that applies to that event.
+
+The TUI keeps the input active while a run is in progress. Additional submitted
+prompts are queued and dispatched after the active run completes. The activity
+panel shows the active backend, elapsed time, current Claude Code permission
+mode, current tool and target, approval and denial counts, queue depth, and a
+`Ctrl+C stop` reminder.
 
 ## Structured Output
 
@@ -125,6 +194,16 @@ types show HMAC verification status when available.
 Destructive TUI actions confirm before they proceed. In v0.12.4, `/clear`
 opens a modal that describes the blast radius: the visible transcript is
 discarded, while persisted receipts and audit records remain stored.
+
+Claude Code runs are not destructive by definition, but they can grant local
+write and command-execution authority. The TUI therefore uses a non-destructive
+approval modal for `/run --backend claude-code <prompt>` before dispatching to
+the local `claude` binary.
+
+If Claude Code emits a runtime approval request while the subprocess is
+running, the TUI records it as activity instead of opening another Craik modal.
+The Claude Code `-p` stream path does not provide a reliable decision channel
+back into the same subprocess, so Craik avoids interrupting the model flow.
 
 Confirmation-only families such as `/policy reset`, `/migrate apply`,
 `/agent delete <agent-id>`, and `/session delete <session-id>` return a

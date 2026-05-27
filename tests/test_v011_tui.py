@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -106,7 +107,7 @@ def test_tui_approval_modal_redacts_secret_like_targets() -> None:
     assert "[REDACTED]" in rendered
 
 
-def test_tui_scripted_input_streams_and_exits(tmp_path: Path) -> None:
+def test_tui_scripted_input_renders_prompt_response_and_exits(tmp_path: Path) -> None:
     env = {"CRAIK_HOME": str(tmp_path / "home")}
     output: list[str] = []
 
@@ -120,5 +121,70 @@ def test_tui_scripted_input_streams_and_exits(tmp_path: Path) -> None:
     assert exit_code == 0
     assert any("Craik TUI" in item for item in output)
     assert any("Usage: /status" in item for item in output)
-    assert any("Streaming output" in item for item in output)
+    assert not any("Streaming output" in item for item in output)
     assert output[-1] == "Session ended."
+
+
+def test_fallback_tui_prompt_ignores_quick_one_shot_flags(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    env = {"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_QUICK": "1"}
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+
+    result = dispatch_tui_input("Upgrade Craik Docs", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert result.command_name == "run"
+    assert result.payload["schema"] == "craik.provider_backed_run_execution"
+    assert "Audited run" in result.text
+    assert "one-shot" not in result.text
+
+
+def test_textual_tui_prompt_ignores_quick_one_shot_flags(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    env = {
+        "CRAIK_HOME": str(tmp_path / "home"),
+        "CRAIK_QUICK": "1",
+        "CRAIK_TUI": "1",
+    }
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+
+    result = dispatch_tui_input("Upgrade Craik Docs", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert result.command_name == "run"
+    assert result.payload["schema"] == "craik.provider_backed_run_execution"
+    assert "Audited run" in result.text
+
+
+def test_tui_prompt_defaults_to_audited_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+
+    result = dispatch_tui_input("Upgrade Craik Docs", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert result.command_name == "run"
+    assert result.payload["schema"] == "craik.provider_backed_run_execution"
+    assert "Audited run" in result.text

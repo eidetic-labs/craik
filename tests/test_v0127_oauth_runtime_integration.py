@@ -18,6 +18,7 @@ from craik.runtime.auth.sources import (
     provider_oauth,
     source_for_auth_profile,
 )
+from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
 from craik.runtime.auth.sources.openai_oauth import (
     OPENAI_OAUTH_CLIENT_ID,
     OPENAI_OAUTH_REDIRECT_URI,
@@ -153,6 +154,16 @@ def test_auth_status_rows_include_provider_billing_surfaces(monkeypatch) -> None
                     oauth_client_id="google-adc",
                     oauth_scope_list=["https://www.googleapis.com/auth/cloud-platform"],
                 ),
+                AuthProfile(
+                    id="anthropic:claude-cli",
+                    kind=CredentialKind.MARKER,
+                    provider_family="anthropic",
+                    metadata={
+                        "credential_mode": "claude-cli",
+                        "external_runtime": "claude-cli",
+                    },
+                    created_at=datetime.now(UTC),
+                ),
             ],
             env={"ANTHROPIC_API_KEY": "sk-ant-api"},
             validate=False,
@@ -162,6 +173,7 @@ def test_auth_status_rows_include_provider_billing_surfaces(monkeypatch) -> None
     billing_by_id = {row["id"]: row["billing_surface"] for row in rows}
     assert billing_by_id == {
         "anthropic:env": "Anthropic Console API (per-token)",
+        "anthropic:claude-cli": "Claude CLI subscription",
         "openai:subscription": "OpenAI subscription",
         "gemini:vertex": "GCP project (Vertex AI)",
     }
@@ -205,19 +217,17 @@ def test_auth_login_oauth_mode_uses_browser_oauth_flow(monkeypatch, tmp_path) ->
     assert "access-token" not in result.output
 
 
-def test_auth_login_anthropic_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None:
+def test_auth_login_anthropic_defaults_to_claude_cli(monkeypatch, tmp_path) -> None:
     profile = AuthProfile(
         id="anthropic:default",
-        kind=CredentialKind.KEYRING_REF,
+        kind=CredentialKind.MARKER,
         provider_family="anthropic",
-        metadata={"ref": "anthropic:default:api-key"},
+        metadata={"external_runtime": "claude-cli", "credential_mode": "oauth"},
         created_at=datetime.now(UTC),
     )
 
-    def _login(provider: str, **kwargs):
-        assert provider == "anthropic"
+    def _login(**kwargs):
         assert kwargs["profile_id"] is None
-        assert kwargs["project_id"] is None
         return OAuthLoginResult(
             capture=AuthCaptureResult(
                 provider="anthropic",
@@ -229,11 +239,11 @@ def test_auth_login_anthropic_defaults_to_oauth_mode(monkeypatch, tmp_path) -> N
                     secure=True,
                 ),
             ),
-            authorization_url="https://claude.ai/oauth/authorize",
+            authorization_url="claude",
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _login)
+    monkeypatch.setattr("craik.cli_auth_login.anthropic_claude_cli_login", _login)
     result = runner.invoke(
         app,
         ["auth", "login", "anthropic", "--json"],
@@ -243,8 +253,49 @@ def test_auth_login_anthropic_defaults_to_oauth_mode(monkeypatch, tmp_path) -> N
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["provider"] == "anthropic"
-    assert payload["kind"] == "keyring-ref"
-    assert payload["authorization_url"] == "https://claude.ai/oauth/authorize"
+    assert payload["kind"] == "marker"
+    assert payload["mode"] == "oauth"
+    assert payload["auth_transport"] == "claude-cli"
+    assert payload["authorization_url"] == "claude"
+
+
+def test_auth_login_anthropic_oauth_mode_uses_cli_marker(monkeypatch, tmp_path) -> None:
+    profile = AuthProfile(
+        id="anthropic:default",
+        kind=CredentialKind.MARKER,
+        provider_family="anthropic",
+        metadata={"external_runtime": "claude-cli", "credential_mode": "oauth"},
+        created_at=datetime.now(UTC),
+    )
+
+    def _login(**kwargs):
+        return OAuthLoginResult(
+            capture=AuthCaptureResult(
+                provider="anthropic",
+                profile=profile,
+                status=profile_runtime_ok(),
+                credential_storage=CredentialStorageStatus(
+                    backend="claude-cli",
+                    status="available",
+                    secure=True,
+                ),
+            ),
+            authorization_url="claude auth login",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.anthropic_claude_cli_login", _login)
+    result = runner.invoke(
+        app,
+        ["auth", "login", "anthropic", "--mode=oauth", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "marker"
+    assert payload["mode"] == "oauth"
+    assert payload["auth_transport"] == "claude-cli"
 
 
 def test_auth_login_gemini_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None:
@@ -473,40 +524,33 @@ def test_browser_oauth_login_openai_reports_port_1455_conflict(monkeypatch) -> N
         )
 
 
-def test_anthropic_oauth_bootstrap_stores_keyring_profile(monkeypatch, tmp_path) -> None:
-    stored: dict[str, str] = {}
+def test_browser_oauth_login_anthropic_is_not_supported() -> None:
+    with pytest.raises(AnthropicOAuthError, match="not supported"):
+        browser_oauth_login(
+            "anthropic",
+            browser_opener=lambda url: False,
+            code_prompt=lambda prompt: "one-time-code",
+        )
 
+
+def test_anthropic_claude_cli_login_stores_external_cli_marker(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        oauth_provider_login,
-        "bootstrap_anthropic_api_key",
-        lambda **kwargs: SimpleNamespace(
-            api_key="sk-ant-api-key",
-            authorization_url="https://claude.ai/oauth/authorize",
-            browser_opened=False,
-        ),
-    )
-    monkeypatch.setattr(
-        oauth_provider_login,
-        "put_cached_credential",
-        lambda ref, value, *, env=None: (
-            stored.__setitem__(ref, value)
-            or CredentialStorageStatus(backend="test-keyring", status="available", secure=True)
-        ),
+        "craik.runtime.auth.sources.anthropic_claude_cli.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
-    result = browser_oauth_login(
-        "anthropic",
-        browser_opener=lambda url: False,
-        code_prompt=lambda prompt: "one-time-code",
+    result = oauth_provider_login.anthropic_claude_cli_login(
         env={"CRAIK_HOME": str(tmp_path / "home")},
     )
 
-    assert result.capture.profile.kind is CredentialKind.KEYRING_REF
+    assert result.capture.profile.kind is CredentialKind.MARKER
     assert result.capture.profile.id == "anthropic:default"
-    assert result.capture.profile.metadata["source"] == "anthropic-oauth-bootstrap"
-    assert result.capture.profile.metadata["ref"] == "anthropic:default:api-key"
-    assert stored == {"anthropic:default:api-key": "sk-ant-api-key"}
-    assert result.authorization_url == "https://claude.ai/oauth/authorize"
+    assert result.capture.profile.metadata["source"] == "claude-cli-external"
+    assert result.capture.profile.metadata["external_runtime"] == "claude-cli"
+    assert result.capture.profile.metadata["credential_mode"] == "oauth"
+    assert result.capture.profile.metadata["billing_surface"] == "anthropic-claude-cli"
+    assert result.capture.credential_storage.backend == "claude-cli"
+    assert result.authorization_url == "claude auth login"
 
 
 def test_auth_login_gemini_oauth_uses_adc_or_service_account_flow(monkeypatch, tmp_path) -> None:

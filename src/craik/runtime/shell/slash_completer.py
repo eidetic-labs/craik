@@ -8,10 +8,10 @@ from typing import Any
 from craik.runtime.auth.guided_setup import GUIDED_PROVIDER_DEFAULTS
 from craik.runtime.auth.login import auth_status_payload
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
+from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
-from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.store import DATABASE_NAME, LocalStore
 
 

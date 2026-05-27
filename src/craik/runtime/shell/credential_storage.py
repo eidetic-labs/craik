@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import shutil
 import tempfile
 from dataclasses import dataclass
 from importlib import import_module
@@ -16,6 +17,10 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from craik.runtime.paths import resolve_craik_home
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    run_reviewed_local_process,
+)
 
 CredentialBackendStatus = Literal["available", "unavailable", "fallback"]
 OWNER_ONLY_FILE_MODE = 0o600
@@ -48,7 +53,7 @@ def credential_storage_status(env: dict[str, str] | None = None) -> CredentialSt
     forced = values.get("CRAIK_CREDENTIAL_BACKEND")
     if forced == "file":
         return _file_fallback()
-    if _python_keyring_available():
+    if _python_keyring_available() or _macos_security_available():
         return CredentialStorageStatus(
             backend=_platform_keyring_name(),
             status="available",
@@ -111,9 +116,14 @@ def put_cached_credential(
     if status.status == "unavailable":
         detail = status.warning or f"{status.backend} is unavailable"
         raise CredentialStorageError(detail)
-    if status.secure and _python_keyring_available():
-        _keyring_set(ref, value)
-        return status
+    if status.secure and _secure_backend_available():
+        try:
+            _secure_set(ref, value)
+            if _secure_get(ref) != value:
+                raise CredentialStorageError("secure credential round-trip failed")
+            return status
+        except CredentialStorageError:
+            pass
     _file_put(ref, value, env=env)
     return _file_fallback()
 
@@ -123,11 +133,13 @@ def get_cached_credential(ref: str, *, env: dict[str, str] | None = None) -> Sto
     if not ref.strip():
         raise CredentialStorageError("credential reference is required")
     status = credential_storage_status(env)
-    if status.secure and _python_keyring_available():
-        value = _keyring_get(ref)
-        if not value:
-            raise CredentialStorageError("cached credential could not be resolved")
-        return StoredCredential(value=value, backend=status.backend, secure=True)
+    if status.secure and _secure_backend_available():
+        try:
+            value = _secure_get(ref)
+        except CredentialStorageError:
+            value = None
+        if value:
+            return StoredCredential(value=value, backend=status.backend, secure=True)
     payload = _file_read(env=env)
     value = payload.get(ref)
     if not isinstance(value, str) or not value:
@@ -144,9 +156,8 @@ def get_cached_credential(ref: str, *, env: dict[str, str] | None = None) -> Sto
 def delete_cached_credential(ref: str, *, env: dict[str, str] | None = None) -> None:
     """Delete cached credential material for one opaque reference."""
     status = credential_storage_status(env)
-    if status.secure and _python_keyring_available():
-        _keyring_delete(ref)
-        return
+    if status.secure and _secure_backend_available():
+        _secure_delete(ref)
     payload = _file_read(env=env)
     payload.pop(ref, None)
     _file_write(payload, env=env)
@@ -180,8 +191,49 @@ def _python_keyring_available() -> bool:
     return True
 
 
+def _macos_security_available() -> bool:
+    return _macos_security_executable() is not None
+
+
+def _macos_security_executable() -> str | None:
+    if platform.system().lower() != "darwin":
+        return None
+    return shutil.which("security")
+
+
+def _secure_backend_available() -> bool:
+    return _python_keyring_available() or _macos_security_available()
+
+
 def _keyring_service() -> str:
     return "craik"
+
+
+def _secure_set(ref: str, value: str) -> None:
+    if _python_keyring_available():
+        _keyring_set(ref, value)
+        return
+    if _macos_security_available():
+        _macos_keychain_set(ref, value)
+        return
+    raise CredentialStorageError("secure credential backend is unavailable")
+
+
+def _secure_get(ref: str) -> str | None:
+    if _python_keyring_available():
+        return _keyring_get(ref)
+    if _macos_security_available():
+        return _macos_keychain_get(ref)
+    raise CredentialStorageError("secure credential backend is unavailable")
+
+
+def _secure_delete(ref: str) -> None:
+    if _python_keyring_available():
+        _keyring_delete(ref)
+        return
+    if _macos_security_available():
+        _macos_keychain_delete(ref)
+        return
 
 
 def _keyring_set(ref: str, value: str) -> None:
@@ -213,6 +265,75 @@ def _keyring_delete(ref: str) -> None:
 
 def _keyring_module() -> Any:
     return import_module("keyring")
+
+
+def _macos_keychain_set(ref: str, value: str) -> None:
+    executable = _macos_security_executable()
+    if executable is None:
+        raise CredentialStorageError("macOS Keychain executable is unavailable")
+    try:
+        result = run_reviewed_local_process(
+            [
+                executable,
+                "add-generic-password",
+                "-a",
+                ref,
+                "-s",
+                _keyring_service(),
+                "-w",
+                value,
+                "-U",
+            ],
+            timeout_seconds=30.0,
+        )
+        if result.returncode != 0:
+            raise CredentialStorageError("macOS Keychain credential write failed")
+    except (OSError, LocalProcessStartError) as exc:
+        raise CredentialStorageError("macOS Keychain credential write failed") from exc
+
+
+def _macos_keychain_get(ref: str) -> str | None:
+    executable = _macos_security_executable()
+    if executable is None:
+        raise CredentialStorageError("macOS Keychain executable is unavailable")
+    try:
+        result = run_reviewed_local_process(
+            [
+                executable,
+                "find-generic-password",
+                "-a",
+                ref,
+                "-s",
+                _keyring_service(),
+                "-w",
+            ],
+            timeout_seconds=30.0,
+        )
+    except (OSError, LocalProcessStartError) as exc:
+        raise CredentialStorageError("macOS Keychain credential read failed") from exc
+    if result.returncode != 0:
+        return None
+    return result.stdout.rstrip("\n")
+
+
+def _macos_keychain_delete(ref: str) -> None:
+    executable = _macos_security_executable()
+    if executable is None:
+        return
+    try:
+        run_reviewed_local_process(
+            [
+                executable,
+                "delete-generic-password",
+                "-a",
+                ref,
+                "-s",
+                _keyring_service(),
+            ],
+            timeout_seconds=30.0,
+        )
+    except (OSError, LocalProcessStartError):
+        return
 
 
 def _file_path(env: dict[str, str] | None = None) -> Path:

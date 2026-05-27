@@ -16,19 +16,22 @@ Screen > .screen--selection {
 
 #slash-popup {
     dock: bottom;
-    margin: 0 2 1 2;
+    margin: 0 2 8 2;
     border: round #4A4A4A;
     height: auto;
     max-height: 12;
 }
 
 #working {
+    dock: bottom;
+    margin-bottom: 16;
+    height: 1;
     color: $craik-brand;
 }
 
 #toast-queue {
     dock: bottom;
-    margin: 0 2 4 2;
+    margin: 0 2 15 2;
     color: #4A4A4A;
 }
 
@@ -37,7 +40,11 @@ Screen > .screen--selection {
 }
 
 #input {
+    dock: bottom;
     border: round $craik-brand;
+    margin-bottom: 3;
+    height: 5;
+    padding: 1 2;
 }
 
 .status-bar {

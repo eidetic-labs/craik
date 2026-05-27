@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rich.markup import escape
+import os
 
 from craik.runtime.auth.commands import (
     auth_logout_confirmation_result,
@@ -11,7 +11,10 @@ from craik.runtime.auth.commands import (
     operator_login_guidance_result,
     provider_login_capture_result,
 )
-from craik.runtime.contract.auto_registry import AutoSlashRegistry, CommandInventoryEntry
+from craik.runtime.backend.claude_code import (
+    CLAUDE_PERMISSION_MODE_ENV as CLAUDE_PERMISSION_MODE_ENV,
+)
+from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
@@ -25,6 +28,10 @@ from craik.runtime.setup import setup_command_result
 from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
+from craik.runtime.shell.contract_runtime.result_helpers import (
+    _named_result,
+    _subcommand_listing,
+)
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
     receipts_slash_result,
@@ -96,6 +103,28 @@ def status_command(*_args: str, env: dict[str, str] | None = None) -> CommandRes
 def clear_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Return clear confirmation guidance for non-Textual shell dispatch."""
     return _named_result(confirmation_result("clear"), "clear")
+
+
+def copy_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
+    """Return copy guidance for non-Textual shell dispatch."""
+    text = (
+        "In the interactive TUI, select text normally in your terminal and use the "
+        "terminal copy shortcut. `/copy` remains available for the latest response, "
+        "and `/copy transcript` copies everything."
+    )
+    return CommandResult(payload=text, shape="markdown", text=text, command_name="copy")
+
+
+def export_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
+    """Return export guidance for non-Textual shell dispatch."""
+    target = args[0] if args else "transcript"
+    text = (
+        "`/export transcript` writes the current TUI transcript under "
+        "`$CRAIK_HOME/state/exports/`."
+        if target == "transcript"
+        else "export currently supports `transcript`."
+    )
+    return CommandResult(payload=text, shape="markdown", text=text, command_name="export")
 
 
 def exit_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
@@ -208,6 +237,30 @@ def model_command(*args: str, env: dict[str, str] | None = None) -> CommandResul
             )
         return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
     return CommandResult(payload=result.payload, shape=result.shape, command_name="model")
+
+
+def mode_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
+    """Inspect or set Claude Code permission mode."""
+    values = env if env is not None else os.environ
+    allowed = {"default", "acceptEdits", "plan", "auto"}
+    if args:
+        mode = args[0]
+        if mode not in allowed:
+            text = "mode must be one of `default`, `acceptEdits`, `plan`, or `auto`."
+            return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
+        values[CLAUDE_PERMISSION_MODE_ENV] = mode
+    mode = values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+    payload = {
+        "claude_permission_mode": mode,
+        "choices": ["default", "acceptEdits", "plan", "auto"],
+        "hint": "Shift-Tab cycles this mode inside the TUI.",
+    }
+    return CommandResult(
+        payload=payload,
+        shape="kv",
+        text=f"Claude permission mode: `{mode}`." if args else None,
+        command_name="mode",
+    )
 
 
 def sessions_command(*_args: str, env: dict[str, str] | None = None) -> CommandResult:
@@ -396,49 +449,6 @@ def session_command(*args: str, env: dict[str, str] | None = None) -> CommandRes
     )
 
 
-def unknown_command_result(text: str, registry: AutoSlashRegistry) -> CommandResult:
-    """Return a friendly unknown-command result."""
-    import difflib
-    import shlex
-
-    tokens = shlex.split(text.strip())
-    name = tokens[0].removeprefix("/") if tokens else ""
-    names = [
-        entry.slash_name.removeprefix("/")
-        for entry in registry.all_commands_including_exempt()
-        if entry.is_slash and entry.slash_name
-    ]
-    matches = difflib.get_close_matches(name, names, n=1, cutoff=0.65)
-    suggestion = matches[0] if matches else None
-    if suggestion == "auth" and len(tokens) > 1 and tokens[1] == "login":
-        suggestion = "auth login"
-    suffix = f". Did you mean `/{suggestion}`?" if suggestion else ""
-    message = f"unknown slash command: /{name}{suffix}"
-    return CommandResult(
-        payload={"error": message},
-        shape="kv",
-        text=f"unknown slash command: /{escape(name)}{suffix}",
-        exit_code=2,
-    )
-
-
-def _summary(entry: CommandInventoryEntry) -> str:
-    if entry.callback is None:
-        return entry.command_name
-    doc = getattr(entry.callback, "__doc__", None)
-    if isinstance(doc, str) and doc.strip():
-        return doc.strip().split("\n", 1)[0]
-    return entry.command_name
-
-
-def _subcommand_listing(command_name: str, subcommands: tuple[str, ...]) -> str:
-    escaped_command = escape(command_name)
-    rendered = ", ".join(f"`/{escaped_command} {subcommand}`" for subcommand in subcommands)
-    return (
-        f"`/{escaped_command}` requires a subcommand: {rendered}. "
-        f"See `/help {escaped_command}` for details."
-    )
-
 
 def _argument_help(command_name: str) -> CommandResult:
     spec = find_slash_command_spec(_active_specs(), command_name)
@@ -449,18 +459,6 @@ def _argument_help(command_name: str) -> CommandResult:
     )
     return CommandResult(payload=text, shape="markdown", text=text, command_name="help")
 
-
-def _named_result(result: CommandResult, command_name: str) -> CommandResult:
-    return CommandResult(
-        payload=result.payload,
-        shape=result.shape,
-        text=result.text,
-        exit_code=result.exit_code,
-        exit_shell=result.exit_shell,
-        command_name=command_name,
-        next_actions=result.next_actions,
-        empty_state_message=result.empty_state_message,
-    )
 
 
 def _registry() -> AutoSlashRegistry:

@@ -101,6 +101,7 @@ def test_auth_login_fails_closed_when_keyring_is_unavailable(
     env = {"CRAIK_HOME": str(tmp_path / "home")}
     _allow_health_check(monkeypatch)
     monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage, "_macos_security_available", lambda: False)
     monkeypatch.setattr(credential_storage.platform, "system", lambda: "Darwin")
 
     result = runner.invoke(
@@ -113,6 +114,121 @@ def test_auth_login_fails_closed_when_keyring_is_unavailable(
     assert result.exit_code != 0
     assert "credential storage unavailable" in result.output
     assert AuthProfileStore(tmp_path / "home").list() == []
+
+
+def test_macos_keychain_backend_is_available_without_python_keyring(monkeypatch) -> None:
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(credential_storage.shutil, "which", lambda command: "/usr/bin/security")
+
+    status = credential_storage.credential_storage_status({})
+
+    assert status.backend == "macos-keychain"
+    assert status.status == "available"
+    assert status.secure is True
+
+
+def test_macos_keychain_backend_round_trips_without_python_keyring(monkeypatch) -> None:
+    seen: dict[str, list[str]] = {}
+
+    class _Result:
+        returncode: int | None = 0
+        stdout = "stored-secret\n"
+        stderr = ""
+        reason = "local process command completed"
+
+    def _run(args, **kwargs):
+        seen[str(args[1])] = list(args)
+        return _Result()
+
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        credential_storage,
+        "_macos_security_executable",
+        lambda: "/usr/bin/security",
+    )
+    monkeypatch.setattr(credential_storage, "run_reviewed_local_process", _run)
+
+    credential_storage.put_cached_credential("openai:subscription:access", "stored-secret")
+    stored = credential_storage.get_cached_credential("openai:subscription:access")
+    credential_storage.delete_cached_credential("openai:subscription:access")
+
+    assert seen["add-generic-password"][:2] == ["/usr/bin/security", "add-generic-password"]
+    assert seen["find-generic-password"][:2] == ["/usr/bin/security", "find-generic-password"]
+    assert seen["delete-generic-password"][:2] == [
+        "/usr/bin/security",
+        "delete-generic-password",
+    ]
+    assert stored.value == "stored-secret"
+    assert stored.backend == "macos-keychain"
+    assert stored.secure is True
+
+
+def test_secure_credential_write_failure_falls_back_to_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage, "_macos_security_available", lambda: True)
+    monkeypatch.setattr(
+        credential_storage,
+        "_secure_set",
+        lambda ref, value: (_ for _ in ()).throw(
+            credential_storage.CredentialStorageError("keychain write failed")
+        ),
+    )
+
+    status = credential_storage.put_cached_credential("anthropic:default", "stored", env=env)
+    stored = credential_storage.get_cached_credential("anthropic:default", env=env)
+
+    assert status.backend == "file"
+    assert status.secure is False
+    assert stored.value == "stored"
+    assert stored.backend == "file"
+    assert stored.secure is False
+
+
+def test_secure_credential_round_trip_failure_falls_back_to_file(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage, "_macos_security_available", lambda: True)
+    monkeypatch.setattr(credential_storage, "_secure_set", lambda ref, value: None)
+    monkeypatch.setattr(credential_storage, "_secure_get", lambda ref: None)
+
+    status = credential_storage.put_cached_credential("anthropic:default", "stored", env=env)
+    stored = credential_storage.get_cached_credential("anthropic:default", env=env)
+
+    assert status.backend == "file"
+    assert status.secure is False
+    assert stored.value == "stored"
+    assert stored.backend == "file"
+    assert stored.secure is False
+
+
+def test_secure_credential_read_miss_checks_file_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    env = {
+        "CRAIK_HOME": str(tmp_path / "home"),
+        "CRAIK_CREDENTIAL_BACKEND": "file",
+    }
+    credential_storage.put_cached_credential("anthropic:default", "stored", env=env)
+    env.pop("CRAIK_CREDENTIAL_BACKEND")
+    monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage, "_macos_security_available", lambda: True)
+    monkeypatch.setattr(credential_storage, "_secure_get", lambda ref: None)
+
+    stored = credential_storage.get_cached_credential("anthropic:default", env=env)
+
+    assert stored.value == "stored"
+    assert stored.backend == "file"
+    assert stored.secure is False
 
 
 def test_auth_login_rejected_key_uses_redacted_remediation(tmp_path: Path) -> None:

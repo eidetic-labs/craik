@@ -12,6 +12,7 @@ from craik.runtime.auth import (
     AuthProfileNotFoundError,
     AuthProfileStore,
     CredentialPool,
+    CredentialPoolError,
 )
 from craik.runtime.auth.sources import (
     EnvVarApiKeySource,
@@ -20,6 +21,11 @@ from craik.runtime.auth.sources import (
 from craik.runtime.environment_receipts import EnvironmentReceiptContext, environment_receipt
 from craik.runtime.policy.redaction import redact, redaction_config_for_patterns
 from craik.runtime.providers.http_transport import HTTPTransport
+from craik.runtime.providers.provider_config import (
+    ANTHROPIC_OFFICIAL_DOCS,
+    GEMINI_OFFICIAL_DOCS,
+    OPENAI_OFFICIAL_DOCS,
+)
 from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderFamily,
@@ -112,6 +118,23 @@ def _provider_allows_local_url(provider: ModelProvider) -> bool:
     return provider.id.startswith("provider_local_") or provider.metadata.get(
         "allow_local_base_url"
     ) is True
+
+
+def _official_docs_for_family(family: ProviderFamily) -> list[str]:
+    if family == "anthropic":
+        return list(ANTHROPIC_OFFICIAL_DOCS)
+    if family == "gemini":
+        return list(GEMINI_OFFICIAL_DOCS)
+    return list(OPENAI_OFFICIAL_DOCS)
+
+
+def _default_credential_pool_id(family: ProviderFamily) -> str | None:
+    pool_id = f"{family}:default"
+    try:
+        CredentialPool.from_env().get(pool_id)
+    except CredentialPoolError:
+        return None
+    return pool_id
 
 
 def provider_runtime_receipt(

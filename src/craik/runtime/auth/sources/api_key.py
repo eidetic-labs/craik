@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from craik.runtime.auth.profile import CredentialStatus
-from craik.runtime.auth.sources.anthropic_env import resolve_anthropic_credential_from_env
+from craik.runtime.auth.sources.anthropic_env import (
+    anthropic_headers_for_credential,
+    resolve_anthropic_credential_from_env,
+)
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.secrets import SecretNotFoundError, SecretRef, SecretResolver
 
@@ -29,10 +32,7 @@ class EnvVarApiKeySource:
                 )
             )
             secret = credential.token if credential is not None else self._resolve_secret()
-            headers = {"anthropic-version": "2023-06-01"}
-            if secret:
-                headers["x-api-key"] = secret
-            return headers
+            return anthropic_headers_for_credential(secret)
         secret = self._resolve_secret()
         if family == "gemini":
             return {"x-goog-api-key": secret} if secret else {}

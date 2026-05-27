@@ -21,6 +21,7 @@ from craik.runtime.auth import (
     CredentialPoolConfig,
     CredentialPoolEntry,
 )
+from craik.runtime.auth.guided_setup import default_pool_for_profile
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.providers.model_providers import default_model_provider_registry
@@ -51,6 +52,7 @@ from craik.runtime.providers.provider_transport import (
     ProviderTransport,
 )
 from craik.runtime.secrets import SecretResolver
+from craik.runtime.shell.credential_storage import StoredCredential
 from craik.runtime.store import LocalStore
 
 
@@ -218,6 +220,38 @@ def test_openai_payload_supports_messages_tools_structured_output_and_redaction(
     assert payload["metadata"]["api_key"] == "[REDACTED]"
 
 
+def test_openai_payload_applies_profile_options_without_overriding_reserved_fields() -> None:
+    request = ProviderRuntimeRequest(
+        messages=[ProviderMessage(role="user", content="Create a plan.")],
+        max_output_tokens=2048,
+        temperature=0.2,
+        service_tier="priority",
+        reasoning_effort="high",
+        provider_options={
+            "parallel_tool_calls": False,
+            "top_p": 0.9,
+            "model": "wrong-model",
+            "stream": True,
+            "metadata": {"api_key": "leak"},
+            "max_output_tokens": 1,
+            "temperature": 1.0,
+            "reasoning": {"effort": "low"},
+        },
+    )
+
+    payload = _openai_adapter().build_payload(request)
+
+    assert payload["model"] == "gpt-5.2"
+    assert payload["stream"] is False
+    assert payload["metadata"] == {}
+    assert payload["max_output_tokens"] == 2048
+    assert payload["temperature"] == 0.2
+    assert payload["service_tier"] == "priority"
+    assert payload["reasoning"] == {"effort": "high"}
+    assert payload["parallel_tool_calls"] is False
+    assert payload["top_p"] == 0.9
+
+
 def test_openai_response_normalizes_text_tool_calls_usage_and_retry_decisions() -> None:
     adapter = _openai_adapter()
     result = adapter.normalize_response(
@@ -260,6 +294,31 @@ def test_anthropic_payload_supports_messages_tools_structured_output_and_secret_
     assert payload["tools"][1]["name"] == "craik_structured_output"
     assert payload["tool_choice"] == {"type": "tool", "name": "craik_structured_output"}
     assert payload["metadata"] == {"user_id": "case-user"}
+
+
+def test_anthropic_payload_applies_profile_options_without_overriding_reserved_fields() -> None:
+    request = ProviderRuntimeRequest(
+        messages=[ProviderMessage(role="user", content="Create a plan.")],
+        max_output_tokens=2048,
+        temperature=0.2,
+        service_tier="priority",
+        reasoning_effort="high",
+        provider_options={
+            "top_p": 0.9,
+            "model": "wrong-model",
+            "max_tokens": 1,
+            "thinking": {"type": "enabled", "effort": "low"},
+        },
+    )
+
+    payload = _anthropic_adapter().build_payload(request)
+
+    assert payload["model"] == "claude-sonnet-4-20250514"
+    assert payload["max_tokens"] == 2048
+    assert payload["temperature"] == 0.2
+    assert payload["service_tier"] == "priority"
+    assert payload["thinking"] == {"type": "enabled", "effort": "high"}
+    assert payload["top_p"] == 0.9
 
 
 def test_anthropic_response_normalizes_text_tool_calls_usage_and_retry_decisions() -> None:
@@ -314,6 +373,31 @@ def test_chat_completions_payload_supports_messages_tools_and_structured_output(
     assert payload["tool_choice"] == "auto"
     assert payload["response_format"]["type"] == "json_schema"
     assert payload["response_format"]["json_schema"]["strict"] is True
+
+
+def test_chat_completions_payload_applies_profile_options_without_reserved_override() -> None:
+    request = ProviderRuntimeRequest(
+        messages=[ProviderMessage(role="user", content="Create a plan.")],
+        max_output_tokens=2048,
+        temperature=0.2,
+        service_tier="priority",
+        provider_options={
+            "frequency_penalty": 0.1,
+            "model": "wrong-model",
+            "max_tokens": 1,
+            "temperature": 1.0,
+            "messages": [],
+        },
+    )
+
+    payload = _chat_completions_adapter().build_payload(request)
+
+    assert payload["model"] == "gpt-5.2"
+    assert payload["messages"] == [{"role": "user", "content": "Create a plan."}]
+    assert payload["max_tokens"] == 2048
+    assert payload["temperature"] == 0.2
+    assert payload["service_tier"] == "priority"
+    assert payload["frequency_penalty"] == 0.1
 
 
 def test_chat_completions_payload_omits_tools_and_structured_output_when_absent() -> None:
@@ -405,6 +489,92 @@ def test_gemini_payload_supports_messages_tools_structured_output_and_system_ins
     assert payload["generationConfig"]["maxOutputTokens"] == 1024
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
     assert payload["generationConfig"]["responseSchema"]["required"] == ["answer"]
+
+
+def test_gemini_payload_applies_profile_options_without_overriding_reserved_fields() -> None:
+    request = ProviderRuntimeRequest(
+        messages=[ProviderMessage(role="user", content="Create a plan.")],
+        max_output_tokens=2048,
+        temperature=0.2,
+        reasoning_effort="high",
+        provider_options={
+            "topP": 0.9,
+            "contents": [],
+            "maxOutputTokens": 1,
+            "temperature": 1.0,
+            "thinkingConfig": {"reasoningEffort": "low"},
+        },
+    )
+
+    payload = _gemini_adapter().build_payload(request)
+
+    assert payload["contents"] == [
+        {"role": "user", "parts": [{"text": "Create a plan."}]}
+    ]
+    assert payload["generationConfig"]["maxOutputTokens"] == 2048
+    assert payload["generationConfig"]["temperature"] == 0.2
+    assert payload["generationConfig"]["thinkingConfig"] == {
+        "reasoningEffort": "high"
+    }
+    assert payload["generationConfig"]["topP"] == 0.9
+
+
+def test_provider_backed_runner_maps_profile_options_into_runtime_request(
+    tmp_path: Path,
+) -> None:
+    store = LocalStore(tmp_path / "store.sqlite")
+    store.initialize()
+    try:
+        runner = ProviderBackedStepRunner(
+            store=store,
+            adapter=_openai_adapter(),
+            compiled_prompt=CompiledPrompt(
+                id="compiled_provider_runtime",
+                task_id="task_provider_runtime",
+                case_file_id="case_provider_runtime",
+                policy_envelope_id="policy_provider_runtime",
+                runner_id="provider_openai",
+                runner_mode="fixture",
+                prompt="Run the provider-backed step.",
+            ),
+            actor="runner:provider_openai",
+            provider_options={
+                "max_output_tokens": 4096,
+                "temperature": 0.1,
+                "service_tier": "priority",
+                "reasoning_effort": "high",
+                "top_p": 0.95,
+            },
+        )
+
+        request = runner._provider_request(
+            RunnerStepRequest(
+                id="runner_step_request_provider_runtime",
+                run_id="run_provider_runtime",
+                task_id="task_provider_runtime",
+                phase="act",
+                runner=RunnerMetadata(
+                    id="provider_openai",
+                    name="OpenAI Provider",
+                    adapter="provider",
+                    adapter_version="0.1.0",
+                    mode="fixture",
+                ),
+                policy_envelope_id="policy_provider_runtime",
+                expected_output_schemas=["craik.runner_step_result"],
+                input_prompt="Act.",
+                created_at=datetime(2026, 5, 17, tzinfo=UTC),
+            ),
+            status="completed",
+        )
+    finally:
+        store.close()
+
+    assert request.max_output_tokens == 4096
+    assert request.temperature == 0.1
+    assert request.service_tier == "priority"
+    assert request.reasoning_effort == "high"
+    assert request.provider_options == {"top_p": 0.95}
 
 
 def test_gemini_response_normalizes_text_tool_calls_usage_and_retry_decisions() -> None:
@@ -598,6 +768,46 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     assert isinstance(local_openai_compatible, ChatCompletionsProviderAdapter)
     assert local_openai_compatible.config.secret_ref_name == ""
     assert local_openai_compatible.config.base_url == "http://localhost:11434/v1"
+
+
+def test_adapter_for_live_provider_uses_default_credential_pool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRAIK_HOME", str(tmp_path))
+    profile = AuthProfile(
+        id="anthropic:default",
+        kind=CredentialKind.KEYRING_REF,
+        provider_family="anthropic",
+        metadata={
+            "ref": "anthropic:default:claude-cli-token",
+            "credential_mode": "claude-cli",
+        },
+        created_at=datetime(2026, 5, 17, tzinfo=UTC),
+    )
+    AuthProfileStore(tmp_path).put(profile)
+    CredentialPool(tmp_path).put(default_pool_for_profile(profile))
+    monkeypatch.setattr(
+        "craik.runtime.auth.sources.keyring_ref.get_cached_credential",
+        lambda ref: StoredCredential(
+            value="sk-ant-oat01-test-token",
+            backend="test",
+            secure=True,
+        ),
+    )
+
+    adapter = adapter_for_provider(
+        default_model_provider_registry().require("provider_anthropic"),
+        live_enabled=True,
+    )
+
+    assert adapter.config.credential_pool_id == "anthropic:default"
+    assert adapter.config.secret_ref_name == "CRAIK_ANTHROPIC_API_KEY"
+    headers = _provider_headers(adapter.config)
+    assert headers["Authorization"] == "Bearer sk-ant-oat01-test-token"
+    assert headers["anthropic-beta"] == "claude-code-20250219,oauth-2025-04-20"
+    assert "x-api-key" not in headers
+    assert adapter.config.last_auth_profile_id == "anthropic:default"
 
 
 def test_adapter_for_provider_dispatches_chat_completions_family() -> None:

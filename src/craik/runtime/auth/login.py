@@ -19,6 +19,7 @@ from craik.runtime.auth.pool import CredentialPool
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.auth.sanitization import sanitize_credential_error
 from craik.runtime.auth.sources import source_for_auth_profile
+from craik.runtime.auth.sources.anthropic_claude_cli import claude_cli_runtime_status
 from craik.runtime.auth.sources.anthropic_env import resolve_anthropic_credential_from_env
 from craik.runtime.auth.status_metadata import (
     billing_surface_for_profile,
@@ -202,6 +203,11 @@ def profile_runtime_status(
     env: dict[str, str] | None = None,
 ) -> CredentialStatus:
     """Return whether a profile's configured credential source resolves."""
+    if (
+        profile.kind is CredentialKind.MARKER
+        and profile.metadata.get("external_runtime") == "claude-cli"
+    ):
+        return claude_cli_runtime_status()
     if profile.kind is CredentialKind.KEYRING_REF:
         ref = profile.metadata.get("ref")
         if not isinstance(ref, str):

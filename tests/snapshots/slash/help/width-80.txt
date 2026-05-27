@@ -7,9 +7,13 @@
 - `/logout` - Remove a provider credential profile.
 - `/provider` - Inspect or configure provider credentials.
 - `/model` - Inspect or select the active model.
+- `/mode` - Inspect or set Claude Code mode.
 - `/status` - Show readiness state.
 - `/clear` - Clear the current transcript.
+- `/copy` - Copy transcript text in the interactive TUI.
+- `/export` - Export transcript or run text from the interactive TUI.
 - `/doctor` - Run diagnostics inline.
+- `/run` - Create and execute an audited task run.
 - `/policy` - Manage local policy state.
 - `/migrate` - Apply migration plans.
 - `/agent` - Manage agent records.

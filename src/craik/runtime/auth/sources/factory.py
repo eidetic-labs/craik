@@ -58,7 +58,11 @@ def _keyring_ref_source(profile: AuthProfile) -> KeyringRefCredentialSource:
     ref = profile.metadata.get("ref")
     if not isinstance(ref, str):
         raise AuthProfileSourceError("keyring-ref auth profile requires metadata.ref")
-    return KeyringRefCredentialSource(ref=ref)
+    credential_mode = profile.metadata.get("credential_mode")
+    return KeyringRefCredentialSource(
+        ref=ref,
+        credential_mode=credential_mode if isinstance(credential_mode, str) else None,
+    )
 
 
 def _secrets_root(profile: AuthProfile) -> Path:

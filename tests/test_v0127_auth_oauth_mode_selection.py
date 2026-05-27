@@ -14,18 +14,21 @@ from craik.runtime.shell.credential_storage import CredentialStorageStatus
 runner = CliRunner()
 
 
-def test_anthropic_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:
+def test_anthropic_defaults_to_oauth_cli_delegation_when_mode_is_omitted(
+    monkeypatch,
+    tmp_path,
+) -> None:
     called: dict[str, str] = {}
 
-    def _browser_login(provider: str, **kwargs):
-        called["provider"] = provider
+    def _claude_cli_login(**kwargs):
+        called["provider"] = "anthropic"
         return OAuthLoginResult(
-            capture=_capture_result("anthropic", CredentialKind.KEYRING_REF),
-            authorization_url="https://claude.ai/oauth/authorize",
+            capture=_capture_result("anthropic", CredentialKind.MARKER),
+            authorization_url="claude",
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.browser_oauth_login", _browser_login)
+    monkeypatch.setattr("craik.cli_auth_login.anthropic_claude_cli_login", _claude_cli_login)
 
     result = runner.invoke(
         app,
@@ -35,7 +38,50 @@ def test_anthropic_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path)
 
     assert result.exit_code == 0, result.output
     assert called == {"provider": "anthropic"}
-    assert json.loads(result.stdout)["authorization_url"] == "https://claude.ai/oauth/authorize"
+    assert json.loads(result.stdout)["kind"] == "marker"
+    assert json.loads(result.stdout)["mode"] == "oauth"
+    assert json.loads(result.stdout)["auth_transport"] == "claude-cli"
+    assert json.loads(result.stdout)["authorization_url"] == "claude"
+
+
+def test_anthropic_explicit_oauth_mode_uses_cli_delegation(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    called: dict[str, str] = {}
+
+    def _claude_cli_login(**kwargs):
+        called["provider"] = "anthropic"
+        called["profile_id"] = str(kwargs["profile_id"])
+        return OAuthLoginResult(
+            capture=_capture_result("anthropic", CredentialKind.MARKER),
+            authorization_url="claude",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.anthropic_claude_cli_login", _claude_cli_login)
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "anthropic", "--mode=oauth", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert called == {"provider": "anthropic", "profile_id": "None"}
+    assert json.loads(result.stdout)["mode"] == "oauth"
+    assert json.loads(result.stdout)["auth_transport"] == "claude-cli"
+
+
+def test_anthropic_claude_cli_mode_is_not_public(tmp_path) -> None:
+    result = runner.invoke(
+        app,
+        ["auth", "login", "anthropic", "--mode=claude-cli", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code != 0
+    assert "api-key or oauth" in result.output
 
 
 def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:

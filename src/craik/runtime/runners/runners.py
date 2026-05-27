@@ -60,6 +60,7 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
     matrices = [
         _codex_matrix(),
         _claude_matrix(),
+        _claude_code_matrix(),
         _gemini_matrix(),
         _fixture_matrix(),
         _provider_matrix(
@@ -218,6 +219,49 @@ def _claude_matrix() -> RunnerCapabilityMatrix:
         ],
         policy_notes=[
             "Prompt-handoff side effects must return through Craik review and receipt workflows.",
+        ],
+    )
+
+
+def _claude_code_matrix() -> RunnerCapabilityMatrix:
+    return RunnerCapabilityMatrix(
+        runner=RunnerMetadata(
+            id="claude-code",
+            name="Claude Code",
+            adapter="claude-code",
+            adapter_version="preview",
+            mode="live",
+            capabilities=list(RUNNER_CAPABILITY_NAMES),
+        ),
+        trust=RunnerTrustProfile(
+            level="medium",
+            boundary=(
+                "Local Claude Code CLI runner with workspace tool access controlled by Claude "
+                "Code permission mode and Craik receipts."
+            ),
+            default_grant_posture="prompt-for-approval",
+            notes=[
+                "Treat file writes, shell execution, network access, review comments, and "
+                "memory writes as auditable side effects."
+            ],
+        ),
+        capabilities=[
+            _capability("file.read", "supported", grant_required=False),
+            _capability("file.write", "supported"),
+            _capability("shell.execute", "supported"),
+            _capability("network.access", "supported"),
+            _capability("memory.read", "supported", grant_required=False),
+            _capability("memory.write", "supported"),
+            _capability("review.comment", "supported"),
+            _capability("result.structured", "supported", grant_required=False),
+        ],
+        policy_notes=[
+            (
+                "Execute through the local Claude Code CLI when the operator selects the "
+                + "claude-code backend."
+            ),
+            "Use Claude Code permission modes for edit and tool approval behavior.",
+            "Record Craik receipts and handoffs for the delegated execution.",
         ],
     )
 

@@ -58,7 +58,8 @@ def test_provider_backed_runner_completes_full_mvp_path(
     assert _receipt_count(store, "provider_action") == 4
     assert any(receipt.capability == "shell.execute" for receipt in store.list_receipts())
     assert result.handoff.receipt_ids
-    assert result.handoff.artifacts == [output.id for output in store.list_run_outputs()]
+    run_output_ids = [output.id for output in store.list_run_outputs()]
+    assert set(result.handoff.artifacts) >= {*run_output_ids, result.compiled_prompt.id}
     exit_check = store.get_exit_discipline_check(f"exit_discipline_{task_id}")
     assert exit_check is not None
     assert exit_check.status == "complete"

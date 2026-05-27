@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from textual import events
 from textual.widgets import Input
 
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_spec
@@ -29,14 +30,24 @@ class CraikInput(Input):
     CraikInput {
         dock: bottom;
         border: round $primary;
-        padding: 0 1;
-        height: 3;
+        padding: 1 2;
+        height: 5;
     }
     """
 
     def cli_prefix_match(self) -> str | None:
         match = _CLI_PREFIX_RE.match(self.value.strip())
         return match.group("command") if match else None
+
+    def _on_paste(self, event: events.Paste) -> None:
+        if event.text:
+            selection = self.selection
+            if selection.is_empty:
+                self.insert_text_at_cursor(event.text)
+            else:
+                self.replace(event.text, *selection)
+        event.prevent_default()
+        event.stop()
 
 
 def cli_prefix_warning(text: str) -> str | None:
