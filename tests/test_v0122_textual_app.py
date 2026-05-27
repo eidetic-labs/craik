@@ -532,7 +532,7 @@ def test_textual_model_set_refreshes_footer(tmp_path: Path) -> None:
 
 def test_textual_transcript_distinguishes_user_and_model_text() -> None:
     user = _user_transcript_markup("hello [not markup]")
-    model = _model_transcript_markup("answer https://example.com")
+    model = _model_transcript_markup("answer [still not markup]")
     rendered_user = _render_to_text(user)
     rendered_model = _render_to_text(model)
 
@@ -540,7 +540,7 @@ def test_textual_transcript_distinguishes_user_and_model_text() -> None:
     assert "You" in rendered_user
     assert "hello [not markup]" in rendered_user
     assert "Model" in rendered_model
-    assert "https://example.com" in rendered_model
+    assert "answer [still not markup]" in rendered_model
 
 
 def test_model_transcript_title_uses_active_model_label() -> None:
