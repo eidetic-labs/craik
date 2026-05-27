@@ -43,6 +43,9 @@ within the `0.x.0` stability expectations described in
 - Added a normalized `run.working` Gateway event so TUI, JSONL, replay, and
   future channel clients can show an immediate thinking/working state before
   long provider or Claude Code execution returns.
+- Added explicit CLI mirror metadata to slash command specs and regression
+  coverage for backend-affecting slash commands so TUI commands stay aligned
+  with non-TUI CLI entry points.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

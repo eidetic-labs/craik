@@ -91,6 +91,10 @@ Gateway clients can also use JSONL messages for `model.set`,
 `approval.resolved`, and `run.interrupt.requested` events without relying on
 TUI-only state.
 
+Backend-affecting slash specs carry explicit `cli_mirror` metadata, and
+regression coverage checks the listed mirror against real CLI commands. Shell
+presentation helpers such as `/copy` and `/clear` remain intentionally TUI-only.
+
 `/model set <provider/model>` keeps the legacy selector for compatibility and
 also writes an active model profile with provider id, provider family, model
 id, display label, backend preference, and provider-specific options. Gateway

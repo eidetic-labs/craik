@@ -66,6 +66,35 @@ _HELP_SUMMARY_OVERRIDES: dict[str, str] = {
     "/share": "Share the current transcript.",
 }
 
+_BUILTIN_CLI_MIRRORS: dict[str, str] = {
+    "/agent": "agent",
+    "/approvals": "approvals list",
+    "/attach": "attach",
+    "/auth": "auth status",
+    "/doctor": "doctor",
+    "/fork": "fork",
+    "/gateway": "gateway status",
+    "/handoffs": "handoff list",
+    "/login": "auth login",
+    "/logout": "auth logout",
+    "/mcp": "mcp",
+    "/memory": "memory list",
+    "/model": "model status",
+    "/note": "note",
+    "/provider": "provider list",
+    "/receipts": "receipts list",
+    "/redo": "redo",
+    "/rename": "rename",
+    "/resume": "session resume",
+    "/run": "run prompt",
+    "/session": "session list",
+    "/sessions": "session list",
+    "/setup": "setup",
+    "/skills": "skills list",
+    "/status": "status",
+    "/theme": "theme",
+}
+
 
 def help_spec(spec: SlashCommandSpec) -> SlashCommandSpec:
     """Return the help-list presentation copy for ``spec``."""
@@ -108,6 +137,7 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         "usage": _builtin_usage(name),
         "payload_shape": shape,
         "help": summary,
+        "cli_mirror": _BUILTIN_CLI_MIRRORS.get(name),
         "empty_state": EmptyState(message=f"No {name.removeprefix('/')} results found."),
     }
     if name in {
