@@ -30,7 +30,7 @@ checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
 
 <div><dt>Gateway session</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>runtime/backend/session.py</code> owns raw prompt execution for provider and Claude Code marker paths and emits normalized lifecycle, progress, receipt, output, completion, and error events.</dd></div>
 
-<div><dt>JSONL protocol</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik tui-backend --jsonl</code> accepts <code>session.status</code>, <code>prompt.submit</code>, <code>slash.submit</code>, and close messages over stdio for Textual/Rust/frontend evaluation.</dd></div>
+<div><dt>JSONL protocol</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik tui-backend --jsonl</code> accepts <code>session.status</code>, <code>prompt.submit</code>, <code>slash.submit</code>, <code>model.set</code>, <code>approval.decide</code>, <code>run.interrupt</code>, and close messages over stdio for Textual/Rust/frontend evaluation.</dd></div>
 
 <div><dt>Slash/CLI mirrors</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>/run &lt;prompt&gt;</code> and <code>craik run prompt &lt;prompt&gt;</code> share the audited Gateway path; backend-affecting slash mirrors are covered by regression tests.</dd></div>
 

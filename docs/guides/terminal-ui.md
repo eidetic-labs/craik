@@ -171,11 +171,15 @@ messages from stdin:
 
 ```json
 {"type":"session.status"}
+{"type":"model.set","model":"anthropic/claude-opus-4-7","reasoning_effort":"high"}
 {"type":"prompt.submit","text":"Review the plan"}
 {"type":"slash.submit","text":"/run list"}
+{"type":"approval.decide","approval_id":"approval_123","decision":"approved","reason":"reviewed"}
+{"type":"run.interrupt","run_id":"run_123","reason":"operator requested stop"}
 ```
 
 and writes JSONL Gateway events such as `session.ready`, `run.progress`,
+`model.changed`, `approval.resolved`, `run.interrupt.requested`,
 `receipt.created`, and `run.completed`.
 Use `/mode` (or press `Shift+Tab` to cycle) to choose the Claude Code
 permission mode for the next run. The current mode is shown both in the

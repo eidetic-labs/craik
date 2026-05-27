@@ -27,6 +27,9 @@ within the `0.x.0` stability expectations described in
   TUI candidates can be evaluated against the same event contract.
 - Added a Rust `ratatui` Gateway replay prototype under `crates/craik-tui-rs`
   to evaluate terminal rendering against the shared JSONL event contract.
+- Expanded the Gateway JSONL protocol with `model.set`, `approval.decide`,
+  and `run.interrupt` inputs plus normalized `model.changed`,
+  `approval.resolved`, and `run.interrupt.requested` events.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

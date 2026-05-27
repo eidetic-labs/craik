@@ -8,6 +8,8 @@ from typing import Any, TextIO
 
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import execute_prompt
+from craik.runtime.model_commands import model_set_result, parse_model_options
+from craik.runtime.reviewing.approval_commands import approvals_decide_result
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 
@@ -54,17 +56,76 @@ def run_jsonl_gateway(
                     stream=emit,
                 )
                 continue
+            if message_type == "model.set":
+                model = _required_model(message)
+                options = _model_options(message)
+                result = model_set_result(
+                    model,
+                    env=env,
+                    display_name=_string_or_none(message.get("display_name")),
+                    backend=_string_or_default(message.get("backend"), "provider"),
+                    options=options,
+                )
+                emit(
+                    BackendEvent(
+                        type="model.changed",
+                        data={
+                            "model": model,
+                            "payload": result.payload,
+                        },
+                    )
+                )
+                continue
+            if message_type == "approval.decide":
+                approval_id = _required_string(message, "approval_id")
+                decision = _required_string(message, "decision")
+                reason = _required_string(message, "reason")
+                operator = _string_or_default(message.get("operator"), "user:jsonl")
+                result = approvals_decide_result(
+                    approval_id,
+                    decision=decision,
+                    operator=operator,
+                    reason=reason,
+                    env=env,
+                )
+                emit(
+                    BackendEvent(
+                        type="approval.resolved",
+                        data={
+                            "approval_id": approval_id,
+                            "decision": decision,
+                            "payload": result.payload,
+                        },
+                    )
+                )
+                continue
+            if message_type == "run.interrupt":
+                run_id = _required_string(message, "run_id")
+                emit(
+                    BackendEvent(
+                        type="run.interrupt.requested",
+                        run_id=run_id,
+                        data={
+                            "run_id": run_id,
+                            "reason": _string_or_default(
+                                message.get("reason"),
+                                "interrupt requested by Gateway client",
+                            ),
+                        },
+                    )
+                )
+                continue
             if message_type == "slash.submit":
                 text = _required_text(message)
-                result = dispatch_slash_command(text, env=env)
+                slash_result = dispatch_slash_command(text, env=env)
                 emit(
                     BackendEvent(
                         type="slash.completed",
                         data={
-                            "text": result.text,
-                            "exit_code": result.exit_code,
-                            "payload": result.payload,
-                            "shape": result.payload_shape,
+                            "text": slash_result.text,
+                            "exit_code": slash_result.exit_code,
+                            "payload": slash_result.payload,
+                            "shape": slash_result.payload_shape,
                         },
                     )
                 )
@@ -82,3 +143,48 @@ def _required_text(message: dict[str, Any]) -> str:
     if not isinstance(text, str) or not text.strip():
         raise ValueError(f"{message.get('type')} requires non-empty text")
     return text
+
+
+def _required_model(message: dict[str, Any]) -> str:
+    return _required_string(message, "model")
+
+
+def _required_string(message: dict[str, Any], field: str) -> str:
+    value = message.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{message.get('type')} requires non-empty {field}")
+    return value
+
+
+def _string_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _string_or_default(value: object, default: str) -> str:
+    return value if isinstance(value, str) and value.strip() else default
+
+
+def _model_options(message: dict[str, Any]) -> dict[str, object]:
+    passthrough = message.get("options")
+    option_items = [
+        f"{key}={value}"
+        for key, value in passthrough.items()
+        if isinstance(key, str)
+    ] if isinstance(passthrough, dict) else []
+    return parse_model_options(
+        reasoning_effort=_string_or_none(message.get("reasoning_effort")),
+        service_tier=_string_or_none(message.get("service_tier")),
+        temperature=_float_or_none(message.get("temperature")),
+        max_output_tokens=_int_or_none(message.get("max_output_tokens")),
+        passthrough=option_items,
+    )
+
+
+def _float_or_none(value: object) -> float | None:
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _int_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) else None

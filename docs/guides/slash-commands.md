@@ -86,6 +86,11 @@ Gateway event records. Shell-only commands such as `/copy`, `/clear`, and
 `/theme` remain presentation helpers; backend-affecting commands are expected
 to have CLI mirrors.
 
+Gateway clients can also use JSONL messages for `model.set`,
+`approval.decide`, and `run.interrupt`, receiving `model.changed`,
+`approval.resolved`, and `run.interrupt.requested` events without relying on
+TUI-only state.
+
 `/model set <provider/model>` keeps the legacy selector for compatibility and
 also writes an active model profile with provider id, provider family, model
 id, display label, backend preference, and provider-specific options. The CLI

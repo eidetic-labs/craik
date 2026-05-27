@@ -9,6 +9,8 @@ from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.runtime.backend.jsonl import run_jsonl_gateway
+from craik.runtime.reviewing.approvals import open_approval_request
+from craik.runtime.store import LocalStore
 
 runner = CliRunner()
 
@@ -67,3 +69,87 @@ def test_tui_backend_jsonl_cli_status(tmp_path: Path) -> None:
     assert result.exit_code == 0
     events = _events(result.stdout)
     assert [event["type"] for event in events] == ["session.ready", "session.status"]
+
+
+def test_jsonl_gateway_model_set_and_interrupt_events(tmp_path: Path) -> None:
+    stdin = io.StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "model.set",
+                        "model": "anthropic/claude-opus-4-7",
+                        "display_name": "Anthropic Claude Opus 4.7 High",
+                        "reasoning_effort": "high",
+                        "options": {"thinking": True},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "run.interrupt",
+                        "run_id": "run_review_the_plan",
+                        "reason": "operator requested stop",
+                    }
+                ),
+                "",
+            ]
+        )
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == [
+        "session.ready",
+        "model.changed",
+        "run.interrupt.requested",
+    ]
+    model_payload = events[1]["data"]["payload"]
+    active_profile_id = model_payload["active_profile_id"]
+    assert model_payload["profiles"][active_profile_id]["display_name"] == (
+        "Anthropic Claude Opus 4.7 High"
+    )
+    assert events[2]["run_id"] == "run_review_the_plan"
+
+
+def test_jsonl_gateway_approval_decision_event(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    store = LocalStore.from_env(env)
+    try:
+        store.initialize()
+        open_approval_request(
+            store,
+            approval_id="approval_jsonl",
+            task_id="task_jsonl",
+            capability="repo.write.docs",
+            target="docs/",
+            risk="docs write",
+            policy="trusted-local",
+            requested_by="test",
+            retry_path="/run Retry",
+        )
+    finally:
+        store.close()
+    stdin = io.StringIO(
+        json.dumps(
+            {
+                "type": "approval.decide",
+                "approval_id": "approval_jsonl",
+                "decision": "approved",
+                "operator": "user:test",
+                "reason": "fixture approval",
+            }
+        )
+        + "\n"
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == ["session.ready", "approval.resolved"]
+    assert events[1]["data"]["approval_id"] == "approval_jsonl"
+    assert events[1]["data"]["payload"]["receipt"]["id"] == (
+        "receipt_approval_approval_jsonl_approved"
+    )

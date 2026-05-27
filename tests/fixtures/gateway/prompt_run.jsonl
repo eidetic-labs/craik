@@ -4,3 +4,5 @@
 {"created_at":"2026-05-26T12:00:03+00:00","data":{"backend":"claude-code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"run.started"}
 {"created_at":"2026-05-26T12:00:04+00:00","data":{"receipt_id":"receipt_run_review_the_plan_claude_code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"receipt.created"}
 {"created_at":"2026-05-26T12:00:05+00:00","data":{"status":"completed","backend":"claude-code"},"run_id":"run_review_the_plan","task_id":"task_review_the_plan","type":"run.completed"}
+{"created_at":"2026-05-26T12:00:06+00:00","data":{"approval_id":"approval_review_the_plan","decision":"approved"},"run_id":null,"task_id":null,"type":"approval.resolved"}
+{"created_at":"2026-05-26T12:00:07+00:00","data":{"run_id":"run_review_the_plan","reason":"operator requested stop"},"run_id":"run_review_the_plan","task_id":null,"type":"run.interrupt.requested"}

@@ -8,9 +8,12 @@ from typing import Any, Literal
 
 BackendEventType = Literal[
     "prompt.submitted",
+    "approval.resolved",
     "session.ready",
     "session.status",
     "slash.completed",
+    "model.changed",
+    "run.interrupt.requested",
     "run.started",
     "run.progress",
     "model.selected",
