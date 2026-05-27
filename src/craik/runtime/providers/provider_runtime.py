@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from craik.contracts.models import ModelProvider
-from craik.runtime.auth import CredentialPool, CredentialPoolError
 from craik.runtime.policy.redaction import redact
 from craik.runtime.providers import provider_models as _provider_models
 from craik.runtime.providers import provider_runtime_support as _provider_runtime_support
@@ -51,8 +50,10 @@ from craik.runtime.providers.provider_runtime_support import (
     _chat_completions_tool,
     _chat_completions_tool_calls,
     _chat_completions_usage,
+    _default_credential_pool_id,
     _fixture_context,
     _json_object_or_none,
+    _official_docs_for_family,
     _openai_message,
     _openai_tool,
     _openai_usage,
@@ -494,20 +495,3 @@ def adapter_for_provider(
     if family == "gemini":
         return GeminiProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)
-
-
-def _official_docs_for_family(family: ProviderFamily) -> list[str]:
-    if family == "anthropic":
-        return list(ANTHROPIC_OFFICIAL_DOCS)
-    if family == "gemini":
-        return list(GEMINI_OFFICIAL_DOCS)
-    return list(OPENAI_OFFICIAL_DOCS)
-
-
-def _default_credential_pool_id(family: ProviderFamily) -> str | None:
-    pool_id = f"{family}:default"
-    try:
-        CredentialPool.from_env().get(pool_id)
-    except CredentialPoolError:
-        return None
-    return pool_id

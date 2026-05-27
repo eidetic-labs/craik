@@ -142,6 +142,7 @@ def test_macos_keychain_backend_round_trips_without_python_keyring(monkeypatch) 
         return _Result()
 
     monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
+    monkeypatch.setattr(credential_storage.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(
         credential_storage,
         "_macos_security_executable",

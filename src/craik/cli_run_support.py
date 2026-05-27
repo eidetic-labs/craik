@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import typer
 
-from craik.contracts.models import AgentRoleKind, CapabilityGrant, CapabilityTarget
+from craik.contracts.models import AgentRoleKind, CapabilityGrant, CapabilityTarget, TaskRun
 from craik.runtime.providers.provider_runner import ProviderBackedRunResult
 
 
@@ -82,3 +82,15 @@ def provider_run_payload(result: ProviderBackedRunResult) -> dict[str, Any]:
             f"craik receipts list --task-id {result.run.task_id}",
         ],
     }
+
+
+def next_allowed_action(run: TaskRun) -> str:
+    if run.status == "interrupted":
+        return "recover from the last safe boundary"
+    if run.status == "blocked":
+        return "resolve the blocking condition before recovery"
+    if run.status == "failed":
+        return "inspect diagnostics before deciding whether to retry"
+    if run.status == "completed":
+        return "review handoff, receipts, and memory proposals"
+    return "continue within policy and iteration limits"

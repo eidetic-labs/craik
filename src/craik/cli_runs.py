@@ -9,7 +9,12 @@ import typer
 
 from craik.cli_operator_auth import operator_identity_or_fail
 from craik.cli_output import emit_command_result
-from craik.cli_run_support import fixture_shell_grant, provider_run_payload, role_kind
+from craik.cli_run_support import (
+    fixture_shell_grant,
+    next_allowed_action,
+    provider_run_payload,
+    role_kind,
+)
 from craik.contracts.models import (
     RecoverySession,
     RunDelta,
@@ -383,7 +388,7 @@ def _run_inspection_payload(
         "status": run.status,
         "phase": run.phase,
         "stop_reason": run.stop_reason,
-        "next_allowed_action": _next_allowed_action(run),
+        "next_allowed_action": next_allowed_action(run),
         "receipts": [receipt.model_dump(mode="json", by_alias=True) for receipt in receipts],
         "outputs": [
             _run_output_payload(output, include_outputs=include_outputs) for output in outputs
@@ -413,7 +418,7 @@ def _run_recovery_payload(
         "resume_phase": "continue" if run.iteration < run.max_iterations else "stop",
         "last_phase": run.phase,
         "last_iteration": run.iteration,
-        "next_allowed_action": _next_allowed_action(run),
+        "next_allowed_action": next_allowed_action(run),
         "required_checks": [
             "reload task run state",
             "re-check policy grants",
@@ -493,15 +498,3 @@ def _run_output_payload(output: Any, *, include_outputs: bool) -> dict[str, Any]
 def _run_receipt_ids(run: TaskRun, outputs: list[Any]) -> set[str]:
     output_receipt_ids = [receipt for output in outputs for receipt in output.receipt_ids]
     return {*run.receipt_ids, *output_receipt_ids}
-
-
-def _next_allowed_action(run: TaskRun) -> str:
-    if run.status == "interrupted":
-        return "recover from the last safe boundary"
-    if run.status == "blocked":
-        return "resolve the blocking condition before recovery"
-    if run.status == "failed":
-        return "inspect diagnostics before deciding whether to retry"
-    if run.status == "completed":
-        return "review handoff, receipts, and memory proposals"
-    return "continue within policy and iteration limits"
