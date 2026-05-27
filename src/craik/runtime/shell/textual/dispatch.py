@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from textual.widgets import RichLog
 
@@ -17,14 +17,12 @@ from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
     InteractivePromptRequest,
 )
-from craik.runtime.contract.dispatch import (
-    invoke_slash_command as _contract_invoke,
-)
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.shell.textual.support import (
+    InterruptibleProcess,
     _audited_run_text,
     _claude_permission_mode_label,
     _claude_progress_markup,
@@ -47,12 +45,6 @@ from craik.runtime.shell.tui_interactive_prompts import open_interactive_prompt_
 from craik.runtime.status import auto_approve_status_payload
 
 
-class _InterruptibleProcess(Protocol):
-    def poll(self) -> int | None: ...
-
-    def terminate(self) -> None: ...
-
-
 def _gateway_session_client_class() -> type[GatewaySessionClient]:
     from craik.runtime.shell import textual_app
 
@@ -68,7 +60,7 @@ class CraikAppDispatchMixin:
     _model_prompt_active: bool
     _working_started_at: float | None
     _working_timer: Any | None
-    _active_claude_process: _InterruptibleProcess | None
+    _active_claude_process: InterruptibleProcess | None
     _active_claude_cancel: threading.Event | None
     _active_claude_lock: threading.Lock
     _claude_code_approval_inflight: bool
@@ -78,7 +70,8 @@ class CraikAppDispatchMixin:
     _current_run_phase: str | None
 
     if TYPE_CHECKING:
-        def __getattr__(self, name: str) -> Any: ...
+        def __getattr__(self, name: str) -> Any:
+            raise AttributeError(name)
 
     def _dispatch(self, text: str) -> SlashCommandResult:
         if text.startswith("/"):
@@ -94,15 +87,6 @@ class CraikAppDispatchMixin:
             self._refresh_status_bar()
             self._flash_accent("state")
         return result
-
-    def _dispatch_contract(self, text: str) -> CommandResult:
-        """Dispatch slash text through the CLI/TUI contract layer."""
-        return _contract_invoke(
-            text,
-            registry=self.registry,
-            env=self.env,
-            interactive_prompt_handler=self._open_modal_for_request,
-        )
 
     def _dispatch_slash_async(self, text: str) -> None:
         """Dispatch slash commands off the UI thread so modal prompts can block safely."""
@@ -251,7 +235,7 @@ class CraikAppDispatchMixin:
             self._active_claude_cancel = threading.Event()
             self._active_claude_process = None
 
-    def _set_active_claude_process(self, process: _InterruptibleProcess | None) -> None:
+    def _set_active_claude_process(self, process: InterruptibleProcess | None) -> None:
         with self._active_claude_lock:
             self._active_claude_process = process
 

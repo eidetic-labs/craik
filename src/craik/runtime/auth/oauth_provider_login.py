@@ -43,7 +43,6 @@ from craik.runtime.shell.credential_storage import (
 
 BrowserOpener = Callable[[str], bool]
 CodePrompt = Callable[[str], str]
-TokenPrompt = Callable[[str], str]
 
 
 @dataclass(frozen=True)

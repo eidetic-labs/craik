@@ -6,6 +6,7 @@ import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from craik.runtime.backend.claude_code import CLAUDE_PERMISSION_MODE_ENV
 from craik.runtime.contract.command_result import CommandResult
@@ -22,6 +23,14 @@ CLAUDE_PERMISSION_MODE_LABELS = {
     "plan": "Plan",
     "auto": "Auto",
 }
+
+
+class InterruptibleProcess(Protocol):
+    def poll(self) -> int | None:
+        raise NotImplementedError
+
+    def terminate(self) -> None:
+        raise NotImplementedError
 
 
 @dataclass(frozen=True, slots=True)
@@ -400,5 +409,4 @@ def _claude_permission_mode_posture(mode: str) -> str:
     if normalized == "auto":
         return "Claude Code tools can proceed with minimal interruption."
     return "Claude Code follows its normal tool permission gates."
-
 

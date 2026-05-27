@@ -256,8 +256,10 @@ def _claude_code_matrix() -> RunnerCapabilityMatrix:
             _capability("result.structured", "supported", grant_required=False),
         ],
         policy_notes=[
-            "Execute through the local Claude Code CLI when the operator selects the "
-            "claude-code backend.",
+            (
+                "Execute through the local Claude Code CLI when the operator selects the "
+                + "claude-code backend."
+            ),
             "Use Claude Code permission modes for edit and tool approval behavior.",
             "Record Craik receipts and handoffs for the delegated execution.",
         ],

@@ -222,8 +222,10 @@ def _empty_claude_cli_output_message(prompt: str, stderr: str | None) -> str:
     lines = [
         "Claude CLI completed but did not return response text.",
         "",
-        "This can happen when the delegated `claude -p` run exits without a final stdout "
-        "message. For auditable Claude Code tool activity, run the prompt through:",
+        (
+            "This can happen when the delegated `claude -p` run exits without a final stdout "
+            + "message. For auditable Claude Code tool activity, run the prompt through:"
+        ),
         "",
         f"/run --backend claude-code {prompt.strip()}",
     ]

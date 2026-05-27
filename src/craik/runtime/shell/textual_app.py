@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from textual import events
 from textual.app import App, ComposeResult
@@ -21,8 +21,9 @@ from craik.runtime.backend.claude_code import (
 )
 from craik.runtime.backend.client import GatewaySessionClient as GatewaySessionClient
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
+from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
-    invoke_slash_command as _contract_dispatch_entry_point,
+    invoke_slash_command as _contract_invoke,
 )
 from craik.runtime.shell.confirmations import (
     confirmation_request_for_text,
@@ -39,6 +40,7 @@ from craik.runtime.shell.textual.activity import CraikAppActivityMixin
 from craik.runtime.shell.textual.dispatch import CraikAppDispatchMixin
 from craik.runtime.shell.textual.support import (
     CLAUDE_PERMISSION_MODE_LABELS,
+    InterruptibleProcess,
     _claude_permission_mode_label,
     _requires_claude_code_run_approval,
 )
@@ -91,13 +93,6 @@ from craik.runtime.status import auto_approve_status_payload
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
 CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
-_ = _contract_dispatch_entry_point
-
-
-class _InterruptibleProcess(Protocol):
-    def poll(self) -> int | None: ...
-
-    def terminate(self) -> None: ...
 
 
 class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
@@ -144,7 +139,7 @@ class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
         self._model_prompt_active = False
         self._working_started_at: float | None = None
         self._working_timer: Any | None = None
-        self._active_claude_process: _InterruptibleProcess | None = None
+        self._active_claude_process: InterruptibleProcess | None = None
         self._active_claude_cancel: threading.Event | None = None
         self._active_claude_lock = threading.Lock()
         self._claude_code_approval_inflight = False
@@ -163,6 +158,15 @@ class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
         self._run_recent_events: list[str] = []
         self._run_approvals = 0
         self._run_denials = 0
+
+    def _dispatch_contract(self, text: str) -> CommandResult:
+        """Dispatch slash text through the CLI/TUI contract layer."""
+        return _contract_invoke(
+            text,
+            registry=self.registry,
+            env=self.env,
+            interactive_prompt_handler=self._open_modal_for_request,
+        )
 
     def compose(self) -> ComposeResult:
         yield RichLog(id="transcript", markup=True, wrap=True)

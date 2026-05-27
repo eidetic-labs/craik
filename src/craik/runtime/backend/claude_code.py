@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Literal, Protocol
+from typing import Literal
 
 from craik.contracts.models import (
     CapabilityReceipt,
@@ -31,6 +31,7 @@ from craik.runtime.backend.claude_code_grants import (
     _require_claude_code_run_approval,
 )
 from craik.runtime.backend.claude_code_process import (
+    ClaudeProcessProtocol,
     _read_claude_code_stdout,
     _terminate_claude_code_process,
 )
@@ -82,21 +83,8 @@ _CLAUDE_CODE_EVENT: ContextVar[Callable[[dict[str, object]], None] | None] = Con
     "claude_code_event",
     default=None,
 )
-class _ClaudeProcess(Protocol):
-    stdout: IO[str] | None
-    returncode: int | None
-    pid: int
 
-    def poll(self) -> int | None: ...
-
-    def wait(self, timeout: float | None = None) -> int: ...
-
-    def terminate(self) -> None: ...
-
-    def kill(self) -> None: ...
-
-
-_CLAUDE_CODE_PROCESS: ContextVar[Callable[[_ClaudeProcess | None], None] | None] = (
+_CLAUDE_CODE_PROCESS: ContextVar[Callable[[ClaudeProcessProtocol | None], None] | None] = (
     ContextVar(
         "claude_code_process",
         default=None,
@@ -129,7 +117,7 @@ def claude_code_progress(
     callback: Callable[[str], None] | None,
     *,
     event_callback: Callable[[dict[str, object]], None] | None = None,
-    process_callback: Callable[[_ClaudeProcess | None], None] | None = None,
+    process_callback: Callable[[ClaudeProcessProtocol | None], None] | None = None,
     cancel_event: threading.Event | None = None,
 ) -> Iterator[None]:
     """Install per-dispatch Claude Code progress and cancellation hooks."""
@@ -473,7 +461,7 @@ def _emit_claude_code_event(event: dict[str, object]) -> None:
         callback(dict(event))
 
 
-def _set_claude_code_process(process: _ClaudeProcess | None) -> None:
+def _set_claude_code_process(process: ClaudeProcessProtocol | None) -> None:
     callback = _CLAUDE_CODE_PROCESS.get()
     if callback is not None:
         callback(process)
@@ -492,5 +480,3 @@ def _claude_code_env(env: dict[str, str] | None) -> dict[str, str]:
         values.pop(name, None)
     _emit_claude_code_progress("Using Claude CLI auth; bearer token env vars removed.")
     return values
-# Backward-compatible private alias for older imports and tests.
-_create_and_execute_claude_code_run = execute_claude_code_run

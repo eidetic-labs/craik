@@ -62,7 +62,8 @@ class CraikAppActivityMixin:
     _run_denials: int
 
     if TYPE_CHECKING:
-        def __getattr__(self, name: str) -> Any: ...
+        def __getattr__(self, name: str) -> Any:
+            raise AttributeError(name)
 
     def _open_modal_flow(self, text: str) -> bool:
         return open_textual_modal_flow(self, text)
