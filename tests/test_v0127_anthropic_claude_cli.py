@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
 from craik.runtime.auth.profile import CredentialKind
@@ -50,13 +48,8 @@ def test_export_claude_code_oauth_token_runs_setup_token(monkeypatch) -> None:
     )
 
     def _runner(*args, **kwargs):
-        assert args[0] == ("claude", "setup-token")
-        return subprocess.CompletedProcess(
-            args=args[0],
-            returncode=0,
-            stdout="export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-from-cli\n",
-            stderr="",
-        )
+        assert args[0] == ("/bin/claude", "setup-token")
+        return 0, "export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-from-cli\n", ""
 
     assert export_claude_code_oauth_token(runner=_runner) == "sk-ant-oat01-from-cli"
 
@@ -68,12 +61,7 @@ def test_export_claude_code_oauth_token_redacts_failure(monkeypatch) -> None:
     )
 
     def _runner(*args, **kwargs):
-        return subprocess.CompletedProcess(
-            args=args[0],
-            returncode=1,
-            stdout="",
-            stderr="failed with sk-ant-oat01-secret-token",
-        )
+        return 1, "", "failed with sk-ant-oat01-secret-token"
 
     with pytest.raises(AnthropicClaudeCliError) as exc_info:
         export_claude_code_oauth_token(runner=_runner)
@@ -89,13 +77,8 @@ def test_claude_cli_runtime_status_reports_logged_in(monkeypatch) -> None:
     )
 
     def _runner(*args, **kwargs):
-        assert args[0] == ("claude", "auth", "status")
-        return subprocess.CompletedProcess(
-            args=args[0],
-            returncode=0,
-            stdout='{"loggedIn": true, "authMethod": "oauth"}',
-            stderr="",
-        )
+        assert args[0] == ("/bin/claude", "auth", "status")
+        return 0, '{"loggedIn": true, "authMethod": "oauth"}', ""
 
     assert claude_cli_runtime_status(runner=_runner).status == "ok"
 
@@ -107,12 +90,7 @@ def test_claude_cli_runtime_status_rejects_logged_out(monkeypatch) -> None:
     )
 
     def _runner(*args, **kwargs):
-        return subprocess.CompletedProcess(
-            args=args[0],
-            returncode=1,
-            stdout='{"loggedIn": false, "authMethod": "none"}',
-            stderr="",
-        )
+        return 1, '{"loggedIn": false, "authMethod": "none"}', ""
 
     status = claude_cli_runtime_status(runner=_runner)
 

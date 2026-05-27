@@ -4,6 +4,7 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 from typer.testing import CliRunner
@@ -213,16 +214,21 @@ def test_anthropic_one_shot_uses_external_claude_cli(
     def _run(args, **kwargs):
         seen["args"] = args
         seen["env"] = kwargs["env"]
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="from cli\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="from cli\n",
+            stderr="",
+            reason="local process command completed",
+        )
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
 
     chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
 
     assert chat.exit_code == 0
     assert chat.output == "from cli\n"
     assert seen["args"] == [
-        "claude",
+        "/usr/local/bin/claude",
         "-p",
         "hello",
         "--model",
@@ -264,15 +270,20 @@ def test_anthropic_one_shot_passes_claude_permission_mode(
 
     def _run(args, **kwargs):
         seen["args"] = args
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="from cli\n", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="from cli\n",
+            stderr="",
+            reason="local process command completed",
+        )
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
 
     chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
 
     assert chat.exit_code == 0
     assert seen["args"] == [
-        "claude",
+        "/usr/local/bin/claude",
         "-p",
         "hello",
         "--model",
@@ -300,14 +311,23 @@ def test_anthropic_one_shot_empty_claude_output_guides_to_audited_run(
     )
     runner.invoke(app, ["model", "set", "anthropic/claude-sonnet-4-20250514"], env=env)
     monkeypatch.setattr(
+        "craik.runtime.auth.login.claude_cli_runtime_status",
+        lambda: CredentialStatus(status="ok"),
+    )
+    monkeypatch.setattr(
         "craik.runtime.shell.agent_shell.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
     def _run(args, **kwargs):
-        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="",
+            stderr="",
+            reason="local process command completed",
+        )
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
 
     chat = runner.invoke(
         app,

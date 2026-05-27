@@ -303,14 +303,14 @@ def test_textual_anthropic_marker_prompt_streams_without_preapproval(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         assert "--output-format" in args
         assert "stream-json" in args
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -379,14 +379,14 @@ def test_textual_run_claude_code_full_path_approval_invokes_claude(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         calls.append(list(args))
         assert kwargs["env"][CLAUDE_CODE_RUN_APPROVED_ENV] == "1"
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -450,12 +450,12 @@ def test_textual_run_claude_code_full_path_updates_activity_from_structured_even
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 

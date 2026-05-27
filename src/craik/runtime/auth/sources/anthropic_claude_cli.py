@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
 
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    run_reviewed_local_process,
+)
 from craik.runtime.shell.credential_storage import put_cached_credential
 
 CLAUDE_CODE_OAUTH_TOKEN_PATTERN = re.compile(r"sk-ant-oat[A-Za-z0-9._~+/=#-]+")
@@ -23,18 +26,15 @@ class AnthropicClaudeCliError(RuntimeError):
 
 
 class CommandRunner(Protocol):
-    """Minimal subprocess.run-compatible protocol."""
+    """Minimal reviewed command runner protocol."""
 
     def __call__(
         self,
         args: Sequence[str],
         *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
         timeout: float,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a command and return its completed process."""
+    ) -> tuple[int, str, str]:
+        """Run a command and return returncode, stdout, and stderr."""
         raise NotImplementedError
 
 
@@ -93,32 +93,32 @@ def extract_claude_code_oauth_token(text: str) -> str | None:
 
 def export_claude_code_oauth_token(
     *,
-    runner: CommandRunner = subprocess.run,
+    runner: CommandRunner | None = None,
     command: Sequence[str] = DEFAULT_CLAUDE_SETUP_TOKEN_COMMAND,
     timeout_seconds: float = 120.0,
 ) -> str:
     """Run `claude setup-token` and return the exported Claude Code OAuth token."""
     executable = command[0] if command else "claude"
-    if shutil.which(executable) is None:
+    resolved_executable = shutil.which(executable)
+    if resolved_executable is None:
         raise AnthropicClaudeCliError(
             "Claude CLI was not found. Install Anthropic Claude Code, run "
             "`claude auth login`, then retry `craik auth login anthropic --mode=oauth`."
         )
+    resolved_command = (resolved_executable, *tuple(command[1:]))
     try:
-        completed = runner(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
+        returncode, stdout, stderr = _run_claude_command(
+            resolved_command,
+            runner=runner,
+            timeout_seconds=timeout_seconds,
         )
     except TimeoutError as exc:
         raise AnthropicClaudeCliError("Claude CLI setup-token timed out") from exc
-    except OSError as exc:
+    except (OSError, LocalProcessStartError) as exc:
         raise AnthropicClaudeCliError("Claude CLI setup-token failed to start") from exc
 
-    output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-    if completed.returncode != 0:
+    output = "\n".join(part for part in (stdout, stderr) if part)
+    if returncode != 0:
         detail = _safe_cli_output(output)
         raise AnthropicClaudeCliError(
             "Claude CLI setup-token failed"
@@ -136,26 +136,26 @@ def export_claude_code_oauth_token(
 
 def claude_cli_runtime_status(
     *,
-    runner: CommandRunner = subprocess.run,
+    runner: CommandRunner | None = None,
     command: Sequence[str] = DEFAULT_CLAUDE_AUTH_STATUS_COMMAND,
     timeout_seconds: float = 15.0,
 ) -> CredentialStatus:
     """Return whether the delegated local Claude CLI is authenticated."""
     executable = command[0] if command else "claude"
-    if shutil.which(executable) is None:
+    resolved_executable = shutil.which(executable)
+    if resolved_executable is None:
         return CredentialStatus(status="rejected", detail="Claude CLI was not found")
+    resolved_command = (resolved_executable, *tuple(command[1:]))
     try:
-        completed = runner(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
+        returncode, stdout, stderr = _run_claude_command(
+            resolved_command,
+            runner=runner,
+            timeout_seconds=timeout_seconds,
         )
     except (TimeoutError, OSError) as exc:
         return CredentialStatus(status="rejected", detail=str(exc))
-    output = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
-    if completed.returncode != 0:
+    output = "\n".join(part for part in (stdout, stderr) if part)
+    if returncode != 0:
         detail = _safe_cli_output(output) or "Claude CLI auth status failed"
         return CredentialStatus(status="rejected", detail=detail)
     if '"loggedIn": true' in output or '"loggedIn":true' in output:
@@ -203,6 +203,20 @@ def store_claude_cli_token_profile(
 def _safe_cli_output(output: str) -> str:
     redacted = CLAUDE_CODE_OAUTH_TOKEN_PATTERN.sub("[REDACTED]", " ".join(output.split()))
     return redacted[:300]
+
+
+def _run_claude_command(
+    command: Sequence[str],
+    *,
+    runner: CommandRunner | None,
+    timeout_seconds: float,
+) -> tuple[int, str, str]:
+    if runner is not None:
+        return runner(command, timeout=timeout_seconds)
+    execution = run_reviewed_local_process(command, timeout_seconds=timeout_seconds)
+    if execution.reason.endswith("timed out"):
+        raise TimeoutError("Claude CLI command timed out")
+    return execution.returncode or 0, execution.stdout, execution.stderr
 
 
 __all__ = [

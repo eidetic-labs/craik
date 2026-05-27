@@ -120,14 +120,14 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         assert "--output-format" in args
         assert "stream-json" in args
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -299,13 +299,13 @@ def test_run_claude_code_backend_creates_audited_artifacts(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         calls.append(list(args))
         return _Process(args, **kwargs)
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -371,8 +371,8 @@ def test_run_claude_code_backend_creates_audited_artifacts(
     assert "repo.write.docs" in grants
     assert "receipt.write" in grants
     assert calls
-    assert calls[0][0:6] == [
-        "claude",
+    assert calls[0][0] == "/usr/local/bin/claude"
+    assert calls[0][1:6] == [
         "--tools",
         "default",
         "--output-format",
@@ -416,15 +416,15 @@ def test_run_claude_code_backend_invokes_claude_without_auth_preflight(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         calls.append(list(args))
-        assert args[0:3] == ["claude", "--tools", "default"]
+        assert args[0:3] == ["/usr/local/bin/claude", "--tools", "default"]
         assert "-p" in args
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -472,14 +472,14 @@ def test_run_claude_code_backend_uses_cli_auth_without_stored_bearer_token(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         assert "ANTHROPIC_API_KEY" not in kwargs["env"]
         assert "CLAUDE_CODE_OAUTH_TOKEN" not in kwargs["env"]
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -521,12 +521,12 @@ def test_run_claude_code_backend_summarizes_activity_when_result_body_is_empty(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -578,12 +578,12 @@ def test_run_claude_code_backend_reads_nested_result_message_text(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -629,12 +629,12 @@ def test_run_claude_code_backend_records_interrupted_run(
             return -15
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -680,12 +680,12 @@ def test_run_claude_code_backend_observes_runtime_approval_event_without_interce
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 
@@ -738,12 +738,12 @@ def test_claude_code_progress_callback_receives_structured_approval_events(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 

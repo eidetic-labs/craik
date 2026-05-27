@@ -10,7 +10,6 @@ import json
 import os
 import platform
 import shutil
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from importlib import import_module
@@ -18,6 +17,10 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from craik.runtime.paths import resolve_craik_home
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    run_reviewed_local_process,
+)
 
 CredentialBackendStatus = Literal["available", "unavailable", "fallback"]
 OWNER_ONLY_FILE_MODE = 0o600
@@ -189,7 +192,13 @@ def _python_keyring_available() -> bool:
 
 
 def _macos_security_available() -> bool:
-    return platform.system().lower() == "darwin" and shutil.which("security") is not None
+    return _macos_security_executable() is not None
+
+
+def _macos_security_executable() -> str | None:
+    if platform.system().lower() != "darwin":
+        return None
+    return shutil.which("security")
 
 
 def _secure_backend_available() -> bool:
@@ -259,10 +268,13 @@ def _keyring_module() -> Any:
 
 
 def _macos_keychain_set(ref: str, value: str) -> None:
+    executable = _macos_security_executable()
+    if executable is None:
+        raise CredentialStorageError("macOS Keychain executable is unavailable")
     try:
-        subprocess.run(
+        result = run_reviewed_local_process(
             [
-                "security",
+                executable,
                 "add-generic-password",
                 "-a",
                 ref,
@@ -272,19 +284,22 @@ def _macos_keychain_set(ref: str, value: str) -> None:
                 value,
                 "-U",
             ],
-            check=True,
-            capture_output=True,
-            text=True,
+            timeout_seconds=30.0,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+        if result.returncode != 0:
+            raise CredentialStorageError("macOS Keychain credential write failed")
+    except (OSError, LocalProcessStartError) as exc:
         raise CredentialStorageError("macOS Keychain credential write failed") from exc
 
 
 def _macos_keychain_get(ref: str) -> str | None:
+    executable = _macos_security_executable()
+    if executable is None:
+        raise CredentialStorageError("macOS Keychain executable is unavailable")
     try:
-        result = subprocess.run(
+        result = run_reviewed_local_process(
             [
-                "security",
+                executable,
                 "find-generic-password",
                 "-a",
                 ref,
@@ -292,11 +307,9 @@ def _macos_keychain_get(ref: str) -> str | None:
                 _keyring_service(),
                 "-w",
             ],
-            check=False,
-            capture_output=True,
-            text=True,
+            timeout_seconds=30.0,
         )
-    except OSError as exc:
+    except (OSError, LocalProcessStartError) as exc:
         raise CredentialStorageError("macOS Keychain credential read failed") from exc
     if result.returncode != 0:
         return None
@@ -304,21 +317,22 @@ def _macos_keychain_get(ref: str) -> str | None:
 
 
 def _macos_keychain_delete(ref: str) -> None:
+    executable = _macos_security_executable()
+    if executable is None:
+        return
     try:
-        subprocess.run(
+        run_reviewed_local_process(
             [
-                "security",
+                executable,
                 "delete-generic-password",
                 "-a",
                 ref,
                 "-s",
                 _keyring_service(),
             ],
-            check=False,
-            capture_output=True,
-            text=True,
+            timeout_seconds=30.0,
         )
-    except OSError:
+    except (OSError, LocalProcessStartError):
         return
 
 

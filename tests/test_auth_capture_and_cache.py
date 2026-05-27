@@ -132,24 +132,33 @@ def test_macos_keychain_backend_round_trips_without_python_keyring(monkeypatch) 
     seen: dict[str, list[str]] = {}
 
     class _Result:
-        returncode = 0
+        returncode: int | None = 0
         stdout = "stored-secret\n"
+        stderr = ""
+        reason = "local process command completed"
 
     def _run(args, **kwargs):
         seen[str(args[1])] = list(args)
         return _Result()
 
     monkeypatch.setattr(credential_storage, "_python_keyring_available", lambda: False)
-    monkeypatch.setattr(credential_storage, "_macos_security_available", lambda: True)
-    monkeypatch.setattr(credential_storage.subprocess, "run", _run)
+    monkeypatch.setattr(
+        credential_storage,
+        "_macos_security_executable",
+        lambda: "/usr/bin/security",
+    )
+    monkeypatch.setattr(credential_storage, "run_reviewed_local_process", _run)
 
     credential_storage.put_cached_credential("openai:subscription:access", "stored-secret")
     stored = credential_storage.get_cached_credential("openai:subscription:access")
     credential_storage.delete_cached_credential("openai:subscription:access")
 
-    assert seen["add-generic-password"][:2] == ["security", "add-generic-password"]
-    assert seen["find-generic-password"][:2] == ["security", "find-generic-password"]
-    assert seen["delete-generic-password"][:2] == ["security", "delete-generic-password"]
+    assert seen["add-generic-password"][:2] == ["/usr/bin/security", "add-generic-password"]
+    assert seen["find-generic-password"][:2] == ["/usr/bin/security", "find-generic-password"]
+    assert seen["delete-generic-password"][:2] == [
+        "/usr/bin/security",
+        "delete-generic-password",
+    ]
     assert stored.value == "stored-secret"
     assert stored.backend == "macos-keychain"
     assert stored.secure is True

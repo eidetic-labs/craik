@@ -5,12 +5,11 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from rich.markup import escape
 from textual import events
@@ -107,6 +106,12 @@ CLAUDE_PERMISSION_MODE_LABELS = {
 }
 
 
+class _InterruptibleProcess(Protocol):
+    def poll(self) -> int | None: ...
+
+    def terminate(self) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class _ActivityDetails:
     tool: str | None = None
@@ -162,7 +167,7 @@ class CraikApp(App[None]):
         self._model_prompt_active = False
         self._working_started_at: float | None = None
         self._working_timer: Any | None = None
-        self._active_claude_process: subprocess.Popen[str] | None = None
+        self._active_claude_process: _InterruptibleProcess | None = None
         self._active_claude_cancel: threading.Event | None = None
         self._active_claude_lock = threading.Lock()
         self._claude_code_approval_inflight = False
@@ -674,7 +679,7 @@ class CraikApp(App[None]):
             self._active_claude_cancel = threading.Event()
             self._active_claude_process = None
 
-    def _set_active_claude_process(self, process: subprocess.Popen[str] | None) -> None:
+    def _set_active_claude_process(self, process: _InterruptibleProcess | None) -> None:
         with self._active_claude_lock:
             self._active_claude_process = process
 
@@ -1289,15 +1294,15 @@ def _non_response_transcript_line(line: str) -> bool:
 
 def _uses_model_backed_slash_execution(text: str) -> bool:
     try:
-        tokens = shlex.split(text.strip())
+        arguments = shlex.split(text.strip())
     except ValueError:
-        tokens = text.strip().split()
-    if not tokens or tokens[0] != "/run":
+        arguments = text.strip().split()
+    if not arguments or arguments[0] != "/run":
         return False
-    for index, token in enumerate(tokens[1:], start=1):
-        if token == "--backend":
-            return index + 1 < len(tokens) and tokens[index + 1] == "claude-code"
-        if token == "--backend=claude-code":
+    for index, argument in enumerate(arguments[1:], start=1):
+        if argument == "--backend":
+            return index + 1 < len(arguments) and arguments[index + 1] == "claude-code"
+        if argument == "--backend=claude-code":
             return True
     return False
 

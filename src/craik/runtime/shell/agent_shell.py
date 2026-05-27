@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from collections.abc import Callable, Iterable
 
@@ -21,6 +20,10 @@ from craik.runtime.providers.provider_runtime import (
     ProviderMessage,
     ProviderRuntimeRequest,
     adapter_for_provider,
+)
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    run_reviewed_local_process,
 )
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
@@ -145,9 +148,10 @@ def _execute_claude_cli_prompt(
     model: str,
     env: dict[str, str] | None,
 ) -> str:
-    if shutil.which("claude") is None:
+    executable = shutil.which("claude")
+    if executable is None:
         raise RuntimeError("Claude CLI was not found; install Claude Code and run `claude`")
-    command = ["claude", "-p", prompt.strip()]
+    command = [executable, "-p", prompt.strip()]
     model_arg = _claude_cli_model_arg(model)
     if model_arg:
         command.extend(["--model", model_arg])
@@ -155,18 +159,15 @@ def _execute_claude_cli_prompt(
     if permission_mode:
         command.extend(["--permission-mode", permission_mode])
     try:
-        completed = subprocess.run(
+        completed = run_reviewed_local_process(
             command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=600,
+            timeout_seconds=600,
             env=_claude_cli_env(env),
         )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError("Claude CLI prompt timed out") from exc
-    except OSError as exc:
+    except (OSError, LocalProcessStartError) as exc:
         raise RuntimeError("Claude CLI could not be executed") from exc
+    if completed.reason.endswith("timed out"):
+        raise RuntimeError("Claude CLI prompt timed out")
     if completed.returncode != 0:
         detail = _safe_cli_detail(completed.stderr or completed.stdout)
         raise RuntimeError("Claude CLI prompt failed" + (f": {detail}" if detail else ""))

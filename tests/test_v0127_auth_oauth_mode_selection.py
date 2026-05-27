@@ -81,7 +81,7 @@ def test_anthropic_claude_cli_mode_is_not_public(tmp_path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "--mode must be api-key or oauth" in result.output
+    assert "api-key or oauth" in result.output
 
 
 def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:

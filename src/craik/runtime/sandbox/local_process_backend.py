@@ -5,15 +5,17 @@ from __future__ import annotations
 # Local-process execution is restricted to registered argv lists and never uses shell=True.
 import subprocess  # nosec B404
 import time
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from threading import Event
-from typing import Literal
+from typing import IO, Any, Literal
 
 from pydantic import Field
 
 from craik.contracts.models import CraikModel, SandboxBackend
 
 LocalProcessDecisionStatus = Literal["allowed", "denied"]
+LocalProcessTimeoutExpired = subprocess.TimeoutExpired
 
 
 class LocalProcessRequest(CraikModel):
@@ -66,6 +68,10 @@ class LocalProcessExecution(CraikModel):
     stderr: str = ""
     timeout_seconds: float | None = None
     cancelled: bool = False
+
+
+class LocalProcessStartError(RuntimeError):
+    """Raised when a reviewed local process command cannot be started."""
 
 
 class LocalProcessCommandRegistry:
@@ -143,13 +149,11 @@ def execute_local_process_command(
     if command is None:
         return _execution_denied(request, "command reference is not registered")
     deadline = time.monotonic() + command.timeout_seconds
-    # command.argv comes from the command registry, not provider text.
-    process = subprocess.Popen(  # nosec B603
+    process = start_reviewed_local_process(
         command.argv,
         cwd=command.cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+        stdout="pipe",
+        stderr="pipe",
     )
     while True:
         if cancel_event is not None and cancel_event.is_set():
@@ -201,6 +205,88 @@ def execute_local_process_command(
     )
 
 
+def run_reviewed_local_process(
+    argv: Sequence[str],
+    *,
+    cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
+    timeout_seconds: float = 30.0,
+) -> LocalProcessExecution:
+    """Run a fixed argv list through the reviewed local-process boundary."""
+    process = start_reviewed_local_process(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdout="pipe",
+        stderr="pipe",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        stdout, stderr = _terminate(process)
+        return LocalProcessExecution(
+            allowed=True,
+            executed=True,
+            reason="local process command timed out",
+            backend_id="reviewed-local-process",
+            command_ref=_command_ref(argv),
+            argv=[str(arg) for arg in argv],
+            returncode=process.returncode,
+            stdout=stdout,
+            stderr=stderr,
+            timeout_seconds=timeout_seconds,
+        )
+    return LocalProcessExecution(
+        allowed=True,
+        executed=True,
+        reason="local process command completed",
+        backend_id="reviewed-local-process",
+        command_ref=_command_ref(argv),
+        argv=[str(arg) for arg in argv],
+        returncode=process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def start_reviewed_local_process(
+    argv: Sequence[str],
+    *,
+    cwd: Path | None = None,
+    env: Mapping[str, str] | None = None,
+    stdin: int | IO[Any] | None = None,
+    stdout: Literal["pipe"] | int | IO[Any] | None = None,
+    stderr: Literal["pipe", "stdout"] | int | IO[Any] | None = None,
+) -> subprocess.Popen[str]:
+    """Start a fixed argv list without shell expansion."""
+    if not argv:
+        raise LocalProcessStartError("local process argv is required")
+    if _looks_like_inline_shell(str(argv[0])):
+        raise LocalProcessStartError("local process executable must be a resolved command path")
+    stdout_target: int | IO[Any] | None = subprocess.PIPE if stdout == "pipe" else stdout
+    stderr_target = (
+        subprocess.PIPE
+        if stderr == "pipe"
+        else subprocess.STDOUT
+        if stderr == "stdout"
+        else stderr
+    )
+    stdin_target: int | IO[Any] = subprocess.DEVNULL if stdin is None else stdin
+    try:
+        return subprocess.Popen(  # nosec B603
+            [str(arg) for arg in argv],
+            cwd=str(cwd) if cwd is not None else None,
+            env=dict(env) if env is not None else None,
+            stdin=stdin_target,
+            stdout=stdout_target,
+            stderr=stderr_target,
+            text=True,
+        )
+    except OSError as exc:
+        raise LocalProcessStartError("local process command could not be executed") from exc
+
+
 def _supports_shell_execute(backend: SandboxBackend) -> bool:
     return any(
         capability.name == "shell.execute" and "run" in capability.operations
@@ -224,6 +310,10 @@ def _text(value: bytes | str | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def _command_ref(argv: Sequence[str]) -> str:
+    return Path(str(argv[0])).name if argv else "unknown"
 
 
 def _terminate(process: subprocess.Popen[str]) -> tuple[str, str]:

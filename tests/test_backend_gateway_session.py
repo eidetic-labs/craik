@@ -180,12 +180,12 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
             return 0
 
     def _popen(args, **kwargs):
-        if args[0] != "claude":
+        if Path(args[0]).name != "claude":
             return original_popen(args, **kwargs)
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.backend.claude_code.subprocess.Popen",
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
         _popen,
     )
 

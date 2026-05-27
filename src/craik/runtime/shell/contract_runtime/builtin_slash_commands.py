@@ -587,18 +587,18 @@ def _parse_run_backend(args: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
     remaining: list[str] = []
     index = 0
     while index < len(args):
-        token = args[index]
-        if token == "--backend":
+        argument = args[index]
+        if argument == "--backend":
             if index + 1 >= len(args):
                 raise ValueError("run --backend requires a value.")
             backend = args[index + 1]
             index += 2
             continue
-        if token.startswith("--backend="):
-            backend = token.split("=", 1)[1]
+        if argument.startswith("--backend="):
+            backend = argument.split("=", 1)[1]
             index += 1
             continue
-        remaining.append(token)
+        remaining.append(argument)
         index += 1
     if backend not in {"provider", "claude-code"}:
         raise ValueError("run backend must be `provider` or `claude-code`.")

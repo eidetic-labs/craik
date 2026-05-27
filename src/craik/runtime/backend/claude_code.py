@@ -8,7 +8,6 @@ import os
 import queue
 import re
 import shutil
-import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -17,7 +16,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, cast
+from typing import IO, Literal, Protocol, cast
 
 from craik.contracts.models import (
     CapabilityGrant,
@@ -33,6 +32,11 @@ from craik.runtime.auth.store import AuthProfileStore, AuthProfileStoreError
 from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.projects.prompts import PromptCompiler
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    LocalProcessTimeoutExpired,
+    start_reviewed_local_process,
+)
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
 from craik.runtime.work.handoffs import HandoffWriter
@@ -57,7 +61,21 @@ _CLAUDE_CODE_EVENT: ContextVar[Callable[[dict[str, object]], None] | None] = Con
     "claude_code_event",
     default=None,
 )
-_CLAUDE_CODE_PROCESS: ContextVar[Callable[[subprocess.Popen[str] | None], None] | None] = (
+class _ClaudeProcess(Protocol):
+    stdout: IO[str] | None
+    returncode: int | None
+    pid: int
+
+    def poll(self) -> int | None: ...
+
+    def wait(self, timeout: float | None = None) -> int: ...
+
+    def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
+
+
+_CLAUDE_CODE_PROCESS: ContextVar[Callable[[_ClaudeProcess | None], None] | None] = (
     ContextVar(
         "claude_code_process",
         default=None,
@@ -90,7 +108,7 @@ def claude_code_progress(
     callback: Callable[[str], None] | None,
     *,
     event_callback: Callable[[dict[str, object]], None] | None = None,
-    process_callback: Callable[[subprocess.Popen[str] | None], None] | None = None,
+    process_callback: Callable[[_ClaudeProcess | None], None] | None = None,
     cancel_event: threading.Event | None = None,
 ) -> Iterator[None]:
     """Install per-dispatch Claude Code progress and cancellation hooks."""
@@ -410,9 +428,17 @@ def _execute_claude_code_prompt(
     *,
     env: dict[str, str] | None,
 ) -> ClaudeCodeExecution:
-    if shutil.which("claude") is None:
+    executable = shutil.which("claude")
+    if executable is None:
         raise RuntimeError("Claude CLI was not found; install Claude Code and run `claude`")
-    command = ["claude", "--tools", "default", "--output-format", "stream-json", "--verbose"]
+    command = [
+        executable,
+        "--tools",
+        "default",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+    ]
     model_arg = _claude_model_arg(_active_model(env))
     if model_arg:
         command.extend(["--model", model_arg])
@@ -422,15 +448,13 @@ def _execute_claude_code_prompt(
     command.extend(["-p", prompt.strip()])
     _emit_claude_code_progress(f"Starting `{_claude_code_command_summary(env)}`")
     try:
-        process = subprocess.Popen(
+        process = start_reviewed_local_process(
             command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+            stdout="pipe",
+            stderr="stdout",
             env=_claude_code_env(env),
         )
-    except OSError as exc:
+    except (OSError, LocalProcessStartError) as exc:
         raise RuntimeError("Claude Code could not be executed") from exc
 
     _set_claude_code_process(process)
@@ -490,7 +514,7 @@ def _execute_claude_code_prompt(
                     output_parts.append(final_text)
         try:
             return_code = process.wait(timeout=30)
-        except subprocess.TimeoutExpired as exc:
+        except LocalProcessTimeoutExpired as exc:
             process.kill()
             raise RuntimeError("Claude Code prompt did not exit after stream ended") from exc
     finally:
@@ -533,13 +557,13 @@ def _emit_claude_code_event(event: dict[str, object]) -> None:
         callback(dict(event))
 
 
-def _set_claude_code_process(process: subprocess.Popen[str] | None) -> None:
+def _set_claude_code_process(process: _ClaudeProcess | None) -> None:
     callback = _CLAUDE_CODE_PROCESS.get()
     if callback is not None:
         callback(process)
 
 
-def _terminate_claude_code_process(process: subprocess.Popen[str]) -> None:
+def _terminate_claude_code_process(process: _ClaudeProcess) -> None:
     if process.poll() is not None:
         return
     process.terminate()
