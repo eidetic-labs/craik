@@ -17,14 +17,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal, cast
 
 from rich.markup import escape
 
-from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.contracts.models import (
     CapabilityGrant,
     CapabilityReceipt,
     CapabilityTarget,
+    ProjectProfile,
     ReceiptResult,
     RunOutput,
     ToolResultAttestation,
@@ -38,17 +39,22 @@ from craik.runtime.auth.commands import (
 )
 from craik.runtime.auth.profile import CredentialKind
 from craik.runtime.auth.store import AuthProfileStore, AuthProfileStoreError
+from craik.runtime.backend.session import (
+    active_provider_and_model,
+    execute_prompt,
+    live_provider_enabled,
+)
 from craik.runtime.contract.auto_registry import AutoSlashRegistry, CommandInventoryEntry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.memory.commands import memory_overview_result
 from craik.runtime.model_commands import model_list_result, model_set_result, model_status_result
+from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.projects.project_registry import NotGitRepositoryError, ProjectRegistry
 from craik.runtime.projects.prompts import PromptCompiler
 from craik.runtime.providers.commands import provider_list_result
 from craik.runtime.providers.model_providers import ModelProviderNotFoundError
-from craik.runtime.providers.provider_runner import ProviderBackedRunExecutor
 from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
 from craik.runtime.session_commands import session_activate_result, session_shell_status_result
@@ -57,7 +63,6 @@ from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
 from craik.runtime.shell.credential_storage import CredentialStorageError, get_cached_credential
-from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
     receipts_slash_result,
@@ -461,7 +466,7 @@ def run_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
         return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
     label = "Claude Code run" if backend == "claude-code" else "Audited run"
     text = _run_completion_text(label, payload)
-    shape = "markdown" if backend == "claude-code" else "card"
+    shape: Literal["markdown", "card"] = "markdown" if backend == "claude-code" else "card"
     return CommandResult(payload=payload, shape=shape, text=text, command_name="run")
 
 
@@ -627,41 +632,7 @@ def _subcommand_listing(command_name: str, subcommands: tuple[str, ...]) -> str:
 
 
 def _create_and_execute_run(prompt: str, env: dict[str, str] | None) -> dict[str, object]:
-    if anthropic_uses_claude_cli_marker(env):
-        return _create_and_execute_claude_code_run(
-            prompt,
-            env,
-            require_operator_approval=False,
-        )
-    store = LocalStore.from_env(env)
-    try:
-        store.initialize()
-        project = _project_for_cwd(store)
-        title = _title_from_prompt(prompt)
-        task = create_task(
-            store,
-            title=title,
-            objective=prompt,
-            project_id=project.id,
-            requested_by="user:tui",
-            mode="implement",
-            expected_outputs=["runner_step_result", "handoff"],
-        )
-        CaseFileAssembler(store).build(task.id)
-        provider_id, model = _active_provider_and_model(env)
-        result = ProviderBackedRunExecutor(store).execute(
-            task_id=task.id,
-            provider_id=provider_id,
-            grants=[fixture_shell_grant(task.id)],
-            live_enabled=_live_provider_enabled(env),
-            model=model,
-        )
-        payload = provider_run_payload(result)
-        payload["project"] = project.model_dump(mode="json", by_alias=True)
-        payload["task"] = task.model_dump(mode="json", by_alias=True)
-        return payload
-    finally:
-        store.close()
+    return execute_prompt(prompt, env=env, source="tui").payload_with_events()
 
 
 def _create_and_execute_claude_code_run(
@@ -727,7 +698,7 @@ def _create_and_execute_claude_code_run(
             run.id,
             RunTransition(status="running", phase="act", iteration=1, last_step_key="claude_code"),
         )
-        status = "completed"
+        status: Literal["completed", "failed", "interrupted"] = "completed"
         stop_reason = "Claude Code completed."
         try:
             execution = _execute_claude_code_prompt(
@@ -735,7 +706,7 @@ def _create_and_execute_claude_code_run(
                 env=env,
             )
             claude_output = execution.text
-            receipt_status = "passed"
+            receipt_status: Literal["passed", "failed", "skipped"] = "passed"
             diagnostics: list[str] = []
         except ClaudeCodeInterrupted as error:
             claude_output = str(error)
@@ -1123,7 +1094,7 @@ def _read_claude_code_stdout(
     line_queue: queue.Queue[str | None],
 ) -> None:
     try:
-        for raw_line in stream:
+        for raw_line in cast(Iterator[object], stream):
             line_queue.put(str(raw_line))
     finally:
         line_queue.put(None)
@@ -1200,15 +1171,15 @@ def _claude_stream_line_text(line: str) -> tuple[str | None, str | None]:
         permission_denials = _permission_denial_text(event)
         if permission_denials:
             return permission_denials, None
-        text = _claude_result_text(event)
-        if text:
-            return "Claude Code returned a final result.", text
+        result_text = _claude_result_text(event)
+        if result_text:
+            return "Claude Code returned a final result.", result_text
         if event.get("is_error"):
             return _safe_cli_detail(json.dumps(event, sort_keys=True)), None
         return "Claude Code completed.", None
     if event_type == "assistant":
-        text = _assistant_event_text(event)
-        return text, text
+        assistant_text = _assistant_event_text(event)
+        return assistant_text, assistant_text
     if event_type == "system":
         if subtype:
             return f"Claude Code system event: {subtype}.", None
@@ -1574,7 +1545,8 @@ def _claude_activity_summary(events: list[dict[str, object]]) -> dict[str, objec
         command = event.get("command")
         if isinstance(command, str) and command and command not in commands:
             commands.append(command)
-        for path in event.get("files") if isinstance(event.get("files"), list) else []:
+        raw_files = event.get("files")
+        for path in raw_files if isinstance(raw_files, list) else []:
             if isinstance(path, str) and path not in files:
                 files.append(path)
         target = event.get("target")
@@ -1903,7 +1875,7 @@ def _failure_card_text(outputs: list[object]) -> str:
     return "\n".join(lines)
 
 
-def _project_for_cwd(store: LocalStore):
+def _project_for_cwd(store: LocalStore) -> ProjectProfile:
     registry = ProjectRegistry(store)
     project = registry.add_project(Path.cwd())
     return project
@@ -1914,28 +1886,11 @@ def _active_provider_id(env: dict[str, str] | None) -> str:
 
 
 def _active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | None]:
-    active_model = ModelSettingsStore.from_env(env).load().active_model
-    if not active_model:
-        return "provider_openai", None
-    provider_name = active_model.split("/", 1)[0]
-    model = active_model.split("/", 1)[1] if "/" in active_model else None
-    provider_id = {
-        "anthropic": "provider_anthropic",
-        "claude": "provider_anthropic",
-        "openai": "provider_openai",
-        "gemini": "provider_gemini",
-        "google": "provider_gemini",
-    }.get(provider_name, provider_name)
-    return provider_id, model
+    return active_provider_and_model(env)
 
 
 def _live_provider_enabled(env: dict[str, str] | None) -> bool:
-    values = os.environ if env is None else env
-    if values.get("CRAIK_LIVE") == "0":
-        return False
-    if values.get("CRAIK_FIXTURE") == "1":
-        return False
-    return ModelSettingsStore.from_env(env).load().active_model is not None
+    return live_provider_enabled(env)
 
 
 def _title_from_prompt(prompt: str) -> str:
@@ -2004,7 +1959,7 @@ def _run_timeline_result(run_or_task_id: str, env: dict[str, str] | None) -> Com
             text = f"unknown run or task: {run_or_task_id}"
             return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
         outputs = [output for output in store.list_run_outputs() if output.run_id == run.id]
-        timeline = [
+        timeline: list[dict[str, object]] = [
             {
                 "kind": "run",
                 "message": f"Run {run.id} started.",
@@ -2018,8 +1973,8 @@ def _run_timeline_result(run_or_task_id: str, env: dict[str, str] | None) -> Com
                 if isinstance(event, dict):
                     timeline.append(
                         {
-                            "kind": event.get("kind", "event"),
-                            "message": event.get("message", ""),
+                            "kind": str(event.get("kind", "event")),
+                            "message": str(event.get("message", "")),
                             "tool": event.get("tool"),
                             "target": event.get("target"),
                             "command": event.get("command"),

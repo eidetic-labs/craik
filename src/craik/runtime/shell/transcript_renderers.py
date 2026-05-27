@@ -98,9 +98,12 @@ def render_run_summary(
     title: str = "Audited run summary",
 ) -> RenderableType:
     """Render a final audited run payload as an operator summary card."""
-    run = payload.get("run") if isinstance(payload.get("run"), dict) else {}
-    handoff = payload.get("handoff") if isinstance(payload.get("handoff"), dict) else {}
-    outputs = payload.get("run_outputs") if isinstance(payload.get("run_outputs"), list) else []
+    raw_run = payload.get("run")
+    raw_handoff = payload.get("handoff")
+    raw_outputs = payload.get("run_outputs")
+    run: dict[str, object] = raw_run if isinstance(raw_run, dict) else {}
+    handoff: dict[str, object] = raw_handoff if isinstance(raw_handoff, dict) else {}
+    outputs: list[object] = raw_outputs if isinstance(raw_outputs, list) else []
     activity = _summary_activity(outputs)
     status = str(payload.get("status") or run.get("status") or "unknown")
     border = (

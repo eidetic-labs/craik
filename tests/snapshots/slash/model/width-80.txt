@@ -1,3 +1,5 @@
-active model  openai/gpt-5.2
-aliases       0 fields
-fallbacks     0 items
+active model       openai/gpt-5.2
+active profile id  openai-gpt-5-2
+profiles           1 fields (openai-gpt-5-2)
+aliases            0 fields
+fallbacks          0 items

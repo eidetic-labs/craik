@@ -12,6 +12,17 @@ within the `0.x.0` stability expectations described in
 
 ### Added
 
+- Added the local Gateway session service and `craik tui-backend --jsonl`
+  transport for prompt, slash, status, progress, receipt, completion, and
+  error events.
+- Added `craik run prompt <prompt>` as the CLI mirror for audited raw prompt
+  execution through the same Gateway path used by `/run <prompt>`.
+- Added persisted model profiles alongside legacy `provider/model` selectors,
+  including display labels, provider ids, backend preference, common provider
+  options, and `--option key=value` passthrough knobs.
+- Added Gateway regression coverage for JSONL transport, model profiles,
+  slash/CLI mirror policy, Claude Code marker routing, and lifecycle/progress
+  events.
 - Added `/run --backend claude-code <prompt>` for TUI-initiated audited runs
   that create Craik task, case-file, run-output, receipt, and handoff records
   while delegating execution to the local Claude Code CLI.

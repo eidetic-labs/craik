@@ -15,6 +15,7 @@ from craik.contracts.models import (
     RunDelta,
     TaskRun,
 )
+from craik.runtime.backend.session import execute_prompt
 from craik.runtime.companions.operator_views import (
     RunDeltaSnapshot,
     format_run_delta_view,
@@ -30,6 +31,26 @@ from craik.runtime.work.case_files import ProjectNotFoundError, TaskNotFoundErro
 from craik.runtime.work.runs import TERMINAL_RUN_STATUSES, RunTransition, TaskRunManager
 
 run_app = typer.Typer(help="Execute, inspect, and recover single-agent task runs.")
+
+
+@run_app.command("prompt")
+@craik_command(payload_shape="card")
+def run_prompt(
+    prompt: Annotated[str, typer.Argument(help="Prompt text to execute as an audited run.")],
+) -> CommandResult:
+    """Execute a raw prompt through the audited Gateway run path."""
+    try:
+        payload = execute_prompt(prompt, source="cli").payload_with_events()
+    except (
+        ModelProviderNotFoundError,
+        ProjectNotFoundError,
+        TaskNotFoundError,
+        ValueError,
+    ) as error:
+        raise typer.BadParameter(str(error)) from None
+    result = CommandResult(payload=payload, shape="card")
+    emit_command_result(result)
+    return result
 
 
 @run_app.command("execute")

@@ -134,6 +134,11 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
     assert result.exit_code == 0, result.text
     assert "Audited run" in result.text
     assert "from stream" in result.text
+    assert isinstance(result.payload, dict)
+    event_types = [event["type"] for event in result.payload["gateway_events"]]
+    assert "run.started" in event_types
+    assert "run.progress" in event_types
+    assert event_types[-1] == "run.completed"
     assert "unsupported auth profile kind/source" not in result.text
     assert "requires operator approval" not in result.text
     store = LocalStore.from_env(env)

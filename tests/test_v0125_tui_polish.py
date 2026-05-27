@@ -22,6 +22,7 @@ from craik.runtime.shell.textual_widgets.text_selection_hint import (
     first_launch_selection_hint,
 )
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue
+from craik.runtime.shell.textual_widgets.transcript_row_hint import TranscriptRowHint
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 
 
@@ -41,12 +42,14 @@ def test_v0125_bottom_stack_renders_in_locked_edge_order(tmp_path: Path) -> None
             input_widget = pilot.app.query_one(CraikInput)
             toast = pilot.app.query_one(ToastQueue)
             working = pilot.app.query_one(WorkingIndicator)
+            hint = pilot.app.query_one(TranscriptRowHint)
 
             assert footer.region.y > status.region.y
             assert status.region.y > accent.region.y
             assert accent.region.y > input_widget.region.y
             assert input_widget.region.y > toast.region.y
             assert toast.region.y > working.region.y
+            assert hint.region.y < working.region.y
             assert footer.region.y - status.region.y == 1
 
     asyncio.run(run())

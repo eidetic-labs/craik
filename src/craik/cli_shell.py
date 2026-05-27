@@ -21,6 +21,7 @@ from craik.runtime.model_commands import (
     model_probe_result,
     model_set_result,
     model_status_result,
+    parse_model_options,
 )
 from craik.runtime.session_commands import (
     session_delete_result,
@@ -124,10 +125,52 @@ def model_status() -> CommandResult:
 
 @model_app.command("set")
 @craik_command(payload_shape="kv")
-def model_set(model: str) -> CommandResult:
+def model_set(
+    model: str,
+    display_name: Annotated[
+        str | None,
+        typer.Option("--display-name", help="Human-readable model profile label."),
+    ] = None,
+    backend: Annotated[
+        str,
+        typer.Option("--backend", help="Backend preference for this profile."),
+    ] = "provider",
+    reasoning_effort: Annotated[
+        str | None,
+        typer.Option("--reasoning-effort", help="Provider reasoning effort option."),
+    ] = None,
+    service_tier: Annotated[
+        str | None,
+        typer.Option("--service-tier", help="Provider service tier option."),
+    ] = None,
+    temperature: Annotated[
+        float | None,
+        typer.Option("--temperature", help="Provider temperature option."),
+    ] = None,
+    max_output_tokens: Annotated[
+        int | None,
+        typer.Option("--max-output-tokens", help="Provider output token limit."),
+    ] = None,
+    option: Annotated[
+        list[str] | None,
+        typer.Option("--option", help="Provider-specific profile option as key=value."),
+    ] = None,
+) -> CommandResult:
     """Set the active model as <provider>/<model>."""
     try:
-        result = model_set_result(model)
+        options = parse_model_options(
+            reasoning_effort=reasoning_effort,
+            service_tier=service_tier,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            passthrough=option,
+        )
+        result = model_set_result(
+            model,
+            display_name=display_name,
+            backend=backend,
+            options=options,
+        )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from None
     emit_command_result(result)

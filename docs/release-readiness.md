@@ -16,6 +16,38 @@ audit continuity.
 
 <div className="craik-keypoint">
 
+**Gateway backend cleanup follow-up is in progress.**
+
+The current post-cutover goal creates a local Gateway session boundary for
+audited prompt execution, JSONL stdio transport for TUI clients, CLI mirrors
+for raw prompt execution, structured model profiles, and regression tests for
+Claude Code marker routing and progress events. This work starts from
+checkpoint commit `c6cd81d checkpoint: pre-backend-cleanup`.
+
+</div>
+
+<div className="craik-fields">
+
+<div><dt>Gateway session</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>runtime/backend/session.py</code> owns raw prompt execution for provider and Claude Code marker paths and emits normalized lifecycle, progress, receipt, output, completion, and error events.</dd></div>
+
+<div><dt>JSONL protocol</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik tui-backend --jsonl</code> accepts <code>session.status</code>, <code>prompt.submit</code>, <code>slash.submit</code>, and close messages over stdio for Textual/Rust/frontend evaluation.</dd></div>
+
+<div><dt>Slash/CLI mirrors</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>/run &lt;prompt&gt;</code> and <code>craik run prompt &lt;prompt&gt;</code> share the audited Gateway path; backend-affecting slash mirrors are covered by regression tests.</dd></div>
+
+<div><dt>Model profiles</dt><dt><span className="craik-fields__type">ready after this PR</span></dt><dd><code>craik model set</code> keeps legacy selectors while persisting provider/model profile metadata, display labels, backend preference, common provider options, and provider-specific passthrough knobs.</dd></div>
+
+</div>
+
+### Gateway Cleanup Validation Commands
+
+```bash
+uv run pytest tests/test_backend_gateway_session.py tests/test_backend_jsonl.py tests/test_slash_cli_mirrors.py
+uv run pytest tests/test_v010_agent_shell.py tests/test_v011_tui.py tests/test_v0122_slash_inline_execution.py tests/test_v0122_textual_app.py tests/test_v0123_multiline_input_methods.py tests/test_v0125_tui_polish.py tests/test_v0127_anthropic_claude_cli.py tests/test_provider_runner.py tests/test_provider_runtime.py tests/test_cli.py
+uv run python scripts/generate_cli_reference.py --check
+```
+
+<div className="craik-keypoint">
+
 **v0.12.9 completes the runtime consumption path for the CLI/TUI command
 contract.**
 

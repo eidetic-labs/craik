@@ -158,6 +158,25 @@ verification commands. Approving creates an `approval.decide` receipt attached
 to the run; denying stops before a task is created. Non-interactive dispatch
 must set `CRAIK_CLAUDE_CODE_RUN_APPROVED=1` deliberately or the backend
 rejects the Claude Code run.
+
+Raw prompts and `/run <prompt>` now enter the same audited Gateway session
+path used by `craik run prompt <prompt>` and `craik tui-backend --jsonl`.
+The Gateway emits lifecycle events for prompt submission, model/profile
+selection, run start, progress, receipts, outputs, completion, and errors.
+That keeps the TUI responsive while the backend is working and gives future
+Textual, Rust, desktop, and channel clients the same provenance stream.
+
+`craik tui-backend --jsonl` is the first frontend protocol. It reads JSONL
+messages from stdin:
+
+```json
+{"type":"session.status"}
+{"type":"prompt.submit","text":"Review the plan"}
+{"type":"slash.submit","text":"/run list"}
+```
+
+and writes JSONL Gateway events such as `session.ready`, `run.progress`,
+`receipt.created`, and `run.completed`.
 Use `/mode` (or press `Shift+Tab` to cycle) to choose the Claude Code
 permission mode for the next run. The current mode is shown both in the
 status bar's `Claude <mode>` chip and the activity panel header:

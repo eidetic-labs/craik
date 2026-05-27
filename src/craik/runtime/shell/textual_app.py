@@ -10,7 +10,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from rich.markup import escape
 from textual import events
@@ -18,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
 from textual.reactive import reactive
-from textual.widgets import OptionList, RichLog, Static
+from textual.widgets import OptionList, RichLog
 
 from craik import __version__
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
@@ -77,6 +77,7 @@ from craik.runtime.shell.textual_widgets.theme_settings import (
     terminal_supports_textual as terminal_supports_textual,
 )
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
+from craik.runtime.shell.textual_widgets.transcript_row_hint import TranscriptRowHint
 from craik.runtime.shell.textual_widgets.transcript_search import TranscriptSearchOverlay
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.transcript_renderers import (
@@ -187,7 +188,7 @@ class CraikApp(App[None]):
         yield CraikInput(placeholder="Type a prompt or /help", id="input")
         yield ToastQueue(id="toast-queue")
         yield RunActivityPanel("", id="run-activity")
-        yield Static("", id="transcript-row-hint")
+        yield TranscriptRowHint("", id="transcript-row-hint")
         yield WorkingIndicator("", id="working")
 
     def on_mount(self) -> None:
@@ -213,7 +214,7 @@ class CraikApp(App[None]):
         self.query_one("#transcript-search", TranscriptSearchOverlay).display = False
         self.query_one("#working", WorkingIndicator).display = False
         self.query_one("#run-activity", RunActivityPanel).display = False
-        self.query_one("#transcript-row-hint", Static).display = False
+        self.query_one("#transcript-row-hint", TranscriptRowHint).display = False
         self.query_one("#toast-queue", ToastQueue).display = False
         if auto_approve_status_payload(self.env) is not None:
             self._flash_accent("state")
@@ -575,8 +576,9 @@ class CraikApp(App[None]):
         model_label = self._run_backend_label or self._active_model_label()
         self._set_working(False)
         if _is_audited_run_payload(result.payload):
+            payload = cast(dict[str, object], result.payload)
             self.query_one("#transcript", RichLog).write(
-                render_run_summary(result.payload, title="Audited run summary")
+                render_run_summary(payload, title="Audited run summary")
             )
             self._transcript_lines.append(result.text)
         else:
@@ -849,7 +851,7 @@ class CraikApp(App[None]):
         self._update_transcript_selection_hint()
 
     def _update_transcript_selection_hint(self) -> None:
-        hint = self.query_one("#transcript-row-hint", Static)
+        hint = self.query_one("#transcript-row-hint", TranscriptRowHint)
         count = len(self._selected_transcript_rows)
         if count == 0:
             hint.display = False

@@ -7,6 +7,7 @@ from craik.runtime.model_commands.command import (
     model_probe_result,
     model_set_result,
     model_status_result,
+    parse_model_options,
     validate_model_ref,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "model_probe_result",
     "model_set_result",
     "model_status_result",
+    "parse_model_options",
     "validate_model_ref",
 ]

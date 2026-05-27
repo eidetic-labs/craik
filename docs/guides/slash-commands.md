@@ -53,9 +53,9 @@ the command behavior operators see outside the TUI.
 | `/auth status` | Inspect cached credential and runtime health state. |
 | `/provider` | List provider families and credential state. |
 | `/model list` | List configured provider default model selectors. |
-| `/model set <provider/model>` | Set the active provider/model selector. |
+| `/model set <provider/model>` | Set the active provider/model selector and persist a model profile. |
 | `/mode [default\|acceptEdits\|plan\|auto]` | Inspect or set Claude Code permission mode. |
-| `/run [--backend claude-code] <prompt>` | Create an audited task run; the Claude Code backend delegates execution to local `claude -p` with Claude Code tools enabled. |
+| `/run [--backend claude-code] <prompt>` | Create an audited Gateway task run; the Claude Code backend delegates execution to local `claude -p` with Claude Code tools enabled. |
 | `/run list` | List persisted task runs. |
 | `/run inspect <run-or-task-id>` | Inspect persisted run state. |
 | `/run timeline <run-or-task-id>` | Show a chronological run event timeline. |
@@ -79,6 +79,26 @@ the command behavior operators see outside the TUI.
 
 `/doctor` renders the same redacted diagnostic report as `craik doctor --json`,
 including setup, gateway, channel, auth-profile, and local-store checks.
+
+`/run <prompt>` and `craik run prompt <prompt>` share the same Gateway path.
+Both create task, case-file, run-output, receipt, handoff, and normalized
+Gateway event records. Shell-only commands such as `/copy`, `/clear`, and
+`/theme` remain presentation helpers; backend-affecting commands are expected
+to have CLI mirrors.
+
+`/model set <provider/model>` keeps the legacy selector for compatibility and
+also writes an active model profile with provider id, provider family, model
+id, display label, backend preference, and provider-specific options. The CLI
+mirror accepts richer profile metadata:
+
+```sh
+craik model set anthropic/claude-opus-4-7 \
+  --display-name "Anthropic Claude Opus 4.7 High" \
+  --reasoning-effort high \
+  --service-tier priority \
+  --max-output-tokens 8192 \
+  --option thinking=true
+```
 
 `/run --backend claude-code <prompt>` opens an approval modal before it grants
 Claude Code repository read, documentation write, receipt write, and

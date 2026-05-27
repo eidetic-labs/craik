@@ -12,6 +12,7 @@ from craik.runtime.auth import AuthProfileStore, CredentialKind
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
 from craik.runtime.i18n.messages import text as localize_text
+from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.providers.model_providers import (
     ModelProviderNotFoundError,
     default_model_provider_registry,
@@ -24,7 +25,6 @@ from craik.runtime.providers.provider_runtime import (
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
-from craik.runtime.shell.model_settings import ModelSettingsStore
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
 
 
