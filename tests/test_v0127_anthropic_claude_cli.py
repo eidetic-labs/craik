@@ -134,7 +134,7 @@ def test_store_claude_cli_token_profile_writes_keyring(monkeypatch) -> None:
     result = store_claude_cli_token_profile("sk-ant-oat01-token")
 
     assert result.profile.kind is CredentialKind.KEYRING_REF
-    assert result.profile.metadata["credential_mode"] == "claude-cli"
+    assert result.profile.metadata["credential_mode"] == "oauth"
     assert result.profile.metadata["source"] == "claude-cli-setup-token"
     assert stored == {"anthropic:default:claude-cli-token": "sk-ant-oat01-token"}
 
@@ -151,6 +151,7 @@ def test_create_claude_cli_profile_uses_external_cli_marker(monkeypatch) -> None
     assert result.profile.metadata["source"] == "claude-cli-external"
     assert result.profile.metadata["external_runtime"] == "claude-cli"
     assert result.profile.metadata["credential_backend"] == "claude-cli"
+    assert result.profile.metadata["credential_mode"] == "oauth"
     assert result.credential_storage_backend == "claude-cli"
 
 

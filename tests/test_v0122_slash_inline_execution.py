@@ -11,11 +11,13 @@ import pytest
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.sources.anthropic_claude_cli import store_claude_cli_token_profile
 from craik.runtime.auth.store import AuthProfileStore
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
+from craik.runtime.backend.claude_code import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
+    claude_code_progress,
+)
+from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
     _active_provider_and_model,
     _live_provider_enabled,
-    claude_code_progress,
 )
 from craik.runtime.shell.credential_storage import CredentialStorageStatus
 from craik.runtime.shell.slash_commands import dispatch_slash_command
@@ -94,7 +96,7 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -125,7 +127,7 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -138,7 +140,16 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
     event_types = [event["type"] for event in result.payload["gateway_events"]]
     assert "run.started" in event_types
     assert "run.progress" in event_types
+    assert "tool.used" in event_types
+    assert "run.event" in event_types
     assert event_types[-1] == "run.completed"
+    tool_event = next(
+        event for event in result.payload["gateway_events"] if event["type"] == "tool.used"
+    )
+    assert tool_event["data"]["backend"] == "claude-code"
+    assert tool_event["data"]["kind"] == "tool_use"
+    assert tool_event["data"]["tool"] == "Read"
+    assert tool_event["data"]["files"] == ["README.md"]
     assert "unsupported auth profile kind/source" not in result.text
     assert "requires operator approval" not in result.text
     store = LocalStore.from_env(env)
@@ -244,7 +255,7 @@ def test_run_claude_code_backend_creates_audited_artifacts(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -294,7 +305,7 @@ def test_run_claude_code_backend_creates_audited_artifacts(
         return _Process(args, **kwargs)
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -394,7 +405,7 @@ def test_run_claude_code_backend_invokes_claude_without_auth_preflight(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -413,7 +424,7 @@ def test_run_claude_code_backend_invokes_claude_without_auth_preflight(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -450,7 +461,7 @@ def test_run_claude_code_backend_uses_cli_auth_without_stored_bearer_token(
     profile = store_claude_cli_token_profile("sk-ant-oat01-from-keyring", env=env).profile
     AuthProfileStore.from_env(env).put(profile)
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -468,7 +479,7 @@ def test_run_claude_code_backend_uses_cli_auth_without_stored_bearer_token(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -491,7 +502,7 @@ def test_run_claude_code_backend_summarizes_activity_when_result_body_is_empty(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -515,7 +526,7 @@ def test_run_claude_code_backend_summarizes_activity_when_result_body_is_empty(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -549,7 +560,7 @@ def test_run_claude_code_backend_reads_nested_result_message_text(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -572,7 +583,7 @@ def test_run_claude_code_backend_reads_nested_result_message_text(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -597,7 +608,7 @@ def test_run_claude_code_backend_records_interrupted_run(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -623,7 +634,7 @@ def test_run_claude_code_backend_records_interrupted_run(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -650,7 +661,7 @@ def test_run_claude_code_backend_observes_runtime_approval_event_without_interce
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -674,7 +685,7 @@ def test_run_claude_code_backend_observes_runtime_approval_event_without_interce
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -694,6 +705,57 @@ def test_run_claude_code_backend_observes_runtime_approval_event_without_interce
         "Claude Code requests approval"
     )
     assert output.observed_output["text"] == "approved path continued"
+
+
+def test_claude_code_progress_callback_receives_structured_approval_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = _env(tmp_path)
+    original_popen = subprocess.Popen
+    events: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _Process:
+        stdout = iter(
+            [
+                (
+                    '{"type":"approval_request","tool_name":"Edit",'
+                    '"target":"docs/index.md","reason":"write docs"}\n'
+                ),
+                '{"type":"result","result":"approved path continued"}\n',
+            ]
+        )
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    def _popen(args, **kwargs):
+        if args[0] != "claude":
+            return original_popen(args, **kwargs)
+        return _Process()
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.subprocess.Popen",
+        _popen,
+    )
+
+    from craik.runtime.backend.claude_code import _execute_claude_code_prompt
+
+    with claude_code_progress(None, event_callback=events.append):
+        execution = _execute_claude_code_prompt("continue", env=env)
+
+    assert execution.text == "approved path continued"
+    assert events[0]["kind"] == "approval_request"
+    assert events[0]["tool"] == "Edit"
+    assert events[0]["target"] == "docs/index.md"
 
 
 def test_run_claude_code_backend_requires_operator_approval(

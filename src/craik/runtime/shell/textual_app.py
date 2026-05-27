@@ -21,8 +21,14 @@ from textual.reactive import reactive
 from textual.widgets import OptionList, RichLog
 
 from craik import __version__
+from craik.runtime.backend.claude_code import (
+    CLAUDE_CODE_RUN_APPROVED_ENV,
+    CLAUDE_PERMISSION_MODE_ENV,
+    claude_code_progress,
+)
 from craik.runtime.backend.client import GatewaySessionClient
 from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.session import claude_structured_event_to_backend_event
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
@@ -37,8 +43,6 @@ from craik.runtime.shell.confirmations import (
     record_confirmation_decision,
 )
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
-    CLAUDE_CODE_RUN_APPROVED_ENV,
-    claude_code_progress,
     run_command,
 )
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
@@ -94,7 +98,6 @@ from craik.runtime.status import auto_approve_status_payload
 
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
-CLAUDE_PERMISSION_MODE_ENV = "CRAIK_CLAUDE_PERMISSION_MODE"
 CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
 CLAUDE_PERMISSION_MODE_LABELS = {
     "default": "Default",
@@ -611,6 +614,7 @@ class CraikApp(App[None]):
             if _uses_model_backed_slash_execution(text):
                 with claude_code_progress(
                     self._emit_claude_code_progress,
+                    event_callback=self._emit_claude_code_event,
                     process_callback=self._set_active_claude_process,
                     cancel_event=self._active_claude_cancel,
                 ):
@@ -660,6 +664,10 @@ class CraikApp(App[None]):
 
     def _emit_gateway_event(self, event: BackendEvent) -> None:
         self.call_from_thread(self._update_run_activity_from_gateway_event, event.as_dict())
+
+    def _emit_claude_code_event(self, event: dict[str, object]) -> None:
+        gateway_event = claude_structured_event_to_backend_event(event)
+        self.call_from_thread(self._update_run_activity_from_gateway_event, gateway_event.as_dict())
 
     def _prepare_active_claude_code_run(self) -> None:
         with self._active_claude_lock:
@@ -994,6 +1002,45 @@ class CraikApp(App[None]):
             self._current_run_phase = _data_string(data, "phase") or "thinking"
         elif event_type == "run.started":
             self._current_run_phase = "running"
+        elif event_type == "tool.used":
+            self._current_run_phase = "using tool"
+            tool = _data_string(data, "tool")
+            target = _data_string(data, "target")
+            command = _data_string(data, "command")
+            if tool:
+                self._current_run_tool = tool
+            if target:
+                self._current_run_target = target
+            if command and command not in self._run_commands:
+                self._run_commands.append(command)
+            for path in _data_string_list(data, "files"):
+                if path not in self._run_files:
+                    self._run_files.append(path)
+        elif event_type == "file.changed":
+            self._current_run_phase = "changing files"
+            tool = _data_string(data, "tool")
+            target = _data_string(data, "target")
+            if tool:
+                self._current_run_tool = tool
+            if target:
+                self._current_run_target = target
+            for path in _data_string_list(data, "files"):
+                if path not in self._run_files:
+                    self._run_files.append(path)
+        elif event_type == "approval.requested":
+            self._current_run_phase = "approval requested"
+            self._run_approvals += 1
+            tool = _data_string(data, "tool")
+            target = _data_string(data, "target")
+            if tool:
+                self._current_run_tool = tool
+            if target:
+                self._current_run_target = target
+                if target not in self._run_files:
+                    self._run_files.append(target)
+        elif event_type == "approval.denied":
+            self._current_run_phase = "approval denied"
+            self._run_denials += 1
         elif event_type == "receipt.created":
             self._current_run_phase = "recording receipt"
         elif event_type == "run.output":
@@ -1128,6 +1175,27 @@ def _gateway_event_message(event: dict[str, object]) -> str | None:
         if isinstance(run_id, str):
             return f"Gateway run started: `{run_id}`."
         return "Gateway run started."
+    if event_type == "tool.used":
+        tool = _data_string(data, "tool")
+        target = _data_string(data, "target")
+        command = _data_string(data, "command")
+        if tool and target:
+            return f"Claude Code used `{tool}` on `{target}`."
+        if tool and command:
+            return f"Claude Code used `{tool}`: `{command}`."
+        return f"Claude Code used `{tool}`." if tool else "Claude Code used a tool."
+    if event_type == "file.changed":
+        target = _data_string(data, "target")
+        return f"Claude Code changed `{target}`." if target else "Claude Code changed files."
+    if event_type == "approval.requested":
+        message = _data_string(data, "message")
+        return message or "Claude Code requested approval."
+    if event_type == "approval.denied":
+        message = _data_string(data, "message")
+        return message or "Claude Code approval denied."
+    if event_type == "run.event":
+        message = _data_string(data, "message")
+        return message
     if event_type == "receipt.created":
         receipt_id = _data_string(data, "receipt_id")
         if receipt_id:
@@ -1171,6 +1239,15 @@ def _data_string(data: object, key: str) -> str | None:
         return None
     value = data.get(key)
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _data_string_list(data: object, key: str) -> list[str]:
+    if not isinstance(data, dict):
+        return []
+    value = data.get(key)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
 
 
 def _audited_run_text(payload: object) -> str:

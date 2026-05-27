@@ -300,7 +300,7 @@ def _clip(value: str, limit: int = 240) -> str:
 
 
 def _anthropic_marker_uses_claude_code(env: dict[str, str] | None) -> bool:
-    from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
+    from craik.runtime.backend.claude_code import (
         anthropic_uses_claude_cli_marker,
     )
 
@@ -313,18 +313,65 @@ def _execute_claude_code_prompt(
     env: dict[str, str] | None,
     stream: Callable[[BackendEvent], None] | None = None,
 ) -> dict[str, object]:
-    from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
-        _create_and_execute_claude_code_run,
+    from craik.runtime.backend.claude_code import (
         claude_code_progress,
+        execute_claude_code_run,
     )
 
     def emit_progress(message: str) -> None:
         if stream is not None:
             stream(BackendEvent(type="run.progress", data={"message": message}))
 
-    with claude_code_progress(emit_progress):
-        return _create_and_execute_claude_code_run(
+    def emit_claude_event(event: dict[str, object]) -> None:
+        if stream is not None:
+            stream(claude_structured_event_to_backend_event(event))
+
+    with claude_code_progress(emit_progress, event_callback=emit_claude_event):
+        return execute_claude_code_run(
             prompt,
             env,
             require_operator_approval=False,
         )
+
+
+def claude_structured_event_to_backend_event(event: dict[str, object]) -> BackendEvent:
+    """Map one parsed Claude Code stream event to the Gateway event contract."""
+    kind = str(event.get("kind") or "event")
+    message = str(event.get("message") or "").strip()
+    data = {
+        "backend": "claude-code",
+        "kind": kind,
+        **_json_safe_event_data(event),
+    }
+    if message:
+        data["message"] = message
+    if kind == "tool_use":
+        return BackendEvent(type="tool.used", data=data)
+    if kind == "file_change":
+        return BackendEvent(type="file.changed", data=data)
+    if kind == "approval_request":
+        return BackendEvent(type="approval.requested", data=data)
+    if kind == "permission_denial":
+        return BackendEvent(type="approval.denied", data=data)
+    if kind in {"assistant_text", "result", "output", "system", "error", "event", "tool_result"}:
+        return BackendEvent(type="run.event", data=data)
+    return BackendEvent(type="run.event", data=data)
+
+
+def _json_safe_event_data(event: dict[str, object]) -> dict[str, object]:
+    safe: dict[str, object] = {}
+    for key, value in event.items():
+        if key == "message":
+            continue
+        safe[key] = _json_safe_value(value)
+    return safe
+
+
+def _json_safe_value(value: object) -> object:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    return str(value)

@@ -179,7 +179,7 @@ def test_textual_run_claude_code_shows_waiting_indicator(
     release = threading.Event()
 
     def _dispatch_contract(self: CraikApp, text: str) -> CommandResult:
-        from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
+        from craik.runtime.backend.claude_code import (
             _emit_claude_code_progress,
         )
 
@@ -279,7 +279,7 @@ def test_textual_anthropic_marker_prompt_streams_without_preapproval(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -310,7 +310,7 @@ def test_textual_anthropic_marker_prompt_streams_without_preapproval(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -368,7 +368,7 @@ def test_textual_run_claude_code_full_path_approval_invokes_claude(
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.shutil.which",
+        "craik.runtime.backend.claude_code.shutil.which",
         lambda command: "/usr/local/bin/claude" if command == "claude" else None,
     )
 
@@ -386,7 +386,7 @@ def test_textual_run_claude_code_full_path_approval_invokes_claude(
         return _Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.contract_runtime.builtin_slash_commands.subprocess.Popen",
+        "craik.runtime.backend.claude_code.subprocess.Popen",
         _popen,
     )
 
@@ -408,6 +408,75 @@ def test_textual_run_claude_code_full_path_approval_invokes_claude(
                 for line in app._transcript_lines
             )
             assert CLAUDE_CODE_RUN_APPROVED_ENV not in app.env
+
+    asyncio.run(run())
+
+
+def test_textual_run_claude_code_full_path_updates_activity_from_structured_events(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+    monkeypatch.chdir(repo)
+    original_popen = subprocess.Popen
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _Process:
+        stdout = iter(
+            [
+                (
+                    '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+                    '"name":"Bash","input":{"command":"uv run pytest"}}]}}\n'
+                ),
+                (
+                    '{"type":"approval_request","tool_name":"Edit",'
+                    '"target":"README.md","reason":"write docs"}\n'
+                ),
+                '{"type":"result","result":"docs updated"}\n',
+            ]
+        )
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    def _popen(args, **kwargs):
+        if args[0] != "claude":
+            return original_popen(args, **kwargs)
+        return _Process()
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.subprocess.Popen",
+        _popen,
+    )
+
+    async def run() -> None:
+        app = CraikApp(env=_env(tmp_path))
+        async with app.run_test() as pilot:
+            input_widget = app.query_one("#input", CraikInput)
+            input_widget.value = "/run --backend=claude-code update docs"
+            await pilot.press("enter")
+            assert isinstance(app.screen, ConfirmModal)
+            await pilot.click("#confirm-yes")
+            for _ in range(40):
+                await pilot.pause(0.05)
+                if not app._model_prompt_active:
+                    break
+            state = app.query_one("#run-activity", RunActivityPanel).current_state
+
+            assert state.current_tool == "Edit"
+            assert state.current_target == "README.md"
+            assert state.commands == ("uv run pytest",)
+            assert state.approvals == 1
 
     asyncio.run(run())
 
@@ -547,6 +616,61 @@ def test_run_activity_panel_shows_recent_event_trail() -> None:
     assert "recent Preparing run" in rendered
     assert "Created task" in rendered
     assert "Claude Code is using" in rendered
+
+
+def test_textual_gateway_typed_claude_events_update_activity_panel(tmp_path: Path) -> None:
+    async def run() -> None:
+        app = CraikApp(env=_env(tmp_path))
+        async with app.run_test():
+            app._set_working(True)
+            app._update_run_activity_from_gateway_event(
+                BackendEvent(
+                    type="tool.used",
+                    data={
+                        "backend": "claude-code",
+                        "kind": "tool_use",
+                        "message": "Claude Code is using `Bash`: `uv run pytest`.",
+                        "tool": "Bash",
+                        "command": "uv run pytest",
+                    },
+                ).as_dict()
+            )
+            app._update_run_activity_from_gateway_event(
+                BackendEvent(
+                    type="file.changed",
+                    data={
+                        "backend": "claude-code",
+                        "kind": "file_change",
+                        "message": "Claude Code diff",
+                        "tool": "Edit",
+                        "target": "src/craik/runtime/backend/session.py",
+                        "files": ["src/craik/runtime/backend/session.py"],
+                    },
+                ).as_dict()
+            )
+            app._update_run_activity_from_gateway_event(
+                BackendEvent(
+                    type="approval.requested",
+                    data={
+                        "backend": "claude-code",
+                        "kind": "approval_request",
+                        "message": "Claude Code requests approval for `Edit`.",
+                        "tool": "Edit",
+                        "target": "src/craik/runtime/backend/session.py",
+                    },
+                ).as_dict()
+            )
+            await asyncio.sleep(0.1)
+            state = app.query_one("#run-activity", RunActivityPanel).current_state
+
+            assert state.current_tool == "Edit"
+            assert state.current_target == "src/craik/runtime/backend/session.py"
+            assert state.files == ("src/craik/runtime/backend/session.py",)
+            assert state.commands == ("uv run pytest",)
+            assert state.approvals == 1
+            assert state.phase == "approval requested"
+
+    asyncio.run(run())
 
 
 def _render_to_text(renderable: object) -> str:

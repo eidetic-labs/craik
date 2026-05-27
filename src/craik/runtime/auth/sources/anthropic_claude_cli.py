@@ -67,7 +67,7 @@ def create_claude_cli_profile(
         metadata={
             "billing_surface": "anthropic-claude-cli",
             "credential_backend": "claude-cli",
-            "credential_mode": "claude-cli",
+            "credential_mode": "oauth",
             "external_runtime": "claude-cli",
             "last_validated_at": now,
             "provider": "anthropic",
@@ -102,7 +102,7 @@ def export_claude_code_oauth_token(
     if shutil.which(executable) is None:
         raise AnthropicClaudeCliError(
             "Claude CLI was not found. Install Anthropic Claude Code, run "
-            "`claude auth login`, then retry `craik auth login anthropic --mode=claude-cli`."
+            "`claude auth login`, then retry `craik auth login anthropic --mode=oauth`."
         )
     try:
         completed = runner(
@@ -130,7 +130,7 @@ def export_claude_code_oauth_token(
     raise AnthropicClaudeCliError(
         "Claude CLI setup-token did not print CLAUDE_CODE_OAUTH_TOKEN. "
         "Run `claude setup-token` manually and paste the token into "
-        "`craik auth login anthropic --mode=claude-cli --no-browser`."
+        "`craik auth login anthropic --mode=oauth --no-browser`."
     )
 
 
@@ -184,7 +184,7 @@ def store_claude_cli_token_profile(
             "base_url": "https://api.anthropic.com",
             "billing_surface": "anthropic-claude-cli",
             "credential_backend": storage_status.backend,
-            "credential_mode": "claude-cli",
+            "credential_mode": "oauth",
             "last_validated_at": now,
             "provider": "anthropic",
             "ref": ref,

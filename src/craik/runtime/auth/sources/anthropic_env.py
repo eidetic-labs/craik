@@ -67,7 +67,7 @@ def anthropic_headers_for_credential(
     headers = {"anthropic-version": "2023-06-01"}
     if not token:
         return headers
-    if credential_mode == "claude-cli" or is_claude_code_oauth_token(token):
+    if credential_mode in {"claude-cli", "oauth"} or is_claude_code_oauth_token(token):
         return headers | {
             "Authorization": f"Bearer {token}",
             "anthropic-beta": CLAUDE_CODE_BETA_HEADER,
