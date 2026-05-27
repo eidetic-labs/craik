@@ -76,6 +76,17 @@ def test_brand_hygiene_guard_reports_forbidden_reference(tmp_path: Path) -> None
     ]
 
 
+def test_brand_hygiene_guard_allows_runtime_contract_reference(tmp_path: Path) -> None:
+    _write_clean_tree(tmp_path)
+    runtime_name = "Claude" + " Code"
+    (tmp_path / "docs" / "guide.md").write_text(
+        f"Craik can delegate audited runs to the local {runtime_name} runtime.\n",
+        encoding="utf-8",
+    )
+
+    assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == []
+
+
 def test_brand_hygiene_guard_allows_documented_exception(tmp_path: Path) -> None:
     _write_clean_tree(tmp_path)
     forbidden = "Chat" + "GPT"
