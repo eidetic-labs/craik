@@ -18,8 +18,8 @@ from craik.runtime.contract.dispatch import (
     InteractivePromptRequest,
 )
 from craik.runtime.contract.format import format_command_result
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
+from craik.runtime.shell.contract_runtime.run_helpers import run_command
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.shell.textual.support import (
     InterruptibleProcess,
@@ -44,11 +44,11 @@ from craik.runtime.shell.transcript_renderers import (
 from craik.runtime.shell.tui_interactive_prompts import open_interactive_prompt_modal
 from craik.runtime.status import auto_approve_status_payload
 
+GATEWAY_SESSION_CLIENT_CLASS: type[GatewaySessionClient] = GatewaySessionClient
+
 
 def _gateway_session_client_class() -> type[GatewaySessionClient]:
-    from craik.runtime.shell import textual_app
-
-    return getattr(textual_app, "GatewaySessionClient", GatewaySessionClient)
+    return GATEWAY_SESSION_CLIENT_CLASS
 
 
 class CraikAppDispatchMixin:

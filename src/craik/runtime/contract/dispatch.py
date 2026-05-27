@@ -18,7 +18,7 @@ from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.craik_command import CraikCommandMetadata
 from craik.runtime.contract.format import format_command_result
 from craik.runtime.contract.output_context import slash_dispatch_context
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import unknown_command_result
+from craik.runtime.shell.contract_runtime.result_helpers import unknown_command_result
 from craik.runtime.shell.modals import canonical_modal_registry, resolve_modal_class
 from craik.runtime.shell.slash_command_schema.help import argument_help_markdown
 from craik.runtime.shell.slash_command_schema.lookup import find_slash_command_spec

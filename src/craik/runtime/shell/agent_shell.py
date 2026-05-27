@@ -25,9 +25,9 @@ from craik.runtime.sandbox.local_process_backend import (
     LocalProcessStartError,
     run_reviewed_local_process,
 )
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
+from craik.runtime.shell.contract_runtime.run_helpers import run_command
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
 
 

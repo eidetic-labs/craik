@@ -32,21 +32,6 @@ from craik.runtime.shell.contract_runtime.result_helpers import (
     _named_result,
     _subcommand_listing,
 )
-from craik.runtime.shell.contract_runtime.result_helpers import (
-    unknown_command_result as unknown_command_result,
-)
-from craik.runtime.shell.contract_runtime.run_helpers import (
-    _active_provider_and_model as _active_provider_and_model,
-)
-from craik.runtime.shell.contract_runtime.run_helpers import (
-    _active_provider_id as _active_provider_id,
-)
-from craik.runtime.shell.contract_runtime.run_helpers import (
-    _live_provider_enabled as _live_provider_enabled,
-)
-from craik.runtime.shell.contract_runtime.run_helpers import (
-    run_command as run_command,
-)
 from craik.runtime.shell.slash_command_adapters.system_command_results import (
     gateway_slash_result,
     receipts_slash_result,

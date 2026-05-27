@@ -19,7 +19,6 @@ from craik.runtime.backend.claude_code import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
     CLAUDE_PERMISSION_MODE_ENV,
 )
-from craik.runtime.backend.client import GatewaySessionClient as GatewaySessionClient
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.contract.dispatch import (
@@ -46,15 +45,6 @@ from craik.runtime.shell.textual.support import (
 )
 from craik.runtime.shell.textual.support import (
     _claude_code_run_approval_request as _claude_code_run_approval_request,
-)
-from craik.runtime.shell.textual.support import (
-    _claude_progress_markup as _claude_progress_markup,
-)
-from craik.runtime.shell.textual.support import (
-    _display_model_label as _display_model_label,
-)
-from craik.runtime.shell.textual.support import (
-    _model_transcript_markup as _model_transcript_markup,
 )
 from craik.runtime.shell.textual.support import (
     _user_transcript_markup as _user_transcript_markup,

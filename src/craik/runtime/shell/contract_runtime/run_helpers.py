@@ -8,11 +8,9 @@ from typing import Literal
 
 from craik.contracts.models import ProjectProfile, RunOutput
 from craik.runtime.backend.claude_code import (
-    _clip_block as _clip_block,
-)
-from craik.runtime.backend.claude_code import (
     execute_claude_code_run,
 )
+from craik.runtime.backend.claude_code_support import _clip_block
 from craik.runtime.backend.session import (
     active_provider_and_model,
     execute_prompt,
@@ -371,4 +369,3 @@ def _merged_activity(outputs: list[RunOutput]) -> dict[str, object]:
                 if value not in merged[key]:
                     merged[key].append(value)
     return dict(merged)
-

@@ -50,9 +50,6 @@ from craik.runtime.backend.claude_code_support import (
     _clip_summary,
     _safe_cli_detail,
 )
-from craik.runtime.backend.claude_code_support import (
-    _clip_block as _clip_block,
-)
 from craik.runtime.projects.prompts import PromptCompiler
 from craik.runtime.sandbox.local_process_backend import (
     LocalProcessStartError,

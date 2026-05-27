@@ -17,6 +17,7 @@ from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlashRegistry:
     """Return ``registry`` extended with shell-only slash commands."""
     from craik.runtime.shell.contract_runtime import builtin_slash_commands as commands
+    from craik.runtime.shell.contract_runtime.run_helpers import run_command
 
     builtins = (
         ("/help", commands.help_command, "Show slash-command help.", "markdown"),
@@ -70,7 +71,7 @@ def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlas
         ("/doctor", commands.doctor_command, "Run diagnostics inline.", "tree"),
         (
             "/run",
-            commands.run_command,
+            run_command,
             "Create and execute an audited task run.",
             "card",
         ),

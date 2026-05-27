@@ -15,7 +15,7 @@ from craik.runtime.backend.claude_code import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
     claude_code_progress,
 )
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
+from craik.runtime.shell.contract_runtime.run_helpers import (
     _active_provider_and_model,
     _live_provider_enabled,
 )

@@ -14,16 +14,18 @@ from craik.runtime.auth.store import AuthProfileStore
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import BackendPromptResult
 from craik.runtime.contract.command_result import CommandResult
-from craik.runtime.shell.textual_app import (
-    CLAUDE_CODE_RUN_APPROVED_ENV,
-    CLAUDE_PERMISSION_MODE_ENV,
-    CraikApp,
+from craik.runtime.shell.textual.support import (
     _claude_code_run_approval_request,
     _claude_progress_markup,
     _display_model_label,
     _model_transcript_markup,
     _user_transcript_markup,
     _uses_model_backed_slash_execution,
+)
+from craik.runtime.shell.textual_app import (
+    CLAUDE_CODE_RUN_APPROVED_ENV,
+    CLAUDE_PERMISSION_MODE_ENV,
+    CraikApp,
 )
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmModal
 from craik.runtime.shell.textual_widgets.craik_input import (
@@ -97,7 +99,10 @@ def test_textual_model_prompt_shows_waiting_indicator(
             assert release.wait(2)
             return BackendPromptResult(payload=_gateway_payload("model response"))
 
-    monkeypatch.setattr("craik.runtime.shell.textual_app.GatewaySessionClient", _GatewayClient)
+    monkeypatch.setattr(
+        "craik.runtime.shell.textual.dispatch.GATEWAY_SESSION_CLIENT_CLASS",
+        _GatewayClient,
+    )
 
     async def run() -> None:
         app = CraikApp(env={**_env(tmp_path), "CRAIK_QUICK": "1"})
@@ -146,7 +151,10 @@ def test_textual_active_run_queues_next_input(
             second_done.set()
             return BackendPromptResult(payload=_gateway_payload("second response"))
 
-    monkeypatch.setattr("craik.runtime.shell.textual_app.GatewaySessionClient", _GatewayClient)
+    monkeypatch.setattr(
+        "craik.runtime.shell.textual.dispatch.GATEWAY_SESSION_CLIENT_CLASS",
+        _GatewayClient,
+    )
 
     async def run() -> None:
         app = CraikApp(env=_env(tmp_path))
