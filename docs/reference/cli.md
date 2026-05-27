@@ -301,8 +301,8 @@ craik auth login [OPTIONS] PROVIDER
 
 Options:
 
-- `--no-browser`: Print provider setup URL instead of opening a browser.; default `false`
-- `--mode`: Login mode: api-key or oauth.
+- `--no-browser`: Do not launch provider/browser setup.; default `false`
+- `--mode`: Login mode: api-key, oauth, or claude-cli.
 - `--profile-id`: Auth profile id to create.
 - `--env-var`: Environment variable containing the provider key.
 - `--secret-ref`: Secret reference instead of an environment variable.

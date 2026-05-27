@@ -21,6 +21,7 @@ from craik.runtime.auth import (
     CredentialPoolConfig,
     CredentialPoolEntry,
 )
+from craik.runtime.auth.guided_setup import default_pool_for_profile
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.providers.model_providers import default_model_provider_registry
@@ -51,6 +52,7 @@ from craik.runtime.providers.provider_transport import (
     ProviderTransport,
 )
 from craik.runtime.secrets import SecretResolver
+from craik.runtime.shell.credential_storage import StoredCredential
 from craik.runtime.store import LocalStore
 
 
@@ -598,6 +600,46 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     assert isinstance(local_openai_compatible, ChatCompletionsProviderAdapter)
     assert local_openai_compatible.config.secret_ref_name == ""
     assert local_openai_compatible.config.base_url == "http://localhost:11434/v1"
+
+
+def test_adapter_for_live_provider_uses_default_credential_pool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CRAIK_HOME", str(tmp_path))
+    profile = AuthProfile(
+        id="anthropic:default",
+        kind=CredentialKind.KEYRING_REF,
+        provider_family="anthropic",
+        metadata={
+            "ref": "anthropic:default:claude-cli-token",
+            "credential_mode": "claude-cli",
+        },
+        created_at=datetime(2026, 5, 17, tzinfo=UTC),
+    )
+    AuthProfileStore(tmp_path).put(profile)
+    CredentialPool(tmp_path).put(default_pool_for_profile(profile))
+    monkeypatch.setattr(
+        "craik.runtime.auth.sources.keyring_ref.get_cached_credential",
+        lambda ref: StoredCredential(
+            value="sk-ant-oat01-test-token",
+            backend="test",
+            secure=True,
+        ),
+    )
+
+    adapter = adapter_for_provider(
+        default_model_provider_registry().require("provider_anthropic"),
+        live_enabled=True,
+    )
+
+    assert adapter.config.credential_pool_id == "anthropic:default"
+    assert adapter.config.secret_ref_name == "CRAIK_ANTHROPIC_API_KEY"
+    headers = _provider_headers(adapter.config)
+    assert headers["Authorization"] == "Bearer sk-ant-oat01-test-token"
+    assert headers["anthropic-beta"] == "claude-code-20250219,oauth-2025-04-20"
+    assert "x-api-key" not in headers
+    assert adapter.config.last_auth_profile_id == "anthropic:default"
 
 
 def test_adapter_for_provider_dispatches_chat_completions_family() -> None:

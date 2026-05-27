@@ -37,6 +37,9 @@ class StatusBar(Static):
         quota: ProviderQuotaStatus | None = None,
         auto_approve: bool = False,
         session_name: str | None = None,
+        claude_mode: str | None = None,
+        backend: str | None = None,
+        run_state: str | None = None,
     ) -> None:
         mode = "audited" if report.operator_required else "single-operator"
         model = report.active_model or "no model"
@@ -49,6 +52,15 @@ class StatusBar(Static):
         if session_name:
             plain_segments.append(session_name)
             rich_segments.append(f"[b]{escape(session_name)}[/b]")
+        if claude_mode:
+            plain_segments.append(f"Claude {claude_mode}")
+            rich_segments.append(f"[green]Claude {escape(claude_mode)}[/green]")
+        if backend:
+            plain_segments.append(backend)
+            rich_segments.append(f"[cyan]{escape(backend)}[/cyan]")
+        if run_state:
+            plain_segments.append(run_state)
+            rich_segments.append(f"[yellow]{escape(run_state)}[/yellow]")
         if token_usage is not None:
             plain_segments.append(token_usage.display)
             rich_segments.append(_tier_markup(token_usage.display, token_usage.tier))

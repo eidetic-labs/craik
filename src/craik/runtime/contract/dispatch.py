@@ -60,7 +60,7 @@ def invoke_slash_command(
 ) -> CommandResult:
     """Resolve slash text through a registry and invoke the decorated callback."""
     _bump_invocation_counter()
-    tokens = shlex.split(text.strip())
+    tokens = _slash_tokens(text)
     if not tokens or not tokens[0].startswith("/"):
         return _error_result("slash commands must start with /")
     if tokens[0] == "/craik":
@@ -87,6 +87,14 @@ def invoke_slash_command(
             else replace(result, command_name=command_name)
         )
     return CommandResult(payload=result)
+
+
+def _slash_tokens(text: str) -> list[str]:
+    """Tokenize slash commands without rejecting free-form prompts with raw quotes."""
+    try:
+        return shlex.split(text.strip())
+    except ValueError:
+        return text.strip().split()
 
 
 def dispatch_slash_command(
@@ -202,6 +210,7 @@ def _resolve_entry(
         "/gateway",
         "/agent",
         "/session",
+        "/run",
         "/policy",
         "/migrate",
     }:

@@ -23,9 +23,11 @@ from craik.runtime.auth.login import (
 )
 from craik.runtime.auth.oauth_provider_login import (
     OAuthLoginResult,
+    anthropic_claude_cli_login,
     browser_oauth_login,
     gemini_oauth_login,
 )
+from craik.runtime.auth.sources.anthropic_claude_cli import AnthropicClaudeCliError
 from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
 from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError
@@ -37,7 +39,8 @@ from craik.runtime.shell.readiness import resolve_readiness
 storage_app = typer.Typer(help="Inspect and migrate credential storage posture.")
 auth_app.add_typer(storage_app, name="storage")
 
-DEFAULT_OAUTH_PROVIDERS = {"anthropic", "gemini"}
+DEFAULT_CLAUDE_CLI_PROVIDERS = {"anthropic"}
+DEFAULT_OAUTH_PROVIDERS = {"gemini"}
 
 
 @auth_app.command("login")
@@ -52,11 +55,14 @@ def auth_login_provider(
     ] = "openai",
     no_browser: Annotated[
         bool,
-        typer.Option("--no-browser", help="Print provider setup URL instead of opening a browser."),
+        typer.Option(
+            "--no-browser",
+            help="Do not launch provider/browser setup.",
+        ),
     ] = False,
     mode: Annotated[
         str | None,
-        typer.Option("--mode", help="Login mode: api-key or oauth."),
+        typer.Option("--mode", help="Login mode: api-key, oauth, or claude-cli."),
     ] = None,
     profile_id: Annotated[
         str | None,
@@ -102,23 +108,27 @@ def auth_login_provider(
     try:
         normalized_provider = provider.strip().lower()
         if mode is None:
-            normalized_mode = (
-                "oauth"
-                if _default_login_mode_is_oauth(
-                    normalized_provider,
-                    no_browser=no_browser,
-                    env_var=env_var,
-                    secret_ref=secret_ref,
-                    base_url=base_url,
-                    dry_run=dry_run,
-                )
-                else "api-key"
+            normalized_mode = _default_login_mode(
+                normalized_provider,
+                no_browser=no_browser,
+                env_var=env_var,
+                secret_ref=secret_ref,
+                base_url=base_url,
+                dry_run=dry_run,
             )
         else:
             normalized_mode = mode.strip().lower()
-        if normalized_mode not in {"api-key", "oauth"}:
-            raise typer.BadParameter("--mode must be api-key or oauth")
+        if normalized_mode == "agent-sdk":
+            normalized_mode = "claude-cli"
+        if normalized_mode not in {"api-key", "oauth", "claude-cli"}:
+            raise typer.BadParameter("--mode must be api-key, oauth, or claude-cli")
         if normalized_mode == "oauth":
+            if normalized_provider == "anthropic":
+                raise typer.BadParameter(
+                    "Anthropic does not provide a supported Craik browser OAuth flow. "
+                    "Use --mode=claude-cli for Claude CLI delegation, or "
+                    "--mode=api-key --no-browser to paste a Console API key."
+                )
             if env_var is not None or secret_ref is not None:
                 raise typer.BadParameter("--env-var and --secret-ref require --mode=api-key")
             if base_url is not None:
@@ -150,6 +160,44 @@ def auth_login_provider(
             else:
                 _emit_auth_login_text(command_result.text or "")
             return command_result
+        if normalized_mode == "claude-cli":
+            if normalized_provider != "anthropic":
+                raise typer.BadParameter("--mode=claude-cli is currently supported for anthropic")
+            if env_var is not None or secret_ref is not None:
+                raise typer.BadParameter("--env-var and --secret-ref require --mode=api-key")
+            if base_url is not None:
+                raise typer.BadParameter("--base-url is only supported by --mode=api-key")
+            if project_id is not None:
+                raise typer.BadParameter("--project-id is only supported by --mode=oauth")
+            if service_account is not None:
+                raise typer.BadParameter("--service-account is only supported for gemini OAuth")
+            if dry_run:
+                raise typer.BadParameter(
+                    "--dry-run is not supported for Anthropic Claude CLI login"
+                )
+            _confirm_reauthentication(provider, profile_id=profile_id)
+            oauth_result = anthropic_claude_cli_login(
+                profile_id=profile_id,
+                token_prompt=_code_prompt,
+                run_setup_token=not no_browser,
+            )
+            payload = oauth_result.capture.as_dict() | {
+                "browser_opened": oauth_result.browser_opened,
+                "setup_url": oauth_result.authorization_url,
+                "authorization_url": oauth_result.authorization_url,
+                "copy_paste_fallback": False,
+                "mode": "claude-cli",
+            }
+            command_result = CommandResult(
+                payload=payload,
+                shape="card",
+                text="\n".join(_claude_cli_login_lines(provider, oauth_result.capture)),
+            )
+            if json_output or oauth_result.capture.status.status != "ok":
+                emit_command_result(command_result)
+                return command_result
+            _emit_auth_login_text(command_result.text or "")
+            return command_result
         if project_id is not None:
             raise typer.BadParameter("--project-id is only supported by --mode=oauth")
         if service_account is not None:
@@ -179,7 +227,12 @@ def auth_login_provider(
                 allow_local_base_url=allow_local_base_url,
                 dry_run=dry_run,
             )
-    except (AnthropicOAuthError, GeminiOAuthError, OpenAIOAuthError) as error:
+    except (
+        AnthropicClaudeCliError,
+        AnthropicOAuthError,
+        GeminiOAuthError,
+        OpenAIOAuthError,
+    ) as error:
         _raise_oauth_error(str(error))
     except (ProviderURLSafetyError, ValueError) as error:
         raise typer.BadParameter(str(error)) from None
@@ -285,7 +338,7 @@ def _default_env_var(provider: str) -> str:
     return "CRAIK_OPENAI_API_KEY"
 
 
-def _default_login_mode_is_oauth(
+def _default_login_mode(
     provider: str,
     *,
     no_browser: bool,
@@ -293,12 +346,18 @@ def _default_login_mode_is_oauth(
     secret_ref: str | None,
     base_url: str | None,
     dry_run: bool,
-) -> bool:
+) -> str:
     if env_var is not None or secret_ref is not None or base_url is not None or dry_run:
-        return False
+        return "api-key"
+    if provider in DEFAULT_CLAUDE_CLI_PROVIDERS:
+        return "claude-cli" if not no_browser else "api-key"
     if provider == "openai":
-        return not no_browser and not bool(os.environ.get("OPENAI_API_KEY"))
-    return provider in DEFAULT_OAUTH_PROVIDERS
+        if not no_browser and not bool(os.environ.get("OPENAI_API_KEY")):
+            return "oauth"
+        return "api-key"
+    if provider in DEFAULT_OAUTH_PROVIDERS:
+        return "oauth"
+    return "api-key"
 
 
 def _provider_setup_url(provider: str) -> str | None:
@@ -347,6 +406,20 @@ def _credential_location_message(result: AuthCaptureResult) -> str:
 
 def _api_key_login_lines(provider: str, result: AuthCaptureResult) -> list[str]:
     lines = [f"Logged into {provider.title()}. {_credential_location_message(result)}"]
+    if resolve_readiness().active_model is not None:
+        lines.append("Ready to chat.")
+    else:
+        lines.append("Set an active model with `craik model set <provider/model>`.")
+    if result.warning:
+        lines.append(f"Warning: {result.warning}")
+    return lines
+
+
+def _claude_cli_login_lines(provider: str, result: AuthCaptureResult) -> list[str]:
+    lines = [
+        f"Logged into {provider.title()} with the local Claude CLI. "
+        "Craik will call `claude -p` instead of replaying Claude OAuth tokens."
+    ]
     if resolve_readiness().active_model is not None:
         lines.append("Ready to chat.")
     else:

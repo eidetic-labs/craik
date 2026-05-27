@@ -28,9 +28,10 @@ For the contributor-facing product frame, see
 
 ## What Works Today
 
-Note: v0.12.1 supersedes v0.12.0. Operators on v0.12.0 should upgrade;
-v0.12.0 shipped with an auth-UX gap that prevented `craik chat` from working
-in default installs.
+Note: v0.12.9 supersedes v0.12.8. v0.12.8 shipped the CLI/TUI command-contract
+infrastructure but did not fully wire it into the TUI runtime; v0.12.9
+completes the runtime cutover so operators actually exercise that contract in
+the shell. See [CHANGELOG](CHANGELOG.md) for the full release history.
 
 Craik can assemble local repository context, read optional GitHub and Stigmem
 state, compile governed runner prompts, execute fixture-backed and live-shaped

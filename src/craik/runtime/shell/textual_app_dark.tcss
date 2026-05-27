@@ -14,9 +14,22 @@ Screen > .screen--selection {
     padding: 1 1;
 }
 
+#transcript-row-hint {
+    dock: bottom;
+    margin-bottom: 15;
+    height: 1;
+    color: #A0A0A0;
+}
+
+#run-activity {
+    dock: bottom;
+    margin: 0 1 8 1;
+    height: 5;
+}
+
 #slash-popup {
     dock: bottom;
-    margin: 0 2 1 2;
+    margin: 0 2 8 2;
     border: round #A0A0A0;
     height: auto;
     max-height: 12;
@@ -24,7 +37,7 @@ Screen > .screen--selection {
 
 #history-search {
     dock: bottom;
-    margin: 0 2 4 2;
+    margin: 0 2 8 2;
     border: round #A0A0A0;
     height: auto;
     max-height: 8;
@@ -32,14 +45,14 @@ Screen > .screen--selection {
 
 #working {
     dock: bottom;
-    margin-bottom: 7;
+    margin-bottom: 16;
     height: 1;
     color: $craik-brand;
 }
 
 #toast-queue {
     dock: bottom;
-    margin: 0 2 6 2;
+    margin: 0 2 15 2;
     color: #A0A0A0;
 }
 
@@ -54,7 +67,8 @@ Screen > .screen--selection {
     dock: bottom;
     border: round $craik-brand;
     margin-bottom: 3;
-    height: 3;
+    height: 5;
+    padding: 1 2;
 }
 
 .status-bar {

@@ -69,7 +69,16 @@ def _anthropic_billing_surface(
             return "Anthropic Console API (per-token)"
         return "unknown"
     if profile.kind is CredentialKind.KEYRING_REF:
+        if profile.metadata.get("credential_mode") == "claude-cli":
+            return "Claude CLI subscription / extra usage"
+        if profile.metadata.get("credential_mode") == "agent-sdk":
+            return "Claude Agent SDK subscription / extra usage"
         return "Anthropic Console API (per-token)"
+    if (
+        profile.kind is CredentialKind.MARKER
+        and profile.metadata.get("external_runtime") == "claude-cli"
+    ):
+        return "Claude CLI subscription"
     if profile.kind is CredentialKind.OAUTH:
         return "Claude subscription"
     return None

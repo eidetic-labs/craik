@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from craik.contracts.models import ModelProvider
+from craik.runtime.auth import CredentialPool, CredentialPoolError
 from craik.runtime.policy.redaction import redact
 from craik.runtime.providers import provider_models as _provider_models
 from craik.runtime.providers import provider_runtime_support as _provider_runtime_support
@@ -436,6 +437,11 @@ def adapter_for_provider(
         timeout_seconds=float(provider.metadata.get("timeout_seconds", 30.0)),
         max_retries=int(provider.metadata.get("max_retries", 3)),
         live_enabled=live_configured,
+        credential_pool_id=(
+            _default_credential_pool_id(cast(ProviderFamily, family))
+            if live_configured
+            else None
+        ),
         docs_refs=_official_docs_for_family(cast(ProviderFamily, family)),
     )
     transport = _transport_for_config(config)
@@ -454,3 +460,12 @@ def _official_docs_for_family(family: ProviderFamily) -> list[str]:
     if family == "gemini":
         return list(GEMINI_OFFICIAL_DOCS)
     return list(OPENAI_OFFICIAL_DOCS)
+
+
+def _default_credential_pool_id(family: ProviderFamily) -> str | None:
+    pool_id = f"{family}:default"
+    try:
+        CredentialPool.from_env().get(pool_id)
+    except CredentialPoolError:
+        return None
+    return pool_id

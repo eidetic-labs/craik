@@ -328,6 +328,44 @@ def test_live_enabled_adapter_retries_retryable_http_errors() -> None:
     assert result.text == "retry ok"
 
 
+def test_live_enabled_adapter_does_not_retry_429_without_retry_after() -> None:
+    seen = {"requests": 0}
+
+    def handle(payload: dict[str, Any], headers: dict[str, str]) -> _StubResponse:
+        seen["requests"] += 1
+        return _json_response({"error": "rate limited"}, status=429)
+
+    with _stub_server(handle) as server:
+        config = ProviderRuntimeConfig(
+            provider_id="provider_openai_chat_rate_limit_stub",
+            provider_family="chat_completions",
+            model="gpt-test",
+            secret_ref_name="TEST_API_KEY",
+            base_url=server.url,
+            allow_local_base_url=True,
+            live_enabled=True,
+            docs_refs=list(OPENAI_OFFICIAL_DOCS),
+        )
+        adapter = ChatCompletionsProviderAdapter(
+            config,
+            transport=HTTPTransport(
+                family="chat_completions",
+                base_url=server.url,
+                headers_factory=dict,
+                timeout_seconds=5,
+            ),
+        )
+
+        with pytest.raises(ProviderTransportError):
+            adapter.execute(
+                ProviderRuntimeRequest(
+                    messages=[ProviderMessage(role="user", content="Say ok.")],
+                )
+            )
+
+    assert seen["requests"] == 1
+
+
 class _StubResponse:
     def __init__(
         self,

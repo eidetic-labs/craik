@@ -14,7 +14,7 @@ from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
-from craik.runtime.shell.agent_shell import one_shot_response
+from craik.runtime.shell.contract_runtime.builtin_slash_commands import run_command
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
@@ -225,7 +225,8 @@ def dispatch_tui_input(
     if text.startswith("/"):
         result = _contract_invoke(text, registry=registry, env=env)
         return to_slash_command_result(result)
-    return SlashCommandResult("Streaming output\n" + one_shot_response(text, env=env))
+    result = run_command(text, env=env)
+    return to_slash_command_result(result)
 
 
 def _autocomplete_names(registry: AutoSlashRegistry) -> tuple[str, ...]:

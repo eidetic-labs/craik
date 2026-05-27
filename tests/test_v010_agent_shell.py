@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -9,12 +10,13 @@ from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.contracts.models import AgentSessionState
-from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind
+from craik.runtime.auth import AuthProfile, AuthProfileStore, CredentialKind, CredentialStatus
 from craik.runtime.auth import health_check as auth_health_check
 from craik.runtime.auth.operator import OperatorSession, OperatorSessionStore
 from craik.runtime.auth.redaction import masked_metadata
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.shell.agent_shell import run_shell
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command, list_slash_commands
 from craik.runtime.store import LocalStore
@@ -68,6 +70,31 @@ def test_one_shot_reads_prompt_from_stdin_without_warning(tmp_path: Path) -> Non
     assert result.output.startswith("Craik is not ready")
     assert "argv-supplied prompts" not in result.output
     assert "WARNING: prompt was supplied via argv" not in result.output
+
+
+def test_plain_shell_prompt_defaults_to_audited_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    env = {"CRAIK_HOME": str(tmp_path / "home")}
+    output: list[str] = []
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+
+    exit_code = run_shell(
+        env=env,
+        stdin_isatty=True,
+        lines=["Upgrade Craik Docs", "/exit"],
+        output_func=output.append,
+    )
+
+    assert exit_code == 0
+    assert any("Audited run" in item for item in output)
+    assert not any("one-shot model execution" in item for item in output)
 
 
 def test_chat_prompt_uses_same_argv_safety_gate(tmp_path: Path) -> None:
@@ -132,7 +159,11 @@ def test_readiness_transitions_from_operator_only_to_fully_ready(
 
 def test_single_operator_mode_provider_and_model_are_ready(tmp_path: Path) -> None:
     home = tmp_path / "home"
-    env = {"CRAIK_HOME": str(home), "OPENAI_API_KEY": "openai-key"}
+    env = {
+        "CRAIK_HOME": str(home),
+        "CRAIK_LIVE": "0",
+        "OPENAI_API_KEY": "openai-key",
+    }
     AuthProfileStore.from_env(env).put(_auth_profile("openai:default"))
     model_set = runner.invoke(app, ["model", "set", "openai/gpt-5"], env=env)
     chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
@@ -144,8 +175,151 @@ def test_single_operator_mode_provider_and_model_are_ready(tmp_path: Path) -> No
     assert report.operator_authenticated is False
     assert report.state == "fully-ready"
     assert chat.exit_code == 0
-    assert "One-shot execution is queued for openai/gpt-5" in chat.output
+    assert "openai fixture completed fixture with status completed." in chat.output
     assert "not ready" not in chat.output
+
+
+def test_anthropic_one_shot_uses_external_claude_cli(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    env = {
+        "CRAIK_HOME": str(home),
+        "ANTHROPIC_API_KEY": "should-not-reach-claude-cli",
+        "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-from-claude-code",
+    }
+    AuthProfileStore.from_env(env).put(
+        AuthProfile(
+            id="anthropic:default",
+            kind=CredentialKind.MARKER,
+            provider_family="anthropic",
+            metadata={"external_runtime": "claude-cli", "credential_mode": "claude-cli"},
+            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
+            last_status="ok",
+        )
+    )
+    runner.invoke(app, ["model", "set", "anthropic/claude-sonnet-4-20250514"], env=env)
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(
+        "craik.runtime.auth.login.claude_cli_runtime_status",
+        lambda: CredentialStatus(status="ok"),
+    )
+    monkeypatch.setattr(
+        "craik.runtime.shell.agent_shell.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    def _run(args, **kwargs):
+        seen["args"] = args
+        seen["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="from cli\n", stderr="")
+
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+
+    chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
+
+    assert chat.exit_code == 0
+    assert chat.output == "from cli\n"
+    assert seen["args"] == [
+        "claude",
+        "-p",
+        "hello",
+        "--model",
+        "sonnet",
+    ]
+    assert "ANTHROPIC_API_KEY" not in seen["env"]
+    assert seen["env"]["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-from-claude-code"
+
+
+def test_anthropic_one_shot_passes_claude_permission_mode(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    env = {
+        "CRAIK_HOME": str(home),
+        "CRAIK_CLAUDE_PERMISSION_MODE": "plan",
+    }
+    AuthProfileStore.from_env(env).put(
+        AuthProfile(
+            id="anthropic:default",
+            kind=CredentialKind.MARKER,
+            provider_family="anthropic",
+            metadata={"external_runtime": "claude-cli", "credential_mode": "claude-cli"},
+            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
+            last_status="ok",
+        )
+    )
+    runner.invoke(app, ["model", "set", "anthropic/claude-opus-4-7"], env=env)
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(
+        "craik.runtime.auth.login.claude_cli_runtime_status",
+        lambda: CredentialStatus(status="ok"),
+    )
+    monkeypatch.setattr(
+        "craik.runtime.shell.agent_shell.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    def _run(args, **kwargs):
+        seen["args"] = args
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="from cli\n", stderr="")
+
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+
+    chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
+
+    assert chat.exit_code == 0
+    assert seen["args"] == [
+        "claude",
+        "-p",
+        "hello",
+        "--model",
+        "opus",
+        "--permission-mode",
+        "plan",
+    ]
+
+
+def test_anthropic_one_shot_empty_claude_output_guides_to_audited_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    env = {"CRAIK_HOME": str(home)}
+    AuthProfileStore.from_env(env).put(
+        AuthProfile(
+            id="anthropic:default",
+            kind=CredentialKind.MARKER,
+            provider_family="anthropic",
+            metadata={"external_runtime": "claude-cli", "credential_mode": "claude-cli"},
+            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
+            last_status="ok",
+        )
+    )
+    runner.invoke(app, ["model", "set", "anthropic/claude-sonnet-4-20250514"], env=env)
+    monkeypatch.setattr(
+        "craik.runtime.shell.agent_shell.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    def _run(args, **kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("craik.runtime.shell.agent_shell.subprocess.run", _run)
+
+    chat = runner.invoke(
+        app,
+        ["chat", "-q", "-"],
+        input="Can you review the implementation plan on the desktop for the next phase?\n",
+        env=env,
+    )
+
+    assert chat.exit_code == 0
+    assert "did not return response text" in chat.output
+    assert "/run --backend claude-code Can you review the implementation plan" in chat.output
+    assert "completed without output" not in chat.output
 
 
 def test_audited_mode_requires_operator_session(tmp_path: Path) -> None:

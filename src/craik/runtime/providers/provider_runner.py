@@ -221,6 +221,7 @@ class ProviderBackedRunExecutor:
         max_iterations: int = 5,
         provider_token_budget: int | None = None,
         live_enabled: bool | None = None,
+        model: str | None = None,
         role_kind: AgentRoleKind | None = None,
         role_runner_id: str | None = None,
         started_at: datetime | None = None,
@@ -252,6 +253,8 @@ class ProviderBackedRunExecutor:
             if live_enabled is not None
             else bool(provider.metadata.get("live_enabled", False)),
         )
+        if model is not None:
+            adapter.config.model = model
         compiled = PromptCompiler(self.store).compile(
             task_id,
             runner_id=provider.id,

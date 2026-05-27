@@ -19,7 +19,16 @@ class WorkingIndicator(Static):
     }
     """
 
-    def set_elapsed(self, seconds: int) -> None:
+    def set_elapsed(
+        self,
+        seconds: int,
+        *,
+        backend: str | None = None,
+        queued: int = 0,
+    ) -> None:
         minutes, remainder = divmod(max(0, seconds), 60)
         elapsed = f"{minutes}m {remainder}s" if minutes else f"{remainder}s"
-        self.update(f"{STATE_INFLIGHT} Working ({elapsed} {BULLET_SEPARATOR} esc to interrupt)")
+        pulse = "." * ((seconds % 3) + 1)
+        label = backend or "Model"
+        queue_text = f" {BULLET_SEPARATOR} queued {queued}" if queued else ""
+        self.update(f"{STATE_INFLIGHT} {label} thinking{pulse} ({elapsed}{queue_text})")

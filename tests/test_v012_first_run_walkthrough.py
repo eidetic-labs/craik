@@ -4,7 +4,10 @@ from _subprocess_harness import CraikSubprocess
 
 
 def test_first_run_provider_model_chat_walkthrough(tmp_path) -> None:
-    cli = CraikSubprocess(tmp_path, {"OPENAI_API_KEY": "openai-test-key"})
+    cli = CraikSubprocess(
+        tmp_path,
+        {"CRAIK_LIVE": "0", "OPENAI_API_KEY": "openai-test-key"},
+    )
 
     initial = cli.run()
     login = cli.run(
@@ -24,6 +27,6 @@ def test_first_run_provider_model_chat_walkthrough(tmp_path) -> None:
     assert login.exit_code == 0, login.output
     assert model.exit_code == 0, model.output
     assert chat.exit_code == 0, chat.output
-    assert "One-shot execution is queued for openai/gpt-4o-mini" in chat.output
+    assert "openai fixture completed fixture with status completed." in chat.output
     assert "not ready" not in chat.output.lower()
     assert "State: provider-only" not in chat.output

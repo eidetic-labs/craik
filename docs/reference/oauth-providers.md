@@ -22,7 +22,7 @@ Match your source to your preferred billing model:
 | Anthropic | `ANTHROPIC_TOKEN` env var | Depends on the exported token | You need a manual override matching the token issuer |
 | Anthropic | `ANTHROPIC_API_KEY` env var | Anthropic Console API (per-token) | You have a Console API key and want per-token billing |
 | Anthropic | `CRAIK_ANTHROPIC_API_KEY` env var | Anthropic Console API (per-token) | You want a Craik-specific env-var slot |
-| Anthropic | Keyring after `craik auth login anthropic` | Anthropic Console API (per-token) | You want browser bootstrap to mint a Console API key |
+| Anthropic | Claude CLI marker after `craik auth login anthropic` | Claude CLI subscription | You want Craik to call the local `claude` binary |
 | **Gemini** | Application Default Credentials | GCP project (Vertex AI) | You use Google Cloud project billing |
 | Gemini | Service-account JSON | GCP project (Vertex AI) | You need headless or organization-managed credentials |
 | Gemini | `GEMINI_API_KEY` / `GOOGLE_API_KEY` env var | Google AI Studio (per-token) | You want lightweight AI Studio credentials |
@@ -81,16 +81,35 @@ in-flight OAuth login, close that flow and retry.
 
 | Field | Value |
 | --- | --- |
-| Authorization endpoint | `https://claude.ai/oauth/authorize` |
-| Token endpoint | `https://console.anthropic.com/v1/oauth/token` |
-| Request header | `x-api-key` |
-| Billing surface | Anthropic Console account |
-| Flow type | Environment token, direct API key, or OAuth-to-API-key bootstrap |
-| v0.12.7 status | Anthropic CLI token env var and browser bootstrap are supported |
+| Claude CLI command | `claude -p` |
+| Stored credential | None; Craik stores a marker profile only |
+| Request header | None for `claude-cli` mode; `x-api-key` for Console API keys |
+| Billing surface | Claude CLI subscription, or Anthropic Console API for direct API keys |
+| Flow type | External Claude CLI delegation or direct API key |
+| v0.12.7 status | Anthropic Claude CLI delegation and API-key login are supported |
 
 Craik checks Anthropic credential sources in this order.
 
-### 1. Anthropic CLI OAuth token
+### 1. Claude CLI delegation
+
+If you have Claude CLI installed and authenticated, use:
+
+```sh
+craik auth login anthropic
+```
+
+Craik stores a marker profile and calls `claude -p` for live Anthropic prompts.
+It does not store or replay `CLAUDE_CODE_OAUTH_TOKEN`, which avoids routing a
+Claude subscription token through Craik's third-party HTTP client.
+
+Verify detection with:
+
+```sh
+craik doctor
+craik auth status
+```
+
+### 2. Anthropic CLI OAuth token environment override
 
 If you have Anthropic CLI installed and authenticated, reuse those
 credentials through Anthropic's documented environment-variable integration:
@@ -101,24 +120,18 @@ export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
 Craik reads `CLAUDE_CODE_OAUTH_TOKEN` automatically for Anthropic requests
-and sends it via `x-api-key`. Operators can also set `ANTHROPIC_TOKEN` as a
-manual OAuth token override when they need a separately managed Anthropic
-token. Craik never writes these environment variables or refreshes the token;
-rotate the CLI token by re-running `claude setup-token`.
+and sends `sk-ant-oat` tokens as bearer credentials with Claude Code beta
+headers. Operators can also set `ANTHROPIC_TOKEN` as a manual OAuth token
+override when they need a separately managed Anthropic token. Craik never
+writes these environment variables or refreshes the token; rotate the CLI
+token by re-running `claude setup-token`.
 
-> **About Claude subscription billing:** `CLAUDE_CODE_OAUTH_TOKEN` routes
-> Craik usage through your Claude Pro or Max subscription quota. Use this
-> path if you have a Claude subscription and prefer subscription billing
-> over Anthropic Console per-token charges.
+> **About Claude subscription billing:** Directly replaying
+> `CLAUDE_CODE_OAUTH_TOKEN` from a third-party HTTP client may route differently
+> from the first-party Claude CLI. Prefer `craik auth login anthropic`, which
+> delegates to `claude -p`.
 
-Verify detection with:
-
-```sh
-craik doctor
-craik auth status
-```
-
-### 2. Anthropic Platform API key
+### 3. Anthropic Platform API key
 
 Use a direct Anthropic Platform key when Anthropic CLI is not installed or when
 you want a separate billing credential:
@@ -127,22 +140,11 @@ you want a separate billing credential:
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-### 3. OAuth-to-API-key bootstrap
-
-Run the browser bootstrap when neither environment variable is set:
-
-```sh
-craik auth login anthropic
-```
-
-Craik opens the Anthropic authorization URL, asks the operator to paste the
-one-time code shown by Anthropic, exchanges that code for a long-lived API
-key, and stores the key through Craik credential storage. Subsequent provider
-requests use Anthropic's required `x-api-key` header, not
-`Authorization: Bearer`.
-
-Use `--mode=api-key` to bypass the browser bootstrap and capture an
-Anthropic API key directly.
+Pass `--no-browser`, `--env-var`, or
+`--secret-ref` with `--mode=api-key` to bypass Claude CLI and capture or
+reference an Anthropic Console API key directly. `--mode=oauth` is reserved
+for providers that store OAuth credentials; Anthropic's interactive browser
+flow is not exposed as a supported Craik login mode.
 
 ## Gemini / Vertex AI
 

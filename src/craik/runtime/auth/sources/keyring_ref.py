@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from craik.runtime.auth.profile import CredentialStatus
+from craik.runtime.auth.sources.anthropic_env import anthropic_headers_for_credential
 from craik.runtime.providers.provider_transport import ProviderFamily
 from craik.runtime.shell.credential_storage import CredentialStorageError, get_cached_credential
 
@@ -14,15 +15,13 @@ class KeyringRefCredentialSource:
     """Resolve provider credentials from Craik's cached credential store."""
 
     ref: str
+    credential_mode: str | None = None
 
     def headers_for(self, family: ProviderFamily) -> dict[str, str]:
         """Return provider-specific headers from cached credential material."""
         secret = self._resolve_secret()
         if family == "anthropic":
-            return {
-                "anthropic-version": "2023-06-01",
-                "x-api-key": secret,
-            }
+            return anthropic_headers_for_credential(secret, credential_mode=self.credential_mode)
         if family == "gemini":
             return {"x-goog-api-key": secret}
         return {"Authorization": f"Bearer {secret}"}

@@ -10,6 +10,8 @@ CLAUDE_CODE_OAUTH_TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"  # nosec B105 - env var 
 ANTHROPIC_TOKEN_ENV = "ANTHROPIC_TOKEN"  # nosec B105 - env var name, not a secret.
 ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
 CRAIK_ANTHROPIC_API_KEY_ENV = "CRAIK_ANTHROPIC_API_KEY"
+CLAUDE_CODE_VERSION = "2.1.75"
+CLAUDE_CODE_BETA_HEADER = "claude-code-20250219,oauth-2025-04-20"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +50,31 @@ def resolve_anthropic_credential_from_env(
                 display=f"{env_var} (env)",
             )
     return None
+
+
+def is_claude_code_oauth_token(value: str) -> bool:
+    """Return whether a value looks like Anthropic's Claude Code OAuth token."""
+    return value.strip().startswith("sk-ant-oat")
+
+
+def anthropic_headers_for_credential(
+    credential: str,
+    *,
+    credential_mode: str | None = None,
+) -> dict[str, str]:
+    """Return Anthropic request headers for either API keys or Claude Code tokens."""
+    token = credential.strip()
+    headers = {"anthropic-version": "2023-06-01"}
+    if not token:
+        return headers
+    if credential_mode == "claude-cli" or is_claude_code_oauth_token(token):
+        return headers | {
+            "Authorization": f"Bearer {token}",
+            "anthropic-beta": CLAUDE_CODE_BETA_HEADER,
+            "user-agent": f"claude-cli/{CLAUDE_CODE_VERSION}",
+            "x-app": "cli",
+        }
+    return headers | {"x-api-key": token}
 
 
 def _env_value(env: Mapping[str, str], name: str) -> str:

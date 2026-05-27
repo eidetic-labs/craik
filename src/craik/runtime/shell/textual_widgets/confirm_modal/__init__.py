@@ -19,6 +19,9 @@ class ConfirmationRequest:
     command_text: str
     title: str
     message: str
+    confirm_label: str = "Yes"
+    cancel_label: str = "No"
+    destructive: bool = True
 
 
 class ConfirmModal(ModalScreen[bool]):
@@ -38,8 +41,12 @@ class ConfirmModal(ModalScreen[bool]):
             Label(f"{WARN_GLYPH} {self.request.title}", classes="modal-title"),
             Static(self.request.message, classes="modal-copy"),
             Horizontal(
-                Button("No", id="confirm-no"),
-                Button("Yes", id="confirm-yes", variant="error"),
+                Button(self.request.cancel_label, id="confirm-no"),
+                Button(
+                    self.request.confirm_label,
+                    id="confirm-yes",
+                    variant="error" if self.request.destructive else "primary",
+                ),
                 classes="modal-actions",
             ),
             id="confirm-modal",

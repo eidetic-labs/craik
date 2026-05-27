@@ -70,6 +70,7 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
 
     assert sorted(matrices) == [
         "claude",
+        "claude-code",
         "codex",
         "fixture",
         "gemini",
@@ -86,6 +87,8 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
     ]
     assert matrices["codex"].trust.default_grant_posture == "prompt-for-approval"
     assert matrices["claude"].trust.default_grant_posture == "deny-by-default"
+    assert matrices["claude-code"].runner.mode == "live"
+    assert capability_supported(matrices["claude-code"], "file.write")
     assert matrices["gemini"].trust.level == "low"
     assert matrices["fixture"].trust.requires_receipts is False
     assert matrices["provider_openai"].runner.adapter == "provider-runtime"

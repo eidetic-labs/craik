@@ -15,6 +15,7 @@ from craik.runtime.shell.textual_widgets.accent_emission import AccentEmission
 from craik.runtime.shell.textual_widgets.craik_input import CraikInput
 from craik.runtime.shell.textual_widgets.footer_safe_area import FooterSafeArea
 from craik.runtime.shell.textual_widgets.history_search import HistorySearchOverlay
+from craik.runtime.shell.textual_widgets.run_activity_panel import RunActivityPanel
 from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.text_selection_hint import (
     SELECTION_HINT_MESSAGE,
@@ -62,6 +63,32 @@ def test_v0125_history_overlay_has_region_snapshot_coverage(tmp_path: Path) -> N
             input_widget = pilot.app.query_one(CraikInput)
 
             assert overlay.region.y < input_widget.region.y
+
+    asyncio.run(run())
+
+
+def test_v0125_active_run_keeps_transcript_space_on_small_terminal(tmp_path: Path) -> None:
+    async def run() -> None:
+        env = {"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_TUI_SELECTION_HINT": "0"}
+        app = CraikApp(env=env)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause(0.2)
+            app._run_backend_label = "Claude Code"
+            app._set_working(True)
+            app._update_run_activity_from_message("Created task `task_update_docs`.")
+            app._update_run_activity_from_message("Created run `run_update_docs`.")
+            app._update_run_activity_from_message(
+                "Claude Code is using `Read` on `docs/guides/terminal-ui.md`."
+            )
+            await pilot.pause(0.1)
+
+            transcript = app.query_one("#transcript")
+            activity = app.query_one(RunActivityPanel)
+            input_widget = app.query_one(CraikInput)
+
+            assert transcript.region.height >= 7
+            assert activity.region.height == 5
+            assert transcript.region.y < activity.region.y < input_widget.region.y
 
     asyncio.run(run())
 

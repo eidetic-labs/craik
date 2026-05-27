@@ -157,6 +157,10 @@ def _retryable_transport_error(
     adapter: ProviderRuntimeAdapter,
     error: ProviderTransportError,
 ) -> bool:
+    if error.status_code == 429 and error.retry_after_seconds is None:
+        retry_after = _retry_after(error.headers)
+        if retry_after is None:
+            return False
     decision = adapter.classify_error(
         status_code=error.status_code,
         headers=error.headers,
