@@ -27,6 +27,8 @@ def test_first_run_provider_model_chat_walkthrough(tmp_path) -> None:
     assert login.exit_code == 0, login.output
     assert model.exit_code == 0, model.output
     assert chat.exit_code == 0, chat.output
-    assert "openai fixture completed fixture with status completed." in chat.output
+    assert "openai fixture completed plan with status completed." in chat.output
+    assert "Audited run `" in chat.output
+    assert "Receipts:" in chat.output
     assert "not ready" not in chat.output.lower()
     assert "State: provider-only" not in chat.output

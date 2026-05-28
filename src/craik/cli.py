@@ -196,7 +196,7 @@ def root(
             raise typer.Exit(run_tui(env=env))
         if one_shot is not None:
             prompt = resolve_cli_prompt(one_shot, allow_argv=allow_argv_prompt)
-            typer.echo(one_shot_response(prompt))
+            typer.echo(one_shot_response(prompt, env=env))
             raise typer.Exit()
         if (
             not no_tui

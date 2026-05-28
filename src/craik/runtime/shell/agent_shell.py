@@ -2,29 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 import sys
 from collections.abc import Callable, Iterable
 
-from craik.runtime.auth import AuthProfileStore, CredentialKind
+from craik.runtime.backend.session import execute_prompt
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.dispatch import invoke_slash_command as _contract_invoke
 from craik.runtime.i18n.messages import text as localize_text
-from craik.runtime.modeling import ModelSettingsStore
-from craik.runtime.providers.model_providers import (
-    ModelProviderNotFoundError,
-    default_model_provider_registry,
-)
-from craik.runtime.providers.provider_runtime import (
-    ProviderMessage,
-    ProviderRuntimeRequest,
-    adapter_for_provider,
-)
-from craik.runtime.sandbox.local_process_backend import (
-    LocalProcessStartError,
-    run_reviewed_local_process,
-)
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.contract_runtime.run_helpers import run_command
@@ -72,167 +56,47 @@ def one_shot_response(prompt: str, *, env: dict[str, str] | None = None) -> str:
 
 
 def _execute_one_shot(prompt: str, *, env: dict[str, str] | None = None) -> str:
-    settings = ModelSettingsStore.from_env(env).load()
-    active_model = settings.active_model
-    if active_model is None:
-        raise ValueError("no active model is configured")
-    provider_id, model = _provider_and_model(active_model)
-    provider = default_model_provider_registry().require(provider_id)
-    live_enabled = _live_provider_enabled(env)
-    if live_enabled and provider.provider == "anthropic" and _anthropic_uses_claude_cli(env):
-        return _execute_claude_cli_prompt(prompt, model=model, env=env)
-    adapter = adapter_for_provider(provider, live_enabled=live_enabled)
-    adapter.config.model = model
-    result = adapter.execute(
-        ProviderRuntimeRequest(
-            messages=[ProviderMessage(role="user", content=prompt.strip())],
-            stream=False,
-            metadata={"surface": "craik.console.one_shot"},
-        )
-    )
-    if result.text.strip():
-        return result.text.strip()
-    if result.structured_output is not None:
-        return str(result.structured_output)
-    return f"Completed one-shot execution for {active_model}."
+    payload = execute_prompt(prompt, env=env, source="cli").payload_with_events()
+    return _one_shot_audit_text(payload)
 
 
-def _provider_and_model(active_model: str) -> tuple[str, str]:
-    provider_name, model = active_model.split("/", 1)
-    registry = default_model_provider_registry()
-    if registry.get(provider_name) is not None:
-        return provider_name, model
-    provider_id = {
-        "anthropic": "provider_anthropic",
-        "claude": "provider_anthropic",
-        "gemini": "provider_gemini",
-        "google": "provider_gemini",
-        "openai": "provider_openai",
-        "openai-compatible": "provider_local_openai_compatible",
-        "local": "provider_local_openai_compatible",
-        "ollama": "provider_local_ollama",
-        "lm-studio": "provider_local_lm_studio",
-        "vllm": "provider_local_vllm",
-    }.get(provider_name)
-    if provider_id is not None:
-        return provider_id, model
-    for provider in registry.list():
-        if provider.provider == provider_name:
-            return provider.id, model
-    raise ModelProviderNotFoundError(f"unknown provider in active model: {provider_name}")
-
-
-def _live_provider_enabled(env: dict[str, str] | None) -> bool:
-    values = os.environ if env is None else env
-    if values.get("CRAIK_LIVE") == "0":
-        return False
-    if values.get("CRAIK_FIXTURE") == "1":
-        return False
-    return True
-
-
-def _anthropic_uses_claude_cli(env: dict[str, str] | None) -> bool:
-    try:
-        profile = AuthProfileStore.from_env(env).get("anthropic:default")
-    except Exception:
-        return False
-    return (
-        profile.kind is CredentialKind.MARKER
-        and profile.metadata.get("external_runtime") == "claude-cli"
-    )
-
-
-def _execute_claude_cli_prompt(
-    prompt: str,
-    *,
-    model: str,
-    env: dict[str, str] | None,
-) -> str:
-    executable = shutil.which("claude")
-    if executable is None:
-        raise RuntimeError("Claude CLI was not found; install Claude Code and run `claude`")
-    command = [executable, "-p", prompt.strip()]
-    model_arg = _claude_cli_model_arg(model)
-    if model_arg:
-        command.extend(["--model", model_arg])
-    permission_mode = _claude_cli_permission_mode(env)
-    if permission_mode:
-        command.extend(["--permission-mode", permission_mode])
-    try:
-        completed = run_reviewed_local_process(
-            command,
-            timeout_seconds=600,
-            env=_claude_cli_env(env),
-        )
-    except (OSError, LocalProcessStartError) as exc:
-        raise RuntimeError("Claude CLI could not be executed") from exc
-    if completed.reason.endswith("timed out"):
-        raise RuntimeError("Claude CLI prompt timed out")
-    if completed.returncode != 0:
-        detail = _safe_cli_detail(completed.stderr or completed.stdout)
-        raise RuntimeError("Claude CLI prompt failed" + (f": {detail}" if detail else ""))
-    output = completed.stdout.strip()
-    if output:
-        return output
-    diagnostic = _empty_claude_cli_output_message(prompt, completed.stderr)
-    if diagnostic:
-        return diagnostic
-    return "Claude CLI completed without response text."
-
-
-def _claude_cli_model_arg(model: str) -> str | None:
-    lowered = model.lower()
-    if "opus" in lowered:
-        return "opus"
-    if "sonnet" in lowered:
-        return "sonnet"
-    if "haiku" in lowered:
-        return "haiku"
-    return None
-
-
-def _claude_cli_permission_mode(env: dict[str, str] | None) -> str | None:
-    values = os.environ if env is None else env
-    mode = values.get("CRAIK_CLAUDE_PERMISSION_MODE")
-    if mode in {"default", "acceptEdits", "plan", "auto"}:
-        return mode
-    return None
-
-
-def _claude_cli_env(env: dict[str, str] | None) -> dict[str, str]:
-    values = dict(os.environ)
-    if env is not None:
-        values.update(env)
-    for name in (
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_TOKEN",
-        "CRAIK_ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-    ):
-        values.pop(name, None)
-    return values
-
-
-def _safe_cli_detail(output: str) -> str:
-    return " ".join(output.split())[:300]
-
-
-def _empty_claude_cli_output_message(prompt: str, stderr: str | None) -> str:
-    lines = [
-        "Claude CLI completed but did not return response text.",
-        "",
-        (
-            "This can happen when the delegated `claude -p` run exits without a final stdout "
-            + "message. For auditable Claude Code tool activity, run the prompt through:"
-        ),
-        "",
-        f"/run --backend claude-code {prompt.strip()}",
-    ]
-    detail = _safe_cli_detail(stderr or "")
-    if detail:
-        lines.extend(["", f"CLI detail: {detail}"])
+def _one_shot_audit_text(payload: dict[str, object]) -> str:
+    lines: list[str] = []
+    final_text = _final_output_text(payload)
+    if final_text:
+        lines.append(final_text)
+        lines.append("")
+    run = payload.get("run")
+    handoff = payload.get("handoff")
+    receipt_ids = payload.get("receipt_ids")
+    if not isinstance(run, dict):
+        return final_text or "Audited run completed."
+    status = payload.get("status") or run.get("status") or "completed"
+    run_id = run.get("id")
+    task_id = run.get("task_id")
+    lines.append(f"Audited run `{run_id}` completed with status `{status}` for `{task_id}`.")
+    if isinstance(handoff, dict) and handoff.get("id"):
+        lines.append(f"Handoff: `{handoff['id']}`")
+    if isinstance(receipt_ids, list):
+        rendered_receipts = ", ".join(str(item) for item in receipt_ids if item) or "none"
+        lines.append(f"Receipts: {rendered_receipts}")
     return "\n".join(lines)
+
+
+def _final_output_text(payload: dict[str, object]) -> str:
+    outputs = payload.get("run_outputs")
+    if not isinstance(outputs, list):
+        return ""
+    for output in outputs:
+        if not isinstance(output, dict):
+            continue
+        observed = output.get("observed_output")
+        if not isinstance(observed, dict):
+            continue
+        text = observed.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return ""
 
 
 def run_shell(
