@@ -169,7 +169,11 @@ fn entry_body_lines(entry: &TranscriptEntry, expand_details: bool) -> Vec<String
 fn is_collapsible(kind: &TranscriptKind) -> bool {
     matches!(
         kind,
-        TranscriptKind::Tool | TranscriptKind::Command | TranscriptKind::File
+        TranscriptKind::Tool
+            | TranscriptKind::Command
+            | TranscriptKind::File
+            | TranscriptKind::Approval
+            | TranscriptKind::Receipt
     )
 }
 
@@ -194,6 +198,51 @@ fn render_body_line(
     search_query: Option<&str>,
 ) -> Line<'static> {
     let mut spans = vec![Span::styled("  ", Style::default().fg(Color::DarkGray))];
+    if let Some((label, value)) = split_key_value(text) {
+        spans.push(Span::styled(
+            format!("{label}: "),
+            Style::default()
+                .fg(label_color(kind))
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.extend(value_spans(kind, value));
+    } else {
+        spans.extend(value_spans(kind, text));
+    }
+    highlight_search(spans, search_query)
+}
+
+fn split_key_value(text: &str) -> Option<(&str, &str)> {
+    let (label, value) = text.split_once(':')?;
+    let trimmed_label = label.trim();
+    if trimmed_label.is_empty()
+        || trimmed_label.len() > 24
+        || !trimmed_label
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == ' ')
+    {
+        return None;
+    }
+    Some((trimmed_label, value.trim_start()))
+}
+
+fn label_color(kind: &TranscriptKind) -> Color {
+    match kind {
+        TranscriptKind::Command => Color::LightMagenta,
+        TranscriptKind::File => Color::LightBlue,
+        TranscriptKind::Approval => Color::LightRed,
+        TranscriptKind::Receipt => Color::LightCyan,
+        TranscriptKind::Error => Color::LightRed,
+        TranscriptKind::Tool => Color::Magenta,
+        TranscriptKind::Progress => Color::Yellow,
+        TranscriptKind::System => Color::Cyan,
+        TranscriptKind::User => Color::Green,
+        TranscriptKind::Assistant => Color::White,
+    }
+}
+
+fn value_spans(kind: &TranscriptKind, text: &str) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
     match kind {
         TranscriptKind::Command => spans.push(Span::styled(
             text.to_owned(),
@@ -217,9 +266,9 @@ fn render_body_line(
             text.to_owned(),
             Style::default().fg(Color::LightRed),
         )),
-        _ => spans.extend(highlight_inline_code(text)),
+        _ => return highlight_inline_code(text),
     }
-    highlight_search(spans, search_query)
+    spans
 }
 
 fn highlight_inline_code(text: &str) -> Vec<Span<'static>> {
@@ -358,6 +407,24 @@ mod tests {
             lines[1].spans[1].style.fg,
             Some(ratatui::style::Color::LightMagenta)
         );
+    }
+
+    #[test]
+    fn key_value_body_lines_style_label_and_value_separately() {
+        let entries = vec![TranscriptEntry::new(
+            TranscriptKind::Tool,
+            "Bash",
+            "Provider: provider_anthropic",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[1].spans[1].content, "Provider: ");
+        assert_eq!(
+            lines[1].spans[1].style.fg,
+            Some(ratatui::style::Color::Magenta)
+        );
+        assert_eq!(lines[1].spans[2].content, "provider_anthropic");
     }
 
     #[test]
