@@ -1,5 +1,7 @@
 use anyhow::{Context, bail};
 mod backend;
+mod input;
+mod transcript;
 
 use backend::{BackendSession, WorkerMessage};
 use craik_tui_rs::{
@@ -14,10 +16,11 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use input::{SlashHint, input_cursor_position, render_input_lines};
 use ratatui::{
     Terminal,
     backend::{CrosstermBackend, TestBackend},
-    layout::{Constraint, Direction, Layout, Position, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
@@ -27,6 +30,9 @@ use std::{
     env, fs,
     io::{self, IsTerminal},
     time::Duration,
+};
+use transcript::{
+    TranscriptEntry, TranscriptKind, render_transcript_lines, transcript_scroll_offset,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -151,31 +157,6 @@ struct InteractiveApp {
     queued_inputs: VecDeque<String>,
 }
 
-struct TranscriptEntry {
-    kind: TranscriptKind,
-    title: String,
-    body: String,
-}
-
-enum TranscriptKind {
-    System,
-    User,
-    Assistant,
-    Progress,
-    Tool,
-    File,
-    Command,
-    Approval,
-    Receipt,
-    Error,
-}
-
-struct SlashHint {
-    name: String,
-    usage: String,
-    summary: String,
-}
-
 impl InteractiveApp {
     fn new() -> anyhow::Result<Self> {
         let backend = BackendSession::start()?;
@@ -202,12 +183,6 @@ impl InteractiveApp {
         };
         app.send_commands([GatewayCommand::SessionStatus, GatewayCommand::SlashCatalog]);
         Ok(app)
-    }
-
-    #[cfg(test)]
-    fn for_test() -> Self {
-        let (_stdin_sender, stdin_receiver) = std::sync::mpsc::channel();
-        Self::for_test_with_receiver(stdin_receiver)
     }
 
     #[cfg(test)]
@@ -692,36 +667,6 @@ impl InteractiveApp {
     }
 }
 
-impl TranscriptEntry {
-    fn new(kind: TranscriptKind, title: &str, body: &str) -> Self {
-        Self {
-            kind,
-            title: title.to_owned(),
-            body: body.to_owned(),
-        }
-    }
-
-    fn system(title: &str, body: &str) -> Self {
-        Self::new(TranscriptKind::System, title, body)
-    }
-
-    fn user(title: &str, body: &str) -> Self {
-        Self::new(TranscriptKind::User, title, body)
-    }
-
-    fn assistant(title: &str, body: &str) -> Self {
-        Self::new(TranscriptKind::Assistant, title, body)
-    }
-
-    fn progress(title: &str, body: &str) -> Self {
-        Self::new(TranscriptKind::Progress, title, body)
-    }
-
-    fn error(title: &str, body: &str) -> Self {
-        Self::new(TranscriptKind::Error, title, body)
-    }
-}
-
 fn run_interactive_app() -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -759,7 +704,14 @@ fn run_interactive_loop(
             let transcript_height = body[0].height.saturating_sub(2);
             let transcript = Paragraph::new(render_transcript_lines(&app.transcript))
                 .block(Block::default().title("Transcript").borders(Borders::ALL))
-                .scroll((transcript_scroll_offset(&app, transcript_height), 0))
+                .scroll((
+                    transcript_scroll_offset(
+                        &app.transcript,
+                        app.transcript_scroll,
+                        transcript_height,
+                    ),
+                    0,
+                ))
                 .wrap(Wrap { trim: false });
             frame.render_widget(transcript, body[0]);
 
@@ -775,11 +727,15 @@ fn run_interactive_loop(
                 )]))
                 .borders(Borders::ALL);
             let input_inner = input_block.inner(vertical[1]);
-            let input = Paragraph::new(render_input_lines(&app))
+            let input = Paragraph::new(render_input_lines(&app.input, &app.slash_catalog))
                 .block(input_block)
                 .wrap(Wrap { trim: false });
             frame.render_widget(input, vertical[1]);
-            frame.set_cursor_position(input_cursor_position(&app, input_inner));
+            frame.set_cursor_position(input_cursor_position(
+                &app.input,
+                app.input_cursor,
+                input_inner,
+            ));
 
             let footer = Paragraph::new(status_line(&app));
             frame.render_widget(footer, vertical[2]);
@@ -850,109 +806,6 @@ fn run_interactive_loop(
         }
     }
     Ok(())
-}
-
-fn transcript_scroll_offset(app: &InteractiveApp, visible_height: u16) -> u16 {
-    let line_count = app
-        .transcript
-        .iter()
-        .map(|entry| entry.body.lines().count().max(1) as u16 + 1)
-        .sum::<u16>();
-    line_count
-        .saturating_sub(visible_height)
-        .saturating_sub(app.transcript_scroll)
-}
-
-fn render_transcript_lines(entries: &[TranscriptEntry]) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    for entry in entries {
-        let (label, color) = transcript_style(&entry.kind);
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("{label} "),
-                Style::default().fg(color).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                entry.title.clone(),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-        ]));
-        for body_line in entry.body.lines() {
-            lines.push(Line::from(Span::raw(format!("  {body_line}"))));
-        }
-    }
-    lines
-}
-
-fn transcript_style(kind: &TranscriptKind) -> (&'static str, Color) {
-    match kind {
-        TranscriptKind::System => ("system", Color::Cyan),
-        TranscriptKind::User => ("user", Color::Green),
-        TranscriptKind::Assistant => ("assistant", Color::White),
-        TranscriptKind::Progress => ("run", Color::Yellow),
-        TranscriptKind::Tool => ("tool", Color::Magenta),
-        TranscriptKind::File => ("file", Color::Blue),
-        TranscriptKind::Command => ("cmd", Color::LightMagenta),
-        TranscriptKind::Approval => ("approval", Color::Red),
-        TranscriptKind::Receipt => ("receipt", Color::LightCyan),
-        TranscriptKind::Error => ("error", Color::LightRed),
-    }
-}
-
-fn render_input_lines(app: &InteractiveApp) -> Vec<Line<'static>> {
-    let mut lines = app
-        .input
-        .lines()
-        .map(|line| Line::from(Span::raw(line.to_owned())))
-        .collect::<Vec<_>>();
-    if lines.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "Type a prompt or /command",
-            Style::default().fg(Color::DarkGray),
-        )));
-    }
-    let suggestions = slash_suggestions(app);
-    if !suggestions.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Suggestions ", Style::default().fg(Color::Cyan)),
-            Span::raw(suggestions.join("  ")),
-        ]));
-    }
-    lines
-}
-
-fn slash_suggestions(app: &InteractiveApp) -> Vec<String> {
-    let input = app.input.trim_start();
-    if !input.starts_with('/') {
-        return Vec::new();
-    }
-    let prefix = input
-        .trim_start_matches('/')
-        .split_whitespace()
-        .next()
-        .unwrap_or("");
-    app.slash_catalog
-        .iter()
-        .filter(|hint| hint.name.starts_with(prefix))
-        .take(5)
-        .map(|hint| format!("{} - {}", hint.usage, hint.summary))
-        .collect()
-}
-
-fn input_cursor_position(app: &InteractiveApp, area: Rect) -> Position {
-    let before_cursor = &app.input[..app.input_cursor.min(app.input.len())];
-    let row = before_cursor.bytes().filter(|byte| *byte == b'\n').count() as u16;
-    let col = before_cursor
-        .rsplit('\n')
-        .next()
-        .unwrap_or_default()
-        .chars()
-        .count() as u16;
-    let x = area.x.saturating_add(col.min(area.width.saturating_sub(1)));
-    let y = area
-        .y
-        .saturating_add(row.min(area.height.saturating_sub(1)));
-    Position::new(x, y)
 }
 
 fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
@@ -1143,67 +996,9 @@ fn usage() -> String {
 mod tests {
     use crate::backend::WorkerMessage;
 
-    use super::{
-        InteractiveApp, SlashHint, TranscriptEntry, TranscriptKind, input_cursor_position,
-        is_request_terminal_event, render_transcript_lines, slash_suggestions,
-    };
+    use super::{InteractiveApp, is_request_terminal_event};
     use craik_tui_rs::GatewayEvent;
-    use ratatui::layout::Rect;
     use serde_json::json;
-
-    #[test]
-    fn transcript_rendering_labels_entry_kinds() {
-        let entries = vec![
-            TranscriptEntry::user("You", "hello"),
-            TranscriptEntry::new(TranscriptKind::Tool, "Read", "README.md"),
-            TranscriptEntry::error("Gateway", "failed"),
-        ];
-
-        let rendered = render_transcript_lines(&entries)
-            .into_iter()
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        assert!(rendered.contains("user You"));
-        assert!(rendered.contains("tool Read"));
-        assert!(rendered.contains("error Gateway"));
-    }
-
-    #[test]
-    fn slash_suggestions_use_catalog_usage() {
-        let mut app = InteractiveApp::for_test();
-        app.input = "/r".to_owned();
-        app.slash_catalog = vec![
-            SlashHint {
-                name: "run".to_owned(),
-                usage: "/run <prompt>".to_owned(),
-                summary: "Run an audited prompt.".to_owned(),
-            },
-            SlashHint {
-                name: "status".to_owned(),
-                usage: "/status".to_owned(),
-                summary: "Show readiness.".to_owned(),
-            },
-        ];
-
-        assert_eq!(
-            slash_suggestions(&app),
-            ["/run <prompt> - Run an audited prompt."]
-        );
-    }
-
-    #[test]
-    fn cursor_position_tracks_multiline_input() {
-        let mut app = InteractiveApp::for_test();
-        app.input = "abc\ndef".to_owned();
-        app.input_cursor = app.input.len();
-
-        let position = input_cursor_position(&app, Rect::new(10, 20, 40, 3));
-
-        assert_eq!(position.x, 13);
-        assert_eq!(position.y, 21);
-    }
 
     #[test]
     fn terminal_event_detection_covers_request_boundaries() {
