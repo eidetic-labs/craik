@@ -52,6 +52,17 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             state.working_phase.as_deref().unwrap_or("none")
         ),
         format!("  Queued: {}", metrics.queued_inputs),
+    ];
+    if !state.run_ids.is_empty() {
+        lines.push("Recent runs".to_owned());
+        for run_id in state.run_ids.iter().rev().take(3) {
+            lines.push(format!("  {run_id}"));
+        }
+    }
+    if let Some(receipt_id) = state.receipt_ids.last() {
+        lines.push(format!("  Latest receipt: {receipt_id}"));
+    }
+    lines.extend([
         "Evidence".to_owned(),
         format!("  Receipts: {}", state.receipt_ids.len()),
         format!("  Tools: {}", state.tool_events.len()),
@@ -59,7 +70,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         format!("  Commands: {}", state.commands.len()),
         format!("  Approvals seen: {}", state.approval_requests.len()),
         format!("  Slash commands: {}", metrics.slash_commands),
-    ];
+    ]);
     if metrics.pending_approvals > 0 {
         lines.extend([
             "Approval review".to_owned(),
@@ -285,6 +296,12 @@ mod tests {
             receipt_ids: vec!["receipt_1".to_owned()],
             file_paths: vec!["src/main.rs".to_owned()],
             commands: vec!["cargo test".to_owned()],
+            run_ids: vec![
+                "run_1".to_owned(),
+                "run_2".to_owned(),
+                "run_3".to_owned(),
+                "run_4".to_owned(),
+            ],
             ..GatewayAppState::default()
         };
 
@@ -306,6 +323,9 @@ mod tests {
         assert!(rendered.contains("  State: waiting for approval"));
         assert!(rendered.contains("  Model: Anthropic Claude Opus 4.7"));
         assert!(rendered.contains("  Provider: anthropic (provider_anthropic)"));
+        assert!(rendered.contains("Recent runs"));
+        assert!(rendered.contains("  run_4"));
+        assert!(rendered.contains("  Latest receipt: receipt_1"));
         assert!(rendered.contains("Evidence"));
         assert!(rendered.contains("  Receipts: 1"));
         assert!(rendered.contains("  Files: 1"));

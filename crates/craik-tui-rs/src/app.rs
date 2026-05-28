@@ -1,7 +1,7 @@
 use crate::{
     backend::{BackendSession, WorkerMessage},
     gateway_events::{is_request_terminal_event, slash_hints_from_event, summarize_slash_output},
-    input::SlashHint,
+    input::{SlashHint, slash_completion},
     transcript::{TranscriptEntry, TranscriptKind},
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent};
@@ -35,6 +35,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
+    pub(crate) search_match_index: Option<usize>,
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
@@ -65,6 +66,7 @@ impl InteractiveApp {
             expand_transcript_details: true,
             search_active: false,
             search_query: String::new(),
+            search_match_index: None,
             backend,
             in_flight: false,
             last_error: None,
@@ -103,6 +105,7 @@ impl InteractiveApp {
             expand_transcript_details: true,
             search_active: false,
             search_query: String::new(),
+            search_match_index: None,
             backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
@@ -277,6 +280,10 @@ impl InteractiveApp {
                 self.transcript_scroll = 0;
                 LoopAction::Continue
             }
+            KeyCode::Tab => {
+                self.complete_slash_input();
+                LoopAction::Continue
+            }
             KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
                 self.insert_newline();
                 LoopAction::Continue
@@ -349,12 +356,15 @@ impl InteractiveApp {
         match key.code {
             KeyCode::Esc => {
                 self.search_active = false;
+                self.search_match_index = None;
             }
             KeyCode::Enter => {
                 self.search_active = false;
             }
             KeyCode::Backspace => {
                 self.search_query.pop();
+                self.search_match_index = None;
+                self.next_search_match();
             }
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {}
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -365,6 +375,8 @@ impl InteractiveApp {
             }
             KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.search_query.push(ch);
+                self.search_match_index = None;
+                self.next_search_match();
             }
             _ => {}
         }
@@ -616,6 +628,16 @@ impl InteractiveApp {
         self.input_cursor = 0;
     }
 
+    pub(crate) fn complete_slash_input(&mut self) {
+        if self.input_cursor != self.input.len() {
+            return;
+        }
+        if let Some(completion) = slash_completion(&self.input, &self.slash_catalog) {
+            self.input = completion;
+            self.input_cursor = self.input.len();
+        }
+    }
+
     pub(crate) fn backspace(&mut self) {
         if self.input_cursor == 0 {
             return;
@@ -693,32 +715,50 @@ impl InteractiveApp {
     }
 
     pub(crate) fn next_search_match(&mut self) {
-        if self.search_query.trim().is_empty() {
+        let matches = self.search_match_entry_indexes();
+        if matches.is_empty() {
+            self.search_match_index = None;
             return;
         }
-        if let Some(lines_after) = self
-            .transcript
-            .iter()
-            .rev()
-            .find(|entry| entry_matches_search(entry, &self.search_query))
-            .map(|entry| line_count_after_entry(&self.transcript, entry))
-        {
-            self.transcript_scroll = lines_after;
-        }
+        let next = self
+            .search_match_index
+            .map(|index| (index + 1) % matches.len())
+            .unwrap_or(0);
+        self.search_match_index = Some(next);
+        self.transcript_scroll = line_count_after_entry_index(&self.transcript, matches[next]);
     }
 
     pub(crate) fn previous_search_match(&mut self) {
-        if self.search_query.trim().is_empty() {
+        let matches = self.search_match_entry_indexes();
+        if matches.is_empty() {
+            self.search_match_index = None;
             return;
         }
-        if let Some(lines_after) = self
-            .transcript
-            .iter()
-            .find(|entry| entry_matches_search(entry, &self.search_query))
-            .map(|entry| line_count_after_entry(&self.transcript, entry))
-        {
-            self.transcript_scroll = lines_after;
+        let previous = self
+            .search_match_index
+            .map(|index| {
+                if index == 0 {
+                    matches.len() - 1
+                } else {
+                    index - 1
+                }
+            })
+            .unwrap_or_else(|| matches.len() - 1);
+        self.search_match_index = Some(previous);
+        self.transcript_scroll = line_count_after_entry_index(&self.transcript, matches[previous]);
+    }
+
+    fn search_match_entry_indexes(&self) -> Vec<usize> {
+        if self.search_query.trim().is_empty() {
+            return Vec::new();
         }
+        self.transcript
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                entry_matches_search(entry, &self.search_query).then_some(index)
+            })
+            .collect()
     }
 
     fn dispatch_next_queued(&mut self) {
@@ -1009,18 +1049,13 @@ fn entry_matches_search(entry: &TranscriptEntry, query: &str) -> bool {
             || entry.body.to_lowercase().contains(&query))
 }
 
-fn line_count_after_entry(entries: &[TranscriptEntry], target: &TranscriptEntry) -> u16 {
-    let mut found = false;
+fn line_count_after_entry_index(entries: &[TranscriptEntry], target_index: usize) -> u16 {
     let mut count = 0usize;
-    for entry in entries {
-        if std::ptr::eq(entry, target) {
-            found = true;
-            count = 0;
+    for (index, entry) in entries.iter().enumerate() {
+        if index <= target_index {
             continue;
         }
-        if found {
-            count += entry.body.lines().count().max(1) + 2;
-        }
+        count += entry.body.lines().count().max(1) + 2;
     }
     count.min(u16::MAX as usize) as u16
 }
@@ -1029,6 +1064,7 @@ fn line_count_after_entry(entries: &[TranscriptEntry], target: &TranscriptEntry)
 mod tests {
     use super::{InteractiveApp, LoopAction};
     use crate::backend::WorkerMessage;
+    use crate::input::SlashHint;
     use craik_tui_rs::GatewayEvent;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
@@ -1406,6 +1442,47 @@ mod tests {
 
         assert!(!app.search_active);
         assert_eq!(app.search_query, "r");
+    }
+
+    #[test]
+    fn tab_completes_visible_slash_command() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.slash_catalog = vec![SlashHint {
+            name: "run".to_owned(),
+            usage: "/run <prompt>".to_owned(),
+            summary: "Run an audited prompt.".to_owned(),
+            category: "Run".to_owned(),
+        }];
+        app.input = "/r".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+        assert_eq!(app.input, "/run ");
+        assert_eq!(app.input_cursor, app.input.len());
+    }
+
+    #[test]
+    fn search_navigation_tracks_current_match() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript = vec![
+            crate::transcript::TranscriptEntry::system("First", "alpha"),
+            crate::transcript::TranscriptEntry::assistant("Second", "beta"),
+            crate::transcript::TranscriptEntry::progress("Third", "alpha"),
+        ];
+        app.search_query = "alpha".to_owned();
+
+        app.next_search_match();
+        assert_eq!(app.search_match_index, Some(0));
+        let first_scroll = app.transcript_scroll;
+
+        app.next_search_match();
+        assert_eq!(app.search_match_index, Some(1));
+        assert!(app.transcript_scroll < first_scroll);
+
+        app.previous_search_match();
+        assert_eq!(app.search_match_index, Some(0));
+        assert_eq!(app.transcript_scroll, first_scroll);
     }
 
     #[test]

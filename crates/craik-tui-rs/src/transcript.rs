@@ -198,7 +198,12 @@ fn render_body_line(
     search_query: Option<&str>,
 ) -> Line<'static> {
     let mut spans = vec![Span::styled("  ", Style::default().fg(Color::DarkGray))];
-    if let Some((label, value)) = split_key_value(text) {
+    if let Some(bullet) = text.strip_prefix("- ") {
+        spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
+        spans.extend(value_spans(kind, bullet));
+    } else if let Some(diff) = diff_line_spans(text) {
+        spans.extend(diff);
+    } else if let Some((label, value)) = split_key_value(text) {
         spans.push(Span::styled(
             format!("{label}: "),
             Style::default()
@@ -210,6 +215,30 @@ fn render_body_line(
         spans.extend(value_spans(kind, text));
     }
     highlight_search(spans, search_query)
+}
+
+fn diff_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
+    if text.starts_with("+++") || text.starts_with("---") {
+        return Some(vec![Span::styled(
+            text.to_owned(),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )]);
+    }
+    if text.starts_with('+') {
+        return Some(vec![Span::styled(
+            text.to_owned(),
+            Style::default().fg(Color::Green),
+        )]);
+    }
+    if text.starts_with('-') {
+        return Some(vec![Span::styled(
+            text.to_owned(),
+            Style::default().fg(Color::Red),
+        )]);
+    }
+    None
 }
 
 fn split_key_value(text: &str) -> Option<(&str, &str)> {
@@ -407,6 +436,32 @@ mod tests {
             lines[1].spans[1].style.fg,
             Some(ratatui::style::Color::LightMagenta)
         );
+    }
+
+    #[test]
+    fn transcript_styles_bullets_and_diff_lines() {
+        let entries = vec![TranscriptEntry::new(
+            TranscriptKind::File,
+            "Diff",
+            "--- a/src/lib.rs\n+++ b/src/lib.rs\n-old\n+new\n- run_1 [completed]",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(
+            lines[1].spans[1].style.fg,
+            Some(ratatui::style::Color::DarkGray)
+        );
+        assert_eq!(
+            lines[2].spans[1].style.fg,
+            Some(ratatui::style::Color::DarkGray)
+        );
+        assert_eq!(lines[3].spans[1].style.fg, Some(ratatui::style::Color::Red));
+        assert_eq!(
+            lines[4].spans[1].style.fg,
+            Some(ratatui::style::Color::Green)
+        );
+        assert_eq!(lines[5].spans[1].to_string(), "* ");
     }
 
     #[test]
