@@ -42,7 +42,7 @@ from craik.runtime.setup import (
     setup_command_result,
 )
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
-from craik.runtime.shell.tui import run_ratatui_tui, run_tui
+from craik.runtime.shell.tui import run_ratatui_tui, run_textual_legacy_tui, run_tui
 
 PACKAGE_NAME = "craik"
 install_craik_error_handler()
@@ -222,7 +222,7 @@ def tui_command(
         typer.Option("-n", "--name", help="Operator-visible shell session name."),
     ] = None,
 ) -> None:
-    """Launch the keyboard-first terminal UI."""
+    """Launch the terminal UI. Rust/Ratatui is preferred for interactive terminals."""
     raise typer.Exit(run_tui(env=env_with_session_name(session_name)))
 
 
@@ -233,8 +233,19 @@ def tui_rs_command(
         typer.Option("-n", "--name", help="Operator-visible shell session name."),
     ] = None,
 ) -> None:
-    """Launch the developer Rust/Ratatui terminal UI."""
+    """Launch the Rust/Ratatui terminal UI."""
     raise typer.Exit(run_ratatui_tui(env=env_with_session_name(session_name)))
+
+
+@app.command("tui-textual")
+def tui_textual_command(
+    session_name: Annotated[
+        str | None,
+        typer.Option("-n", "--name", help="Operator-visible shell session name."),
+    ] = None,
+) -> None:
+    """Launch the legacy Python/Textual terminal UI."""
+    raise typer.Exit(run_textual_legacy_tui(env=env_with_session_name(session_name)))
 
 
 @app.command("tui-backend")

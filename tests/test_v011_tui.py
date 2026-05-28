@@ -20,6 +20,7 @@ from craik.runtime.shell.tui import (
     render_approval_modal,
     render_tui_snapshot,
     run_ratatui_tui,
+    run_textual_legacy_tui,
     run_tui,
 )
 from craik.runtime.store import LocalStore
@@ -99,8 +100,8 @@ def test_tui_rs_command_falls_back_to_cargo_in_source_checkout(
     exit_code = run_ratatui_tui(env={"CRAIK_HOME": str(tmp_path / "home")})
 
     assert exit_code == 0
-    assert calls[0][:3] == ["/usr/bin/cargo", "run", "--manifest-path"]
-    assert calls[0][3] == str(ratatui_manifest_path())
+    assert calls[0][:4] == ["/usr/bin/cargo", "run", "--locked", "--manifest-path"]
+    assert calls[0][4] == str(ratatui_manifest_path())
 
 
 def test_tui_rs_command_reports_missing_cargo_for_source_fallback(
@@ -161,6 +162,72 @@ def test_tui_runtime_env_can_select_rust(monkeypatch, tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert calls[0][:2] == ["/usr/bin/cargo", "run"]
+
+
+def test_tui_prefers_rust_for_interactive_terminal(monkeypatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    class Process:
+        def wait(self) -> int:
+            return 0
+
+    def fake_start_process(command, **kwargs):
+        calls.append(command)
+        return Process()
+
+    def fake_which(name: str) -> str | None:
+        return "/usr/bin/cargo" if name == "cargo" else None
+
+    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", fake_which)
+    monkeypatch.setattr(
+        "craik.runtime.shell.tui.start_reviewed_local_process",
+        fake_start_process,
+    )
+
+    exit_code = run_tui(env={"CRAIK_HOME": str(tmp_path / "home")}, stdin_isatty=True)
+
+    assert exit_code == 0
+    assert calls[0][:3] == ["/usr/bin/cargo", "run", "--locked"]
+
+
+def test_tui_runtime_env_can_select_legacy_textual(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, str] | None] = []
+
+    monkeypatch.setattr(
+        "craik.runtime.shell.textual_app.terminal_supports_textual",
+        lambda env=None: True,
+    )
+    monkeypatch.setattr(
+        "craik.runtime.shell.textual_app.run_textual_tui",
+        lambda *, env=None: calls.append(env) or 0,
+    )
+
+    exit_code = run_tui(
+        env={
+            "CRAIK_HOME": str(tmp_path / "home"),
+            "CRAIK_TUI_RUNTIME": "textual",
+        },
+        stdin_isatty=True,
+    )
+    command_result = runner.invoke(
+        app,
+        ["tui-textual"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert exit_code == 0
+    assert command_result.exit_code == 0
+    assert calls
+
+
+def test_legacy_textual_command_reports_unsupported_terminal(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        "craik.runtime.shell.textual_app.terminal_supports_textual",
+        lambda env=None: False,
+    )
+
+    assert run_textual_legacy_tui() == 2
+    assert "Legacy Textual TUI is not supported" in capsys.readouterr().err
 
 
 def test_tui_fixture_mode_status_and_store_panels(tmp_path: Path) -> None:
