@@ -13,6 +13,12 @@ from typing import Literal
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.contracts.models import RunOutput
 from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.provider_events import (
+    model_display_name,
+    provider_default_model,
+    provider_family,
+    provider_tool_call_events,
+)
 from craik.runtime.modeling import ModelProfile, ModelSettingsStore
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.providers.provider_runner import ProviderBackedRunExecutor
@@ -137,13 +143,21 @@ def execute_prompt(
         CaseFileAssembler(store).build(task.id)
         provider_id, model = active_provider_and_model(env)
         active_profile = active_model_profile(env)
+        selected_provider_family = provider_family(provider_id)
+        display_name = model_display_name(
+            provider_id=provider_id,
+            model=model,
+            profile=active_profile,
+        )
         emit(
             BackendEvent(
                 type="model.selected",
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
                     "model": model,
+                    "display_name": display_name,
                     "profile": active_profile.as_dict() if active_profile is not None else None,
                     "live_enabled": live_provider_enabled(env),
                 },
@@ -153,7 +167,24 @@ def execute_prompt(
             BackendEvent(
                 type="run.working",
                 task_id=task.id,
-                data={"provider_id": provider_id, "model": model, "phase": "thinking"},
+                data={
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": model,
+                    "phase": "thinking",
+                },
+            )
+        )
+        emit(
+            BackendEvent(
+                type="run.progress",
+                task_id=task.id,
+                data={
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": model,
+                    "message": f"{display_name} is preparing an audited provider run.",
+                },
             )
         )
         result = ProviderBackedRunExecutor(store).execute(
@@ -164,12 +195,39 @@ def execute_prompt(
             model=model,
             provider_options=active_profile.options if active_profile is not None else None,
         )
+        resolved_model = result.provider_results[-1].model if result.provider_results else model
         emit(
             BackendEvent(
                 type="run.started",
                 run_id=result.run.id,
                 task_id=task.id,
-                data={"provider_id": provider_id, "model": model},
+                data={
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": resolved_model,
+                },
+            )
+        )
+        for event in provider_tool_call_events(
+            result,
+            run_id=result.run.id,
+            task_id=task.id,
+        ):
+            emit(event)
+        emit(
+            BackendEvent(
+                type="run.progress",
+                run_id=result.run.id,
+                task_id=task.id,
+                data={
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": resolved_model,
+                    "message": (
+                        f"{display_name} returned {len(result.provider_results)} "
+                        "provider step result(s)."
+                    ),
+                },
             )
         )
         payload = provider_run_payload(result)
@@ -185,7 +243,11 @@ def execute_prompt(
                         type="receipt.created",
                         run_id=result.run.id,
                         task_id=task.id,
-                        data={"receipt_id": receipt_id},
+                        data={
+                            "receipt_id": receipt_id,
+                            "provider_id": provider_id,
+                            "provider_family": selected_provider_family,
+                        },
                     )
                 )
         emit(
@@ -193,7 +255,12 @@ def execute_prompt(
                 type="run.output",
                 run_id=result.run.id,
                 task_id=task.id,
-                data={"summary": result.run.stop_reason},
+                data={
+                    "summary": result.run.stop_reason,
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": resolved_model,
+                },
             )
         )
         emit(
@@ -201,7 +268,12 @@ def execute_prompt(
                 type="run.completed",
                 run_id=result.run.id,
                 task_id=task.id,
-                data={"status": result.run.status},
+                data={
+                    "status": result.run.status,
+                    "provider_id": provider_id,
+                    "provider_family": selected_provider_family,
+                    "model": resolved_model,
+                },
             )
         )
         _persist_gateway_event_history(payload, events, store=store)
@@ -285,7 +357,7 @@ def active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | No
         "lm-studio": "provider_local_lm_studio",
         "vllm": "provider_local_vllm",
     }.get(provider_name, provider_name)
-    return provider_id, model
+    return provider_id, model or provider_default_model(provider_id)
 
 
 def active_model_profile(env: dict[str, str] | None) -> ModelProfile | None:

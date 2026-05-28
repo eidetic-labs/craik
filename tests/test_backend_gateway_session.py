@@ -4,7 +4,9 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
+import pytest
 from typer.testing import CliRunner
 
 from craik.cli import app
@@ -144,6 +146,36 @@ def test_gateway_payload_includes_active_model_profile(tmp_path: Path, monkeypat
     assert model_event["data"]["profile"]["display_name"] == "Anthropic Claude claude-opus-4-7"
 
 
+@pytest.mark.parametrize(
+    ("model_ref", "provider_id", "provider_family"),
+    [
+        ("openai/gpt-5.2", "provider_openai", "openai"),
+        ("anthropic/claude-sonnet-4-20250514", "provider_anthropic", "anthropic"),
+        ("gemini/gemini-2.5-pro", "provider_gemini", "gemini"),
+        ("ollama/llama3.2", "provider_local_ollama", "chat_completions"),
+    ],
+)
+def test_gateway_provider_event_contract_matrix(
+    tmp_path: Path,
+    monkeypatch,
+    model_ref: str,
+    provider_id: str,
+    provider_family: str,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = {**_env(tmp_path), "CRAIK_FIXTURE": "1"}
+    dispatch_slash_command(f"/model set {model_ref}", env=env)
+
+    result = execute_prompt("Review provider contract", env=env, source="tui")
+    events = [event.as_dict() for event in result.events]
+
+    _assert_provider_gateway_event_contract(
+        events,
+        provider_id=provider_id,
+        provider_family=provider_family,
+    )
+
+
 def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     tmp_path: Path,
     monkeypatch,
@@ -223,6 +255,7 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     approval_event = next(event for event in emitted if event.type == "approval.requested")
     assert approval_event.data["tool"] == "Edit"
     assert approval_event.data["target"] == "README.md"
+    assert approval_event.data["reason"] == "write docs"
 
 
 def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None:
@@ -262,3 +295,68 @@ def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None
         "temperature": 0.2,
         "thinking": True,
     }
+
+
+def _assert_provider_gateway_event_contract(
+    events: list[dict[str, Any]],
+    *,
+    provider_id: str,
+    provider_family: str,
+) -> None:
+    event_types = [event["type"] for event in events]
+    assert event_types[0] == "prompt.submitted"
+    assert "model.selected" in event_types
+    assert "run.working" in event_types
+    assert "run.progress" in event_types
+    assert "run.started" in event_types
+    assert "tool.used" in event_types
+    assert "receipt.created" in event_types
+    assert "run.output" in event_types
+    assert event_types[-1] == "run.completed"
+
+    model_event = _event(events, "model.selected")
+    assert model_event["data"]["provider_id"] == provider_id
+    assert model_event["data"]["provider_family"] == provider_family
+    assert model_event["data"]["model"]
+    assert model_event["data"]["display_name"]
+
+    run_started = _event(events, "run.started")
+    assert run_started["run_id"]
+    assert run_started["task_id"]
+    assert run_started["data"]["provider_id"] == provider_id
+    assert run_started["data"]["provider_family"] == provider_family
+    assert run_started["data"]["model"]
+
+    for event_type in ["tool.used", "receipt.created", "run.output", "run.completed"]:
+        for event in [event for event in events if event["type"] == event_type]:
+            assert event["run_id"] == run_started["run_id"]
+            assert event["task_id"] == run_started["task_id"]
+            assert event["data"]["provider_id"] == provider_id
+            assert event["data"]["provider_family"] == provider_family
+
+    for tool_event in [event for event in events if event["type"] == "tool.used"]:
+        assert tool_event["data"]["tool"]
+        assert (
+            tool_event["data"].get("target")
+            or tool_event["data"].get("command")
+            or tool_event["data"].get("message")
+        )
+
+    receipt_ids = [
+        event["data"]["receipt_id"]
+        for event in events
+        if event["type"] == "receipt.created"
+    ]
+    assert receipt_ids
+    assert len(receipt_ids) == len(set(receipt_ids))
+
+    completed = events[-1]
+    assert completed["type"] == "run.completed"
+    assert completed["data"]["status"] in {"completed", "blocked", "failed", "interrupted"}
+    assert completed["data"]["provider_id"] == provider_id
+    assert completed["data"]["provider_family"] == provider_family
+    assert completed["data"]["model"]
+
+
+def _event(events: list[dict[str, Any]], event_type: str) -> dict[str, Any]:
+    return next(event for event in events if event["type"] == event_type)

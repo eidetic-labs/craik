@@ -151,7 +151,8 @@ impl GatewayAppState {
             "model.selected" => {
                 self.active_model = string_at(&event.data, &["model"]);
                 self.active_model_display_name =
-                    string_at(&event.data, &["profile", "display_name"]);
+                    string_at(&event.data, &["profile", "display_name"])
+                        .or_else(|| string_at(&event.data, &["display_name"]));
                 self.backend = string_at(&event.data, &["backend"])
                     .or_else(|| string_at(&event.data, &["profile", "backend"]));
             }
