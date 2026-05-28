@@ -45,7 +45,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
 
 pub fn status_line(state: &GatewayAppState, in_flight: bool) -> Line<'static> {
     let request_state = if in_flight { "working" } else { "ready" };
-    let model = model_label(state, "model not selected").to_owned();
+    let model = compact_label(model_label(state, "model not selected"), 42);
     Line::from(vec![
         Span::styled(
             "Craik",
@@ -53,10 +53,44 @@ pub fn status_line(state: &GatewayAppState, in_flight: bool) -> Line<'static> {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!(
-            " · {model} · {request_state} · Enter sends · Alt-Enter newline · ↑/↓ history · PgUp/PgDn scroll · Ctrl-A approve · Ctrl-X deny · Ctrl-C exits"
-        )),
+        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+        Span::styled(model, Style::default().fg(Color::White)),
+        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            request_state,
+            Style::default()
+                .fg(if in_flight {
+                    Color::Yellow
+                } else {
+                    Color::Green
+                })
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+        Span::styled("Enter", Style::default().fg(Color::LightGreen)),
+        Span::raw(" send"),
+        Span::styled("  Alt-Enter", Style::default().fg(Color::LightBlue)),
+        Span::raw(" newline"),
+        Span::styled("  PgUp/PgDn", Style::default().fg(Color::LightBlue)),
+        Span::raw(" scroll"),
+        Span::styled(
+            if in_flight {
+                "  Ctrl-C stop"
+            } else {
+                "  Ctrl-C exit"
+            },
+            Style::default().fg(Color::LightRed),
+        ),
     ])
+}
+
+fn compact_label(value: &str, max_chars: usize) -> String {
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_owned();
+    }
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", value.chars().take(keep).collect::<String>())
 }
 
 fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
@@ -114,5 +148,20 @@ mod tests {
 
         assert!(rendered.contains("anthropic/claude-sonnet"));
         assert!(rendered.contains("working"));
+    }
+
+    #[test]
+    fn status_line_compacts_long_model_names() {
+        let state = GatewayAppState {
+            active_model_display_name: Some(
+                "Anthropic Claude Opus 4.7 Extended Thinking Preview".to_owned(),
+            ),
+            ..GatewayAppState::default()
+        };
+
+        let rendered = status_line(&state, false).to_string();
+
+        assert!(rendered.contains("Anthropic Claude Opus 4.7 Extended Thin..."));
+        assert!(!rendered.contains("Thinking Preview"));
     }
 }
