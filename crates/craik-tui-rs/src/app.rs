@@ -173,6 +173,14 @@ impl InteractiveApp {
         }
     }
 
+    pub(crate) fn pending_approval_count(&self) -> usize {
+        self.pending_approvals.len()
+    }
+
+    pub(crate) fn latest_pending_approval(&self) -> Option<&str> {
+        self.pending_approvals.last().map(String::as_str)
+    }
+
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -312,8 +320,9 @@ impl InteractiveApp {
                     } else {
                         TranscriptKind::Tool
                     };
+                    let text = summarize_tool_event(event, message);
                     self.transcript
-                        .push(TranscriptEntry::new(kind, tool, message));
+                        .push(TranscriptEntry::new(kind, tool, &text));
                     self.transcript_scroll = 0;
                 }
             }
@@ -329,8 +338,11 @@ impl InteractiveApp {
                     .or_else(|| event.data.get("message"))
                     .and_then(|value| value.as_str())
                     .unwrap_or(target);
-                self.transcript
-                    .push(TranscriptEntry::new(TranscriptKind::File, target, text));
+                self.transcript.push(TranscriptEntry::new(
+                    TranscriptKind::File,
+                    target,
+                    &format!("Path: {target}\nSummary: {text}"),
+                ));
                 self.transcript_scroll = 0;
             }
             "approval.requested" => {
@@ -355,7 +367,15 @@ impl InteractiveApp {
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
                     "Approval requested",
-                    message,
+                    &format!(
+                        "ID: {}\nRequest: {}\nActions: Ctrl-A approve / Ctrl-X deny",
+                        if approval_id.is_empty() {
+                            "unknown"
+                        } else {
+                            approval_id
+                        },
+                        message
+                    ),
                 ));
                 self.transcript_scroll = 0;
             }
@@ -370,12 +390,24 @@ impl InteractiveApp {
                     .get("decision")
                     .and_then(|value| value.as_str())
                     .unwrap_or("resolved");
+                let operator = event
+                    .data
+                    .get("operator")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("operator unknown");
                 self.pending_approvals
                     .retain(|candidate| candidate != approval_id);
+                let title = if decision == "approved" {
+                    "Approval approved"
+                } else if decision == "denied" {
+                    "Approval denied"
+                } else {
+                    "Approval resolved"
+                };
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
-                    "Approval resolved",
-                    &format!("{approval_id}: {decision}"),
+                    title,
+                    &format!("ID: {approval_id}\nDecision: {decision}\nOperator: {operator}"),
                 ));
             }
             "receipt.created" => {
@@ -623,6 +655,18 @@ impl InteractiveApp {
     }
 }
 
+fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String {
+    let mut lines = Vec::new();
+    if let Some(command) = event.data.get("command").and_then(|value| value.as_str()) {
+        lines.push(format!("Command: {command}"));
+    }
+    if let Some(target) = event.data.get("target").and_then(|value| value.as_str()) {
+        lines.push(format!("Target: {target}"));
+    }
+    lines.push(format!("Detail: {fallback_message}"));
+    lines.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{InteractiveApp, LoopAction};
@@ -673,6 +717,97 @@ mod tests {
             app.transcript
                 .iter()
                 .any(|entry| entry.title == "No model output")
+        );
+    }
+
+    #[test]
+    fn approval_request_tracks_pending_state_and_actions() {
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_edit_123",
+                "message": "Edit src/lib.rs?"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&approval);
+
+        assert_eq!(app.pending_approval_count(), 1);
+        assert_eq!(app.latest_pending_approval(), Some("approval_edit_123"));
+        let entry = app.transcript.last().expect("approval transcript entry");
+        assert_eq!(entry.title, "Approval requested");
+        assert!(entry.body.contains("ID: approval_edit_123"));
+        assert!(entry.body.contains("Request: Edit src/lib.rs?"));
+        assert!(entry.body.contains("Ctrl-A approve / Ctrl-X deny"));
+    }
+
+    #[test]
+    fn approval_resolution_clears_pending_state_and_shows_decision() {
+        let requested = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_cmd_456",
+                "message": "Run cargo test?"
+            }),
+        };
+        let resolved = GatewayEvent {
+            event_type: "approval.resolved".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_cmd_456",
+                "decision": "approved",
+                "operator": "user:ratatui"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&requested);
+        app.record_event(&resolved);
+
+        assert_eq!(app.pending_approval_count(), 0);
+        assert_eq!(app.latest_pending_approval(), None);
+        let entry = app.transcript.last().expect("approval transcript entry");
+        assert_eq!(entry.title, "Approval approved");
+        assert!(entry.body.contains("ID: approval_cmd_456"));
+        assert!(entry.body.contains("Decision: approved"));
+        assert!(entry.body.contains("Operator: user:ratatui"));
+    }
+
+    #[test]
+    fn tool_events_surface_command_target_and_detail() {
+        let event = GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "tool": "Bash",
+                "command": "cargo test",
+                "target": "crates/craik-tui-rs",
+                "message": "Command completed successfully."
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&event);
+
+        let entry = app.transcript.last().expect("tool transcript entry");
+        assert_eq!(entry.title, "Bash");
+        assert!(entry.body.contains("Command: cargo test"));
+        assert!(entry.body.contains("Target: crates/craik-tui-rs"));
+        assert!(
+            entry
+                .body
+                .contains("Detail: Command completed successfully.")
         );
     }
 

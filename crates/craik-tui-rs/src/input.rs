@@ -10,6 +10,11 @@ pub struct SlashHint {
     pub summary: String,
 }
 
+struct SlashSuggestion<'a> {
+    usage: &'a str,
+    summary: &'a str,
+}
+
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     let mut lines = if input.is_empty() {
         vec![Line::from(Span::styled(
@@ -34,25 +39,45 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
             Span::styled(" / Alt-Enter newline", Style::default().fg(Color::DarkGray)),
         ]));
     }
-    let suggestions = slash_suggestions(input, slash_catalog);
+    let suggestions = slash_suggestion_rows(input, slash_catalog);
     if !suggestions.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                "Suggestions ",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                suggestions.join("  "),
-                Style::default().fg(Color::LightCyan),
-            ),
-        ]));
+        lines.push(Line::from(Span::styled(
+            "Suggestions",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.extend(suggestions.into_iter().map(|suggestion| {
+            Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    suggestion.usage.to_owned(),
+                    Style::default()
+                        .fg(Color::LightCyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("  {}", suggestion.summary),
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ])
+        }));
     }
     lines
 }
 
-pub fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String> {
+#[cfg(test)]
+fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String> {
+    slash_suggestion_rows(input, slash_catalog)
+        .into_iter()
+        .map(|hint| format!("{} - {}", hint.usage, hint.summary))
+        .collect()
+}
+
+fn slash_suggestion_rows<'a>(
+    input: &str,
+    slash_catalog: &'a [SlashHint],
+) -> Vec<SlashSuggestion<'a>> {
     let input = input.trim_start();
     if !input.starts_with('/') {
         return Vec::new();
@@ -66,7 +91,10 @@ pub fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String
         .iter()
         .filter(|hint| hint.name.starts_with(prefix))
         .take(5)
-        .map(|hint| format!("{} - {}", hint.usage, hint.summary))
+        .map(|hint| SlashSuggestion {
+            usage: &hint.usage,
+            summary: &hint.summary,
+        })
         .collect()
 }
 
@@ -140,5 +168,32 @@ mod tests {
             lines[0].spans[0].style.fg,
             Some(ratatui::style::Color::DarkGray)
         );
+    }
+
+    #[test]
+    fn input_rendering_stacks_slash_suggestions_for_scanning() {
+        let catalog = vec![
+            SlashHint {
+                name: "run".to_owned(),
+                usage: "/run <prompt>".to_owned(),
+                summary: "Run an audited prompt.".to_owned(),
+            },
+            SlashHint {
+                name: "receipt".to_owned(),
+                usage: "/receipt latest".to_owned(),
+                summary: "Show latest receipt.".to_owned(),
+            },
+        ];
+
+        let lines = render_input_lines("/r", &catalog);
+        let rendered = lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("Suggestions"));
+        assert!(rendered.contains("  /run <prompt>  Run an audited prompt."));
+        assert!(rendered.contains("  /receipt latest  Show latest receipt."));
     }
 }

@@ -208,6 +208,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             slash_commands: app.slash_catalog.len(),
             queued_inputs: app.queued_inputs.len(),
             last_error: app.last_error.as_deref(),
+            pending_approvals: app.pending_approval_count(),
+            latest_pending_approval: app.latest_pending_approval(),
         },
     ))
     .block(Block::default().title("Activity").borders(Borders::ALL))
@@ -232,7 +234,11 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         input_inner,
     ));
 
-    let footer = Paragraph::new(status_line(&app.state, app.in_flight));
+    let footer = Paragraph::new(status_line(
+        &app.state,
+        app.in_flight,
+        app.latest_pending_approval(),
+    ));
     frame.render_widget(footer, vertical[2]);
 }
 
