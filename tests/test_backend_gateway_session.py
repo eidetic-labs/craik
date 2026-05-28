@@ -92,7 +92,19 @@ def test_cli_run_prompt_mirrors_slash_gateway_path(tmp_path: Path, monkeypatch) 
     _repo(tmp_path, monkeypatch)
     env = _env(tmp_path)
 
-    result = runner.invoke(app, ["run", "prompt", "Upgrade Craik Docs"], env=env)
+    result = runner.invoke(app, ["run", "prompt", "Upgrade", "Craik", "Docs"], env=env)
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["task"]["id"] == "task_upgrade_craik_docs"
+    assert payload["gateway_events"][-1]["type"] == "run.completed"
+
+
+def test_cli_run_direct_prompt_mirrors_gateway_path(tmp_path: Path, monkeypatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+
+    result = runner.invoke(app, ["run", "Upgrade", "Craik", "Docs"], env=env)
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
