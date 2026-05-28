@@ -14,6 +14,17 @@ pub(crate) enum LoopAction {
     Exit,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PendingApproval {
+    id: String,
+    message: String,
+    tool: Option<String>,
+    target: Option<String>,
+    reason: Option<String>,
+    risk: Option<String>,
+    command: Option<String>,
+}
+
 pub(crate) struct InteractiveApp {
     pub(crate) state: GatewayAppState,
     pub(crate) input: String,
@@ -27,7 +38,8 @@ pub(crate) struct InteractiveApp {
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
-    pending_approvals: Vec<String>,
+    pending_approvals: Vec<PendingApproval>,
+    selected_approval_index: Option<usize>,
     pub(crate) slash_catalog: Vec<SlashHint>,
     history: Vec<String>,
     history_index: Option<usize>,
@@ -57,6 +69,7 @@ impl InteractiveApp {
             in_flight: false,
             last_error: None,
             pending_approvals: Vec::new(),
+            selected_approval_index: None,
             slash_catalog: Vec::new(),
             history: Vec::new(),
             history_index: None,
@@ -94,6 +107,7 @@ impl InteractiveApp {
             in_flight: false,
             last_error: None,
             pending_approvals: Vec::new(),
+            selected_approval_index: None,
             slash_catalog: Vec::new(),
             history: Vec::new(),
             history_index: None,
@@ -190,7 +204,31 @@ impl InteractiveApp {
     }
 
     pub(crate) fn latest_pending_approval(&self) -> Option<&str> {
-        self.pending_approvals.last().map(String::as_str)
+        self.selected_pending_approval()
+            .map(|approval| approval.id.as_str())
+    }
+
+    pub(crate) fn selected_approval_summary(&self) -> Option<String> {
+        let approval = self.selected_pending_approval()?;
+        let position = self.selected_approval_index.unwrap_or_default() + 1;
+        let total = self.pending_approvals.len();
+        let subject = approval
+            .target
+            .as_deref()
+            .or(approval.command.as_deref())
+            .or(approval.tool.as_deref())
+            .unwrap_or("target unavailable");
+        Some(format!("{position}/{total} {} -> {subject}", approval.id))
+    }
+
+    pub(crate) fn selected_approval_preview(&self) -> Option<String> {
+        self.selected_pending_approval()
+            .map(PendingApproval::preview_text)
+    }
+
+    fn selected_pending_approval(&self) -> Option<&PendingApproval> {
+        let index = self.selected_approval_index?;
+        self.pending_approvals.get(index)
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
@@ -208,11 +246,19 @@ impl InteractiveApp {
             }
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => LoopAction::Exit,
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.approve_latest();
+                self.approve_selected();
                 LoopAction::Continue
             }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.deny_latest();
+                self.deny_selected();
+                LoopAction::Continue
+            }
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_next_approval();
+                LoopAction::Continue
+            }
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_previous_approval();
                 LoopAction::Continue
             }
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -408,36 +454,21 @@ impl InteractiveApp {
                 self.follow_tail_after_transcript_update();
             }
             "approval.requested" => {
-                let approval_id = event
-                    .data
-                    .get("approval_id")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default();
-                if !approval_id.is_empty()
+                let approval = PendingApproval::from_event(event);
+                if !approval.id.is_empty()
                     && !self
                         .pending_approvals
                         .iter()
-                        .any(|candidate| candidate == approval_id)
+                        .any(|candidate| candidate.id == approval.id)
                 {
-                    self.pending_approvals.push(approval_id.to_owned());
+                    self.pending_approvals.push(approval.clone());
+                    self.selected_approval_index =
+                        Some(self.pending_approvals.len().saturating_sub(1));
                 }
-                let message = event
-                    .data
-                    .get("message")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("Approval requested.");
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
                     "Approval requested",
-                    &format!(
-                        "ID: {}\nRequest: {}\nActions: Ctrl-A approve / Ctrl-X deny",
-                        if approval_id.is_empty() {
-                            "unknown"
-                        } else {
-                            approval_id
-                        },
-                        message
-                    ),
+                    &approval.request_text(),
                 ));
                 self.follow_tail_after_transcript_update();
             }
@@ -458,7 +489,8 @@ impl InteractiveApp {
                     .and_then(|value| value.as_str())
                     .unwrap_or("operator unknown");
                 self.pending_approvals
-                    .retain(|candidate| candidate != approval_id);
+                    .retain(|candidate| candidate.id != approval_id);
+                self.normalize_selected_approval();
                 let title = if decision == "approved" {
                     "Approval approved"
                 } else if decision == "denied" {
@@ -471,6 +503,28 @@ impl InteractiveApp {
                     title,
                     &format!("ID: {approval_id}\nDecision: {decision}\nOperator: {operator}"),
                 ));
+                self.follow_tail_after_transcript_update();
+            }
+            "approval.denied" => {
+                let approval_id = event
+                    .data
+                    .get("approval_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("approval");
+                let message = event
+                    .data
+                    .get("message")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("Approval denied.");
+                self.pending_approvals
+                    .retain(|candidate| candidate.id != approval_id);
+                self.normalize_selected_approval();
+                self.transcript.push(TranscriptEntry::new(
+                    TranscriptKind::Approval,
+                    "Approval denied",
+                    &format!("ID: {approval_id}\nDecision: denied\nMessage: {message}"),
+                ));
+                self.follow_tail_after_transcript_update();
             }
             "receipt.created" => {
                 if let Some(receipt_id) = event
@@ -483,6 +537,7 @@ impl InteractiveApp {
                         "Receipt",
                         receipt_id,
                     ));
+                    self.follow_tail_after_transcript_update();
                 }
             }
             "run.output" => {
@@ -689,8 +744,8 @@ impl InteractiveApp {
         }]);
     }
 
-    pub(crate) fn approve_latest(&mut self) {
-        let Some(approval_id) = self.pending_approvals.last().cloned() else {
+    pub(crate) fn approve_selected(&mut self) {
+        let Some(approval) = self.selected_pending_approval().cloned() else {
             self.transcript.push(TranscriptEntry::system(
                 "Approval",
                 "No pending approval with an id is available.",
@@ -700,18 +755,18 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::new(
             TranscriptKind::Approval,
             "Approving",
-            &approval_id,
+            &format!("ID: {}\n{}", approval.id, approval.preview_text()),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
-            approval_id,
+            approval_id: approval.id,
             decision: "approved".to_owned(),
             operator: "user:ratatui".to_owned(),
             reason: "approved from Ratatui client".to_owned(),
         }]);
     }
 
-    pub(crate) fn deny_latest(&mut self) {
-        let Some(approval_id) = self.pending_approvals.last().cloned() else {
+    pub(crate) fn deny_selected(&mut self) {
+        let Some(approval) = self.selected_pending_approval().cloned() else {
             self.transcript.push(TranscriptEntry::system(
                 "Approval",
                 "No pending approval with an id is available.",
@@ -721,14 +776,56 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::new(
             TranscriptKind::Approval,
             "Denying",
-            &approval_id,
+            &format!("ID: {}\n{}", approval.id, approval.preview_text()),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
-            approval_id,
+            approval_id: approval.id,
             decision: "denied".to_owned(),
             operator: "user:ratatui".to_owned(),
             reason: "denied from Ratatui client".to_owned(),
         }]);
+    }
+
+    pub(crate) fn select_next_approval(&mut self) {
+        if self.pending_approvals.is_empty() {
+            self.selected_approval_index = None;
+            return;
+        }
+        let next = self
+            .selected_approval_index
+            .map(|index| (index + 1) % self.pending_approvals.len())
+            .unwrap_or(0);
+        self.selected_approval_index = Some(next);
+    }
+
+    pub(crate) fn select_previous_approval(&mut self) {
+        if self.pending_approvals.is_empty() {
+            self.selected_approval_index = None;
+            return;
+        }
+        let previous = self
+            .selected_approval_index
+            .map(|index| {
+                if index == 0 {
+                    self.pending_approvals.len() - 1
+                } else {
+                    index - 1
+                }
+            })
+            .unwrap_or(0);
+        self.selected_approval_index = Some(previous);
+    }
+
+    fn normalize_selected_approval(&mut self) {
+        if self.pending_approvals.is_empty() {
+            self.selected_approval_index = None;
+            return;
+        }
+        let index = self
+            .selected_approval_index
+            .unwrap_or_default()
+            .min(self.pending_approvals.len() - 1);
+        self.selected_approval_index = Some(index);
     }
 
     pub(crate) fn history_previous(&mut self) {
@@ -760,6 +857,48 @@ impl InteractiveApp {
     }
 }
 
+impl PendingApproval {
+    fn from_event(event: &GatewayEvent) -> Self {
+        Self {
+            id: string_data(event, "approval_id").unwrap_or_default(),
+            message: string_data(event, "message")
+                .unwrap_or_else(|| "Approval requested.".to_owned()),
+            tool: string_data(event, "tool"),
+            target: string_data(event, "target"),
+            reason: string_data(event, "reason"),
+            risk: string_data(event, "risk").or_else(|| string_data(event, "risk_text")),
+            command: string_data(event, "command"),
+        }
+    }
+
+    fn request_text(&self) -> String {
+        format!(
+            "{}\nActions: Ctrl-A approve / Ctrl-X deny · Ctrl-N/Ctrl-P select",
+            self.preview_text()
+        )
+    }
+
+    fn preview_text(&self) -> String {
+        let mut lines = vec![
+            format!(
+                "ID: {}",
+                if self.id.is_empty() {
+                    "unknown"
+                } else {
+                    self.id.as_str()
+                }
+            ),
+            format!("Request: {}", self.message),
+        ];
+        push_optional_line(&mut lines, "Tool", self.tool.as_deref());
+        push_optional_line(&mut lines, "Target", self.target.as_deref());
+        push_optional_line(&mut lines, "Command", self.command.as_deref());
+        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
+        push_optional_line(&mut lines, "Risk", self.risk.as_deref());
+        lines.join("\n")
+    }
+}
+
 fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String {
     let mut lines = Vec::new();
     if let Some(command) = event.data.get("command").and_then(|value| value.as_str()) {
@@ -770,6 +909,21 @@ fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String 
     }
     lines.push(format!("Detail: {fallback_message}"));
     lines.join("\n")
+}
+
+fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
+    event
+        .data
+        .get(key)
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+}
+
+fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        lines.push(format!("{label}: {value}"));
+    }
 }
 
 fn entry_matches_search(entry: &TranscriptEntry, query: &str) -> bool {
@@ -857,7 +1011,11 @@ mod tests {
             task_id: None,
             data: json!({
                 "approval_id": "approval_edit_123",
-                "message": "Edit src/lib.rs?"
+                "message": "Edit src/lib.rs?",
+                "tool": "Edit",
+                "target": "src/lib.rs",
+                "reason": "normalize event mapping",
+                "risk": "writes source files"
             }),
         };
         let mut app = InteractiveApp::for_test_with_messages([]);
@@ -866,11 +1024,128 @@ mod tests {
 
         assert_eq!(app.pending_approval_count(), 1);
         assert_eq!(app.latest_pending_approval(), Some("approval_edit_123"));
+        assert_eq!(
+            app.selected_approval_summary().as_deref(),
+            Some("1/1 approval_edit_123 -> src/lib.rs")
+        );
+        assert!(
+            app.selected_approval_preview()
+                .expect("approval preview")
+                .contains("Risk: writes source files")
+        );
         let entry = app.transcript.last().expect("approval transcript entry");
         assert_eq!(entry.title, "Approval requested");
         assert!(entry.body.contains("ID: approval_edit_123"));
         assert!(entry.body.contains("Request: Edit src/lib.rs?"));
+        assert!(entry.body.contains("Tool: Edit"));
+        assert!(entry.body.contains("Target: src/lib.rs"));
+        assert!(entry.body.contains("Reason: normalize event mapping"));
         assert!(entry.body.contains("Ctrl-A approve / Ctrl-X deny"));
+    }
+
+    #[test]
+    fn multiple_approvals_can_be_selected_and_decided() {
+        let first = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_edit_1",
+                "message": "Edit first file?",
+                "tool": "Edit",
+                "target": "src/first.rs"
+            }),
+        };
+        let second = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_2",
+                "message": "Run tests?",
+                "tool": "Bash",
+                "command": "cargo test"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&first);
+        app.record_event(&second);
+
+        assert_eq!(app.pending_approval_count(), 2);
+        assert_eq!(app.latest_pending_approval(), Some("approval_bash_2"));
+        assert_eq!(
+            app.selected_approval_summary().as_deref(),
+            Some("2/2 approval_bash_2 -> cargo test")
+        );
+
+        app.select_previous_approval();
+
+        assert_eq!(app.latest_pending_approval(), Some("approval_edit_1"));
+        assert_eq!(
+            app.selected_approval_summary().as_deref(),
+            Some("1/2 approval_edit_1 -> src/first.rs")
+        );
+
+        app.deny_selected();
+
+        let entry = app.transcript.last().expect("decision transcript entry");
+        assert_eq!(entry.title, "Denying");
+        assert!(entry.body.contains("ID: approval_edit_1"));
+        assert!(entry.body.contains("Target: src/first.rs"));
+    }
+
+    #[test]
+    fn approval_resolution_removes_selected_item_and_keeps_next_pending_selected() {
+        let first = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_one",
+                "message": "Edit one?",
+                "tool": "Edit",
+                "target": "one.rs"
+            }),
+        };
+        let second = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_two",
+                "message": "Edit two?",
+                "tool": "Edit",
+                "target": "two.rs"
+            }),
+        };
+        let resolved = GatewayEvent {
+            event_type: "approval.resolved".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_two",
+                "decision": "approved",
+                "operator": "user:ratatui"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&first);
+        app.record_event(&second);
+        app.record_event(&resolved);
+
+        assert_eq!(app.pending_approval_count(), 1);
+        assert_eq!(app.latest_pending_approval(), Some("approval_one"));
+        assert_eq!(
+            app.selected_approval_summary().as_deref(),
+            Some("1/1 approval_one -> one.rs")
+        );
     }
 
     #[test]

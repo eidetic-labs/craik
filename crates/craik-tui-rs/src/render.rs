@@ -10,6 +10,8 @@ pub struct ActivityMetrics<'a> {
     pub last_error: Option<&'a str>,
     pub pending_approvals: usize,
     pub latest_pending_approval: Option<&'a str>,
+    pub selected_approval_summary: Option<&'a str>,
+    pub selected_approval_preview: Option<&'a str>,
 }
 
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
@@ -46,16 +48,27 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
     ];
     if metrics.pending_approvals > 0 {
         lines.extend([
-            "Approval pending".to_owned(),
+            "Approvals pending".to_owned(),
             format!("  Pending: {}", metrics.pending_approvals),
-            format!(
-                "  Latest: {}",
+        ]);
+        if let Some(summary) = metrics.selected_approval_summary {
+            lines.push(format!("  Selected: {summary}"));
+        } else {
+            lines.push(format!(
+                "  Selected: {}",
                 metrics
                     .latest_pending_approval
                     .unwrap_or("approval id unavailable")
-            ),
-            "  Actions: Ctrl-A approve / Ctrl-X deny".to_owned(),
-        ]);
+            ));
+        }
+        if let Some(preview) = metrics.selected_approval_preview {
+            lines.push("  Preview".to_owned());
+            lines.extend(preview.lines().map(|line| format!("    {line}")));
+        }
+        lines.push("  Actions: Ctrl-A approve / Ctrl-X deny".to_owned());
+        if metrics.pending_approvals > 1 {
+            lines.push("  Select: Ctrl-N next / Ctrl-P previous".to_owned());
+        }
     } else {
         lines.push("Approvals: none pending".to_owned());
     }
@@ -139,7 +152,7 @@ pub fn status_line(
         },
         if pending_approval.is_some() {
             Span::styled(
-                "  Ctrl-A approve  Ctrl-X deny",
+                "  Ctrl-A approve  Ctrl-X deny  Ctrl-N/P select",
                 Style::default()
                     .fg(Color::LightRed)
                     .add_modifier(Modifier::BOLD),
@@ -206,6 +219,8 @@ mod tests {
                 last_error: Some("gateway disconnected"),
                 pending_approvals: 1,
                 latest_pending_approval: Some("approval_123"),
+                selected_approval_summary: Some("1/1 approval_123 -> src/lib.rs"),
+                selected_approval_preview: Some("ID: approval_123\nTool: Edit\nTarget: src/lib.rs"),
             },
         );
 
@@ -218,8 +233,10 @@ mod tests {
         assert!(rendered.contains("  Commands: 1"));
         assert!(rendered.contains("  Slash commands: 12"));
         assert!(rendered.contains("  Queued: 2"));
-        assert!(rendered.contains("Approval pending"));
-        assert!(rendered.contains("  Latest: approval_123"));
+        assert!(rendered.contains("Approvals pending"));
+        assert!(rendered.contains("  Selected: 1/1 approval_123 -> src/lib.rs"));
+        assert!(rendered.contains("    Tool: Edit"));
+        assert!(rendered.contains("    Target: src/lib.rs"));
         assert!(rendered.contains("Last error: gateway disconnected"));
     }
 
