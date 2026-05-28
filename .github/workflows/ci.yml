@@ -15,6 +15,7 @@ jobs:
     outputs:
       python: ${{ steps.filter.outputs.python }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      rust: ${{ steps.filter.outputs.rust }}
       docs: ${{ steps.filter.outputs.docs }}
       workflows: ${{ steps.filter.outputs.workflows }}
     steps:
@@ -33,6 +34,8 @@ jobs:
               - 'src/craik/contracts/**'
               - 'tests/fixtures/contracts/**'
               - 'tests/test_contracts.py'
+            rust:
+              - 'crates/**'
             docs:
               - 'docs/**'
               - 'README.md'
@@ -145,6 +148,21 @@ jobs:
       - name: Run recorded integration tests
         run: pytest -m "integration and not live" tests/integration
 
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path crates/craik-tui-rs/Cargo.toml --check
+      - name: Lint Rust crate
+        run: cargo clippy --manifest-path crates/craik-tui-rs/Cargo.toml --all-targets -- -D warnings
+      - name: Test Rust crate
+        run: cargo test --manifest-path crates/craik-tui-rs/Cargo.toml
+      - name: Smoke Rust Gateway replay
+        run: cargo run --manifest-path crates/craik-tui-rs/Cargo.toml -- tests/fixtures/gateway/claude_code_stream.jsonl
+
   security:
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.docs == 'true' || needs.changes.outputs.workflows == 'true'
@@ -245,6 +263,7 @@ jobs:
       - unit
       - contract
       - integration
+      - rust
       - security
       - quickstart-smoke
     if: always()
@@ -259,6 +278,7 @@ jobs:
             "${{ needs.unit.result }}" \
             "${{ needs.contract.result }}" \
             "${{ needs.integration.result }}" \
+            "${{ needs.rust.result }}" \
             "${{ needs.security.result }}" \
             "${{ needs.quickstart-smoke.result }}"; do
             case "$result" in
