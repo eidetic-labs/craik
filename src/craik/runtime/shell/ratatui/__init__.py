@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
+from os import X_OK, PathLike, access
 from pathlib import Path
 
 
@@ -39,10 +40,19 @@ def ratatui_command() -> list[str] | None:
     return ["cargo", "run", "--locked", "--manifest-path", str(manifest)]
 
 
+def cargo_path() -> str | None:
+    """Return Cargo from PATH or the standard rustup install location."""
+    discovered = shutil.which("cargo")
+    if discovered is not None:
+        return discovered
+    rustup_cargo = Path.home() / ".cargo" / "bin" / "cargo"
+    return str(rustup_cargo) if _is_executable_file(rustup_cargo) else None
+
+
 def ratatui_runtime_diagnostics() -> RatatuiRuntimeDiagnostics:
     """Return launch diagnostics for packaging and install guidance."""
     installed = shutil.which("craik-tui-rs")
-    cargo = shutil.which("cargo")
+    cargo = cargo_path()
     manifest = ratatui_manifest_path()
     command: tuple[str, ...] | None
     if installed is not None:
@@ -70,3 +80,7 @@ def ratatui_manifest_path() -> Path | None:
     root = Path(__file__).resolve().parents[5]
     manifest = root / "crates" / "craik-tui-rs" / "Cargo.toml"
     return manifest if manifest.exists() else None
+
+
+def _is_executable_file(path: str | PathLike[str]) -> bool:
+    return Path(path).is_file() and access(path, X_OK)

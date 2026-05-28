@@ -105,11 +105,43 @@ def test_tui_rs_command_falls_back_to_cargo_in_source_checkout(
     assert calls[0][4] == str(ratatui_manifest_path())
 
 
+def test_tui_rs_command_falls_back_to_rustup_cargo_path(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[list[str]] = []
+    cargo = tmp_path / ".cargo" / "bin" / "cargo"
+    cargo.parent.mkdir(parents=True)
+    cargo.write_text("#!/bin/sh\n", encoding="utf-8")
+    cargo.chmod(0o755)
+
+    class Process:
+        def wait(self) -> int:
+            return 0
+
+    def fake_start_process(command, **kwargs):
+        calls.append(command)
+        return Process()
+
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", lambda name: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.Path.home", lambda: tmp_path)
+    monkeypatch.setattr(
+        "craik.runtime.shell.tui.start_reviewed_local_process",
+        fake_start_process,
+    )
+
+    exit_code = run_ratatui_tui(env={"CRAIK_HOME": str(tmp_path / "home")})
+
+    assert exit_code == 0
+    assert calls[0][:4] == [str(cargo), "run", "--locked", "--manifest-path"]
+
+
 def test_tui_rs_command_reports_missing_cargo_for_source_fallback(
     monkeypatch,
     capsys,
 ) -> None:
     monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", lambda name: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.Path.home", lambda: Path("/missing"))
 
     exit_code = run_ratatui_tui()
 
@@ -122,6 +154,7 @@ def test_tui_rs_command_reports_missing_binary_and_checkout(
     capsys,
 ) -> None:
     monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", lambda name: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.Path.home", lambda: Path("/missing"))
     monkeypatch.setattr("craik.runtime.shell.ratatui.ratatui_manifest_path", lambda: None)
 
     exit_code = run_ratatui_tui()
