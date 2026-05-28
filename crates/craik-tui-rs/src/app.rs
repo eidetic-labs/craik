@@ -6,7 +6,7 @@ use crate::{
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, env, fs, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoopAction {
@@ -469,6 +469,10 @@ impl InteractiveApp {
             }
             KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.retry_last_prompt();
+                LoopAction::Continue
+            }
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.export_selected_run();
                 LoopAction::Continue
             }
             KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1507,6 +1511,31 @@ impl InteractiveApp {
         self.dispatch_text(text);
     }
 
+    pub(crate) fn export_selected_run(&mut self) {
+        let Some(run) = self.selected_run() else {
+            self.transcript.push(TranscriptEntry::system(
+                "Export",
+                "No selected run is available to export.",
+            ));
+            return;
+        };
+        let markdown = run.export_markdown();
+        match write_run_export(&run.run_id, &markdown) {
+            Ok(path) => {
+                self.transcript.push(TranscriptEntry::system(
+                    "Export written",
+                    &format!("Path: {}\n\n{}", path.display(), markdown),
+                ));
+            }
+            Err(error) => {
+                self.transcript.push(TranscriptEntry::error(
+                    "Export failed",
+                    &format!("{error}\n\n{markdown}"),
+                ));
+            }
+        }
+    }
+
     pub(crate) fn approve_selected(&mut self) {
         let Some(approval) = self.selected_pending_approval().cloned() else {
             self.transcript.push(TranscriptEntry::system(
@@ -1806,6 +1835,28 @@ impl RunRecord {
         push_detail_section(&mut lines, "Outputs", &self.outputs);
         lines.join("\n")
     }
+
+    fn export_markdown(&self) -> String {
+        let mut lines = vec![
+            format!("# Craik Run Handoff: {}", self.run_id),
+            String::new(),
+            format!("- Status: {}", self.status.as_deref().unwrap_or("active")),
+        ];
+        push_optional_bullet(&mut lines, "Task", self.task_id.as_deref());
+        push_optional_bullet(&mut lines, "Provider", self.provider.as_deref());
+        push_optional_bullet(&mut lines, "Model", self.model.as_deref());
+        push_optional_bullet(&mut lines, "Prompt", self.prompt.as_deref());
+        lines.push(String::new());
+        push_markdown_section(&mut lines, "Receipts", &self.receipts);
+        push_markdown_section(&mut lines, "Receipt Detail", &self.receipt_details);
+        push_markdown_section(&mut lines, "Tools", &self.tools);
+        push_markdown_section(&mut lines, "Commands", &self.commands);
+        push_markdown_section(&mut lines, "Files", &self.files);
+        push_markdown_section(&mut lines, "Approvals", &self.approvals);
+        push_markdown_section(&mut lines, "Provenance", &self.provenance);
+        push_markdown_section(&mut lines, "Outputs", &self.outputs);
+        lines.join("\n")
+    }
 }
 
 fn summarize_model_event(event: &GatewayEvent) -> String {
@@ -1944,6 +1995,52 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
     if let Some(value) = value {
         lines.push(format!("{label}: {value}"));
+    }
+}
+
+fn push_optional_bullet(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        lines.push(format!("- {label}: {value}"));
+    }
+}
+
+fn push_markdown_section(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    lines.push(format!("## {title}"));
+    if values.is_empty() {
+        lines.push("- None".to_owned());
+    } else {
+        lines.extend(values.iter().map(|value| format!("- {value}")));
+    }
+    lines.push(String::new());
+}
+
+fn write_run_export(run_id: &str, markdown: &str) -> std::io::Result<PathBuf> {
+    let home = env::var_os("CRAIK_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".craik")))
+        .unwrap_or_else(|| PathBuf::from(".craik"));
+    let dir = home.join("state").join("exports");
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}.md", export_file_stem(run_id)));
+    fs::write(&path, markdown)?;
+    Ok(path)
+}
+
+fn export_file_stem(run_id: &str) -> String {
+    let stem = run_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if stem.is_empty() {
+        "run".to_owned()
+    } else {
+        stem
     }
 }
 
@@ -2198,7 +2295,7 @@ fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -
 
 #[cfg(test)]
 mod tests {
-    use super::{InteractiveApp, LoopAction};
+    use super::{InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::WorkerMessage;
     use crate::input::SlashHint;
     use craik_tui_rs::GatewayEvent;
@@ -3020,6 +3117,54 @@ mod tests {
             Some("approval: 1 entries")
         );
         assert!(app.transcript_scroll > 0);
+    }
+
+    #[test]
+    fn selected_run_export_formats_handoff_markdown() {
+        let run = RunRecord {
+            run_id: "run/unsafe id".to_owned(),
+            task_id: Some("task_1".to_owned()),
+            prompt: Some("Review the implementation plan".to_owned()),
+            model: Some("claude-opus-4-7".to_owned()),
+            provider: Some("anthropic".to_owned()),
+            status: Some("completed".to_owned()),
+            receipts: vec!["receipt_1".to_owned()],
+            receipt_details: vec!["capability=shell.execute status=completed".to_owned()],
+            tools: vec!["Bash".to_owned()],
+            files: vec!["crates/craik-tui-rs/src/app.rs".to_owned()],
+            commands: vec!["cargo test".to_owned()],
+            approvals: vec!["approval_1 approved".to_owned()],
+            outputs: vec!["Implementation plan reviewed.".to_owned()],
+            provenance: vec!["Tool used: Bash".to_owned()],
+        };
+
+        let markdown = run.export_markdown();
+
+        assert!(markdown.contains("# Craik Run Handoff: run/unsafe id"));
+        assert!(markdown.contains("- Status: completed"));
+        assert!(markdown.contains("- Task: task_1"));
+        assert!(markdown.contains("- Provider: anthropic"));
+        assert!(markdown.contains("- Model: claude-opus-4-7"));
+        assert!(markdown.contains("## Receipts"));
+        assert!(markdown.contains("- receipt_1"));
+        assert!(markdown.contains("## Commands"));
+        assert!(markdown.contains("- cargo test"));
+        assert!(markdown.contains("## Files"));
+        assert!(markdown.contains("- crates/craik-tui-rs/src/app.rs"));
+        assert!(markdown.contains("## Provenance"));
+        assert_eq!(export_file_stem("run/unsafe id"), "run_unsafe_id");
+        assert_eq!(export_file_stem(""), "run");
+    }
+
+    #[test]
+    fn export_without_selected_run_is_visible() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.export_selected_run();
+
+        let entry = app.transcript.last().expect("export transcript entry");
+        assert_eq!(entry.title, "Export");
+        assert!(entry.body.contains("No selected run"));
     }
 
     #[test]

@@ -230,6 +230,8 @@ pub fn status_line(
         Span::raw(" filter"),
         Span::styled("  Ctrl-Y", Style::default().fg(Color::LightBlue)),
         Span::raw(" retry"),
+        Span::styled("  Ctrl-O", Style::default().fg(Color::LightBlue)),
+        Span::raw(" export"),
         Span::styled("  Ctrl-B", Style::default().fg(Color::LightBlue)),
         Span::raw(" reconnect"),
         if pending_approval.is_some() {
