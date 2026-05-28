@@ -1,5 +1,6 @@
 use anyhow::{Context, bail};
 mod backend;
+mod gateway_events;
 mod input;
 mod render;
 mod transcript;
@@ -17,6 +18,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use gateway_events::{is_request_terminal_event, slash_hints_from_event, summarize_slash_output};
 use input::{SlashHint, input_cursor_position, render_input_lines};
 use ratatui::{
     Terminal,
@@ -817,82 +819,6 @@ fn run_interactive_loop(
     Ok(())
 }
 
-fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
-    event
-        .data
-        .get("commands")
-        .and_then(|value| value.as_array())
-        .into_iter()
-        .flatten()
-        .filter_map(|value| {
-            let object = value.as_object()?;
-            Some(SlashHint {
-                name: object.get("name")?.as_str()?.to_owned(),
-                usage: object
-                    .get("usage")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default()
-                    .to_owned(),
-                summary: object
-                    .get("summary")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or_default()
-                    .to_owned(),
-            })
-        })
-        .collect()
-}
-
-fn is_request_terminal_event(event: &GatewayEvent) -> bool {
-    matches!(
-        event.event_type.as_str(),
-        "session.status"
-            | "slash.catalog"
-            | "slash.completed"
-            | "model.changed"
-            | "approval.resolved"
-            | "run.completed"
-            | "run.interrupt.requested"
-            | "error"
-    )
-}
-
-fn summarize_slash_output(event: &GatewayEvent) -> Option<String> {
-    let data = &event.data;
-    if let Some(payload) = data.get("payload")
-        && let Some(items) = payload.as_array()
-    {
-        if items.is_empty() {
-            return Some("No records.".to_owned());
-        }
-        let mut lines = vec![format!("{} records", items.len())];
-        for item in items.iter().take(6) {
-            if let Some(object) = item.as_object() {
-                let id = object
-                    .get("id")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("record");
-                let status = object
-                    .get("status")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("unknown");
-                let runner = object
-                    .get("runner_id")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("runner unknown");
-                lines.push(format!("- {id} [{status}] via {runner}"));
-            }
-        }
-        if items.len() > 6 {
-            lines.push(format!("- and {} more", items.len() - 6));
-        }
-        return Some(lines.join("\n"));
-    }
-    data.get("text")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned)
-}
-
 fn render_replay(path: &str) -> anyhow::Result<String> {
     if path.starts_with('-') {
         bail!("unknown option: {path}");
@@ -941,30 +867,9 @@ fn usage() -> String {
 mod tests {
     use crate::backend::WorkerMessage;
 
-    use super::{InteractiveApp, is_request_terminal_event};
+    use super::InteractiveApp;
     use craik_tui_rs::GatewayEvent;
     use serde_json::json;
-
-    #[test]
-    fn terminal_event_detection_covers_request_boundaries() {
-        let completed = GatewayEvent {
-            event_type: "run.completed".to_owned(),
-            created_at: None,
-            run_id: Some("run_1".to_owned()),
-            task_id: None,
-            data: json!({}),
-        };
-        let progress = GatewayEvent {
-            event_type: "run.progress".to_owned(),
-            created_at: None,
-            run_id: Some("run_1".to_owned()),
-            task_id: None,
-            data: json!({}),
-        };
-
-        assert!(is_request_terminal_event(&completed));
-        assert!(!is_request_terminal_event(&progress));
-    }
 
     #[test]
     fn backend_close_unblocks_working_state() {
