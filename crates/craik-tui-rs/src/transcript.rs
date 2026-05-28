@@ -89,6 +89,7 @@ pub fn transcript_line_count(
     rendered_entry_line_count(entries, options).min(u16::MAX as usize) as u16
 }
 
+#[cfg(test)]
 pub fn render_transcript_lines(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
