@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Any, NoReturn
 
+import click
 import typer
+from typer.core import TyperGroup
 
 from craik.cli_operator_auth import operator_identity_or_fail
 from craik.cli_output import emit_command_result
@@ -15,6 +17,7 @@ from craik.cli_run_support import (
     provider_run_payload,
     role_kind,
 )
+from craik.cli_run_views import run_inspection_payload
 from craik.contracts.models import (
     RecoverySession,
     RunDelta,
@@ -35,17 +38,48 @@ from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import ProjectNotFoundError, TaskNotFoundError
 from craik.runtime.work.runs import TERMINAL_RUN_STATUSES, RunTransition, TaskRunManager
 
-run_app = typer.Typer(help="Execute, inspect, and recover single-agent task runs.")
+
+class RunPromptFallbackGroup(TyperGroup):
+    """Treat unknown `craik run ...` subcommands as direct prompt text."""
+
+    def resolve_command(
+        self,
+        ctx: click.Context,
+        args: list[str],
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError:
+            if args and not args[0].startswith("-"):
+                command = self.get_command(ctx, "prompt")
+                if command is not None:
+                    return "prompt", command, args
+            raise
+
+
+run_app = typer.Typer(
+    cls=RunPromptFallbackGroup,
+    help=(
+        "Execute, inspect, and recover single-agent task runs. "
+        "Use `craik run \"prompt\"` for a direct audited prompt run."
+    ),
+)
 
 
 @run_app.command("prompt")
 @craik_command(payload_shape="card")
 def run_prompt(
-    prompt: Annotated[str, typer.Argument(help="Prompt text to execute as an audited run.")],
+    prompt: Annotated[
+        list[str],
+        typer.Argument(help="Prompt text to execute as an audited run."),
+    ],
 ) -> CommandResult:
     """Execute a raw prompt through the audited Gateway run path."""
+    prompt_text = " ".join(prompt).strip()
+    if not prompt_text:
+        raise typer.BadParameter("run prompt requires prompt text.")
     try:
-        payload = execute_prompt(prompt, source="cli").payload_with_events()
+        payload = execute_prompt(prompt_text, source="cli").payload_with_events()
     except (
         ModelProviderNotFoundError,
         ProjectNotFoundError,
@@ -284,7 +318,7 @@ def _run_inspection_result(run_id_or_task_id: str, *, include_outputs: bool) -> 
         run = _find_run(store, run_id_or_task_id)
         if run is None:
             raise typer.BadParameter(f"unknown run or task: {run_id_or_task_id}")
-        payload = _run_inspection_payload(store, run, include_outputs=include_outputs)
+        payload = run_inspection_payload(store, run, include_outputs=include_outputs)
     finally:
         store.close()
     return CommandResult(payload=payload, shape="card")
@@ -367,40 +401,6 @@ def _find_run(store: LocalStore, run_id_or_task_id: str) -> TaskRun | None:
     return matches[-1] if matches else None
 
 
-def _run_inspection_payload(
-    store: LocalStore,
-    run: TaskRun,
-    *,
-    include_outputs: bool,
-) -> dict[str, Any]:
-    outputs = [output for output in store.list_run_outputs() if output.run_id == run.id]
-    receipts = [
-        receipt for receipt in store.list_receipts() if receipt.id in _run_receipt_ids(run, outputs)
-    ]
-    proposals = [
-        proposal
-        for proposal in store.list_proposals()
-        if proposal.id in {item for output in outputs for item in output.memory_proposal_ids}
-    ]
-    handoff = store.get_handoff(run.handoff_id) if run.handoff_id else None
-    return {
-        "run": run.model_dump(mode="json", by_alias=True),
-        "status": run.status,
-        "phase": run.phase,
-        "stop_reason": run.stop_reason,
-        "next_allowed_action": next_allowed_action(run),
-        "receipts": [receipt.model_dump(mode="json", by_alias=True) for receipt in receipts],
-        "outputs": [
-            _run_output_payload(output, include_outputs=include_outputs) for output in outputs
-        ],
-        "memory_proposals": [
-            proposal.model_dump(mode="json", by_alias=True) for proposal in proposals
-        ],
-        "handoff": handoff.model_dump(mode="json", by_alias=True) if handoff else None,
-        "runner_metadata": run.runner_metadata,
-    }
-
-
 def _run_recovery_payload(
     store: LocalStore,
     run: TaskRun,
@@ -475,26 +475,3 @@ def _run_delta_payload(
         ],
         "lines": format_run_delta_view(snapshot),
     }
-
-
-def _run_output_payload(output: Any, *, include_outputs: bool) -> dict[str, Any]:
-    payload = output.model_dump(mode="json", by_alias=True)
-    if include_outputs:
-        return dict(payload)
-    return {
-        "id": payload["id"],
-        "run_id": payload["run_id"],
-        "step_result_id": payload["step_result_id"],
-        "phase": payload["phase"],
-        "summary": payload["summary"],
-        "diagnostics": payload["diagnostics"],
-        "receipt_ids": payload["receipt_ids"],
-        "memory_proposal_ids": payload["memory_proposal_ids"],
-        "artifacts": payload["artifacts"],
-        "redacted": payload["redacted"],
-    }
-
-
-def _run_receipt_ids(run: TaskRun, outputs: list[Any]) -> set[str]:
-    output_receipt_ids = [receipt for output in outputs for receipt in output.receipt_ids]
-    return {*run.receipt_ids, *output_receipt_ids}
