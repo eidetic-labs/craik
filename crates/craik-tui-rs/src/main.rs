@@ -184,7 +184,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(8),
-            Constraint::Length(6),
+            Constraint::Length(input_panel_height(app)),
             Constraint::Length(1),
         ])
         .split(area);
@@ -238,6 +238,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         render_search_lines(
             &app.search_query,
             search_match_count(&app.transcript, &app.search_query),
+            app.search_match_index,
         )
     } else {
         render_input_lines(&app.input, &app.slash_catalog)
@@ -269,6 +270,16 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         !app.expand_transcript_details,
     ));
     frame.render_widget(footer, vertical[2]);
+}
+
+fn input_panel_height(app: &InteractiveApp) -> u16 {
+    if app.search_active {
+        5
+    } else if app.input.trim_start().starts_with('/') {
+        10
+    } else {
+        7
+    }
 }
 
 fn render_transcript_panel(
@@ -338,7 +349,11 @@ fn transcript_title(
         "split"
     };
     let search = if active_search_query(app).is_some() {
-        format!(" | Search: {} matches", search_count)
+        if let Some(index) = app.search_match_index {
+            format!(" | Search: {}/{} matches", index + 1, search_count)
+        } else {
+            format!(" | Search: {} matches", search_count)
+        }
     } else {
         String::new()
     };
@@ -403,7 +418,9 @@ fn usage() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{InteractiveApp, Terminal, TestBackend, draw_interactive_frame};
+    use super::{
+        InteractiveApp, Terminal, TestBackend, draw_interactive_frame, input_panel_height,
+    };
     use craik_tui_rs::parse_gateway_events;
 
     const CLAUDE_CODE_STREAM: &str =
@@ -459,6 +476,17 @@ mod tests {
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("receipt_run_review_desktop_plan"));
         assert!(!rendered.contains("Activity"));
+    }
+
+    #[test]
+    fn slash_input_gets_extra_panel_height_for_suggestions() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        assert_eq!(input_panel_height(&app), 7);
+        app.input = "/r".to_owned();
+        assert_eq!(input_panel_height(&app), 10);
+        app.search_active = true;
+        assert_eq!(input_panel_height(&app), 5);
     }
 
     #[test]

@@ -10,8 +10,9 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
         .flatten()
         .filter_map(|value| {
             let object = value.as_object()?;
+            let name = object.get("name")?.as_str()?;
             Some(SlashHint {
-                name: object.get("name")?.as_str()?.to_owned(),
+                name: name.to_owned(),
                 usage: object
                     .get("usage")
                     .and_then(|value| value.as_str())
@@ -22,9 +23,26 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
                     .and_then(|value| value.as_str())
                     .unwrap_or_default()
                     .to_owned(),
+                category: object
+                    .get("category")
+                    .or_else(|| object.get("group"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| slash_category(name)),
             })
         })
         .collect()
+}
+
+fn slash_category(name: &str) -> String {
+    match name {
+        "run" | "stop" | "interrupt" | "model" => "Run",
+        "receipt" | "receipts" | "evidence" | "provenance" => "Evidence",
+        "status" | "config" | "auth" | "login" => "Session",
+        "help" | "commands" => "Help",
+        _ => "Workflow",
+    }
+    .to_owned()
 }
 
 pub fn is_request_terminal_event(event: &GatewayEvent) -> bool {
@@ -113,7 +131,7 @@ mod tests {
             task_id: None,
             data: json!({
                 "commands": [
-                    {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt."},
+                    {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt.", "category": "Run"},
                     {"name": "status", "usage": "/status", "summary": "Show Gateway status."}
                 ]
             }),
@@ -124,7 +142,9 @@ mod tests {
         assert_eq!(hints.len(), 2);
         assert_eq!(hints[0].name, "run");
         assert_eq!(hints[0].usage, "/run <prompt>");
+        assert_eq!(hints[0].category, "Run");
         assert_eq!(hints[1].summary, "Show Gateway status.");
+        assert_eq!(hints[1].category, "Session");
     }
 
     #[test]
