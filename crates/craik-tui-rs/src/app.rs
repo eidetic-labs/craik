@@ -293,6 +293,27 @@ impl InteractiveApp {
         }
     }
 
+    pub(crate) fn shutdown(&mut self) {
+        match self.backend.close() {
+            Ok(()) => {
+                self.backend_connected = false;
+                self.in_flight = false;
+                self.state.working_phase = None;
+                self.transcript.push(TranscriptEntry::system(
+                    "Session closing",
+                    "Gateway session close requested.",
+                ));
+            }
+            Err(error) => {
+                self.last_error = Some(error.to_string());
+                self.transcript.push(TranscriptEntry::error(
+                    "Session close failed",
+                    &error.to_string(),
+                ));
+            }
+        }
+    }
+
     pub(crate) fn drain_worker(&mut self) {
         while let Ok(message) = self.backend.receiver.try_recv() {
             match message {
@@ -3165,6 +3186,23 @@ mod tests {
         let entry = app.transcript.last().expect("export transcript entry");
         assert_eq!(entry.title, "Export");
         assert!(entry.body.contains("No selected run"));
+    }
+
+    #[test]
+    fn shutdown_surfaces_session_close_status() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.backend_connected = true;
+        app.in_flight = true;
+        app.state.working_phase = Some("waiting".to_owned());
+
+        app.shutdown();
+
+        assert!(!app.backend_connected);
+        assert!(!app.in_flight);
+        assert_eq!(app.state.working_phase, None);
+        let entry = app.transcript.last().expect("shutdown transcript entry");
+        assert_eq!(entry.title, "Session closing");
+        assert!(entry.body.contains("Gateway session close requested"));
     }
 
     #[test]

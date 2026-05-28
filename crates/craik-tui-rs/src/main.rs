@@ -181,6 +181,7 @@ fn run_interactive_loop(
             }
         }
     }
+    app.shutdown();
     Ok(())
 }
 
