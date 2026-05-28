@@ -104,6 +104,8 @@ pub struct GatewayAppState {
     pub readiness_state: Option<String>,
     pub active_model: Option<String>,
     pub active_model_display_name: Option<String>,
+    pub active_provider_id: Option<String>,
+    pub active_provider_family: Option<String>,
     pub backend: Option<String>,
     pub working_phase: Option<String>,
     pub run_status: Option<String>,
@@ -145,11 +147,15 @@ impl GatewayAppState {
             }
             "model.changed" => {
                 self.active_model = string_at(&event.data, &["model"]);
+                self.active_provider_id = string_at(&event.data, &["provider_id"]);
+                self.active_provider_family = string_at(&event.data, &["provider_family"]);
                 self.active_model_display_name = model_changed_display_name(&event.data)
                     .or_else(|| string_at(&event.data, &["display_name"]));
             }
             "model.selected" => {
                 self.active_model = string_at(&event.data, &["model"]);
+                self.active_provider_id = string_at(&event.data, &["provider_id"]);
+                self.active_provider_family = string_at(&event.data, &["provider_family"]);
                 self.active_model_display_name =
                     string_at(&event.data, &["profile", "display_name"])
                         .or_else(|| string_at(&event.data, &["display_name"]));

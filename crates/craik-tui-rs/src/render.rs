@@ -27,6 +27,13 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             state.readiness_state.as_deref().unwrap_or("unknown")
         ),
         format!("  Model: {model}"),
+        format!(
+            "  Provider: {}",
+            provider_label(
+                state.active_provider_id.as_deref(),
+                state.active_provider_family.as_deref()
+            )
+        ),
         format!("  Backend: {}", state.backend.as_deref().unwrap_or("auto")),
         "Run".to_owned(),
         format!(
@@ -194,6 +201,15 @@ fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
         .unwrap_or(fallback)
 }
 
+fn provider_label(provider_id: Option<&str>, provider_family: Option<&str>) -> String {
+    match (provider_id, provider_family) {
+        (Some(id), Some(family)) if id != family => format!("{family} ({id})"),
+        (Some(id), _) => id.to_owned(),
+        (_, Some(family)) => family.to_owned(),
+        _ => "not selected".to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{ActivityMetrics, render_activity_panel, status_line};
@@ -205,6 +221,8 @@ mod tests {
             ready: true,
             active_model: Some("anthropic/claude-opus-4-7".to_owned()),
             active_model_display_name: Some("Anthropic Claude Opus 4.7".to_owned()),
+            active_provider_id: Some("provider_anthropic".to_owned()),
+            active_provider_family: Some("anthropic".to_owned()),
             receipt_ids: vec!["receipt_1".to_owned()],
             file_paths: vec!["src/main.rs".to_owned()],
             commands: vec!["cargo test".to_owned()],
@@ -227,6 +245,7 @@ mod tests {
         assert!(rendered.contains("Session"));
         assert!(rendered.contains("  State: ready"));
         assert!(rendered.contains("  Model: Anthropic Claude Opus 4.7"));
+        assert!(rendered.contains("  Provider: anthropic (provider_anthropic)"));
         assert!(rendered.contains("Evidence"));
         assert!(rendered.contains("  Receipts: 1"));
         assert!(rendered.contains("  Files: 1"));

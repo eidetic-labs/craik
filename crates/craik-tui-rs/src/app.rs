@@ -396,18 +396,17 @@ impl InteractiveApp {
                     .push(TranscriptEntry::progress("Submitted", preview));
             }
             "model.selected" | "model.changed" => {
-                let model = event
-                    .data
-                    .get("model")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("model selected");
-                self.transcript
-                    .push(TranscriptEntry::system("Model", model));
+                self.transcript.push(TranscriptEntry::system(
+                    "Model selected",
+                    &summarize_model_event(event),
+                ));
             }
             "run.started" => {
                 let run_id = event.run_id.as_deref().unwrap_or("run");
-                self.transcript
-                    .push(TranscriptEntry::progress("Run started", run_id));
+                self.transcript.push(TranscriptEntry::progress(
+                    "Run started",
+                    &summarize_run_event(event, run_id),
+                ));
             }
             "run.progress" => {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
@@ -428,7 +427,7 @@ impl InteractiveApp {
                     } else {
                         TranscriptKind::Tool
                     };
-                    let text = summarize_tool_event(event, message);
+                    let text = summarize_tool_event(event, tool, message);
                     self.transcript
                         .push(TranscriptEntry::new(kind, tool, &text));
                     self.follow_tail_after_transcript_update();
@@ -534,8 +533,8 @@ impl InteractiveApp {
                 {
                     self.transcript.push(TranscriptEntry::new(
                         TranscriptKind::Receipt,
-                        "Receipt",
-                        receipt_id,
+                        "Receipt created",
+                        &summarize_receipt_event(event, receipt_id),
                     ));
                     self.follow_tail_after_transcript_update();
                 }
@@ -569,8 +568,10 @@ impl InteractiveApp {
                     .get("status")
                     .and_then(|value| value.as_str())
                     .unwrap_or("completed");
-                self.transcript
-                    .push(TranscriptEntry::progress("Run completed", status));
+                self.transcript.push(TranscriptEntry::progress(
+                    "Run completed",
+                    &summarize_run_event(event, status),
+                ));
                 if status == "completed" && self.state.outputs.is_empty() {
                     self.transcript.push(TranscriptEntry::system(
                         "No model output",
@@ -899,8 +900,59 @@ impl PendingApproval {
     }
 }
 
-fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String {
+fn summarize_model_event(event: &GatewayEvent) -> String {
     let mut lines = Vec::new();
+    push_optional_data_line(&mut lines, event, "Display", "display_name");
+    push_optional_data_line(&mut lines, event, "Model", "model");
+    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
+    push_optional_data_line(&mut lines, event, "Family", "provider_family");
+    push_optional_data_line(&mut lines, event, "Backend", "backend");
+    if let Some(live_enabled) = event
+        .data
+        .get("live_enabled")
+        .and_then(|value| value.as_bool())
+    {
+        lines.push(format!("Live: {live_enabled}"));
+    }
+    if let Some(profile) = event
+        .data
+        .get("profile")
+        .and_then(|value| value.as_object())
+        && let Some(profile_name) = profile.get("name").and_then(|value| value.as_str())
+    {
+        lines.push(format!("Profile: {profile_name}"));
+    }
+    if lines.is_empty() {
+        lines.push("Model: selected".to_owned());
+    }
+    lines.join("\n")
+}
+
+fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
+    let mut lines = Vec::new();
+    if let Some(run_id) = event.run_id.as_deref() {
+        lines.push(format!("Run: {run_id}"));
+    }
+    if let Some(task_id) = event.task_id.as_deref() {
+        lines.push(format!("Task: {task_id}"));
+    }
+    push_optional_data_line(&mut lines, event, "Status", "status");
+    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
+    push_optional_data_line(&mut lines, event, "Family", "provider_family");
+    push_optional_data_line(&mut lines, event, "Model", "model");
+    if lines.is_empty() {
+        lines.push(format!("Detail: {fallback}"));
+    }
+    lines.join("\n")
+}
+
+fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("Tool: {tool}"));
+    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
+    push_optional_data_line(&mut lines, event, "Family", "provider_family");
+    push_optional_data_line(&mut lines, event, "Model", "model");
+    push_optional_data_line(&mut lines, event, "Response", "response_id");
     if let Some(command) = event.data.get("command").and_then(|value| value.as_str()) {
         lines.push(format!("Command: {command}"));
     }
@@ -908,6 +960,19 @@ fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String 
         lines.push(format!("Target: {target}"));
     }
     lines.push(format!("Detail: {fallback_message}"));
+    lines.join("\n")
+}
+
+fn summarize_receipt_event(event: &GatewayEvent, receipt_id: &str) -> String {
+    let mut lines = vec![format!("Receipt: {receipt_id}")];
+    if let Some(run_id) = event.run_id.as_deref() {
+        lines.push(format!("Run: {run_id}"));
+    }
+    if let Some(task_id) = event.task_id.as_deref() {
+        lines.push(format!("Task: {task_id}"));
+    }
+    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
+    push_optional_data_line(&mut lines, event, "Family", "provider_family");
     lines.join("\n")
 }
 
@@ -922,6 +987,12 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
 
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
     if let Some(value) = value {
+        lines.push(format!("{label}: {value}"));
+    }
+}
+
+fn push_optional_data_line(lines: &mut Vec<String>, event: &GatewayEvent, label: &str, key: &str) {
+    if let Some(value) = string_data(event, key) {
         lines.push(format!("{label}: {value}"));
     }
 }
@@ -1194,6 +1265,10 @@ mod tests {
             task_id: None,
             data: json!({
                 "tool": "Bash",
+                "provider_id": "provider_anthropic",
+                "provider_family": "anthropic",
+                "model": "claude-sonnet-4-20250514",
+                "response_id": "response_123",
                 "command": "cargo test",
                 "target": "crates/craik-tui-rs",
                 "message": "Command completed successfully."
@@ -1205,6 +1280,11 @@ mod tests {
 
         let entry = app.transcript.last().expect("tool transcript entry");
         assert_eq!(entry.title, "Bash");
+        assert!(entry.body.contains("Tool: Bash"));
+        assert!(entry.body.contains("Provider: provider_anthropic"));
+        assert!(entry.body.contains("Family: anthropic"));
+        assert!(entry.body.contains("Model: claude-sonnet-4-20250514"));
+        assert!(entry.body.contains("Response: response_123"));
         assert!(entry.body.contains("Command: cargo test"));
         assert!(entry.body.contains("Target: crates/craik-tui-rs"));
         assert!(
@@ -1212,6 +1292,63 @@ mod tests {
                 .body
                 .contains("Detail: Command completed successfully.")
         );
+    }
+
+    #[test]
+    fn model_and_receipt_events_surface_provider_context() {
+        let model = GatewayEvent {
+            event_type: "model.selected".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: Some("task_1".to_owned()),
+            data: json!({
+                "display_name": "Anthropic Claude Opus 4.7",
+                "model": "claude-opus-4-7",
+                "provider_id": "provider_anthropic",
+                "provider_family": "anthropic",
+                "live_enabled": true
+            }),
+        };
+        let receipt = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: Some("task_1".to_owned()),
+            data: json!({
+                "receipt_id": "receipt_run_1_provider",
+                "provider_id": "provider_anthropic",
+                "provider_family": "anthropic"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&model);
+        app.record_event(&receipt);
+
+        let model_entry = app
+            .transcript
+            .iter()
+            .find(|entry| entry.title == "Model selected")
+            .expect("model transcript entry");
+        assert!(
+            model_entry
+                .body
+                .contains("Display: Anthropic Claude Opus 4.7")
+        );
+        assert!(model_entry.body.contains("Provider: provider_anthropic"));
+        assert!(model_entry.body.contains("Family: anthropic"));
+        assert!(model_entry.body.contains("Live: true"));
+
+        let receipt_entry = app.transcript.last().expect("receipt transcript entry");
+        assert_eq!(receipt_entry.title, "Receipt created");
+        assert!(
+            receipt_entry
+                .body
+                .contains("Receipt: receipt_run_1_provider")
+        );
+        assert!(receipt_entry.body.contains("Run: run_1"));
+        assert!(receipt_entry.body.contains("Task: task_1"));
+        assert!(receipt_entry.body.contains("Provider: provider_anthropic"));
     }
 
     #[test]
