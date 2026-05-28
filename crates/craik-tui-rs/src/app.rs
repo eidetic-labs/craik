@@ -14,6 +14,47 @@ pub(crate) enum LoopAction {
     Exit,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RunFilter {
+    All,
+    Active,
+    NeedsApproval,
+    Failed,
+    Completed,
+}
+
+impl RunFilter {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Active => "active",
+            Self::NeedsApproval => "approval",
+            Self::Failed => "failed",
+            Self::Completed => "completed",
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::All => Self::Active,
+            Self::Active => Self::NeedsApproval,
+            Self::NeedsApproval => Self::Failed,
+            Self::Failed => Self::Completed,
+            Self::Completed => Self::All,
+        }
+    }
+
+    fn matches(self, run: &RunRecord) -> bool {
+        match self {
+            Self::All => true,
+            Self::Active => run.is_active(),
+            Self::NeedsApproval => !run.approvals.is_empty() && !run.is_completed(),
+            Self::Failed => run.is_failed(),
+            Self::Completed => run.is_completed(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PendingApproval {
     id: String,
@@ -66,6 +107,9 @@ pub(crate) struct InteractiveApp {
     pub(crate) queued_inputs: VecDeque<String>,
     pub(crate) run_records: Vec<RunRecord>,
     pub(crate) selected_run_index: Option<usize>,
+    pub(crate) run_filter: RunFilter,
+    auto_select_latest_run: bool,
+    last_submitted_text: Option<String>,
     last_prompt_preview: Option<String>,
 }
 
@@ -101,6 +145,9 @@ impl InteractiveApp {
             queued_inputs: VecDeque::new(),
             run_records: Vec::new(),
             selected_run_index: None,
+            run_filter: RunFilter::All,
+            auto_select_latest_run: true,
+            last_submitted_text: None,
             last_prompt_preview: None,
         };
         app.send_commands([
@@ -148,6 +195,9 @@ impl InteractiveApp {
             queued_inputs: VecDeque::new(),
             run_records: Vec::new(),
             selected_run_index: None,
+            run_filter: RunFilter::All,
+            auto_select_latest_run: true,
+            last_submitted_text: None,
             last_prompt_preview: None,
         }
     }
@@ -165,6 +215,8 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::user("You", &text));
         self.history.push(text.clone());
         self.history_index = None;
+        self.last_submitted_text = Some(text.clone());
+        self.auto_select_latest_run = true;
         if self.in_flight {
             self.queued_inputs.push_back(text);
             self.transcript.push(TranscriptEntry::progress(
@@ -275,14 +327,68 @@ impl InteractiveApp {
 
     pub(crate) fn selected_run_summary(&self) -> Option<String> {
         let run = self.selected_run()?;
-        let position = self.selected_run_index.unwrap_or_default() + 1;
-        let total = self.run_records.len();
+        let visible = self.filtered_run_indexes();
+        let position = visible
+            .iter()
+            .position(|index| Some(*index) == self.selected_run_index)
+            .map(|index| index + 1)
+            .unwrap_or_default();
+        let total = visible.len();
         let status = run.status.as_deref().unwrap_or("active");
-        Some(format!("{position}/{total} {} [{status}]", run.run_id))
+        Some(format!(
+            "{position}/{total} {} [{status}] filter={}",
+            run.run_id,
+            self.run_filter.label()
+        ))
     }
 
     pub(crate) fn selected_run_detail(&self) -> Option<String> {
         self.selected_run().map(RunRecord::detail_text)
+    }
+
+    pub(crate) fn selected_run_provenance(&self) -> String {
+        if let Some(run) = self.selected_run() {
+            return run.detail_text();
+        }
+        if self.run_records.is_empty() {
+            "No runs or receipts loaded yet.\nSubmit a prompt or wait for session history."
+                .to_owned()
+        } else {
+            format!(
+                "No run matches the `{}` filter.\nPress Ctrl-L to cycle filters.",
+                self.run_filter.label()
+            )
+        }
+    }
+
+    pub(crate) fn prompt_context(&self) -> String {
+        let mut lines = Vec::new();
+        if !self.backend_connected {
+            lines.push("Gateway disconnected. Press Ctrl-B to reconnect.".to_owned());
+        }
+        if self
+            .state
+            .readiness_state
+            .as_deref()
+            .is_some_and(|state| state != "ready")
+        {
+            lines.push(format!(
+                "Readiness: {}",
+                self.state.readiness_state.as_deref().unwrap_or("unknown")
+            ));
+        }
+        if self.state.active_model.is_none() && self.state.active_model_display_name.is_none() {
+            lines.push("Model: not selected".to_owned());
+        }
+        if self.state.active_provider_id.is_none() && self.state.active_provider_family.is_none() {
+            lines.push("Provider: not selected".to_owned());
+        }
+        if self.in_flight {
+            lines.push("Run: working; Ctrl-C requests stop.".to_owned());
+        } else if self.last_submitted_text.is_some() {
+            lines.push("Retry: Ctrl-Y resubmits the last prompt.".to_owned());
+        }
+        lines.join("\n")
     }
 
     fn selected_run(&self) -> Option<&RunRecord> {
@@ -311,6 +417,14 @@ impl InteractiveApp {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => LoopAction::Exit,
             KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.restart_backend();
+                LoopAction::Continue
+            }
+            KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.retry_last_prompt();
+                LoopAction::Continue
+            }
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.cycle_run_filter();
                 LoopAction::Continue
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -745,7 +859,9 @@ impl InteractiveApp {
             return;
         };
         let index = self.ensure_run_record(run_id);
-        self.selected_run_index = Some(index);
+        if self.auto_select_latest_run || self.selected_run_index.is_none() {
+            self.selected_run_index = Some(index);
+        }
         let run = &mut self.run_records[index];
         if run.task_id.is_none() {
             run.task_id = event.task_id.clone();
@@ -860,9 +976,7 @@ impl InteractiveApp {
                 run.outputs.push(summary.to_owned());
             }
         }
-        if !self.run_records.is_empty() && self.selected_run_index.is_none() {
-            self.selected_run_index = Some(self.run_records.len() - 1);
-        }
+        self.normalize_selected_run();
     }
 
     fn ensure_run_record(&mut self, run_id: &str) -> usize {
@@ -1191,6 +1305,27 @@ impl InteractiveApp {
         }]);
     }
 
+    pub(crate) fn retry_last_prompt(&mut self) {
+        let Some(text) = self.last_submitted_text.clone() else {
+            self.transcript.push(TranscriptEntry::system(
+                "Retry",
+                "No submitted prompt is available to retry.",
+            ));
+            return;
+        };
+        if self.in_flight {
+            self.queued_inputs.push_back(text);
+            self.transcript.push(TranscriptEntry::progress(
+                "Retry queued",
+                "The last prompt will run after the active request completes.",
+            ));
+            return;
+        }
+        self.transcript.push(TranscriptEntry::user("Retry", &text));
+        self.auto_select_latest_run = true;
+        self.dispatch_text(text);
+    }
+
     pub(crate) fn approve_selected(&mut self) {
         let Some(approval) = self.selected_pending_approval().cloned() else {
             self.transcript.push(TranscriptEntry::system(
@@ -1272,15 +1407,18 @@ impl InteractiveApp {
     }
 
     pub(crate) fn select_next_run(&mut self) {
-        if self.run_records.is_empty() {
+        let visible = self.filtered_run_indexes();
+        if visible.is_empty() {
             self.selected_run_index = None;
             return;
         }
-        let next = self
+        let position = self
             .selected_run_index
-            .map(|index| (index + 1) % self.run_records.len())
+            .and_then(|selected| visible.iter().position(|index| *index == selected))
+            .map(|index| (index + 1) % visible.len())
             .unwrap_or(0);
-        self.selected_run_index = Some(next);
+        self.selected_run_index = Some(visible[position]);
+        self.auto_select_latest_run = false;
         self.transcript.push(TranscriptEntry::system(
             "Run selected",
             &self.selected_run_detail().unwrap_or_default(),
@@ -1288,25 +1426,63 @@ impl InteractiveApp {
     }
 
     pub(crate) fn select_previous_run(&mut self) {
-        if self.run_records.is_empty() {
+        let visible = self.filtered_run_indexes();
+        if visible.is_empty() {
             self.selected_run_index = None;
             return;
         }
-        let previous = self
+        let position = self
             .selected_run_index
+            .and_then(|selected| visible.iter().position(|index| *index == selected))
             .map(|index| {
                 if index == 0 {
-                    self.run_records.len() - 1
+                    visible.len() - 1
                 } else {
                     index - 1
                 }
             })
-            .unwrap_or_else(|| self.run_records.len() - 1);
-        self.selected_run_index = Some(previous);
+            .unwrap_or_else(|| visible.len() - 1);
+        self.selected_run_index = Some(visible[position]);
+        self.auto_select_latest_run = false;
         self.transcript.push(TranscriptEntry::system(
             "Run selected",
             &self.selected_run_detail().unwrap_or_default(),
         ));
+    }
+
+    pub(crate) fn cycle_run_filter(&mut self) {
+        self.run_filter = self.run_filter.next();
+        self.normalize_selected_run();
+        self.transcript.push(TranscriptEntry::system(
+            "Run filter",
+            &format!(
+                "Showing {} run records. Press Ctrl-L to cycle filters.",
+                self.run_filter.label()
+            ),
+        ));
+    }
+
+    fn filtered_run_indexes(&self) -> Vec<usize> {
+        self.run_records
+            .iter()
+            .enumerate()
+            .filter_map(|(index, run)| self.run_filter.matches(run).then_some(index))
+            .collect()
+    }
+
+    fn normalize_selected_run(&mut self) {
+        let visible = self.filtered_run_indexes();
+        if visible.is_empty() {
+            self.selected_run_index = None;
+            return;
+        }
+        if self
+            .selected_run_index
+            .is_some_and(|selected| visible.contains(&selected))
+        {
+            return;
+        }
+        self.selected_run_index = visible.last().copied();
     }
 
     fn normalize_selected_approval(&mut self) {
@@ -1402,6 +1578,27 @@ impl PendingApproval {
 }
 
 impl RunRecord {
+    fn is_active(&self) -> bool {
+        matches!(
+            self.status.as_deref(),
+            None | Some("running") | Some("thinking") | Some("working") | Some("queued")
+        )
+    }
+
+    fn is_completed(&self) -> bool {
+        matches!(
+            self.status.as_deref(),
+            Some("completed") | Some("passed") | Some("persisted")
+        )
+    }
+
+    fn is_failed(&self) -> bool {
+        matches!(
+            self.status.as_deref(),
+            Some("failed") | Some("error") | Some("denied") | Some("blocked")
+        )
+    }
+
     fn detail_text(&self) -> String {
         let mut lines = vec![
             format!("Run: {}", self.run_id),
@@ -1814,6 +2011,7 @@ mod tests {
     use craik_tui_rs::GatewayEvent;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
+    use std::collections::VecDeque;
 
     #[test]
     fn backend_close_unblocks_working_state() {
@@ -1902,7 +2100,7 @@ mod tests {
         assert_eq!(app.run_records.len(), 1);
         assert_eq!(
             app.selected_run_summary().as_deref(),
-            Some("1/1 task_history_1 [persisted]")
+            Some("1/1 task_history_1 [persisted] filter=all")
         );
         assert!(
             app.selected_run_detail()
@@ -2046,20 +2244,92 @@ mod tests {
         assert_eq!(app.run_records.len(), 2);
         assert_eq!(
             app.selected_run_summary().as_deref(),
-            Some("2/2 run_2 [running]")
+            Some("2/2 run_2 [running] filter=all")
         );
 
         app.select_previous_run();
 
         assert_eq!(
             app.selected_run_summary().as_deref(),
-            Some("1/2 run_1 [running]")
+            Some("1/2 run_1 [running] filter=all")
         );
         let detail = app.selected_run_detail().expect("run detail");
         assert!(detail.contains("Provider: provider_anthropic"));
         assert!(detail.contains("Tools: 1 latest Bash"));
         assert!(detail.contains("Commands: 1 latest cargo test"));
         assert!(detail.contains("Receipts: 1 latest receipt_run_1"));
+    }
+
+    #[test]
+    fn run_filter_preserves_manual_selection_while_new_events_arrive() {
+        let first = GatewayEvent {
+            event_type: "run.completed".to_owned(),
+            created_at: None,
+            run_id: Some("run_done".to_owned()),
+            task_id: None,
+            data: json!({"status": "completed"}),
+        };
+        let second = GatewayEvent {
+            event_type: "run.started".to_owned(),
+            created_at: None,
+            run_id: Some("run_active".to_owned()),
+            task_id: None,
+            data: json!({}),
+        };
+        let third = GatewayEvent {
+            event_type: "run.started".to_owned(),
+            created_at: None,
+            run_id: Some("run_new".to_owned()),
+            task_id: None,
+            data: json!({}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&first);
+        app.record_event(&second);
+        app.select_previous_run();
+        app.record_event(&third);
+
+        assert!(
+            app.selected_run_summary()
+                .expect("selected run")
+                .contains("run_done")
+        );
+
+        app.cycle_run_filter();
+
+        assert_eq!(app.run_filter, super::RunFilter::Active);
+        assert!(
+            app.selected_run_summary()
+                .expect("selected run")
+                .contains("filter=active")
+        );
+        assert!(
+            app.selected_run_summary()
+                .expect("selected run")
+                .contains("run_new")
+        );
+    }
+
+    #[test]
+    fn retry_last_prompt_queues_or_dispatches_last_submission() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.input = "Review the plan".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.submit_input();
+        app.in_flight = true;
+        app.retry_last_prompt();
+
+        assert_eq!(
+            app.queued_inputs,
+            VecDeque::from(["Review the plan".to_owned()])
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Retry queued")
+        );
     }
 
     #[test]

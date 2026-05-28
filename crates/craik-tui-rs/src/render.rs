@@ -44,6 +44,13 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             )
         ),
         format!("  Backend: {}", state.backend.as_deref().unwrap_or("auto")),
+        "Evidence".to_owned(),
+        format!("  Receipts: {}", state.receipt_ids.len()),
+        format!("  Tools: {}", state.tool_events.len()),
+        format!("  Files: {}", state.file_paths.len()),
+        format!("  Commands: {}", state.commands.len()),
+        format!("  Approvals seen: {}", state.approval_requests.len()),
+        format!("  Slash commands: {}", metrics.slash_commands),
         "Gateway health".to_owned(),
         format!(
             "  Backend link: {}",
@@ -83,15 +90,6 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
     if let Some(receipt_id) = state.receipt_ids.last() {
         lines.push(format!("  Latest receipt: {receipt_id}"));
     }
-    lines.extend([
-        "Evidence".to_owned(),
-        format!("  Receipts: {}", state.receipt_ids.len()),
-        format!("  Tools: {}", state.tool_events.len()),
-        format!("  Files: {}", state.file_paths.len()),
-        format!("  Commands: {}", state.commands.len()),
-        format!("  Approvals seen: {}", state.approval_requests.len()),
-        format!("  Slash commands: {}", metrics.slash_commands),
-    ]);
     if !state.run_ids.is_empty() {
         lines.push("Recent runs".to_owned());
         for run_id in state.run_ids.iter().rev().take(3) {
@@ -134,6 +132,35 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
     }
     if let Some(error) = metrics.last_error {
         lines.push(format!("Last error: {error}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_provenance_panel(detail: &str) -> String {
+    let mut lines = Vec::new();
+    let mut section = "";
+    for raw in detail.lines() {
+        if raw.ends_with(':') && !raw.starts_with("- ") {
+            section = raw.trim_end_matches(':');
+            lines.push(raw.to_owned());
+            continue;
+        }
+        if raw.starts_with("- ") {
+            lines.push(format!("  {raw}"));
+            continue;
+        }
+        if let Some((label, value)) = raw.split_once(':') {
+            lines.push(format!("  {label}:{}", compact_panel_value(value)));
+        } else if raw.trim().is_empty() {
+            lines.push(String::new());
+        } else if section.is_empty() {
+            lines.push(raw.to_owned());
+        } else {
+            lines.push(format!("  {raw}"));
+        }
+    }
+    if lines.is_empty() {
+        lines.push("No provenance selected.".to_owned());
     }
     lines.join("\n")
 }
@@ -197,6 +224,10 @@ pub fn status_line(
         }),
         Span::styled("  Ctrl-J/K", Style::default().fg(Color::LightBlue)),
         Span::raw(" runs"),
+        Span::styled("  Ctrl-L", Style::default().fg(Color::LightBlue)),
+        Span::raw(" filter"),
+        Span::styled("  Ctrl-Y", Style::default().fg(Color::LightBlue)),
+        Span::raw(" retry"),
         Span::styled("  Ctrl-B", Style::default().fg(Color::LightBlue)),
         Span::raw(" reconnect"),
         if pending_approval.is_some() {
@@ -253,6 +284,15 @@ fn compact_label(value: &str, max_chars: usize) -> String {
     }
     let keep = max_chars.saturating_sub(3);
     format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
+fn compact_panel_value(value: &str) -> String {
+    let trimmed = value.trim_start();
+    if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!(" {trimmed}")
+    }
 }
 
 fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {

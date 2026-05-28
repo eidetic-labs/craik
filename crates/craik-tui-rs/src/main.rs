@@ -23,11 +23,11 @@ use ratatui::{
     Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Padding, Paragraph, Wrap},
 };
-use render::{ActivityMetrics, render_activity_panel, status_line};
+use render::{ActivityMetrics, render_activity_panel, render_provenance_panel, status_line};
 use std::{
     env, fs,
     io::{self, IsTerminal},
@@ -204,10 +204,14 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     } else {
         let body = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
+            .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
             .split(vertical[0]);
         render_transcript_panel(frame, app, body[0], &transcript_options);
 
+        let side = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(44), Constraint::Percentage(56)])
+            .split(body[1]);
         let selected_approval_summary = app.selected_approval_summary();
         let selected_approval_preview = app.selected_approval_preview();
         let selected_run_summary = app.selected_run_summary();
@@ -229,7 +233,16 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         ))
         .block(Block::default().title("Activity").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
-        frame.render_widget(activity, body[1]);
+        frame.render_widget(activity, side[0]);
+
+        let provenance = Paragraph::new(render_provenance_panel(&app.selected_run_provenance()))
+            .block(
+                Block::default()
+                    .title("Run provenance  Ctrl-J/K select  Ctrl-L filter")
+                    .borders(Borders::ALL),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(provenance, side[1]);
     }
 
     let input_title = input_title(app);
@@ -241,7 +254,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .borders(Borders::ALL)
         .padding(Padding::horizontal(1));
     let input_inner = input_block.inner(vertical[1]);
-    let input_lines = if app.search_active {
+    let mut input_lines = if app.search_active {
         render_search_lines(
             &app.search_query,
             search_match_count(&app.transcript, &app.search_query),
@@ -250,6 +263,23 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     } else {
         render_input_lines(&app.input, &app.slash_catalog)
     };
+    if !app.search_active {
+        let context = app.prompt_context();
+        if !context.is_empty() {
+            input_lines.push(Line::from(Span::styled(
+                "Readiness",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )));
+            input_lines.extend(context.lines().map(|line| {
+                Line::from(Span::styled(
+                    format!("  {line}"),
+                    Style::default().fg(Color::DarkGray),
+                ))
+            }));
+        }
+    }
     let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
@@ -286,7 +316,8 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
         12
     } else {
         let content_lines = app.input_line_count().min(8) as u16;
-        (content_lines + 5).clamp(8, 13)
+        let context_lines = app.prompt_context().lines().count().min(4) as u16;
+        (content_lines + context_lines + 5).clamp(8, 15)
     }
 }
 
@@ -296,7 +327,7 @@ fn input_title(app: &InteractiveApp) -> String {
     }
     let (line, col) = app.input_cursor_line_col();
     format!(
-        "Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Alt-Enter newline / Ctrl-U start / Ctrl-K end / Ctrl-W word",
+        "Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
         app.input_line_count(),
         app.input_char_count()
     )
@@ -478,10 +509,11 @@ mod tests {
     #[test]
     fn fixture_backed_wide_frame_renders_activity_and_evidence_context() {
         let app = app_from_fixture(CLAUDE_CODE_STREAM);
-        let rendered = render_app_frame(&app, 140, 34);
+        let rendered = render_app_frame(&app, 140, 42);
 
         assert!(rendered.contains("Transcript"));
         assert!(rendered.contains("Activity"));
+        assert!(rendered.contains("Run provenance"));
         assert!(rendered.contains("Receipts: 2"));
         assert!(rendered.contains("Tools"));
         assert!(rendered.contains("Approvals seen"));
@@ -518,7 +550,7 @@ mod tests {
         assert_eq!(input_panel_height(&app), 8);
         app.input = "one\ntwo\nthree\nfour".to_owned();
 
-        assert_eq!(input_panel_height(&app), 9);
+        assert_eq!(input_panel_height(&app), 11);
         assert!(input_title(&app).contains("4 line(s)"));
     }
 
