@@ -12,6 +12,7 @@ BackendEventType = Literal[
     "session.ready",
     "session.status",
     "slash.completed",
+    "slash.catalog",
     "model.changed",
     "run.interrupt.requested",
     "run.started",

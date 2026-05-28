@@ -42,7 +42,7 @@ from craik.runtime.setup import (
     setup_command_result,
 )
 from craik.runtime.shell.agent_shell import one_shot_response, run_shell
-from craik.runtime.shell.tui import run_tui
+from craik.runtime.shell.tui import run_ratatui_tui, run_tui
 
 PACKAGE_NAME = "craik"
 install_craik_error_handler()
@@ -224,6 +224,17 @@ def tui_command(
 ) -> None:
     """Launch the keyboard-first terminal UI."""
     raise typer.Exit(run_tui(env=env_with_session_name(session_name)))
+
+
+@app.command("tui-rs")
+def tui_rs_command(
+    session_name: Annotated[
+        str | None,
+        typer.Option("-n", "--name", help="Operator-visible shell session name."),
+    ] = None,
+) -> None:
+    """Launch the developer Rust/Ratatui terminal UI."""
+    raise typer.Exit(run_ratatui_tui(env=env_with_session_name(session_name)))
 
 
 @app.command("tui-backend")

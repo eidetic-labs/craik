@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from craik.runtime.auth.login import auth_status_payload
@@ -169,6 +172,8 @@ def run_tui(
     lines: Iterable[str] | None = None,
 ) -> int:
     """Run the terminal UI, falling back to a single render in noninteractive mode."""
+    if (env or {}).get("CRAIK_TUI_RUNTIME") == "rust":
+        return run_ratatui_tui(env=env)
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
     scripted = iter(lines) if lines is not None else None
     if interactive and scripted is None:
@@ -205,6 +210,27 @@ def run_tui(
         output_func(result.text)
         if result.exit_shell:
             return result.exit_code
+
+
+def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
+    """Launch the developer Rust/Ratatui terminal UI client."""
+    manifest = ratatui_manifest_path()
+    if manifest is None:
+        print("Rust TUI crate not found; run from a Craik source checkout.", file=sys.stderr)
+        return 2
+    completed = subprocess.run(
+        ["cargo", "run", "--manifest-path", str(manifest)],
+        env={**dict(os.environ), **(env or {})},
+        check=False,
+    )
+    return completed.returncode
+
+
+def ratatui_manifest_path() -> Path | None:
+    """Return the Rust TUI manifest path when running from a source checkout."""
+    root = Path(__file__).resolve().parents[4]
+    manifest = root / "crates" / "craik-tui-rs" / "Cargo.toml"
+    return manifest if manifest.exists() else None
 
 
 def dispatch_tui_input(

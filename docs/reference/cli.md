@@ -2808,6 +2808,18 @@ Options:
 - `--jsonl`: Run the local Gateway session over JSONL stdio.; default `false`
 - `-n, --name`: Operator-visible backend session name.
 
+## `craik tui-rs`
+
+Launch the developer Rust/Ratatui terminal UI.
+
+```text
+craik tui-rs [OPTIONS]
+```
+
+Options:
+
+- `-n, --name`: Operator-visible shell session name.
+
 ## `craik update`
 
 Print safe update guidance without modifying the installation.
