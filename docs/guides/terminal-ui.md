@@ -96,6 +96,11 @@ PageUp/PageDown scroll the transcript, `Ctrl-A` approves the latest actionable
 approval request, and `Ctrl-X` denies it. Piped stdin still replays Gateway
 JSONL for test fixtures and CI evaluation.
 
+Rust TUI changes are covered by the main CI workflow. The Rust gate runs
+formatting, Clippy with warnings denied, crate tests, and a Gateway replay
+smoke against the recorded Claude Code stream fixture whenever `crates/**` or
+workflow files change.
+
 ## Layout
 
 <div className="craik-grid">
