@@ -245,6 +245,18 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         frame.render_widget(provenance, side[1]);
     }
 
+    if app.help_visible {
+        let help = Paragraph::new(app.help_text())
+            .block(
+                Block::default()
+                    .title("Help  Esc closes")
+                    .borders(Borders::ALL)
+                    .padding(Padding::horizontal(1)),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(help, vertical[0]);
+    }
+
     let input_title = input_title(app);
     let input_block = Block::default()
         .title(Line::from(vec![Span::styled(

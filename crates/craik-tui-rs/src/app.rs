@@ -123,6 +123,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) transcript_scroll: u16,
     pub(crate) transcript_focused: bool,
     pub(crate) expand_transcript_details: bool,
+    pub(crate) help_visible: bool,
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
     pub(crate) search_match_index: Option<usize>,
@@ -162,6 +163,7 @@ impl InteractiveApp {
             transcript_scroll: 0,
             transcript_focused: false,
             expand_transcript_details: true,
+            help_visible: false,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -213,6 +215,7 @@ impl InteractiveApp {
             transcript_scroll: 0,
             transcript_focused: false,
             expand_transcript_details: true,
+            help_visible: false,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -436,10 +439,21 @@ impl InteractiveApp {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
+        if self.help_visible {
+            return self.handle_help_key(key);
+        }
         if self.search_active {
             return self.handle_search_key(key);
         }
         match key.code {
+            KeyCode::Char('?') => {
+                self.help_visible = true;
+                LoopAction::Continue
+            }
+            KeyCode::Char('/') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.help_visible = true;
+                LoopAction::Continue
+            }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.in_flight {
                     self.request_interrupt();
@@ -622,6 +636,51 @@ impl InteractiveApp {
             }
             _ => LoopAction::Continue,
         }
+    }
+
+    fn handle_help_key(&mut self, key: KeyEvent) -> LoopAction {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?') => {
+                self.help_visible = false;
+            }
+            _ => {}
+        }
+        LoopAction::Continue
+    }
+
+    pub(crate) fn help_text(&self) -> String {
+        let mut lines = vec![
+            "Craik Rust TUI Commands".to_owned(),
+            "Prompt".to_owned(),
+            "  Enter send prompt or slash command".to_owned(),
+            "  Alt-Enter insert newline".to_owned(),
+            "  Ctrl-Y retry last prompt".to_owned(),
+            "  Ctrl-U delete to line start; Ctrl-K delete to line end; Ctrl-W delete word"
+                .to_owned(),
+            "Run and provenance".to_owned(),
+            "  Ctrl-J / Ctrl-K select next or previous run".to_owned(),
+            "  Ctrl-L cycle run filters: all, active, approval, failed, completed".to_owned(),
+            "  Ctrl-C stop active run; Ctrl-B reconnect Gateway backend".to_owned(),
+            "Transcript".to_owned(),
+            "  Ctrl-F search; Ctrl-N / Ctrl-P navigate search results".to_owned(),
+            "  Ctrl-T/G/H/Z jump to tool, approval, receipt, or error".to_owned(),
+            "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
+            "  Ctrl-R focus transcript; Ctrl-E expand or collapse detail".to_owned(),
+            "Approvals".to_owned(),
+            "  Ctrl-A approve selected request; Ctrl-X deny selected request".to_owned(),
+            "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
+                .to_owned(),
+            "Help".to_owned(),
+            "  ? or Ctrl-/ show this help; Esc closes help".to_owned(),
+        ];
+        if self.pending_approval_count() > 0 {
+            lines.push("Current context: approval pending.".to_owned());
+        } else if self.in_flight {
+            lines.push("Current context: run is active.".to_owned());
+        } else if !self.backend_connected {
+            lines.push("Current context: Gateway disconnected.".to_owned());
+        }
+        lines.join("\n")
     }
 
     fn handle_search_key(&mut self, key: KeyEvent) -> LoopAction {
@@ -2871,6 +2930,23 @@ mod tests {
 
         assert!(!app.search_active);
         assert_eq!(app.search_query, "r");
+    }
+
+    #[test]
+    fn help_overlay_toggles_and_lists_contextual_actions() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+
+        assert!(app.help_visible);
+        let help = app.help_text();
+        assert!(help.contains("Craik Rust TUI Commands"));
+        assert!(help.contains("Ctrl-Y retry last prompt"));
+        assert!(help.contains("Ctrl-T/G/H/Z jump"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert!(!app.help_visible);
     }
 
     #[test]

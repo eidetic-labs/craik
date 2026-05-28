@@ -210,6 +210,8 @@ pub fn status_line(
         } else {
             " search"
         }),
+        Span::styled("  ?", Style::default().fg(Color::LightBlue)),
+        Span::raw(" help"),
         Span::styled("  Ctrl-R", Style::default().fg(Color::LightBlue)),
         Span::raw(if transcript_focused {
             " split"
