@@ -888,6 +888,48 @@ mod tests {
     };
     use serde_json::json;
 
+    const GATEWAY_FIXTURES: &[&str] = &[
+        include_str!("../../../tests/fixtures/gateway/prompt_run.jsonl"),
+        include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl"),
+        include_str!("../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"),
+        include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
+        include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
+        include_str!("../../../tests/fixtures/gateway/provider_local_ollama_stream.jsonl"),
+    ];
+
+    const PROVIDER_FIXTURES: &[(&str, &str, &str, &str, &str)] = &[
+        (
+            include_str!(
+                "../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"
+            ),
+            "provider_anthropic_messages",
+            "anthropic",
+            "Anthropic Claude Sonnet 4",
+            "provider",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
+            "provider_openai_responses",
+            "openai",
+            "OpenAI GPT-5.4",
+            "provider",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
+            "provider_gemini",
+            "gemini",
+            "Google Gemini 2.5 Pro",
+            "provider",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_local_ollama_stream.jsonl"),
+            "provider_local_ollama",
+            "chat_completions",
+            "Local Ollama Llama 3.1 8B",
+            "local",
+        ),
+    ];
+
     #[test]
     fn summarizes_gateway_replay_fixture() {
         let input = include_str!("../../../tests/fixtures/gateway/prompt_run.jsonl");
@@ -1093,13 +1135,43 @@ mod tests {
 
     #[test]
     fn gateway_fixtures_satisfy_event_contract() {
-        for input in [
-            include_str!("../../../tests/fixtures/gateway/prompt_run.jsonl"),
-            include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl"),
-        ] {
+        for input in GATEWAY_FIXTURES {
             let events = parse_gateway_events(input).expect("fixture parses");
 
             assert_eq!(validate_gateway_events(&events), []);
+        }
+    }
+
+    #[test]
+    fn provider_fixtures_render_consistent_dashboard_state() {
+        for (input, provider_id, provider_family, display_name, backend) in PROVIDER_FIXTURES {
+            let events = parse_gateway_events(input).expect("fixture parses");
+            let state = app_state_from_events(&events);
+
+            assert!(state.ready);
+            assert_eq!(state.active_provider_id.as_deref(), Some(*provider_id));
+            assert_eq!(
+                state.active_provider_family.as_deref(),
+                Some(*provider_family)
+            );
+            assert_eq!(
+                state.active_model_display_name.as_deref(),
+                Some(*display_name)
+            );
+            assert_eq!(state.backend.as_deref(), Some(*backend));
+            assert_eq!(state.run_status.as_deref(), Some("completed"));
+            assert_eq!(state.run_ids.len(), 1);
+            assert_eq!(state.task_ids.len(), 1);
+            assert_eq!(state.tool_events.len(), 1);
+            assert_eq!(state.receipt_ids.len(), 1);
+            assert_eq!(state.outputs.len(), 1);
+
+            let rendered = render_dashboard_text(&state);
+            assert!(rendered.contains(*provider_id));
+            assert!(rendered.contains(*display_name));
+            assert!(rendered.contains("Run: completed"));
+            assert!(rendered.contains("Receipts: receipt_provider_"));
+            assert!(rendered.contains("Output: "));
         }
     }
 
