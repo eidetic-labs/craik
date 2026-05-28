@@ -323,6 +323,8 @@ def test_run_claude_code_backend_creates_audited_artifacts(
 
     assert result.exit_code == 0, result.text
     assert "Claude Code run" in result.text
+    assert isinstance(result.payload, dict)
+    assert [event["type"] for event in result.payload["gateway_events"]][-1] == "run.completed"
     assert "Activity:" in result.text
     assert "- Tools: `Read`, `Bash`, `Edit`" in result.text
     assert "- Files: `docs/index.md`" in result.text

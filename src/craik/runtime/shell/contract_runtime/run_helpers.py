@@ -7,9 +7,6 @@ from pathlib import Path
 from typing import Literal
 
 from craik.contracts.models import ProjectProfile, RunOutput
-from craik.runtime.backend.claude_code import (
-    execute_claude_code_run,
-)
 from craik.runtime.backend.claude_code_support import _clip_block
 from craik.runtime.backend.session import (
     active_provider_and_model,
@@ -53,11 +50,7 @@ def run_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
         text = "run requires a prompt."
         return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
     try:
-        payload = (
-            execute_claude_code_run(prompt, env)
-            if backend == "claude-code"
-            else _create_and_execute_run(prompt, env)
-        )
+        payload = _create_and_execute_run(prompt, env, backend=backend)
     except (
         ModelProviderNotFoundError,
         NotGitRepositoryError,
@@ -74,15 +67,25 @@ def run_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     return CommandResult(payload=payload, shape=shape, text=text, command_name="run")
 
 
+def _create_and_execute_run(
+    prompt: str,
+    env: dict[str, str] | None,
+    *,
+    backend: Literal["auto", "provider", "claude-code"],
+) -> dict[str, object]:
+    return execute_prompt(
+        prompt,
+        env=env,
+        source="tui",
+        backend=backend,
+        require_operator_approval=backend == "claude-code",
+    ).payload_with_events()
 
-def _create_and_execute_run(prompt: str, env: dict[str, str] | None) -> dict[str, object]:
-    return execute_prompt(prompt, env=env, source="tui").payload_with_events()
 
-
-
-
-def _parse_run_backend(args: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
-    backend = "provider"
+def _parse_run_backend(
+    args: tuple[str, ...],
+) -> tuple[Literal["auto", "provider", "claude-code"], tuple[str, ...]]:
+    backend: Literal["auto", "provider", "claude-code"] = "auto"
     remaining: list[str] = []
     index = 0
     while index < len(args):
@@ -90,20 +93,24 @@ def _parse_run_backend(args: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
         if argument == "--backend":
             if index + 1 >= len(args):
                 raise ValueError("run --backend requires a value.")
-            backend = args[index + 1]
+            backend = _run_backend_value(args[index + 1])
             index += 2
             continue
         if argument.startswith("--backend="):
-            backend = argument.split("=", 1)[1]
+            backend = _run_backend_value(argument.split("=", 1)[1])
             index += 1
             continue
         remaining.append(argument)
         index += 1
-    if backend not in {"provider", "claude-code"}:
-        raise ValueError("run backend must be `provider` or `claude-code`.")
     return backend, tuple(remaining)
 
 
+def _run_backend_value(value: str) -> Literal["provider", "claude-code"]:
+    if value == "provider":
+        return "provider"
+    if value == "claude-code":
+        return "claude-code"
+    raise ValueError("run backend must be `provider` or `claude-code`.")
 
 
 def _run_completion_text(label: str, payload: dict[str, object]) -> str:

@@ -30,6 +30,11 @@ from craik.runtime.backend.claude_code_grants import (
     _put_claude_code_grants,
     _require_claude_code_run_approval,
 )
+from craik.runtime.backend.claude_code_hooks import (
+    chain_event_callbacks,
+    chain_process_callbacks,
+    chain_progress_callbacks,
+)
 from craik.runtime.backend.claude_code_process import (
     ClaudeProcessProtocol,
     _read_claude_code_stdout,
@@ -118,10 +123,16 @@ def claude_code_progress(
     cancel_event: threading.Event | None = None,
 ) -> Iterator[None]:
     """Install per-dispatch Claude Code progress and cancellation hooks."""
-    progress_token = _CLAUDE_CODE_PROGRESS.set(callback)
-    event_token = _CLAUDE_CODE_EVENT.set(event_callback)
-    process_token = _CLAUDE_CODE_PROCESS.set(process_callback)
-    cancel_token = _CLAUDE_CODE_CANCEL.set(cancel_event)
+    progress_token = _CLAUDE_CODE_PROGRESS.set(
+        chain_progress_callbacks(_CLAUDE_CODE_PROGRESS.get(), callback)
+    )
+    event_token = _CLAUDE_CODE_EVENT.set(
+        chain_event_callbacks(_CLAUDE_CODE_EVENT.get(), event_callback)
+    )
+    process_token = _CLAUDE_CODE_PROCESS.set(
+        chain_process_callbacks(_CLAUDE_CODE_PROCESS.get(), process_callback)
+    )
+    cancel_token = _CLAUDE_CODE_CANCEL.set(cancel_event or _CLAUDE_CODE_CANCEL.get())
     try:
         yield
     finally:
