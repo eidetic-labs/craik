@@ -3,6 +3,8 @@ use ratatui::{
     text::{Line, Span},
 };
 
+const TRANSCRIPT_RENDER_BUFFER_LINES: usize = 1_000;
+
 pub struct TranscriptEntry {
     pub kind: TranscriptKind,
     pub title: String,
@@ -89,6 +91,41 @@ pub fn transcript_line_count(
 
 pub fn render_transcript_lines(
     entries: &[TranscriptEntry],
+    options: &TranscriptRenderOptions<'_>,
+) -> Vec<Line<'static>> {
+    let entries = entries.iter().collect::<Vec<_>>();
+    render_entries(&entries, options)
+}
+
+pub fn render_transcript_lines_window(
+    entries: &[TranscriptEntry],
+    options: &TranscriptRenderOptions<'_>,
+    scroll_offset: u16,
+    visible_height: u16,
+) -> Vec<Line<'static>> {
+    let start = usize::from(transcript_render_window_start(scroll_offset));
+    let end = usize::from(scroll_offset)
+        .saturating_add(usize::from(visible_height))
+        .saturating_add(TRANSCRIPT_RENDER_BUFFER_LINES);
+    let mut cursor = 0;
+    let mut visible_entries = Vec::new();
+    for entry in entries {
+        let entry_line_count = 2 + entry_body_lines(entry, options.expand_details).len().max(1);
+        let entry_end = cursor + entry_line_count;
+        if entry_end >= start && cursor <= end {
+            visible_entries.push(entry);
+        }
+        cursor = entry_end;
+    }
+    render_entries(&visible_entries, options)
+}
+
+pub fn transcript_render_window_start(scroll_offset: u16) -> u16 {
+    scroll_offset.saturating_sub(TRANSCRIPT_RENDER_BUFFER_LINES.min(usize::from(u16::MAX)) as u16)
+}
+
+fn render_entries(
+    entries: &[&TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
 ) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
@@ -364,7 +401,7 @@ fn normalized_search(value: &str) -> String {
 mod tests {
     use super::{
         TranscriptEntry, TranscriptKind, TranscriptRenderOptions, render_transcript_lines,
-        search_match_count, transcript_scroll_offset,
+        render_transcript_lines_window, search_match_count, transcript_scroll_offset,
     };
 
     #[test]
@@ -527,5 +564,29 @@ mod tests {
 
         assert_eq!(search_match_count(&entries, "cargo"), 3);
         assert_eq!(search_match_count(&entries, "missing"), 0);
+    }
+
+    #[test]
+    fn windowed_rendering_bounds_large_transcripts_near_viewport() {
+        let entries = (0..600)
+            .map(|index| TranscriptEntry::assistant(&format!("Entry {index}"), "body"))
+            .collect::<Vec<_>>();
+
+        let full = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+        let windowed = render_transcript_lines_window(
+            &entries,
+            &TranscriptRenderOptions::expanded(),
+            transcript_scroll_offset(&entries, &TranscriptRenderOptions::expanded(), 0, 12),
+            12,
+        );
+        let rendered = windowed
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(windowed.len() < full.len());
+        assert!(rendered.contains("Entry 599"));
+        assert!(!rendered.contains("Entry 0"));
     }
 }

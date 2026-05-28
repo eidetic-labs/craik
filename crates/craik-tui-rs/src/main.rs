@@ -34,8 +34,8 @@ use std::{
     time::Duration,
 };
 use transcript::{
-    TranscriptRenderOptions, render_transcript_lines, search_match_count, transcript_line_count,
-    transcript_scroll_offset,
+    TranscriptRenderOptions, render_transcript_lines_window, search_match_count,
+    transcript_line_count, transcript_render_window_start, transcript_scroll_offset,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -353,27 +353,33 @@ fn render_transcript_panel(
     options: &TranscriptRenderOptions<'_>,
 ) {
     let transcript_height = area.height.saturating_sub(2);
-    let transcript = Paragraph::new(render_transcript_lines(&app.transcript, options))
-        .block(
-            Block::default()
-                .title(transcript_title(
-                    app,
-                    options,
-                    transcript_height,
-                    area.width,
-                ))
-                .borders(Borders::ALL),
-        )
-        .scroll((
-            transcript_scroll_offset(
-                &app.transcript,
+    let offset = transcript_scroll_offset(
+        &app.transcript,
+        options,
+        app.transcript_scroll,
+        transcript_height,
+    );
+    let transcript = Paragraph::new(render_transcript_lines_window(
+        &app.transcript,
+        options,
+        offset,
+        transcript_height,
+    ))
+    .block(
+        Block::default()
+            .title(transcript_title(
+                app,
                 options,
-                app.transcript_scroll,
                 transcript_height,
-            ),
-            0,
-        ))
-        .wrap(Wrap { trim: false });
+                area.width,
+            ))
+            .borders(Borders::ALL),
+    )
+    .scroll((
+        offset.saturating_sub(transcript_render_window_start(offset)),
+        0,
+    ))
+    .wrap(Wrap { trim: false });
     frame.render_widget(transcript, area);
 }
 
