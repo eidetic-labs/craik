@@ -80,13 +80,14 @@ class ModelSettingsStore:
         aliases = payload.get("aliases", {})
         fallbacks = payload.get("fallbacks", [])
         profiles = payload.get("profiles", {})
-        return ModelSettings(
+        settings = ModelSettings(
             active_model=_string_or_none(payload.get("active_model")),
             active_profile_id=_string_or_none(payload.get("active_profile_id")),
             profiles=_profiles_from_payload(profiles),
             aliases=aliases if isinstance(aliases, dict) else {},
             fallbacks=[str(item) for item in fallbacks] if isinstance(fallbacks, list) else [],
         )
+        return _repair_active_profile(settings)
 
     def save(self, settings: ModelSettings) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +158,23 @@ def _profiles_from_payload(value: object) -> dict[str, ModelProfile]:
             options=options if isinstance(options, dict) else {},
         )
     return profiles
+
+
+def _repair_active_profile(settings: ModelSettings) -> ModelSettings:
+    """Hydrate model profile metadata for settings written before profiles existed."""
+    if settings.active_model is None or settings.active_profile is not None:
+        return settings
+    try:
+        profile = model_profile_from_ref(settings.active_model)
+    except ValueError:
+        return settings
+    return ModelSettings(
+        active_model=settings.active_model,
+        active_profile_id=profile.id,
+        profiles={**settings.profiles, profile.id: profile},
+        aliases=settings.aliases,
+        fallbacks=settings.fallbacks,
+    )
 
 
 def _provider_identity(provider_name: str) -> tuple[str, str]:
