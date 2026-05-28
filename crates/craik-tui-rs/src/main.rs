@@ -26,7 +26,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Padding, Paragraph, Wrap},
 };
 use render::{ActivityMetrics, render_activity_panel, status_line};
 use std::{
@@ -183,7 +183,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(8),
-            Constraint::Length(4),
+            Constraint::Length(6),
             Constraint::Length(1),
         ])
         .split(area);
@@ -216,10 +216,11 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
 
     let input_block = Block::default()
         .title(Line::from(vec![Span::styled(
-            "Prompt",
+            "Prompt  Enter sends / Alt-Enter newline",
             Style::default().add_modifier(Modifier::BOLD),
         )]))
-        .borders(Borders::ALL);
+        .borders(Borders::ALL)
+        .padding(Padding::horizontal(1));
     let input_inner = input_block.inner(vertical[1]);
     let input = Paragraph::new(render_input_lines(&app.input, &app.slash_catalog))
         .block(input_block)
