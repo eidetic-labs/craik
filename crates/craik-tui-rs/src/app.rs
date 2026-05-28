@@ -59,7 +59,9 @@ impl InteractiveApp {
     }
 
     #[cfg(test)]
-    fn for_test_with_messages(messages: impl IntoIterator<Item = WorkerMessage>) -> Self {
+    pub(crate) fn for_test_with_messages(
+        messages: impl IntoIterator<Item = WorkerMessage>,
+    ) -> Self {
         let (sender, receiver) = std::sync::mpsc::channel();
         for message in messages {
             sender.send(message).expect("test worker message sends");

@@ -21,7 +21,7 @@ use crossterm::{
 };
 use input::{input_cursor_position, render_input_lines};
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
@@ -161,67 +161,7 @@ fn run_interactive_loop(
     let mut app = InteractiveApp::new()?;
     loop {
         app.drain_worker();
-        terminal.draw(|frame| {
-            let area = frame.area();
-            let vertical = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(8),
-                    Constraint::Length(4),
-                    Constraint::Length(1),
-                ])
-                .split(area);
-            let body = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
-                .split(vertical[0]);
-
-            let transcript_height = body[0].height.saturating_sub(2);
-            let transcript = Paragraph::new(render_transcript_lines(&app.transcript))
-                .block(Block::default().title("Transcript").borders(Borders::ALL))
-                .scroll((
-                    transcript_scroll_offset(
-                        &app.transcript,
-                        app.transcript_scroll,
-                        transcript_height,
-                    ),
-                    0,
-                ))
-                .wrap(Wrap { trim: false });
-            frame.render_widget(transcript, body[0]);
-
-            let activity = Paragraph::new(render_activity_panel(
-                &app.state,
-                ActivityMetrics {
-                    slash_commands: app.slash_catalog.len(),
-                    queued_inputs: app.queued_inputs.len(),
-                    last_error: app.last_error.as_deref(),
-                },
-            ))
-            .block(Block::default().title("Activity").borders(Borders::ALL))
-            .wrap(Wrap { trim: false });
-            frame.render_widget(activity, body[1]);
-
-            let input_block = Block::default()
-                .title(Line::from(vec![Span::styled(
-                    "Prompt",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )]))
-                .borders(Borders::ALL);
-            let input_inner = input_block.inner(vertical[1]);
-            let input = Paragraph::new(render_input_lines(&app.input, &app.slash_catalog))
-                .block(input_block)
-                .wrap(Wrap { trim: false });
-            frame.render_widget(input, vertical[1]);
-            frame.set_cursor_position(input_cursor_position(
-                &app.input,
-                app.input_cursor,
-                input_inner,
-            ));
-
-            let footer = Paragraph::new(status_line(&app.state, app.in_flight));
-            frame.render_widget(footer, vertical[2]);
-        })?;
+        terminal.draw(|frame| draw_interactive_frame(frame, &app))?;
 
         if event::poll(Duration::from_millis(80))?
             && let Event::Key(key) = event::read()?
@@ -235,6 +175,64 @@ fn run_interactive_loop(
         }
     }
     Ok(())
+}
+
+fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
+    let area = frame.area();
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(8),
+            Constraint::Length(4),
+            Constraint::Length(1),
+        ])
+        .split(area);
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
+        .split(vertical[0]);
+
+    let transcript_height = body[0].height.saturating_sub(2);
+    let transcript = Paragraph::new(render_transcript_lines(&app.transcript))
+        .block(Block::default().title("Transcript").borders(Borders::ALL))
+        .scroll((
+            transcript_scroll_offset(&app.transcript, app.transcript_scroll, transcript_height),
+            0,
+        ))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(transcript, body[0]);
+
+    let activity = Paragraph::new(render_activity_panel(
+        &app.state,
+        ActivityMetrics {
+            slash_commands: app.slash_catalog.len(),
+            queued_inputs: app.queued_inputs.len(),
+            last_error: app.last_error.as_deref(),
+        },
+    ))
+    .block(Block::default().title("Activity").borders(Borders::ALL))
+    .wrap(Wrap { trim: false });
+    frame.render_widget(activity, body[1]);
+
+    let input_block = Block::default()
+        .title(Line::from(vec![Span::styled(
+            "Prompt",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]))
+        .borders(Borders::ALL);
+    let input_inner = input_block.inner(vertical[1]);
+    let input = Paragraph::new(render_input_lines(&app.input, &app.slash_catalog))
+        .block(input_block)
+        .wrap(Wrap { trim: false });
+    frame.render_widget(input, vertical[1]);
+    frame.set_cursor_position(input_cursor_position(
+        &app.input,
+        app.input_cursor,
+        input_inner,
+    ));
+
+    let footer = Paragraph::new(status_line(&app.state, app.in_flight));
+    frame.render_widget(footer, vertical[2]);
 }
 
 fn render_replay(path: &str) -> anyhow::Result<String> {
@@ -279,4 +277,36 @@ fn usage() -> String {
         "  craik-tui-rs --interrupt run_123 \"operator requested stop\"",
     ]
     .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InteractiveApp, Terminal, TestBackend, draw_interactive_frame};
+
+    #[test]
+    fn interactive_frame_renders_core_regions() {
+        let backend = TestBackend::new(100, 24);
+        let mut terminal = Terminal::new(backend).expect("test terminal is created");
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.input = "Review the plan".to_owned();
+        app.input_cursor = app.input.len();
+
+        terminal
+            .draw(|frame| draw_interactive_frame(frame, &app))
+            .expect("interactive frame renders");
+
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+
+        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Activity"));
+        assert!(rendered.contains("Prompt"));
+        assert!(rendered.contains("Review the plan"));
+        assert!(rendered.contains("Craik"));
+    }
 }
