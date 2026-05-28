@@ -438,8 +438,10 @@ impl InteractiveApp {
         self.record_run_event(event);
         match event.event_type.as_str() {
             "session.ready" => {
-                self.transcript
-                    .push(TranscriptEntry::system("Gateway", "Session ready."));
+                self.transcript.push(TranscriptEntry::system(
+                    "Gateway",
+                    &summarize_session_ready_event(event),
+                ));
             }
             "session.status" => {
                 let state = event
@@ -1118,6 +1120,12 @@ impl PendingApproval {
         push_optional_line(&mut lines, "Command", self.command.as_deref());
         push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         push_optional_line(&mut lines, "Risk", self.risk.as_deref());
+        if self.risk.as_deref().is_some_and(is_high_risk_text) {
+            lines.push(
+                "Confirmation: high-risk approval; review target and receipt before deciding"
+                    .to_owned(),
+            );
+        }
         push_optional_line(&mut lines, "Latest receipt", latest_receipt);
         lines.join("\n")
     }
@@ -1170,6 +1178,14 @@ fn summarize_model_event(event: &GatewayEvent) -> String {
     if lines.is_empty() {
         lines.push("Model: selected".to_owned());
     }
+    lines.join("\n")
+}
+
+fn summarize_session_ready_event(event: &GatewayEvent) -> String {
+    let mut lines = vec!["Session ready.".to_owned()];
+    push_optional_data_line(&mut lines, event, "Transport", "transport");
+    push_optional_data_line(&mut lines, event, "Protocol", "protocol");
+    push_optional_data_line(&mut lines, event, "Version", "protocol_version");
     lines.join("\n")
 }
 
@@ -1257,6 +1273,13 @@ fn compact_text(value: &str, max_chars: usize) -> String {
     }
     let keep = max_chars.saturating_sub(3);
     format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
+fn is_high_risk_text(value: &str) -> bool {
+    let lower = value.to_lowercase();
+    ["write", "delete", "secret", "credential", "network", "exec"]
+        .iter()
+        .any(|needle| lower.contains(needle))
 }
 
 fn push_optional_data_line(lines: &mut Vec<String>, event: &GatewayEvent, label: &str, key: &str) {
@@ -1391,6 +1414,7 @@ mod tests {
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
+        assert!(entry.body.contains("Confirmation: high-risk approval"));
         assert!(
             entry
                 .body
@@ -1690,6 +1714,30 @@ mod tests {
         assert!(receipt_entry.body.contains("Run: run_1"));
         assert!(receipt_entry.body.contains("Task: task_1"));
         assert!(receipt_entry.body.contains("Provider: provider_anthropic"));
+    }
+
+    #[test]
+    fn session_ready_surfaces_protocol_context() {
+        let ready = GatewayEvent {
+            event_type: "session.ready".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "transport": "jsonl.stdio",
+                "protocol": "craik.tui.gateway",
+                "protocol_version": "1"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&ready);
+
+        let entry = app.transcript.last().expect("ready transcript entry");
+        assert_eq!(entry.title, "Gateway");
+        assert!(entry.body.contains("Transport: jsonl.stdio"));
+        assert!(entry.body.contains("Protocol: craik.tui.gateway"));
+        assert!(entry.body.contains("Version: 1"));
     }
 
     #[test]

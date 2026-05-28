@@ -30,7 +30,26 @@ def run_jsonl_gateway(
         output_stream.write(json.dumps(payload, sort_keys=True) + "\n")
         output_stream.flush()
 
-    emit(BackendEvent(type="session.ready", data={"transport": "jsonl.stdio"}))
+    emit(
+        BackendEvent(
+            type="session.ready",
+            data={
+                "transport": "jsonl.stdio",
+                "protocol": "craik.tui.gateway",
+                "protocol_version": "1",
+                "client": "craik-tui",
+                "capabilities": [
+                    "prompt.submit",
+                    "slash.submit",
+                    "slash.catalog",
+                    "approval.decide",
+                    "model.set",
+                    "run.interrupt",
+                    "session.status",
+                ],
+            },
+        )
+    )
     for line in input_stream:
         raw = line.strip()
         if not raw:
@@ -151,7 +170,11 @@ def run_jsonl_gateway(
                 continue
             if message_type in {"session.close", "exit", "quit"}:
                 break
-            raise ValueError(f"unsupported JSONL message type: {message_type!r}")
+            raise ValueError(
+                f"unsupported JSONL message type: {message_type!r}; "
+                "supported types are session.status, prompt.submit, slash.submit, "
+                "slash.catalog, approval.decide, model.set, run.interrupt, session.close"
+            )
         except Exception as error:
             emit(BackendEvent(type="error", data={"message": str(error)}))
     return 0

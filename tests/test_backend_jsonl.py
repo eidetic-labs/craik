@@ -40,6 +40,9 @@ def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert events[0]["type"] == "session.ready"
+    assert events[0]["data"]["protocol"] == "craik.tui.gateway"
+    assert events[0]["data"]["protocol_version"] == "1"
+    assert "approval.decide" in events[0]["data"]["capabilities"]
     assert events[1]["type"] == "session.status"
     assert events[1]["data"]["state"] == "unconfigured"
 
@@ -166,3 +169,26 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     names = {command["name"] for command in events[1]["data"]["commands"]}
     assert "run" in names
     assert "status" in names
+
+
+def test_jsonl_gateway_reports_malformed_and_unsupported_messages(tmp_path: Path) -> None:
+    stdin = io.StringIO(
+        "\n".join(
+            [
+                "not-json",
+                json.dumps({"type": "unknown.command"}),
+                json.dumps({"type": "prompt.submit", "text": ""}),
+                "",
+            ]
+        )
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert events[0]["type"] == "session.ready"
+    errors = [event["data"]["message"] for event in events[1:]]
+    assert any("Expecting value" in message for message in errors)
+    assert any("unsupported JSONL message type" in message for message in errors)
+    assert any("prompt.submit requires non-empty text" in message for message in errors)

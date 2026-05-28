@@ -172,10 +172,14 @@ def run_tui(
     lines: Iterable[str] | None = None,
 ) -> int:
     """Run the terminal UI, falling back to a single render in noninteractive mode."""
-    if (env or {}).get("CRAIK_TUI_RUNTIME") == "rust":
+    runtime = (env or {}).get("CRAIK_TUI_RUNTIME", "").strip().lower()
+    if runtime == "rust":
         return run_ratatui_tui(env=env)
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
     scripted = iter(lines) if lines is not None else None
+    if interactive and scripted is None and runtime not in {"textual", "legacy", "python"}:
+        if ratatui_command() is not None:
+            return run_ratatui_tui(env=env)
     if interactive and scripted is None:
         from craik.runtime.shell.textual_app import run_textual_tui, terminal_supports_textual
 
@@ -213,7 +217,7 @@ def run_tui(
 
 
 def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
-    """Launch the developer Rust/Ratatui terminal UI client."""
+    """Launch the Rust/Ratatui terminal UI client."""
     command = ratatui_command()
     if command is None:
         print(
@@ -247,6 +251,19 @@ def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
     return process.wait()
 
 
+def run_textual_legacy_tui(*, env: dict[str, str] | None = None) -> int:
+    """Launch the legacy Python/Textual terminal UI when the terminal supports it."""
+    from craik.runtime.shell.textual_app import run_textual_tui, terminal_supports_textual
+
+    if terminal_supports_textual(env):
+        return run_textual_tui(env=env)
+    print(
+        "Legacy Textual TUI is not supported in this terminal; use `craik tui` for the Rust TUI.",
+        file=sys.stderr,
+    )
+    return 2
+
+
 def ratatui_command() -> list[str] | None:
     """Return the preferred command for launching the Rust/Ratatui TUI."""
     installed = shutil.which("craik-tui-rs")
@@ -255,7 +272,7 @@ def ratatui_command() -> list[str] | None:
     manifest = ratatui_manifest_path()
     if manifest is None:
         return None
-    return ["cargo", "run", "--manifest-path", str(manifest)]
+    return ["cargo", "run", "--locked", "--manifest-path", str(manifest)]
 
 
 def ratatui_manifest_path() -> Path | None:
