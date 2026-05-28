@@ -1,6 +1,7 @@
 use anyhow::{Context, bail};
 mod backend;
 mod input;
+mod render;
 mod transcript;
 
 use backend::{BackendSession, WorkerMessage};
@@ -21,10 +22,11 @@ use ratatui::{
     Terminal,
     backend::{CrosstermBackend, TestBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use render::{ActivityMetrics, render_activity_panel, status_line};
 use std::{
     collections::VecDeque,
     env, fs,
@@ -715,9 +717,16 @@ fn run_interactive_loop(
                 .wrap(Wrap { trim: false });
             frame.render_widget(transcript, body[0]);
 
-            let activity = Paragraph::new(render_activity_panel(&app))
-                .block(Block::default().title("Activity").borders(Borders::ALL))
-                .wrap(Wrap { trim: false });
+            let activity = Paragraph::new(render_activity_panel(
+                &app.state,
+                ActivityMetrics {
+                    slash_commands: app.slash_catalog.len(),
+                    queued_inputs: app.queued_inputs.len(),
+                    last_error: app.last_error.as_deref(),
+                },
+            ))
+            .block(Block::default().title("Activity").borders(Borders::ALL))
+            .wrap(Wrap { trim: false });
             frame.render_widget(activity, body[1]);
 
             let input_block = Block::default()
@@ -737,7 +746,7 @@ fn run_interactive_loop(
                 input_inner,
             ));
 
-            let footer = Paragraph::new(status_line(&app));
+            let footer = Paragraph::new(status_line(&app.state, app.in_flight));
             frame.render_widget(footer, vertical[2]);
         })?;
 
@@ -882,70 +891,6 @@ fn summarize_slash_output(event: &GatewayEvent) -> Option<String> {
     data.get("text")
         .and_then(|value| value.as_str())
         .map(str::to_owned)
-}
-
-fn render_activity_panel(app: &InteractiveApp) -> String {
-    let model = app
-        .state
-        .active_model_display_name
-        .as_ref()
-        .or(app.state.active_model.as_ref())
-        .map(String::as_str)
-        .unwrap_or("not selected");
-    let mut lines = vec![
-        format!(
-            "Session: {}",
-            if app.state.ready { "ready" } else { "starting" }
-        ),
-        format!(
-            "Readiness: {}",
-            app.state.readiness_state.as_deref().unwrap_or("unknown")
-        ),
-        format!("Model: {model}"),
-        format!(
-            "Backend: {}",
-            app.state.backend.as_deref().unwrap_or("auto")
-        ),
-        format!("Run: {}", app.state.run_status.as_deref().unwrap_or("idle")),
-        format!(
-            "Phase: {}",
-            app.state.working_phase.as_deref().unwrap_or("none")
-        ),
-        format!("Receipts: {}", app.state.receipt_ids.len()),
-        format!("Tools: {}", app.state.tool_events.len()),
-        format!("Files: {}", app.state.file_paths.len()),
-        format!("Commands: {}", app.state.commands.len()),
-        format!("Approvals: {}", app.state.approval_requests.len()),
-        format!("Slash commands: {}", app.slash_catalog.len()),
-        format!("Queued: {}", app.queued_inputs.len()),
-        "Ctrl-A approves latest · Ctrl-X denies latest".to_owned(),
-    ];
-    if let Some(error) = &app.last_error {
-        lines.push(format!("Last error: {error}"));
-    }
-    lines.join("\n")
-}
-
-fn status_line(app: &InteractiveApp) -> Line<'static> {
-    let state = if app.in_flight { "working" } else { "ready" };
-    let model = app
-        .state
-        .active_model_display_name
-        .as_ref()
-        .or(app.state.active_model.as_ref())
-        .cloned()
-        .unwrap_or_else(|| "model not selected".to_owned());
-    Line::from(vec![
-        Span::styled(
-            "Craik",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(format!(
-            " · {model} · {state} · Enter sends · Alt-Enter newline · ↑/↓ history · PgUp/PgDn scroll · Ctrl-A approve · Ctrl-X deny · Ctrl-C exits"
-        )),
-    ])
 }
 
 fn render_replay(path: &str) -> anyhow::Result<String> {
