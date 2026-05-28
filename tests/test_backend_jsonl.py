@@ -3,12 +3,15 @@ from __future__ import annotations
 import io
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from craik.cli import app
+from craik.contracts.models import CapabilityReceipt, ReceiptResult
 from craik.runtime.backend.jsonl import run_jsonl_gateway
+from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.approvals import open_approval_request
 from craik.runtime.store import LocalStore
 
@@ -171,6 +174,33 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert "status" in names
 
 
+def test_jsonl_gateway_reports_persisted_session_history(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    store = LocalStore.from_paths(ensure_craik_home(env))
+    try:
+        store.initialize()
+        store.put_receipt(_receipt("receipt_history_1", task_id="task_history_1"))
+    finally:
+        store.close()
+    stdin = io.StringIO('{"type":"session.history"}\n{"type":"session.close"}\n')
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == ["session.ready", "session.history"]
+    assert events[1]["data"]["receipts"] == [
+        {
+            "id": "receipt_history_1",
+            "task_id": "task_history_1",
+            "capability": "shell.test",
+            "target": "pytest",
+            "status": "passed",
+            "summary": "History receipt.",
+        }
+    ]
+
+
 def test_jsonl_gateway_reports_malformed_and_unsupported_messages(tmp_path: Path) -> None:
     stdin = io.StringIO(
         "\n".join(
@@ -192,3 +222,22 @@ def test_jsonl_gateway_reports_malformed_and_unsupported_messages(tmp_path: Path
     assert any("Expecting value" in message for message in errors)
     assert any("unsupported JSONL message type" in message for message in errors)
     assert any("prompt.submit requires non-empty text" in message for message in errors)
+
+
+def _receipt(receipt_id: str, *, task_id: str) -> CapabilityReceipt:
+    return CapabilityReceipt(
+        id=receipt_id,
+        task_id=task_id,
+        actor="agent:test",
+        capability="shell.test",
+        target="pytest",
+        policy_profile="strict",
+        reason="Validate session history.",
+        result=ReceiptResult(
+            status="passed",
+            summary="History receipt.",
+            metadata={},
+        ),
+        redacted=True,
+        created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
+    )

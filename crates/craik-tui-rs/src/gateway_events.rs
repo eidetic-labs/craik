@@ -49,6 +49,7 @@ pub fn is_request_terminal_event(event: &GatewayEvent) -> bool {
     matches!(
         event.event_type.as_str(),
         "session.status"
+            | "session.history"
             | "slash.catalog"
             | "slash.completed"
             | "model.changed"

@@ -30,6 +30,8 @@ pub struct GatewayContractIssue {
 pub enum GatewayCommand {
     #[serde(rename = "session.status")]
     SessionStatus,
+    #[serde(rename = "session.history")]
+    SessionHistory,
     #[serde(rename = "prompt.submit")]
     PromptSubmit { text: String },
     #[serde(rename = "slash.submit")]
@@ -144,6 +146,16 @@ impl GatewayAppState {
             }
             "session.status" => {
                 self.readiness_state = string_at(&event.data, &["state"]);
+            }
+            "session.history" => {
+                for item in array_at(&event.data, &["receipts"]) {
+                    if let Some(receipt_id) = item.get("id").and_then(|value| value.as_str()) {
+                        push_unique(&mut self.receipt_ids, receipt_id);
+                    }
+                    if let Some(task_id) = item.get("task_id").and_then(|value| value.as_str()) {
+                        push_unique(&mut self.task_ids, task_id);
+                    }
+                }
             }
             "model.changed" => {
                 self.active_model = string_at(&event.data, &["model"]);
@@ -351,6 +363,7 @@ fn validate_gateway_event_at(
         "prompt.submitted" => require_string(&mut issues, event_index, event, &["prompt_preview"]),
         "session.ready" => require_string(&mut issues, event_index, event, &["transport"]),
         "session.status" => require_string(&mut issues, event_index, event, &["state"]),
+        "session.history" => require_array(&mut issues, event_index, event, &["receipts"]),
         "model.changed" => require_string(&mut issues, event_index, event, &["model"]),
         "model.selected" => require_one_string(
             &mut issues,
@@ -472,7 +485,7 @@ pub fn render_dashboard_text(state: &GatewayAppState) -> String {
     let run_state = state.run_status.as_deref().unwrap_or("idle");
     let phase = state.working_phase.as_deref().unwrap_or("none");
     [
-        "Craik Ratatui Gateway".to_owned(),
+        "Craik Rust/Ratatui Gateway".to_owned(),
         format!(
             "Session: {}",
             if state.ready { "ready" } else { "starting" }
@@ -574,6 +587,7 @@ fn known_event_type(event_type: &str) -> bool {
             | "approval.resolved"
             | "session.ready"
             | "session.status"
+            | "session.history"
             | "slash.completed"
             | "slash.catalog"
             | "model.changed"
@@ -707,6 +721,17 @@ fn string_at(data: &Value, path: &[&str]) -> Option<String> {
         value = value.get(key)?;
     }
     value.as_str().map(str::to_owned)
+}
+
+fn array_at<'a>(data: &'a Value, path: &[&str]) -> &'a [Value] {
+    let mut value = data;
+    for key in path {
+        let Some(next) = value.get(key) else {
+            return &[];
+        };
+        value = next;
+    }
+    value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 
 fn model_changed_display_name(data: &Value) -> Option<String> {
@@ -930,7 +955,7 @@ mod tests {
         assert_eq!(state.approval_requests.len(), 1);
         assert_eq!(state.outputs.len(), 3);
         insta::assert_snapshot!(render_dashboard_text(&state), @r###"
-        Craik Ratatui Gateway
+        Craik Rust/Ratatui Gateway
         Session: starting
         Readiness: unknown
         Model: not selected
@@ -972,6 +997,32 @@ mod tests {
             sample_gateway_command_json()["slash"],
             r#"{"type":"slash.submit","text":"/run list"}"#
         );
+        assert_eq!(
+            encode_gateway_command(&GatewayCommand::SessionHistory).expect("command serializes"),
+            r#"{"type":"session.history"}"#
+        );
+    }
+
+    #[test]
+    fn session_history_updates_dashboard_state() {
+        let event = GatewayEvent {
+            event_type: "session.history".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "receipts": [
+                    {"id": "receipt_history_1", "task_id": "task_history_1"}
+                ]
+            }),
+        };
+
+        let issues = validate_gateway_events(std::slice::from_ref(&event));
+        let state = app_state_from_events(&[event]);
+
+        assert!(issues.is_empty());
+        assert_eq!(state.receipt_ids, ["receipt_history_1"]);
+        assert_eq!(state.task_ids, ["task_history_1"]);
     }
 
     #[test]

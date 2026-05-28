@@ -218,6 +218,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
                 selected_approval_preview: selected_approval_preview.as_deref(),
                 selected_run_summary: selected_run_summary.as_deref(),
                 selected_run_detail: selected_run_detail.as_deref(),
+                backend_connected: app.backend_connected,
             },
         ))
         .block(Block::default().title("Activity").borders(Borders::ALL))
@@ -399,10 +400,11 @@ fn render_events(input: &str) -> anyhow::Result<String> {
 
 fn usage() -> String {
     [
-        "Craik Ratatui client",
+        "Craik Rust/Ratatui operator TUI",
         "",
         "Interactive:",
         "  craik-tui-rs",
+        "  craik tui",
         "",
         "Replay:",
         "  craik-tui-rs <events.jsonl>",
