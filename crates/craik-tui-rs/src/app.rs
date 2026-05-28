@@ -6,7 +6,7 @@ use crate::{
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, env, fs, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LoopAction {
@@ -21,6 +21,37 @@ pub(crate) enum RunFilter {
     NeedsApproval,
     Failed,
     Completed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TranscriptJump {
+    Tool,
+    Approval,
+    Receipt,
+    Error,
+}
+
+impl TranscriptJump {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Tool => "tool",
+            Self::Approval => "approval",
+            Self::Receipt => "receipt",
+            Self::Error => "error",
+        }
+    }
+
+    fn matches(self, kind: TranscriptKind) -> bool {
+        match self {
+            Self::Tool => matches!(
+                kind,
+                TranscriptKind::Tool | TranscriptKind::Command | TranscriptKind::File
+            ),
+            Self::Approval => kind == TranscriptKind::Approval,
+            Self::Receipt => kind == TranscriptKind::Receipt,
+            Self::Error => kind == TranscriptKind::Error,
+        }
+    }
 }
 
 impl RunFilter {
@@ -92,9 +123,11 @@ pub(crate) struct InteractiveApp {
     pub(crate) transcript_scroll: u16,
     pub(crate) transcript_focused: bool,
     pub(crate) expand_transcript_details: bool,
+    pub(crate) help_visible: bool,
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
     pub(crate) search_match_index: Option<usize>,
+    pub(crate) transcript_jump: Option<TranscriptJump>,
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
@@ -130,9 +163,11 @@ impl InteractiveApp {
             transcript_scroll: 0,
             transcript_focused: false,
             expand_transcript_details: true,
+            help_visible: false,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
+            transcript_jump: None,
             backend,
             in_flight: false,
             last_error: None,
@@ -180,9 +215,11 @@ impl InteractiveApp {
             transcript_scroll: 0,
             transcript_focused: false,
             expand_transcript_details: true,
+            help_visible: false,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
+            transcript_jump: None,
             backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
@@ -252,6 +289,27 @@ impl InteractiveApp {
                 ));
                 self.in_flight = false;
                 break;
+            }
+        }
+    }
+
+    pub(crate) fn shutdown(&mut self) {
+        match self.backend.close() {
+            Ok(()) => {
+                self.backend_connected = false;
+                self.in_flight = false;
+                self.state.working_phase = None;
+                self.transcript.push(TranscriptEntry::system(
+                    "Session closing",
+                    "Gateway session close requested.",
+                ));
+            }
+            Err(error) => {
+                self.last_error = Some(error.to_string());
+                self.transcript.push(TranscriptEntry::error(
+                    "Session close failed",
+                    &error.to_string(),
+                ));
             }
         }
     }
@@ -402,10 +460,21 @@ impl InteractiveApp {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
+        if self.help_visible {
+            return self.handle_help_key(key);
+        }
         if self.search_active {
             return self.handle_search_key(key);
         }
         match key.code {
+            KeyCode::Char('?') => {
+                self.help_visible = true;
+                LoopAction::Continue
+            }
+            KeyCode::Char('/') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.help_visible = true;
+                LoopAction::Continue
+            }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.in_flight {
                     self.request_interrupt();
@@ -421,6 +490,10 @@ impl InteractiveApp {
             }
             KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.retry_last_prompt();
+                LoopAction::Continue
+            }
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.export_selected_run();
                 LoopAction::Continue
             }
             KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -445,6 +518,38 @@ impl InteractiveApp {
             }
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.search_active = true;
+                LoopAction::Continue
+            }
+            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Tool);
+                LoopAction::Continue
+            }
+            KeyCode::Char('T') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Tool);
+                LoopAction::Continue
+            }
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Approval);
+                LoopAction::Continue
+            }
+            KeyCode::Char('G') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Approval);
+                LoopAction::Continue
+            }
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Receipt);
+                LoopAction::Continue
+            }
+            KeyCode::Char('H') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Receipt);
+                LoopAction::Continue
+            }
+            KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Error);
+                LoopAction::Continue
+            }
+            KeyCode::Char('Z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Error);
                 LoopAction::Continue
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -556,6 +661,51 @@ impl InteractiveApp {
             }
             _ => LoopAction::Continue,
         }
+    }
+
+    fn handle_help_key(&mut self, key: KeyEvent) -> LoopAction {
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?') => {
+                self.help_visible = false;
+            }
+            _ => {}
+        }
+        LoopAction::Continue
+    }
+
+    pub(crate) fn help_text(&self) -> String {
+        let mut lines = vec![
+            "Craik Rust TUI Commands".to_owned(),
+            "Prompt".to_owned(),
+            "  Enter send prompt or slash command".to_owned(),
+            "  Alt-Enter insert newline".to_owned(),
+            "  Ctrl-Y retry last prompt".to_owned(),
+            "  Ctrl-U delete to line start; Ctrl-K delete to line end; Ctrl-W delete word"
+                .to_owned(),
+            "Run and provenance".to_owned(),
+            "  Ctrl-J / Ctrl-K select next or previous run".to_owned(),
+            "  Ctrl-L cycle run filters: all, active, approval, failed, completed".to_owned(),
+            "  Ctrl-C stop active run; Ctrl-B reconnect Gateway backend".to_owned(),
+            "Transcript".to_owned(),
+            "  Ctrl-F search; Ctrl-N / Ctrl-P navigate search results".to_owned(),
+            "  Ctrl-T/G/H/Z jump to tool, approval, receipt, or error".to_owned(),
+            "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
+            "  Ctrl-R focus transcript; Ctrl-E expand or collapse detail".to_owned(),
+            "Approvals".to_owned(),
+            "  Ctrl-A approve selected request; Ctrl-X deny selected request".to_owned(),
+            "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
+                .to_owned(),
+            "Help".to_owned(),
+            "  ? or Ctrl-/ show this help; Esc closes help".to_owned(),
+        ];
+        if self.pending_approval_count() > 0 {
+            lines.push("Current context: approval pending.".to_owned());
+        } else if self.in_flight {
+            lines.push("Current context: run is active.".to_owned());
+        } else if !self.backend_connected {
+            lines.push("Current context: Gateway disconnected.".to_owned());
+        }
+        lines.join("\n")
     }
 
     fn handle_search_key(&mut self, key: KeyEvent) -> LoopAction {
@@ -1278,6 +1428,62 @@ impl InteractiveApp {
             .collect()
     }
 
+    pub(crate) fn transcript_jump_summary(&self) -> Option<String> {
+        let jump = self.transcript_jump?;
+        let total = self
+            .transcript
+            .iter()
+            .filter(|entry| jump.matches(entry.kind))
+            .count();
+        if total == 0 {
+            return Some(format!("{}: none", jump.label()));
+        }
+        Some(format!("{}: {total} entries", jump.label()))
+    }
+
+    pub(crate) fn jump_to_next_transcript_kind(&mut self, jump: TranscriptJump) {
+        self.jump_to_transcript_kind(jump, true);
+    }
+
+    pub(crate) fn jump_to_previous_transcript_kind(&mut self, jump: TranscriptJump) {
+        self.jump_to_transcript_kind(jump, false);
+    }
+
+    fn jump_to_transcript_kind(&mut self, jump: TranscriptJump, forward: bool) {
+        let matches = self
+            .transcript
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| jump.matches(entry.kind).then_some(index))
+            .collect::<Vec<_>>();
+        if matches.is_empty() {
+            self.transcript_jump = Some(jump);
+            self.transcript.push(TranscriptEntry::system(
+                "Transcript jump",
+                &format!("No {} entries are available.", jump.label()),
+            ));
+            return;
+        }
+        let current_line =
+            transcript_entry_index_for_scroll(&self.transcript, self.transcript_scroll);
+        let selected = if forward {
+            matches
+                .iter()
+                .copied()
+                .find(|index| *index > current_line)
+                .unwrap_or(matches[0])
+        } else {
+            matches
+                .iter()
+                .rev()
+                .copied()
+                .find(|index| *index < current_line)
+                .unwrap_or_else(|| *matches.last().expect("matches not empty"))
+        };
+        self.transcript_jump = Some(jump);
+        self.transcript_scroll = line_count_after_entry_index(&self.transcript, selected);
+    }
+
     fn dispatch_next_queued(&mut self) {
         if self.in_flight {
             return;
@@ -1324,6 +1530,31 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::user("Retry", &text));
         self.auto_select_latest_run = true;
         self.dispatch_text(text);
+    }
+
+    pub(crate) fn export_selected_run(&mut self) {
+        let Some(run) = self.selected_run() else {
+            self.transcript.push(TranscriptEntry::system(
+                "Export",
+                "No selected run is available to export.",
+            ));
+            return;
+        };
+        let markdown = run.export_markdown();
+        match write_run_export(&run.run_id, &markdown) {
+            Ok(path) => {
+                self.transcript.push(TranscriptEntry::system(
+                    "Export written",
+                    &format!("Path: {}\n\n{}", path.display(), markdown),
+                ));
+            }
+            Err(error) => {
+                self.transcript.push(TranscriptEntry::error(
+                    "Export failed",
+                    &format!("{error}\n\n{markdown}"),
+                ));
+            }
+        }
     }
 
     pub(crate) fn approve_selected(&mut self) {
@@ -1625,6 +1856,28 @@ impl RunRecord {
         push_detail_section(&mut lines, "Outputs", &self.outputs);
         lines.join("\n")
     }
+
+    fn export_markdown(&self) -> String {
+        let mut lines = vec![
+            format!("# Craik Run Handoff: {}", self.run_id),
+            String::new(),
+            format!("- Status: {}", self.status.as_deref().unwrap_or("active")),
+        ];
+        push_optional_bullet(&mut lines, "Task", self.task_id.as_deref());
+        push_optional_bullet(&mut lines, "Provider", self.provider.as_deref());
+        push_optional_bullet(&mut lines, "Model", self.model.as_deref());
+        push_optional_bullet(&mut lines, "Prompt", self.prompt.as_deref());
+        lines.push(String::new());
+        push_markdown_section(&mut lines, "Receipts", &self.receipts);
+        push_markdown_section(&mut lines, "Receipt Detail", &self.receipt_details);
+        push_markdown_section(&mut lines, "Tools", &self.tools);
+        push_markdown_section(&mut lines, "Commands", &self.commands);
+        push_markdown_section(&mut lines, "Files", &self.files);
+        push_markdown_section(&mut lines, "Approvals", &self.approvals);
+        push_markdown_section(&mut lines, "Provenance", &self.provenance);
+        push_markdown_section(&mut lines, "Outputs", &self.outputs);
+        lines.join("\n")
+    }
 }
 
 fn summarize_model_event(event: &GatewayEvent) -> String {
@@ -1763,6 +2016,52 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
     if let Some(value) = value {
         lines.push(format!("{label}: {value}"));
+    }
+}
+
+fn push_optional_bullet(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        lines.push(format!("- {label}: {value}"));
+    }
+}
+
+fn push_markdown_section(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    lines.push(format!("## {title}"));
+    if values.is_empty() {
+        lines.push("- None".to_owned());
+    } else {
+        lines.extend(values.iter().map(|value| format!("- {value}")));
+    }
+    lines.push(String::new());
+}
+
+fn write_run_export(run_id: &str, markdown: &str) -> std::io::Result<PathBuf> {
+    let home = env::var_os("CRAIK_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".craik")))
+        .unwrap_or_else(|| PathBuf::from(".craik"));
+    let dir = home.join("state").join("exports");
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}.md", export_file_stem(run_id)));
+    fs::write(&path, markdown)?;
+    Ok(path)
+}
+
+fn export_file_stem(run_id: &str) -> String {
+    let stem = run_id
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if stem.is_empty() {
+        "run".to_owned()
+    } else {
+        stem
     }
 }
 
@@ -2003,9 +2302,21 @@ fn line_count_after_entry_index(entries: &[TranscriptEntry], target_index: usize
     count.min(u16::MAX as usize) as u16
 }
 
+fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -> usize {
+    let mut remaining = scroll as usize;
+    for (index, entry) in entries.iter().rev().enumerate() {
+        let lines = entry.body.lines().count().max(1) + 2;
+        if remaining <= lines {
+            return entries.len().saturating_sub(index + 1);
+        }
+        remaining = remaining.saturating_sub(lines);
+    }
+    0
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{InteractiveApp, LoopAction};
+    use super::{InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::WorkerMessage;
     use crate::input::SlashHint;
     use craik_tui_rs::GatewayEvent;
@@ -2740,6 +3051,23 @@ mod tests {
     }
 
     #[test]
+    fn help_overlay_toggles_and_lists_contextual_actions() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+
+        assert!(app.help_visible);
+        let help = app.help_text();
+        assert!(help.contains("Craik Rust TUI Commands"));
+        assert!(help.contains("Ctrl-Y retry last prompt"));
+        assert!(help.contains("Ctrl-T/G/H/Z jump"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert!(!app.help_visible);
+    }
+
+    #[test]
     fn tab_completes_visible_slash_command() {
         let mut app = InteractiveApp::for_test_with_messages([]);
         app.slash_catalog = vec![SlashHint {
@@ -2778,6 +3106,103 @@ mod tests {
         app.previous_search_match();
         assert_eq!(app.search_match_index, Some(0));
         assert_eq!(app.transcript_scroll, first_scroll);
+    }
+
+    #[test]
+    fn transcript_jump_moves_to_evidence_entries() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript = vec![
+            crate::transcript::TranscriptEntry::assistant("Answer", "done"),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Tool,
+                "Read",
+                "Path: README.md",
+            ),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Approval,
+                "Approval pending",
+                "ID: approval_1",
+            ),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Receipt,
+                "Receipt created",
+                "Receipt: receipt_1",
+            ),
+        ];
+
+        app.jump_to_next_transcript_kind(super::TranscriptJump::Approval);
+
+        assert_eq!(app.transcript_jump, Some(super::TranscriptJump::Approval));
+        assert_eq!(
+            app.transcript_jump_summary().as_deref(),
+            Some("approval: 1 entries")
+        );
+        assert!(app.transcript_scroll > 0);
+    }
+
+    #[test]
+    fn selected_run_export_formats_handoff_markdown() {
+        let run = RunRecord {
+            run_id: "run/unsafe id".to_owned(),
+            task_id: Some("task_1".to_owned()),
+            prompt: Some("Review the implementation plan".to_owned()),
+            model: Some("claude-opus-4-7".to_owned()),
+            provider: Some("anthropic".to_owned()),
+            status: Some("completed".to_owned()),
+            receipts: vec!["receipt_1".to_owned()],
+            receipt_details: vec!["capability=shell.execute status=completed".to_owned()],
+            tools: vec!["Bash".to_owned()],
+            files: vec!["crates/craik-tui-rs/src/app.rs".to_owned()],
+            commands: vec!["cargo test".to_owned()],
+            approvals: vec!["approval_1 approved".to_owned()],
+            outputs: vec!["Implementation plan reviewed.".to_owned()],
+            provenance: vec!["Tool used: Bash".to_owned()],
+        };
+
+        let markdown = run.export_markdown();
+
+        assert!(markdown.contains("# Craik Run Handoff: run/unsafe id"));
+        assert!(markdown.contains("- Status: completed"));
+        assert!(markdown.contains("- Task: task_1"));
+        assert!(markdown.contains("- Provider: anthropic"));
+        assert!(markdown.contains("- Model: claude-opus-4-7"));
+        assert!(markdown.contains("## Receipts"));
+        assert!(markdown.contains("- receipt_1"));
+        assert!(markdown.contains("## Commands"));
+        assert!(markdown.contains("- cargo test"));
+        assert!(markdown.contains("## Files"));
+        assert!(markdown.contains("- crates/craik-tui-rs/src/app.rs"));
+        assert!(markdown.contains("## Provenance"));
+        assert_eq!(export_file_stem("run/unsafe id"), "run_unsafe_id");
+        assert_eq!(export_file_stem(""), "run");
+    }
+
+    #[test]
+    fn export_without_selected_run_is_visible() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.export_selected_run();
+
+        let entry = app.transcript.last().expect("export transcript entry");
+        assert_eq!(entry.title, "Export");
+        assert!(entry.body.contains("No selected run"));
+    }
+
+    #[test]
+    fn shutdown_surfaces_session_close_status() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.backend_connected = true;
+        app.in_flight = true;
+        app.state.working_phase = Some("waiting".to_owned());
+
+        app.shutdown();
+
+        assert!(!app.backend_connected);
+        assert!(!app.in_flight);
+        assert_eq!(app.state.working_phase, None);
+        let entry = app.transcript.last().expect("shutdown transcript entry");
+        assert_eq!(entry.title, "Session closing");
+        assert!(entry.body.contains("Gateway session close requested"));
     }
 
     #[test]

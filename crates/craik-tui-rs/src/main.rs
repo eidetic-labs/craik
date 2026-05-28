@@ -34,8 +34,8 @@ use std::{
     time::Duration,
 };
 use transcript::{
-    TranscriptRenderOptions, render_transcript_lines, search_match_count, transcript_line_count,
-    transcript_scroll_offset,
+    TranscriptRenderOptions, render_transcript_lines_window, search_match_count,
+    transcript_line_count, transcript_render_window_start, transcript_scroll_offset,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -181,6 +181,7 @@ fn run_interactive_loop(
             }
         }
     }
+    app.shutdown();
     Ok(())
 }
 
@@ -243,6 +244,18 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(provenance, side[1]);
+    }
+
+    if app.help_visible {
+        let help = Paragraph::new(app.help_text())
+            .block(
+                Block::default()
+                    .title("Help  Esc closes")
+                    .borders(Borders::ALL)
+                    .padding(Padding::horizontal(1)),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(help, vertical[0]);
     }
 
     let input_title = input_title(app);
@@ -340,27 +353,33 @@ fn render_transcript_panel(
     options: &TranscriptRenderOptions<'_>,
 ) {
     let transcript_height = area.height.saturating_sub(2);
-    let transcript = Paragraph::new(render_transcript_lines(&app.transcript, options))
-        .block(
-            Block::default()
-                .title(transcript_title(
-                    app,
-                    options,
-                    transcript_height,
-                    area.width,
-                ))
-                .borders(Borders::ALL),
-        )
-        .scroll((
-            transcript_scroll_offset(
-                &app.transcript,
+    let offset = transcript_scroll_offset(
+        &app.transcript,
+        options,
+        app.transcript_scroll,
+        transcript_height,
+    );
+    let transcript = Paragraph::new(render_transcript_lines_window(
+        &app.transcript,
+        options,
+        offset,
+        transcript_height,
+    ))
+    .block(
+        Block::default()
+            .title(transcript_title(
+                app,
                 options,
-                app.transcript_scroll,
                 transcript_height,
-            ),
-            0,
-        ))
-        .wrap(Wrap { trim: false });
+                area.width,
+            ))
+            .borders(Borders::ALL),
+    )
+    .scroll((
+        offset.saturating_sub(transcript_render_window_start(offset)),
+        0,
+    ))
+    .wrap(Wrap { trim: false });
     frame.render_widget(transcript, area);
 }
 
@@ -384,6 +403,10 @@ fn transcript_title(
     };
     let bottom = offset.saturating_add(visible_height).min(total);
     let search_count = search_match_count(&app.transcript, &app.search_query);
+    let jump = app
+        .transcript_jump_summary()
+        .map(|summary| format!(" | Jump: {summary}"))
+        .unwrap_or_default();
     let detail_mode = if app.expand_transcript_details {
         "expanded"
     } else {
@@ -410,11 +433,11 @@ fn transcript_title(
     };
     if visible_width < 84 {
         return Line::from(format!(
-            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}"
+            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}{jump}"
         ));
     }
     Line::from(format!(
-        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}"
+        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}{jump}"
     ))
 }
 

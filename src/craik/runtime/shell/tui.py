@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from craik.runtime.auth.login import auth_status_payload
@@ -24,9 +22,34 @@ from craik.runtime.sandbox.local_process_backend import (
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.contract_runtime.run_helpers import run_command
+from craik.runtime.shell.ratatui import (
+    RatatuiRuntimeDiagnostics,
+    ratatui_command,
+    ratatui_manifest_path,
+    ratatui_runtime_diagnostics,
+)
+from craik.runtime.shell.ratatui import (
+    ratatui_runtime_error as _ratatui_runtime_error,
+)
 from craik.runtime.shell.readiness import ReadinessReport, resolve_readiness
 from craik.runtime.shell.slash_command_schema.results import SlashCommandResult
 from craik.runtime.store import DATABASE_NAME, LocalStore
+
+__all__ = [
+    "MultilineComposer",
+    "RatatuiRuntimeDiagnostics",
+    "build_tui_snapshot",
+    "complete_tui_command",
+    "dispatch_tui_input",
+    "ratatui_command",
+    "ratatui_manifest_path",
+    "ratatui_runtime_diagnostics",
+    "render_approval_modal",
+    "render_tui_snapshot",
+    "run_ratatui_tui",
+    "run_textual_legacy_tui",
+    "run_tui",
+]
 
 
 @dataclass(frozen=True)
@@ -218,18 +241,25 @@ def run_tui(
 
 def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
     """Launch the Rust/Ratatui terminal UI client."""
-    command = ratatui_command()
+    diagnostics = ratatui_runtime_diagnostics()
+    command = list(diagnostics.command) if diagnostics.command is not None else None
     if command is None:
         print(
-            "Rust TUI binary was not found and no source checkout fallback is available.",
+            _ratatui_runtime_error(
+                "Rust TUI binary was not found and no source checkout fallback is available.",
+                diagnostics,
+            ),
             file=sys.stderr,
         )
         return 2
     if command[0] == "cargo" or command[0].endswith("/cargo"):
-        cargo = shutil.which("cargo")
+        cargo = diagnostics.cargo
         if cargo is None:
             print(
-                "Cargo was not found; install Rust before launching the Rust TUI.",
+                _ratatui_runtime_error(
+                    "Cargo was not found; install Rust before launching the Rust TUI.",
+                    diagnostics,
+                ),
                 file=sys.stderr,
             )
             return 2
@@ -244,7 +274,10 @@ def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
         )
     except LocalProcessStartError:
         print(
-            "Rust TUI could not be started; verify the installed binary or Rust toolchain.",
+            _ratatui_runtime_error(
+                "Rust TUI could not be started; verify the installed binary or Rust toolchain.",
+                diagnostics,
+            ),
             file=sys.stderr,
         )
         return 2
@@ -262,24 +295,6 @@ def run_textual_legacy_tui(*, env: dict[str, str] | None = None) -> int:
         file=sys.stderr,
     )
     return 2
-
-
-def ratatui_command() -> list[str] | None:
-    """Return the preferred command for launching the Rust/Ratatui TUI."""
-    installed = shutil.which("craik-tui-rs")
-    if installed is not None:
-        return [installed]
-    manifest = ratatui_manifest_path()
-    if manifest is None:
-        return None
-    return ["cargo", "run", "--locked", "--manifest-path", str(manifest)]
-
-
-def ratatui_manifest_path() -> Path | None:
-    """Return the Rust TUI manifest path when running from a source checkout."""
-    root = Path(__file__).resolve().parents[4]
-    manifest = root / "crates" / "craik-tui-rs" / "Cargo.toml"
-    return manifest if manifest.exists() else None
 
 
 def dispatch_tui_input(

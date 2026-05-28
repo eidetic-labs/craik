@@ -17,6 +17,7 @@ from craik.runtime.shell.tui import (
     dispatch_tui_input,
     ratatui_command,
     ratatui_manifest_path,
+    ratatui_runtime_diagnostics,
     render_approval_modal,
     render_tui_snapshot,
     run_ratatui_tui,
@@ -56,7 +57,7 @@ def test_tui_rs_command_launches_ratatui_runtime(monkeypatch, tmp_path: Path) ->
         return Process()
 
     monkeypatch.setattr(
-        "craik.runtime.shell.tui.shutil.which",
+        "craik.runtime.shell.ratatui.shutil.which",
         lambda name: f"/usr/bin/{name}" if name == "craik-tui-rs" else None,
     )
     monkeypatch.setattr(
@@ -91,7 +92,7 @@ def test_tui_rs_command_falls_back_to_cargo_in_source_checkout(
     def fake_which(name: str) -> str | None:
         return "/usr/bin/cargo" if name == "cargo" else None
 
-    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", fake_which)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", fake_which)
     monkeypatch.setattr(
         "craik.runtime.shell.tui.start_reviewed_local_process",
         fake_start_process,
@@ -108,7 +109,7 @@ def test_tui_rs_command_reports_missing_cargo_for_source_fallback(
     monkeypatch,
     capsys,
 ) -> None:
-    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", lambda name: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", lambda name: None)
 
     exit_code = run_ratatui_tui()
 
@@ -120,8 +121,8 @@ def test_tui_rs_command_reports_missing_binary_and_checkout(
     monkeypatch,
     capsys,
 ) -> None:
-    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", lambda name: None)
-    monkeypatch.setattr("craik.runtime.shell.tui.ratatui_manifest_path", lambda: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", lambda name: None)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.ratatui_manifest_path", lambda: None)
 
     exit_code = run_ratatui_tui()
 
@@ -129,9 +130,38 @@ def test_tui_rs_command_reports_missing_binary_and_checkout(
     assert "no source checkout fallback" in capsys.readouterr().err
 
 
+def test_ratatui_runtime_diagnostics_explain_launch_paths(monkeypatch) -> None:
+    manifest = Path("/repo/crates/craik-tui-rs/Cargo.toml")
+
+    def fake_which(name: str) -> str | None:
+        if name == "cargo":
+            return "/usr/bin/cargo"
+        return None
+
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", fake_which)
+    monkeypatch.setattr(
+        "craik.runtime.shell.ratatui.ratatui_manifest_path",
+        lambda: manifest,
+    )
+
+    diagnostics = ratatui_runtime_diagnostics()
+
+    assert diagnostics.command == (
+        "cargo",
+        "run",
+        "--locked",
+        "--manifest-path",
+        str(manifest),
+    )
+    assert diagnostics.cargo == "/usr/bin/cargo"
+    assert diagnostics.installed_binary is None
+    assert diagnostics.manifest == str(manifest)
+    assert any("legacy_textual: craik tui-textual" in line for line in diagnostics.as_lines())
+
+
 def test_ratatui_command_prefers_installed_binary(monkeypatch) -> None:
     monkeypatch.setattr(
-        "craik.runtime.shell.tui.shutil.which",
+        "craik.runtime.shell.ratatui.shutil.which",
         lambda name: f"/usr/local/bin/{name}" if name == "craik-tui-rs" else None,
     )
 
@@ -152,7 +182,7 @@ def test_tui_runtime_env_can_select_rust(monkeypatch, tmp_path: Path) -> None:
     def fake_which(name: str) -> str | None:
         return "/usr/bin/cargo" if name == "cargo" else None
 
-    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", fake_which)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", fake_which)
     monkeypatch.setattr(
         "craik.runtime.shell.tui.start_reviewed_local_process",
         fake_start_process,
@@ -178,7 +208,7 @@ def test_tui_prefers_rust_for_interactive_terminal(monkeypatch, tmp_path: Path) 
     def fake_which(name: str) -> str | None:
         return "/usr/bin/cargo" if name == "cargo" else None
 
-    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", fake_which)
+    monkeypatch.setattr("craik.runtime.shell.ratatui.shutil.which", fake_which)
     monkeypatch.setattr(
         "craik.runtime.shell.tui.start_reviewed_local_process",
         fake_start_process,

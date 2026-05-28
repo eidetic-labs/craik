@@ -124,11 +124,17 @@ impl BackendSession {
         stdin.flush()?;
         Ok(())
     }
+
+    pub fn close(&mut self) -> anyhow::Result<()> {
+        let result = self.send(&GatewayCommand::SessionClose);
+        self.stdin = None;
+        result
+    }
 }
 
 impl Drop for BackendSession {
     fn drop(&mut self) {
-        let _ = self.send(&GatewayCommand::SessionClose);
+        let _ = self.close();
         if let Some(child) = &mut self.child {
             let _ = child.kill();
             let _ = child.wait();
