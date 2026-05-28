@@ -4,7 +4,6 @@ import json
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import cast
 
 from typer.testing import CliRunner
@@ -176,11 +175,11 @@ def test_single_operator_mode_provider_and_model_are_ready(tmp_path: Path) -> No
     assert report.operator_authenticated is False
     assert report.state == "fully-ready"
     assert chat.exit_code == 0
-    assert "openai fixture completed fixture with status completed." in chat.output
+    assert "openai fixture completed plan with status completed." in chat.output
     assert "not ready" not in chat.output
 
 
-def test_anthropic_one_shot_uses_external_claude_cli(
+def test_anthropic_one_shot_routes_claude_cli_profile_through_gateway(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -201,44 +200,30 @@ def test_anthropic_one_shot_uses_external_claude_cli(
         )
     )
     runner.invoke(app, ["model", "set", "anthropic/claude-sonnet-4-20250514"], env=env)
-    seen: dict[str, object] = {}
     monkeypatch.setattr(
         "craik.runtime.auth.login.claude_cli_runtime_status",
         lambda: CredentialStatus(status="ok"),
     )
-    monkeypatch.setattr(
-        "craik.runtime.shell.agent_shell.shutil.which",
-        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
-    )
 
-    def _run(args, **kwargs):
-        seen["args"] = args
+    seen: dict[str, object] = {}
+
+    def _execute(prompt: str, **kwargs) -> dict[str, object]:
+        seen["prompt"] = prompt
         seen["env"] = kwargs["env"]
-        return SimpleNamespace(
-            returncode=0,
-            stdout="from cli\n",
-            stderr="",
-            reason="local process command completed",
-        )
+        return _gateway_payload("from cli")
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
+    monkeypatch.setattr("craik.runtime.backend.session._execute_claude_code_prompt", _execute)
 
     chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
 
     assert chat.exit_code == 0
-    assert chat.output == "from cli\n"
-    assert seen["args"] == [
-        "/usr/local/bin/claude",
-        "-p",
-        "hello",
-        "--model",
-        "sonnet",
-    ]
-    assert "ANTHROPIC_API_KEY" not in seen["env"]
-    assert "CLAUDE_CODE_OAUTH_TOKEN" not in seen["env"]
+    assert "from cli" in chat.output
+    assert "Audited run `run_chat` completed" in chat.output
+    assert "Receipts: receipt_chat" in chat.output
+    assert seen["prompt"] == "hello"
 
 
-def test_anthropic_one_shot_passes_claude_permission_mode(
+def test_anthropic_one_shot_preserves_claude_permission_mode_for_gateway(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -263,37 +248,22 @@ def test_anthropic_one_shot_passes_claude_permission_mode(
         "craik.runtime.auth.login.claude_cli_runtime_status",
         lambda: CredentialStatus(status="ok"),
     )
-    monkeypatch.setattr(
-        "craik.runtime.shell.agent_shell.shutil.which",
-        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
-    )
 
-    def _run(args, **kwargs):
-        seen["args"] = args
-        return SimpleNamespace(
-            returncode=0,
-            stdout="from cli\n",
-            stderr="",
-            reason="local process command completed",
-        )
+    def _execute(prompt: str, **kwargs) -> dict[str, object]:
+        seen["prompt"] = prompt
+        seen["env"] = kwargs["env"]
+        return _gateway_payload("from cli")
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
+    monkeypatch.setattr("craik.runtime.backend.session._execute_claude_code_prompt", _execute)
 
     chat = runner.invoke(app, ["chat", "-q", "-"], input="hello\n", env=env)
 
     assert chat.exit_code == 0
-    assert seen["args"] == [
-        "/usr/local/bin/claude",
-        "-p",
-        "hello",
-        "--model",
-        "opus",
-        "--permission-mode",
-        "plan",
-    ]
+    assert seen["prompt"] == "hello"
+    assert seen["env"]["CRAIK_CLAUDE_PERMISSION_MODE"] == "plan"
 
 
-def test_anthropic_one_shot_empty_claude_output_guides_to_audited_run(
+def test_anthropic_one_shot_without_final_text_still_reports_audit_artifacts(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -314,20 +284,11 @@ def test_anthropic_one_shot_empty_claude_output_guides_to_audited_run(
         "craik.runtime.auth.login.claude_cli_runtime_status",
         lambda: CredentialStatus(status="ok"),
     )
-    monkeypatch.setattr(
-        "craik.runtime.shell.agent_shell.shutil.which",
-        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
-    )
 
-    def _run(args, **kwargs):
-        return SimpleNamespace(
-            returncode=0,
-            stdout="",
-            stderr="",
-            reason="local process command completed",
-        )
+    def _execute(prompt: str, **kwargs) -> dict[str, object]:
+        return _gateway_payload("")
 
-    monkeypatch.setattr("craik.runtime.shell.agent_shell.run_reviewed_local_process", _run)
+    monkeypatch.setattr("craik.runtime.backend.session._execute_claude_code_prompt", _execute)
 
     chat = runner.invoke(
         app,
@@ -337,8 +298,9 @@ def test_anthropic_one_shot_empty_claude_output_guides_to_audited_run(
     )
 
     assert chat.exit_code == 0
-    assert "did not return response text" in chat.output
-    assert "/run --backend claude-code Can you review the implementation plan" in chat.output
+    assert "Audited run `run_chat` completed" in chat.output
+    assert "Handoff: `handoff_chat`" in chat.output
+    assert "Receipts: receipt_chat" in chat.output
     assert "completed without output" not in chat.output
 
 
@@ -518,6 +480,23 @@ def _allow_health_check(monkeypatch) -> None:
         return _FakeHealthResponse()
 
     monkeypatch.setattr(auth_health_check, "_health_check_urlopen", _urlopen)
+
+
+def _gateway_payload(text: str) -> dict[str, object]:
+    return {
+        "schema": "craik.claude_code_run_execution",
+        "status": "completed",
+        "task": {"id": "task_chat"},
+        "run": {"id": "run_chat", "task_id": "task_chat", "status": "completed"},
+        "handoff": {"id": "handoff_chat"},
+        "receipt_ids": ["receipt_chat"],
+        "run_outputs": [
+            {
+                "observed_output": {"text": text},
+                "diagnostics": [],
+            }
+        ],
+    }
 
 
 def _auth_profile(

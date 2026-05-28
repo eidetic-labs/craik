@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -60,7 +61,8 @@ def chat_command(
 ) -> None:
     """Launch the Craik agent shell or run one conversational prompt."""
     if prompt is not None:
-        typer.echo(one_shot_response(resolve_cli_prompt(prompt, allow_argv=allow_argv_prompt)))
+        resolved = resolve_cli_prompt(prompt, allow_argv=allow_argv_prompt)
+        typer.echo(one_shot_response(resolved, env=dict(os.environ)))
         raise typer.Exit()
     raise typer.Exit(run_shell())
 
