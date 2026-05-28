@@ -21,6 +21,7 @@ from craik.runtime.work.case_files import CaseFileAssembler
 from craik.runtime.work.tasks import create_task
 
 PromptSource = Literal["tui", "cli", "slash", "jsonl", "channel"]
+BackendPreference = Literal["auto", "provider", "claude-code"]
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,8 @@ def execute_prompt(
     *,
     env: dict[str, str] | None = None,
     source: PromptSource = "tui",
+    backend: BackendPreference = "auto",
+    require_operator_approval: bool | None = None,
     stream: Callable[[BackendEvent], None] | None = None,
 ) -> BackendPromptResult:
     """Create and execute one audited provider-backed prompt run."""
@@ -62,7 +65,9 @@ def execute_prompt(
             data={"source": source, "prompt_preview": _clip(normalized_prompt)},
         )
     )
-    if _anthropic_marker_uses_claude_code(env):
+    if backend == "claude-code" or (
+        backend == "auto" and _anthropic_marker_uses_claude_code(env)
+    ):
         emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
         emit(
             BackendEvent(
@@ -70,7 +75,17 @@ def execute_prompt(
                 data={"backend": "claude-code", "phase": "starting"},
             )
         )
-        payload = _execute_claude_code_prompt(normalized_prompt, env=env, stream=emit)
+        approval_required = (
+            require_operator_approval
+            if require_operator_approval is not None
+            else backend == "claude-code"
+        )
+        payload = _execute_claude_code_prompt(
+            normalized_prompt,
+            env=env,
+            stream=emit,
+            require_operator_approval=approval_required,
+        )
         run = payload.get("run")
         task = payload.get("task")
         run_id = run.get("id") if isinstance(run, dict) else None
@@ -312,6 +327,7 @@ def _execute_claude_code_prompt(
     *,
     env: dict[str, str] | None,
     stream: Callable[[BackendEvent], None] | None = None,
+    require_operator_approval: bool = False,
 ) -> dict[str, object]:
     from craik.runtime.backend.claude_code import (
         claude_code_progress,
@@ -330,7 +346,7 @@ def _execute_claude_code_prompt(
         return execute_claude_code_run(
             prompt,
             env,
-            require_operator_approval=False,
+            require_operator_approval=require_operator_approval,
         )
 
 
