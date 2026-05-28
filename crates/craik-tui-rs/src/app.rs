@@ -34,11 +34,13 @@ pub(crate) struct RunRecord {
     pub(crate) provider: Option<String>,
     pub(crate) status: Option<String>,
     pub(crate) receipts: Vec<String>,
+    pub(crate) receipt_details: Vec<String>,
     pub(crate) tools: Vec<String>,
     pub(crate) files: Vec<String>,
     pub(crate) commands: Vec<String>,
     pub(crate) approvals: Vec<String>,
     pub(crate) outputs: Vec<String>,
+    pub(crate) provenance: Vec<String>,
 }
 
 pub(crate) struct InteractiveApp {
@@ -340,6 +342,20 @@ impl InteractiveApp {
                 self.transcript_scroll = 0;
                 LoopAction::Continue
             }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.delete_to_line_start();
+                LoopAction::Continue
+            }
+            KeyCode::Char('k')
+                if key.modifiers.contains(KeyModifiers::CONTROL) && !self.input.is_empty() =>
+            {
+                self.delete_to_line_end();
+                LoopAction::Continue
+            }
+            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.delete_previous_word();
+                LoopAction::Continue
+            }
             KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.select_next_run();
                 LoopAction::Continue
@@ -405,11 +421,19 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Up => {
-                self.history_previous();
+                if self.input_has_multiple_lines() && !self.cursor_is_on_first_line() {
+                    self.move_cursor_up_line();
+                } else {
+                    self.history_previous();
+                }
                 LoopAction::Continue
             }
             KeyCode::Down => {
-                self.history_next();
+                if self.input_has_multiple_lines() && !self.cursor_is_on_last_line() {
+                    self.move_cursor_down_line();
+                } else {
+                    self.history_next();
+                }
                 LoopAction::Continue
             }
             KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -538,6 +562,18 @@ impl InteractiveApp {
                         .push(TranscriptEntry::new(kind, tool, &text));
                     self.follow_tail_after_transcript_update();
                 }
+            }
+            "run.working" => {
+                let phase = event
+                    .data
+                    .get("phase")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("working");
+                self.transcript.push(TranscriptEntry::progress(
+                    "Run state",
+                    &summarize_working_event(event, phase),
+                ));
+                self.follow_tail_after_transcript_update();
             }
             "file.changed" => {
                 let target = event
@@ -727,9 +763,26 @@ impl InteractiveApp {
         match event.event_type.as_str() {
             "run.started" => {
                 run.status = Some("running".to_owned());
+                push_unique_string(
+                    &mut run.provenance,
+                    format!(
+                        "Run started: {}",
+                        event.run_id.as_deref().unwrap_or(&run.run_id)
+                    ),
+                );
+            }
+            "run.working" => {
+                if let Some(phase) = string_data(event, "phase") {
+                    run.status = Some(phase.clone());
+                    push_unique_string(&mut run.provenance, format!("Phase: {phase}"));
+                }
+                collect_event_provenance(event, run);
             }
             "run.completed" => {
                 run.status = string_data(event, "status").or_else(|| Some("completed".to_owned()));
+                if let Some(status) = &run.status {
+                    push_unique_string(&mut run.provenance, format!("Run completed: {status}"));
+                }
             }
             "tool.used" => {
                 if let Some(tool) = string_data(event, "tool") {
@@ -741,26 +794,37 @@ impl InteractiveApp {
                 if let Some(target) = string_data(event, "target") {
                     push_unique_string(&mut run.files, target);
                 }
+                collect_event_provenance(event, run);
             }
             "file.changed" => {
                 if let Some(target) = string_data(event, "target") {
                     push_unique_string(&mut run.files, target);
                 }
+                collect_event_provenance(event, run);
             }
             "approval.requested" => {
                 if let Some(message) = string_data(event, "message") {
                     push_unique_string(&mut run.approvals, message);
                 }
+                collect_event_provenance(event, run);
+            }
+            "approval.resolved" | "approval.denied" => {
+                collect_event_provenance(event, run);
             }
             "receipt.created" => {
                 if let Some(receipt_id) = string_data(event, "receipt_id") {
                     push_unique_string(&mut run.receipts, receipt_id);
                 }
+                collect_event_provenance(event, run);
             }
             "run.output" => {
                 if let Some(summary) = string_data(event, "summary") {
                     run.outputs.push(summary);
                 }
+                collect_event_provenance(event, run);
+            }
+            "run.event" => {
+                collect_event_provenance(event, run);
             }
             _ => {}
         }
@@ -790,6 +854,8 @@ impl InteractiveApp {
             }
             run.status.get_or_insert_with(|| "persisted".to_owned());
             push_unique_string(&mut run.receipts, receipt_id.to_owned());
+            push_unique_string(&mut run.receipt_details, receipt_detail(receipt));
+            collect_history_receipt_provenance(receipt, run);
             if let Some(summary) = receipt.get("summary").and_then(|value| value.as_str()) {
                 run.outputs.push(summary.to_owned());
             }
@@ -850,6 +916,14 @@ impl InteractiveApp {
     pub(crate) fn insert_newline(&mut self) {
         self.input.insert(self.input_cursor, '\n');
         self.input_cursor += 1;
+    }
+
+    pub(crate) fn paste_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.input.insert_str(self.input_cursor, text);
+        self.input_cursor += text.len();
     }
 
     pub(crate) fn clear_input(&mut self) {
@@ -919,6 +993,106 @@ impl InteractiveApp {
             .map(|index| self.input_cursor + index)
             .unwrap_or(self.input.len());
         self.input_cursor = line_end;
+    }
+
+    pub(crate) fn delete_to_line_start(&mut self) {
+        let line_start = self.input[..self.input_cursor]
+            .rfind('\n')
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        self.input.replace_range(line_start..self.input_cursor, "");
+        self.input_cursor = line_start;
+    }
+
+    pub(crate) fn delete_to_line_end(&mut self) {
+        let line_end = self.input[self.input_cursor..]
+            .find('\n')
+            .map(|index| self.input_cursor + index)
+            .unwrap_or(self.input.len());
+        self.input.replace_range(self.input_cursor..line_end, "");
+    }
+
+    pub(crate) fn delete_previous_word(&mut self) {
+        if self.input_cursor == 0 {
+            return;
+        }
+        let before = &self.input[..self.input_cursor];
+        let trim_end = before
+            .char_indices()
+            .rev()
+            .find(|(_, ch)| !ch.is_whitespace())
+            .map(|(index, ch)| index + ch.len_utf8())
+            .unwrap_or(0);
+        let word_start = before[..trim_end]
+            .char_indices()
+            .rev()
+            .find(|(_, ch)| ch.is_whitespace())
+            .map(|(index, ch)| index + ch.len_utf8())
+            .unwrap_or(0);
+        self.input.replace_range(word_start..self.input_cursor, "");
+        self.input_cursor = word_start;
+    }
+
+    pub(crate) fn input_line_count(&self) -> usize {
+        self.input.lines().count().max(1)
+    }
+
+    pub(crate) fn input_char_count(&self) -> usize {
+        self.input.chars().count()
+    }
+
+    pub(crate) fn input_cursor_line_col(&self) -> (usize, usize) {
+        let before_cursor = &self.input[..self.input_cursor.min(self.input.len())];
+        let line = before_cursor.bytes().filter(|byte| *byte == b'\n').count();
+        let col = before_cursor
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count();
+        (line + 1, col + 1)
+    }
+
+    fn input_has_multiple_lines(&self) -> bool {
+        self.input.contains('\n')
+    }
+
+    fn cursor_is_on_first_line(&self) -> bool {
+        !self.input[..self.input_cursor.min(self.input.len())].contains('\n')
+    }
+
+    fn cursor_is_on_last_line(&self) -> bool {
+        !self.input[self.input_cursor.min(self.input.len())..].contains('\n')
+    }
+
+    pub(crate) fn move_cursor_up_line(&mut self) {
+        let (line_start, col) = current_line_start_and_col(&self.input, self.input_cursor);
+        if line_start == 0 {
+            return;
+        }
+        let previous_end = line_start.saturating_sub(1);
+        let previous_start = self.input[..previous_end]
+            .rfind('\n')
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        self.input_cursor = byte_index_for_char_col(&self.input, previous_start, previous_end, col);
+    }
+
+    pub(crate) fn move_cursor_down_line(&mut self) {
+        let (line_start, col) = current_line_start_and_col(&self.input, self.input_cursor);
+        let current_end = self.input[line_start..]
+            .find('\n')
+            .map(|index| line_start + index)
+            .unwrap_or(self.input.len());
+        if current_end >= self.input.len() {
+            return;
+        }
+        let next_start = current_end + 1;
+        let next_end = self.input[next_start..]
+            .find('\n')
+            .map(|index| next_start + index)
+            .unwrap_or(self.input.len());
+        self.input_cursor = byte_index_for_char_col(&self.input, next_start, next_end, col);
     }
 
     pub(crate) fn scroll_transcript_up(&mut self) {
@@ -1242,9 +1416,16 @@ impl RunRecord {
         push_count_line(&mut lines, "Commands", &self.commands);
         push_count_line(&mut lines, "Approvals", &self.approvals);
         push_count_line(&mut lines, "Receipts", &self.receipts);
+        push_detail_section(&mut lines, "Receipt detail", &self.receipt_details);
+        push_detail_section(&mut lines, "Provenance", &self.provenance);
+        push_detail_section(&mut lines, "Tools", &self.tools);
+        push_detail_section(&mut lines, "Files", &self.files);
+        push_detail_section(&mut lines, "Commands", &self.commands);
+        push_detail_section(&mut lines, "Approvals", &self.approvals);
         if let Some(output) = self.outputs.last() {
             lines.push(format!("Latest output: {}", compact_text(output, 96)));
         }
+        push_detail_section(&mut lines, "Outputs", &self.outputs);
         lines.join("\n")
     }
 }
@@ -1334,6 +1515,15 @@ fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     lines.join("\n")
 }
 
+fn summarize_working_event(event: &GatewayEvent, phase: &str) -> String {
+    let mut lines = vec![format!("Phase: {phase}")];
+    push_optional_data_line(&mut lines, event, "Backend", "backend");
+    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
+    push_optional_data_line(&mut lines, event, "Model", "model");
+    push_optional_data_line(&mut lines, event, "Detail", "message");
+    lines.join("\n")
+}
+
 fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Tool: {tool}"));
@@ -1387,6 +1577,19 @@ fn push_count_line(lines: &mut Vec<String>, label: &str, values: &[String]) {
     lines.push(format!("{label}: {}{suffix}", values.len()));
 }
 
+fn push_detail_section(lines: &mut Vec<String>, label: &str, values: &[String]) {
+    if values.is_empty() {
+        return;
+    }
+    lines.push(format!("{label}:"));
+    for value in values.iter().take(8) {
+        lines.push(format!("- {value}"));
+    }
+    if values.len() > 8 {
+        lines.push(format!("- ... {} more", values.len() - 8));
+    }
+}
+
 fn push_unique_string(values: &mut Vec<String>, value: String) {
     if !values.iter().any(|candidate| candidate == &value) {
         values.push(value);
@@ -1400,6 +1603,176 @@ fn compact_text(value: &str, max_chars: usize) -> String {
     }
     let keep = max_chars.saturating_sub(3);
     format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
+fn collect_event_provenance(event: &GatewayEvent, run: &mut RunRecord) {
+    match event.event_type.as_str() {
+        "run.working" => {
+            if let Some(message) = string_data(event, "message") {
+                push_unique_string(&mut run.provenance, format!("Working: {message}"));
+            }
+        }
+        "tool.used" => {
+            if let Some(tool) = string_data(event, "tool") {
+                push_unique_string(&mut run.provenance, format!("Tool used: {tool}"));
+            }
+        }
+        "file.changed" => {
+            if let Some(target) = string_data(event, "target") {
+                push_unique_string(&mut run.provenance, format!("File changed: {target}"));
+            }
+        }
+        "approval.requested" => {
+            if let Some(approval_id) = string_data(event, "approval_id") {
+                push_unique_string(
+                    &mut run.provenance,
+                    format!("Approval requested: {approval_id}"),
+                );
+            }
+        }
+        "approval.resolved" => {
+            let approval_id =
+                string_data(event, "approval_id").unwrap_or_else(|| "approval".to_owned());
+            let decision = string_data(event, "decision").unwrap_or_else(|| "resolved".to_owned());
+            push_unique_string(
+                &mut run.provenance,
+                format!("Approval resolved: {approval_id} {decision}"),
+            );
+        }
+        "approval.denied" => {
+            let approval_id =
+                string_data(event, "approval_id").unwrap_or_else(|| "approval".to_owned());
+            push_unique_string(
+                &mut run.provenance,
+                format!("Approval denied: {approval_id}"),
+            );
+        }
+        "receipt.created" => {
+            if let Some(receipt_id) = string_data(event, "receipt_id") {
+                push_unique_string(
+                    &mut run.provenance,
+                    format!("Receipt created: {receipt_id}"),
+                );
+            }
+        }
+        "run.output" => {
+            if let Some(summary) = string_data(event, "summary") {
+                push_unique_string(
+                    &mut run.provenance,
+                    format!("Output: {}", compact_text(&summary, 120)),
+                );
+            }
+        }
+        "run.event" => {
+            if let Some(text) = string_data(event, "text").or_else(|| string_data(event, "message"))
+            {
+                push_unique_string(
+                    &mut run.provenance,
+                    format!("Event: {}", compact_text(&text, 120)),
+                );
+            }
+        }
+        _ => {}
+    }
+    collect_string_list_from_data(event, run, "files", EvidenceTarget::Files);
+    collect_string_list_from_data(event, run, "commands", EvidenceTarget::Commands);
+    collect_string_list_from_data(event, run, "receipts", EvidenceTarget::Receipts);
+}
+
+enum EvidenceTarget {
+    Files,
+    Commands,
+    Receipts,
+}
+
+fn collect_string_list_from_data(
+    event: &GatewayEvent,
+    run: &mut RunRecord,
+    field: &str,
+    target: EvidenceTarget,
+) {
+    let Some(values) = event.data.get(field).and_then(|value| value.as_array()) else {
+        return;
+    };
+    for value in values.iter().filter_map(|value| value.as_str()) {
+        match target {
+            EvidenceTarget::Files => push_unique_string(&mut run.files, value.to_owned()),
+            EvidenceTarget::Commands => push_unique_string(&mut run.commands, value.to_owned()),
+            EvidenceTarget::Receipts => push_unique_string(&mut run.receipts, value.to_owned()),
+        }
+    }
+}
+
+fn receipt_detail(receipt: &serde_json::Value) -> String {
+    let mut parts = Vec::new();
+    if let Some(id) = receipt.get("id").and_then(|value| value.as_str()) {
+        parts.push(format!("id={id}"));
+    }
+    if let Some(capability) = receipt.get("capability").and_then(|value| value.as_str()) {
+        parts.push(format!("capability={capability}"));
+    }
+    if let Some(target) = receipt.get("target").and_then(|value| value.as_str()) {
+        parts.push(format!("target={target}"));
+    }
+    if let Some(status) = receipt.get("status").and_then(|value| value.as_str()) {
+        parts.push(format!("status={status}"));
+    }
+    if let Some(summary) = receipt.get("summary").and_then(|value| value.as_str()) {
+        parts.push(format!("summary={}", compact_text(summary, 96)));
+    }
+    parts.join(" | ")
+}
+
+fn collect_history_receipt_provenance(receipt: &serde_json::Value, run: &mut RunRecord) {
+    for field in [
+        "tools",
+        "files",
+        "commands",
+        "approvals",
+        "outputs",
+        "evidence_ids",
+        "handoff_ids",
+    ] {
+        if let Some(values) = receipt.get(field).and_then(|value| value.as_array()) {
+            for value in values.iter().filter_map(|value| value.as_str()) {
+                match field {
+                    "tools" => push_unique_string(&mut run.tools, value.to_owned()),
+                    "files" => push_unique_string(&mut run.files, value.to_owned()),
+                    "commands" => push_unique_string(&mut run.commands, value.to_owned()),
+                    "approvals" => push_unique_string(&mut run.approvals, value.to_owned()),
+                    "outputs" => run.outputs.push(value.to_owned()),
+                    "evidence_ids" | "handoff_ids" => {
+                        push_unique_string(&mut run.provenance, format!("{field}: {value}"));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(reason) = receipt.get("reason").and_then(|value| value.as_str()) {
+        push_unique_string(&mut run.provenance, format!("Reason: {reason}"));
+    }
+    if let Some(created_at) = receipt.get("created_at").and_then(|value| value.as_str()) {
+        push_unique_string(&mut run.provenance, format!("Receipt time: {created_at}"));
+    }
+}
+
+fn current_line_start_and_col(input: &str, cursor: usize) -> (usize, usize) {
+    let cursor = cursor.min(input.len());
+    let line_start = input[..cursor]
+        .rfind('\n')
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    let col = input[line_start..cursor].chars().count();
+    (line_start, col)
+}
+
+fn byte_index_for_char_col(input: &str, start: usize, end: usize, col: usize) -> usize {
+    input[start..end]
+        .char_indices()
+        .nth(col)
+        .map(|(index, _)| start + index)
+        .unwrap_or(end)
 }
 
 fn is_high_risk_text(value: &str) -> bool {
@@ -1509,7 +1882,15 @@ mod tests {
                     {
                         "id": "receipt_history_1",
                         "task_id": "task_history_1",
-                        "summary": "Persisted receipt"
+                        "capability": "shell.execute",
+                        "target": "cargo test",
+                        "status": "completed",
+                        "summary": "Persisted receipt",
+                        "reason": "verify the TUI",
+                        "commands": ["cargo test"],
+                        "files": ["crates/craik-tui-rs/src/app.rs"],
+                        "approvals": ["approval_history_1"],
+                        "evidence_ids": ["evidence_history_1"]
                     }
                 ]
             }),
@@ -1528,6 +1909,16 @@ mod tests {
                 .expect("run detail")
                 .contains("Receipts: 1 latest receipt_history_1")
         );
+        let detail = app.selected_run_detail().expect("run detail");
+        assert!(detail.contains("Receipt detail:"));
+        assert!(detail.contains("capability=shell.execute"));
+        assert!(detail.contains("Commands:"));
+        assert!(detail.contains("- cargo test"));
+        assert!(detail.contains("Files:"));
+        assert!(detail.contains("- crates/craik-tui-rs/src/app.rs"));
+        assert!(detail.contains("Approvals:"));
+        assert!(detail.contains("- approval_history_1"));
+        assert!(detail.contains("evidence_ids: evidence_history_1"));
     }
 
     #[test]
@@ -1669,6 +2060,70 @@ mod tests {
         assert!(detail.contains("Tools: 1 latest Bash"));
         assert!(detail.contains("Commands: 1 latest cargo test"));
         assert!(detail.contains("Receipts: 1 latest receipt_run_1"));
+    }
+
+    #[test]
+    fn live_events_stream_into_run_provenance_detail() {
+        let started = GatewayEvent {
+            event_type: "run.started".to_owned(),
+            created_at: None,
+            run_id: Some("run_live".to_owned()),
+            task_id: Some("task_live".to_owned()),
+            data: json!({"model": "claude-opus", "provider_id": "provider_anthropic"}),
+        };
+        let working = GatewayEvent {
+            event_type: "run.working".to_owned(),
+            created_at: None,
+            run_id: Some("run_live".to_owned()),
+            task_id: Some("task_live".to_owned()),
+            data: json!({
+                "backend": "provider",
+                "phase": "thinking",
+                "message": "Planning edits"
+            }),
+        };
+        let tool = GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            created_at: None,
+            run_id: Some("run_live".to_owned()),
+            task_id: Some("task_live".to_owned()),
+            data: json!({
+                "tool": "Bash",
+                "command": "cargo test",
+                "files": ["crates/craik-tui-rs/src/app.rs"],
+                "message": "Tests passed"
+            }),
+        };
+        let output = GatewayEvent {
+            event_type: "run.output".to_owned(),
+            created_at: None,
+            run_id: Some("run_live".to_owned()),
+            task_id: Some("task_live".to_owned()),
+            data: json!({"summary": "Implemented provenance detail."}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        for event in [&started, &working, &tool, &output] {
+            app.record_event(event);
+        }
+
+        let detail = app.selected_run_detail().expect("run detail");
+        assert!(detail.contains("Status: thinking"));
+        assert!(detail.contains("Provenance:"));
+        assert!(detail.contains("- Phase: thinking"));
+        assert!(detail.contains("- Working: Planning edits"));
+        assert!(detail.contains("- Tool used: Bash"));
+        assert!(detail.contains("Commands:"));
+        assert!(detail.contains("- cargo test"));
+        assert!(detail.contains("Files:"));
+        assert!(detail.contains("- crates/craik-tui-rs/src/app.rs"));
+        assert!(detail.contains("Outputs:"));
+        assert!(detail.contains("- Implemented provenance detail."));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Run state" && entry.body.contains("thinking"))
+        );
     }
 
     #[test]
@@ -1967,6 +2422,38 @@ mod tests {
         assert_eq!(action, LoopAction::Continue);
         assert!(app.input.is_empty());
         assert_eq!(app.input_cursor, 0);
+    }
+
+    #[test]
+    fn prompt_editor_supports_paste_and_line_editing_controls() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.paste_text("first line\nsecond line");
+        assert_eq!(app.input_line_count(), 2);
+        assert_eq!(app.input_cursor_line_col(), (2, 12));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(app.input, "first line\n");
+        assert_eq!(app.input_cursor_line_col(), (2, 1));
+
+        app.paste_text("second line");
+
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert_eq!(app.input_cursor_line_col(), (1, 11));
+
+        app.input = "alpha beta".to_owned();
+        app.input_cursor = app.input.len();
+        app.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.input, "alpha ");
+        assert_eq!(app.input_cursor, 6);
+
+        app.input = "alpha beta".to_owned();
+        app.input_cursor = 6;
+        app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.input, "alpha ");
+        assert_eq!(app.input_cursor, 6);
     }
 
     #[test]
