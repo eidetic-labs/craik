@@ -4,6 +4,8 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use crate::theme;
+
 pub struct ActivityMetrics<'a> {
     pub slash_commands: usize,
     pub queued_inputs: usize,
@@ -180,105 +182,81 @@ pub fn status_line(
     pending_approval: Option<&str>,
     transcript_focused: bool,
     search_active: bool,
-    details_collapsed: bool,
+    _details_collapsed: bool,
 ) -> Line<'static> {
     let request_state = footer_state_label(state, in_flight, pending_approval.is_some());
-    let model = compact_label(model_label(state, "model not selected"), 42);
-    let approval_label = pending_approval.map(|approval_id| compact_label(approval_id, 24));
-    Line::from(vec![
-        Span::styled(
-            "Craik",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
-        Span::styled(model, Style::default().fg(Color::White)),
-        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            request_state,
-            Style::default()
-                .fg(status_color(request_state))
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" | ", Style::default().fg(Color::DarkGray)),
-        Span::styled("Enter", Style::default().fg(Color::LightGreen)),
-        Span::raw(" send"),
-        Span::styled("  Ctrl-F", Style::default().fg(Color::LightBlue)),
-        Span::raw(if search_active {
-            " search active"
-        } else {
-            " search"
-        }),
-        Span::styled("  ?", Style::default().fg(Color::LightBlue)),
-        Span::raw(" help"),
-        Span::styled("  Ctrl-R", Style::default().fg(Color::LightBlue)),
-        Span::raw(if transcript_focused {
-            " split"
-        } else {
-            " focus"
-        }),
-        Span::styled("  Ctrl-E", Style::default().fg(Color::LightBlue)),
-        Span::raw(if details_collapsed {
-            " expand"
-        } else {
-            " collapse"
-        }),
-        Span::styled("  Ctrl-J/K", Style::default().fg(Color::LightBlue)),
-        Span::raw(" runs"),
-        Span::styled("  Ctrl-L", Style::default().fg(Color::LightBlue)),
-        Span::raw(" filter"),
-        Span::styled("  Ctrl-Y", Style::default().fg(Color::LightBlue)),
-        Span::raw(" retry"),
-        Span::styled("  Ctrl-O", Style::default().fg(Color::LightBlue)),
-        Span::raw(" export"),
-        Span::styled("  Ctrl-B", Style::default().fg(Color::LightBlue)),
-        Span::raw(" reconnect"),
-        if pending_approval.is_some() {
-            Span::raw("")
-        } else {
-            Span::styled("  Alt-Enter", Style::default().fg(Color::LightBlue))
-        },
-        if pending_approval.is_some() {
-            Span::raw("")
-        } else {
-            Span::raw(" newline")
-        },
-        if let Some(approval_id) = approval_label {
+    let model = compact_model_label(model_label(state, "model not selected"));
+    let effort = effort_label(state).unwrap_or("default");
+    let approval_label = pending_approval.map(|approval_id| compact_label(approval_id, 18));
+    let mut spans = vec![
+        Span::styled(" default ", mode_pill_style("default")),
+        Span::raw("  "),
+        Span::styled(model, theme::primary_style()),
+        Span::raw(" "),
+        Span::styled(effort, effort_style(effort)),
+        Span::raw("  "),
+        Span::styled(status_glyph(request_state), status_style(request_state)),
+        Span::raw(" "),
+        Span::styled(request_state, status_style(request_state)),
+        Span::raw("    "),
+        Span::styled("/", theme::accent_style()),
+        Span::styled(" commands", theme::dim_style()),
+    ];
+    if let Some(approval_id) = approval_label {
+        spans.extend([
+            Span::raw("   "),
             Span::styled(
-                format!("  Approval {approval_id}"),
+                "⌃a",
                 Style::default()
-                    .fg(Color::LightRed)
+                    .fg(theme::amber())
                     .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::styled("  PgUp/PgDn", Style::default().fg(Color::LightBlue))
-        },
-        if pending_approval.is_some() {
+            ),
             Span::styled(
-                "  Ctrl-A approve  Ctrl-X deny  Ctrl-N/P select",
-                Style::default()
-                    .fg(Color::LightRed)
-                    .add_modifier(Modifier::BOLD),
-            )
-        } else {
-            Span::raw(" scroll")
-        },
+                format!(" approvals {approval_id}"),
+                Style::default().fg(theme::amber()),
+            ),
+        ]);
+    } else if !state.receipt_ids.is_empty() {
+        spans.extend([
+            Span::raw("   "),
+            Span::styled("⌃e", theme::accent_style()),
+            Span::styled(" evidence", theme::dim_style()),
+        ]);
+    } else {
+        spans.extend([
+            Span::raw("   "),
+            Span::styled("⌃m", theme::accent_style()),
+            Span::styled(" memory", theme::dim_style()),
+        ]);
+    }
+    spans.extend([
+        Span::raw("   "),
+        Span::styled("⌃r", theme::accent_style()),
         Span::styled(
-            if pending_approval.is_some() {
-                "  Esc keeps editing"
-            } else if in_flight {
-                "  Ctrl-C stop"
+            if transcript_focused {
+                " split"
             } else {
-                "  Ctrl-C exit"
+                " runs"
             },
-            Style::default().fg(if pending_approval.is_some() {
-                Color::DarkGray
-            } else {
-                Color::LightRed
-            }),
+            theme::dim_style(),
         ),
-    ])
+        Span::raw("   "),
+        Span::styled("?", theme::accent_style()),
+        Span::styled(
+            if search_active {
+                " search active"
+            } else {
+                " help"
+            },
+            theme::dim_style(),
+        ),
+        Span::raw("   "),
+        Span::styled(
+            if in_flight { "⌃c stop" } else { "⌃c exit" },
+            Style::default().fg(theme::red()),
+        ),
+    ]);
+    Line::from(spans)
 }
 
 fn compact_label(value: &str, max_chars: usize) -> String {
@@ -288,6 +266,34 @@ fn compact_label(value: &str, max_chars: usize) -> String {
     }
     let keep = max_chars.saturating_sub(3);
     format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
+fn compact_model_label(value: &str) -> String {
+    let value = value
+        .strip_prefix("Anthropic Claude ")
+        .or_else(|| value.strip_prefix("anthropic/"))
+        .or_else(|| value.strip_prefix("OpenAI "))
+        .or_else(|| value.strip_prefix("openai/"))
+        .unwrap_or(value);
+    compact_label(value, 28)
+}
+
+fn effort_label(state: &GatewayAppState) -> Option<&'static str> {
+    let value = state
+        .active_model_display_name
+        .as_deref()
+        .or(state.active_model.as_deref())
+        .unwrap_or_default()
+        .to_lowercase();
+    if value.contains("max") {
+        Some("max")
+    } else if value.contains("high") {
+        Some("high")
+    } else if value.contains("low") {
+        Some("low")
+    } else {
+        None
+    }
 }
 
 fn compact_panel_value(value: &str) -> String {
@@ -355,12 +361,46 @@ fn footer_state_label(
 
 fn status_color(state: &str) -> Color {
     match state {
-        "waiting for approval" => Color::LightRed,
-        "thinking" => Color::LightYellow,
-        "working" => Color::Yellow,
-        "completed" | "ready" => Color::Green,
-        _ => Color::White,
+        "waiting for approval" => theme::amber(),
+        "thinking" | "working" => theme::amber(),
+        "completed" | "ready" => theme::sage(),
+        _ => theme::primary(),
     }
+}
+
+fn status_glyph(state: &str) -> &'static str {
+    match state {
+        "thinking" | "working" => "◐",
+        _ => "●",
+    }
+}
+
+fn status_style(state: &str) -> Style {
+    Style::default()
+        .fg(status_color(state))
+        .add_modifier(Modifier::BOLD)
+}
+
+fn mode_pill_style(mode: &str) -> Style {
+    let fg = if mode == "plan" {
+        theme::amber()
+    } else {
+        theme::accent()
+    };
+    Style::default()
+        .fg(fg)
+        .bg(theme::surface())
+        .add_modifier(Modifier::BOLD)
+}
+
+fn effort_style(effort: &str) -> Style {
+    let color = match effort {
+        "max" => theme::cyan(),
+        "high" => theme::amber(),
+        "low" => theme::dim(),
+        _ => theme::mute(),
+    };
+    Style::default().fg(color)
 }
 
 fn provider_label(provider_id: Option<&str>, provider_family: Option<&str>) -> String {
@@ -451,7 +491,7 @@ mod tests {
 
         let rendered = status_line(&state, true, None, false, false, false).to_string();
 
-        assert!(rendered.contains("anthropic/claude-sonnet"));
+        assert!(rendered.contains("claude-sonnet"));
         assert!(rendered.contains("working"));
     }
 
@@ -489,7 +529,7 @@ mod tests {
 
         let rendered = status_line(&state, false, None, false, false, false).to_string();
 
-        assert!(rendered.contains("Anthropic Claude Opus 4.7 Extended Thin..."));
+        assert!(rendered.contains("Opus 4.7 Extended"));
         assert!(!rendered.contains("Thinking Preview"));
     }
 
@@ -507,9 +547,9 @@ mod tests {
         )
         .to_string();
 
-        assert!(rendered.contains("Approval approval_run_edit_123..."));
-        assert!(rendered.contains("Ctrl-A approve"));
-        assert!(rendered.contains("Ctrl-X deny"));
+        assert!(rendered.contains("approvals approval_run_ed..."));
+        assert!(rendered.contains("⌃a"));
+        assert!(rendered.contains("⌃c stop"));
     }
 
     #[test]
@@ -518,8 +558,8 @@ mod tests {
 
         let rendered = status_line(&state, false, None, true, true, true).to_string();
 
-        assert!(rendered.contains("Ctrl-F search active"));
-        assert!(rendered.contains("Ctrl-R split"));
-        assert!(rendered.contains("Ctrl-E expand"));
+        assert!(rendered.contains("search active"));
+        assert!(rendered.contains("⌃r split"));
+        assert!(rendered.contains("?"));
     }
 }

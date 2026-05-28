@@ -3,6 +3,8 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use crate::theme;
+
 const TRANSCRIPT_RENDER_BUFFER_LINES: usize = 1_000;
 
 pub struct TranscriptEntry {
@@ -134,17 +136,12 @@ fn render_entries(
         let (label, color) = transcript_label_style(&entry.kind);
         lines.push(highlight_search(
             vec![
+                Span::styled("▌ ", Style::default().fg(color)),
                 Span::styled(
-                    format!("[{label}] "),
-                    Style::default()
-                        .fg(color)
-                        .add_modifier(Modifier::BOLD)
-                        .add_modifier(Modifier::REVERSED),
+                    format!("{label} "),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    entry.title.clone(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(entry.title.clone(), title_style(&entry.kind)),
             ],
             options.search_query,
         ));
@@ -217,16 +214,32 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
 
 fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
     match kind {
-        TranscriptKind::System => ("SYSTEM", Color::Cyan),
-        TranscriptKind::User => ("USER", Color::Green),
-        TranscriptKind::Assistant => ("ASSIST", Color::White),
-        TranscriptKind::Progress => ("RUN", Color::Yellow),
-        TranscriptKind::Tool => ("TOOL", Color::Magenta),
-        TranscriptKind::File => ("FILE", Color::Blue),
-        TranscriptKind::Command => ("CMD", Color::LightMagenta),
-        TranscriptKind::Approval => ("APPROVE", Color::Red),
-        TranscriptKind::Receipt => ("RECEIPT", Color::LightCyan),
-        TranscriptKind::Error => ("ERROR", Color::LightRed),
+        TranscriptKind::System => ("SYSTEM", theme::cyan()),
+        TranscriptKind::User => ("YOU", theme::sage()),
+        TranscriptKind::Assistant => ("MODEL", theme::primary()),
+        TranscriptKind::Progress => ("RUN", theme::amber()),
+        TranscriptKind::Tool => ("TOOL", theme::accent()),
+        TranscriptKind::File => ("FILE", theme::cyan()),
+        TranscriptKind::Command => ("CMD", theme::accent()),
+        TranscriptKind::Approval => ("APPROVE", theme::red()),
+        TranscriptKind::Receipt => ("RECEIPT", theme::cyan()),
+        TranscriptKind::Error => ("ERROR", theme::red()),
+    }
+}
+
+fn title_style(kind: &TranscriptKind) -> Style {
+    match kind {
+        TranscriptKind::Assistant => theme::primary_style().add_modifier(Modifier::BOLD),
+        TranscriptKind::User => Style::default()
+            .fg(theme::sage())
+            .add_modifier(Modifier::BOLD),
+        TranscriptKind::Approval | TranscriptKind::Error => Style::default()
+            .fg(theme::red())
+            .add_modifier(Modifier::BOLD),
+        TranscriptKind::Progress => Style::default()
+            .fg(theme::amber())
+            .add_modifier(Modifier::BOLD),
+        _ => theme::accent_style(),
     }
 }
 
@@ -235,7 +248,7 @@ fn render_body_line(
     text: &str,
     search_query: Option<&str>,
 ) -> Line<'static> {
-    let mut spans = vec![Span::styled("  ", Style::default().fg(Color::DarkGray))];
+    let mut spans = vec![Span::styled("  ", theme::mute_style())];
     if let Some(bullet) = text.strip_prefix("- ") {
         spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
         spans.extend(value_spans(kind, bullet));
@@ -259,21 +272,19 @@ fn diff_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
     if text.starts_with("+++") || text.starts_with("---") {
         return Some(vec![Span::styled(
             text.to_owned(),
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
+            theme::mute_style().add_modifier(Modifier::BOLD),
         )]);
     }
     if text.starts_with('+') {
         return Some(vec![Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::Green),
+            Style::default().fg(theme::sage()),
         )]);
     }
     if text.starts_with('-') {
         return Some(vec![Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::Red),
+            Style::default().fg(theme::red()),
         )]);
     }
     None
@@ -295,16 +306,16 @@ fn split_key_value(text: &str) -> Option<(&str, &str)> {
 
 fn label_color(kind: &TranscriptKind) -> Color {
     match kind {
-        TranscriptKind::Command => Color::LightMagenta,
-        TranscriptKind::File => Color::LightBlue,
-        TranscriptKind::Approval => Color::LightRed,
-        TranscriptKind::Receipt => Color::LightCyan,
-        TranscriptKind::Error => Color::LightRed,
-        TranscriptKind::Tool => Color::Magenta,
-        TranscriptKind::Progress => Color::Yellow,
-        TranscriptKind::System => Color::Cyan,
-        TranscriptKind::User => Color::Green,
-        TranscriptKind::Assistant => Color::White,
+        TranscriptKind::Command => theme::accent(),
+        TranscriptKind::File => theme::cyan(),
+        TranscriptKind::Approval => theme::red(),
+        TranscriptKind::Receipt => theme::cyan(),
+        TranscriptKind::Error => theme::red(),
+        TranscriptKind::Tool => theme::accent(),
+        TranscriptKind::Progress => theme::amber(),
+        TranscriptKind::System => theme::cyan(),
+        TranscriptKind::User => theme::sage(),
+        TranscriptKind::Assistant => theme::primary(),
     }
 }
 
@@ -313,25 +324,25 @@ fn value_spans(kind: &TranscriptKind, text: &str) -> Vec<Span<'static>> {
     match kind {
         TranscriptKind::Command => spans.push(Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::LightMagenta),
+            Style::default().fg(theme::accent()),
         )),
         TranscriptKind::File => spans.push(Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::LightBlue),
+            Style::default().fg(theme::cyan()),
         )),
         TranscriptKind::Approval => spans.push(Span::styled(
             text.to_owned(),
             Style::default()
-                .fg(Color::LightRed)
+                .fg(theme::red())
                 .add_modifier(Modifier::BOLD),
         )),
         TranscriptKind::Receipt => spans.push(Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::LightCyan),
+            Style::default().fg(theme::cyan()),
         )),
         TranscriptKind::Error => spans.push(Span::styled(
             text.to_owned(),
-            Style::default().fg(Color::LightRed),
+            Style::default().fg(theme::red()),
         )),
         _ => return highlight_inline_code(text),
     }
@@ -348,7 +359,7 @@ fn highlight_inline_code(text: &str) -> Vec<Span<'static>> {
             spans.push(Span::styled(
                 part.to_owned(),
                 Style::default()
-                    .fg(Color::LightYellow)
+                    .fg(theme::amber())
                     .add_modifier(Modifier::BOLD),
             ));
         } else {
@@ -419,9 +430,9 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("[USER] You"));
-        assert!(rendered.contains("[TOOL] Read"));
-        assert!(rendered.contains("[ERROR] Gateway"));
+        assert!(rendered.contains("YOU You"));
+        assert!(rendered.contains("TOOL Read"));
+        assert!(rendered.contains("ERROR Gateway"));
     }
 
     #[test]
@@ -453,10 +464,7 @@ mod tests {
 
         assert_eq!(body.spans[1].content, "Run ");
         assert_eq!(body.spans[2].content, "cargo test");
-        assert_eq!(
-            body.spans[2].style.fg,
-            Some(ratatui::style::Color::LightYellow)
-        );
+        assert_eq!(body.spans[2].style.fg, Some(crate::theme::amber()));
     }
 
     #[test]
@@ -470,10 +478,7 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines[1].spans[1].content, "uv run pytest");
-        assert_eq!(
-            lines[1].spans[1].style.fg,
-            Some(ratatui::style::Color::LightMagenta)
-        );
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::accent()));
     }
 
     #[test]
@@ -486,19 +491,10 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(
-            lines[1].spans[1].style.fg,
-            Some(ratatui::style::Color::DarkGray)
-        );
-        assert_eq!(
-            lines[2].spans[1].style.fg,
-            Some(ratatui::style::Color::DarkGray)
-        );
-        assert_eq!(lines[3].spans[1].style.fg, Some(ratatui::style::Color::Red));
-        assert_eq!(
-            lines[4].spans[1].style.fg,
-            Some(ratatui::style::Color::Green)
-        );
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::mute()));
+        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::mute()));
+        assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::red()));
+        assert_eq!(lines[4].spans[1].style.fg, Some(crate::theme::sage()));
         assert_eq!(lines[5].spans[1].to_string(), "* ");
     }
 
@@ -513,10 +509,7 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines[1].spans[1].content, "Provider: ");
-        assert_eq!(
-            lines[1].spans[1].style.fg,
-            Some(ratatui::style::Color::Magenta)
-        );
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::accent()));
         assert_eq!(lines[1].spans[2].content, "provider_anthropic");
     }
 
