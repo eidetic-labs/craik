@@ -11,6 +11,7 @@ BackendEventType = Literal[
     "approval.resolved",
     "session.ready",
     "session.status",
+    "session.history",
     "slash.completed",
     "slash.catalog",
     "model.changed",

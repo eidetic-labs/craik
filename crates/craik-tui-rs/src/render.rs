@@ -14,6 +14,7 @@ pub struct ActivityMetrics<'a> {
     pub selected_approval_preview: Option<&'a str>,
     pub selected_run_summary: Option<&'a str>,
     pub selected_run_detail: Option<&'a str>,
+    pub backend_connected: bool,
 }
 
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
@@ -44,6 +45,14 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         ),
         format!("  Backend: {}", state.backend.as_deref().unwrap_or("auto")),
         "Gateway health".to_owned(),
+        format!(
+            "  Backend link: {}",
+            if metrics.backend_connected {
+                "connected"
+            } else {
+                "disconnected; Ctrl-B reconnect"
+            }
+        ),
         format!(
             "  Provider auth: {}",
             provider_health_label(
@@ -188,6 +197,8 @@ pub fn status_line(
         }),
         Span::styled("  Ctrl-J/K", Style::default().fg(Color::LightBlue)),
         Span::raw(" runs"),
+        Span::styled("  Ctrl-B", Style::default().fg(Color::LightBlue)),
+        Span::raw(" reconnect"),
         if pending_approval.is_some() {
             Span::raw("")
         } else {
@@ -356,6 +367,7 @@ mod tests {
                 selected_run_detail: Some(
                     "Run: run_4\nStatus: completed\nTools: 2 latest Bash\nReceipts: 1 latest receipt_1",
                 ),
+                backend_connected: true,
             },
         );
 
@@ -370,6 +382,7 @@ mod tests {
         assert!(rendered.contains("  Navigate: Ctrl-J next / Ctrl-K previous"));
         assert!(rendered.contains("  Latest receipt: receipt_1"));
         assert!(rendered.contains("Gateway health"));
+        assert!(rendered.contains("  Backend link: connected"));
         assert!(rendered.contains("  Provider auth: provider selected"));
         assert!(rendered.contains("Evidence"));
         assert!(rendered.contains("  Receipts: 1"));

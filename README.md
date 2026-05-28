@@ -89,6 +89,18 @@ instead of `openai` when configuring another provider. See
 [installation](docs/guides/installation.md) and
 [quickstart](docs/guides/quickstart.md) for the full operator walkthrough.
 
+## Terminal UI
+
+`craik tui` launches the supported Rust/Ratatui operator TUI on interactive
+terminals. The Rust TUI preserves native terminal selection, streams Gateway
+events over the JSONL backend protocol, surfaces approvals and receipts, and
+loads persisted receipt history when the backend starts. Source checkouts launch
+the Rust client with `cargo run --locked --manifest-path crates/craik-tui-rs/Cargo.toml`
+when an installed `craik-tui-rs` binary is not available.
+
+The previous Python/Textual interface remains available only as a legacy
+fallback via `craik tui-textual` or `CRAIK_TUI_RUNTIME=textual`.
+
 ## Operator Modes
 
 Craik runs in one of two modes:

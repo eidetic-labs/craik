@@ -55,6 +55,7 @@ pub(crate) struct InteractiveApp {
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
+    pub(crate) backend_connected: bool,
     pending_approvals: Vec<PendingApproval>,
     selected_approval_index: Option<usize>,
     pub(crate) slash_catalog: Vec<SlashHint>,
@@ -89,6 +90,7 @@ impl InteractiveApp {
             backend,
             in_flight: false,
             last_error: None,
+            backend_connected: true,
             pending_approvals: Vec::new(),
             selected_approval_index: None,
             slash_catalog: Vec::new(),
@@ -99,7 +101,11 @@ impl InteractiveApp {
             selected_run_index: None,
             last_prompt_preview: None,
         };
-        app.send_commands([GatewayCommand::SessionStatus, GatewayCommand::SlashCatalog]);
+        app.send_commands([
+            GatewayCommand::SessionStatus,
+            GatewayCommand::SessionHistory,
+            GatewayCommand::SlashCatalog,
+        ]);
         Ok(app)
     }
 
@@ -131,6 +137,7 @@ impl InteractiveApp {
             backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
+            backend_connected: true,
             pending_approvals: Vec::new(),
             selected_approval_index: None,
             slash_catalog: Vec::new(),
@@ -199,6 +206,7 @@ impl InteractiveApp {
         while let Ok(message) = self.backend.receiver.try_recv() {
             match message {
                 WorkerMessage::Event(event) => {
+                    self.backend_connected = true;
                     let terminal_event = is_request_terminal_event(&event);
                     self.record_event(&event);
                     self.state.apply_event(&event);
@@ -220,7 +228,12 @@ impl InteractiveApp {
                     self.last_error = Some(message.clone());
                     self.transcript
                         .push(TranscriptEntry::error("Gateway disconnected", &message));
+                    self.transcript.push(TranscriptEntry::system(
+                        "Reconnect",
+                        "Press Ctrl-B to restart the Gateway backend.",
+                    ));
                     self.in_flight = false;
+                    self.backend_connected = false;
                     self.state.working_phase = None;
                 }
             }
@@ -294,6 +307,10 @@ impl InteractiveApp {
                 }
             }
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => LoopAction::Exit,
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.restart_backend();
+                LoopAction::Continue
+            }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.approve_selected();
                 LoopAction::Continue
@@ -451,6 +468,25 @@ impl InteractiveApp {
                     .unwrap_or("unknown");
                 self.transcript
                     .push(TranscriptEntry::system("Readiness", state));
+                if state != "ready" {
+                    self.transcript.push(TranscriptEntry::system(
+                        "Run blocked",
+                        &blocked_run_guidance(event),
+                    ));
+                }
+            }
+            "session.history" => {
+                let receipts = event
+                    .data
+                    .get("receipts")
+                    .and_then(|value| value.as_array())
+                    .map(Vec::len)
+                    .unwrap_or_default();
+                self.record_history_event(event);
+                self.transcript.push(TranscriptEntry::system(
+                    "Session history",
+                    &format!("Loaded {receipts} persisted receipt records."),
+                ));
             }
             "slash.catalog" => {
                 self.slash_catalog = slash_hints_from_event(event);
@@ -730,6 +766,39 @@ impl InteractiveApp {
         }
     }
 
+    fn record_history_event(&mut self, event: &GatewayEvent) {
+        let Some(receipts) = event
+            .data
+            .get("receipts")
+            .and_then(|value| value.as_array())
+        else {
+            return;
+        };
+        for receipt in receipts {
+            let Some(receipt_id) = receipt.get("id").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let task_id = receipt
+                .get("task_id")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned);
+            let run_id = task_id.as_deref().unwrap_or("persisted-history");
+            let index = self.ensure_run_record(run_id);
+            let run = &mut self.run_records[index];
+            if run.task_id.is_none() {
+                run.task_id = task_id;
+            }
+            run.status.get_or_insert_with(|| "persisted".to_owned());
+            push_unique_string(&mut run.receipts, receipt_id.to_owned());
+            if let Some(summary) = receipt.get("summary").and_then(|value| value.as_str()) {
+                run.outputs.push(summary.to_owned());
+            }
+        }
+        if !self.run_records.is_empty() && self.selected_run_index.is_none() {
+            self.selected_run_index = Some(self.run_records.len() - 1);
+        }
+    }
+
     fn ensure_run_record(&mut self, run_id: &str) -> usize {
         if let Some(index) = self
             .run_records
@@ -744,6 +813,33 @@ impl InteractiveApp {
             ..RunRecord::default()
         });
         self.run_records.len() - 1
+    }
+
+    pub(crate) fn restart_backend(&mut self) {
+        match BackendSession::start() {
+            Ok(backend) => {
+                self.backend = backend;
+                self.backend_connected = true;
+                self.last_error = None;
+                self.in_flight = false;
+                self.transcript.push(TranscriptEntry::system(
+                    "Gateway reconnected",
+                    "Backend restarted; refreshing readiness, history, and slash commands.",
+                ));
+                self.send_commands([
+                    GatewayCommand::SessionStatus,
+                    GatewayCommand::SessionHistory,
+                    GatewayCommand::SlashCatalog,
+                ]);
+            }
+            Err(error) => {
+                let message = error.to_string();
+                self.backend_connected = false;
+                self.last_error = Some(message.clone());
+                self.transcript
+                    .push(TranscriptEntry::error("Gateway reconnect failed", &message));
+            }
+        }
     }
 
     pub(crate) fn insert_char(&mut self, ch: char) {
@@ -1189,6 +1285,37 @@ fn summarize_session_ready_event(event: &GatewayEvent) -> String {
     lines.join("\n")
 }
 
+fn blocked_run_guidance(event: &GatewayEvent) -> String {
+    let mut lines = vec!["The Gateway is not ready to start a model run.".to_owned()];
+    push_optional_data_line(&mut lines, event, "State", "state");
+    if let Some(missing) = event.data.get("missing").and_then(|value| value.as_array()) {
+        let values = missing
+            .iter()
+            .filter_map(|value| value.as_str())
+            .collect::<Vec<_>>();
+        if !values.is_empty() {
+            lines.push(format!("Missing: {}", values.join(", ")));
+        }
+    }
+    if let Some(next_actions) = event
+        .data
+        .get("next_actions")
+        .and_then(|value| value.as_array())
+    {
+        for action in next_actions
+            .iter()
+            .filter_map(|value| value.as_str())
+            .take(3)
+        {
+            lines.push(format!("Next: {action}"));
+        }
+    }
+    if lines.len() == 1 {
+        lines.push("Run `/status` or check provider authentication.".to_owned());
+    }
+    lines.join("\n")
+}
+
 fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     let mut lines = Vec::new();
     if let Some(run_id) = event.run_id.as_deref() {
@@ -1326,6 +1453,7 @@ mod tests {
         app.drain_worker();
 
         assert!(!app.in_flight);
+        assert!(!app.backend_connected);
         assert_eq!(app.state.working_phase, None);
         assert_eq!(
             app.last_error.as_deref(),
@@ -1335,6 +1463,70 @@ mod tests {
             app.transcript
                 .iter()
                 .any(|entry| entry.title == "Gateway disconnected")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Reconnect")
+        );
+    }
+
+    #[test]
+    fn status_not_ready_surfaces_blocked_run_guidance() {
+        let status = GatewayEvent {
+            event_type: "session.status".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "state": "unconfigured",
+                "missing": ["provider credentials"],
+                "next_actions": ["run craik auth login anthropic"]
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&status);
+
+        let entry = app
+            .transcript
+            .iter()
+            .find(|entry| entry.title == "Run blocked")
+            .expect("blocked guidance entry");
+        assert!(entry.body.contains("Missing: provider credentials"));
+        assert!(entry.body.contains("Next: run craik auth login anthropic"));
+    }
+
+    #[test]
+    fn session_history_loads_persisted_receipts_into_run_records() {
+        let history = GatewayEvent {
+            event_type: "session.history".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "receipts": [
+                    {
+                        "id": "receipt_history_1",
+                        "task_id": "task_history_1",
+                        "summary": "Persisted receipt"
+                    }
+                ]
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&history);
+
+        assert_eq!(app.run_records.len(), 1);
+        assert_eq!(
+            app.selected_run_summary().as_deref(),
+            Some("1/1 task_history_1 [persisted]")
+        );
+        assert!(
+            app.selected_run_detail()
+                .expect("run detail")
+                .contains("Receipts: 1 latest receipt_history_1")
         );
     }
 

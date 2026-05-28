@@ -13,6 +13,7 @@ from craik.runtime.reviewing.approval_commands import approvals_decide_result
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.store import LocalStore
 
 
 def run_jsonl_gateway(
@@ -46,6 +47,7 @@ def run_jsonl_gateway(
                     "model.set",
                     "run.interrupt",
                     "session.status",
+                    "session.history",
                 ],
             },
         )
@@ -64,6 +66,14 @@ def run_jsonl_gateway(
                     BackendEvent(
                         type="session.status",
                         data=resolve_readiness(env).as_dict(),
+                    )
+                )
+                continue
+            if message_type == "session.history":
+                emit(
+                    BackendEvent(
+                        type="session.history",
+                        data={"receipts": _recent_receipts(env)},
                     )
                 )
                 continue
@@ -173,7 +183,8 @@ def run_jsonl_gateway(
             raise ValueError(
                 f"unsupported JSONL message type: {message_type!r}; "
                 "supported types are session.status, prompt.submit, slash.submit, "
-                "slash.catalog, approval.decide, model.set, run.interrupt, session.close"
+                "slash.catalog, approval.decide, model.set, run.interrupt, "
+                "session.history, session.close"
             )
         except Exception as error:
             emit(BackendEvent(type="error", data={"message": str(error)}))
@@ -230,3 +241,27 @@ def _float_or_none(value: object) -> float | None:
 
 def _int_or_none(value: object) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def _recent_receipts(env: dict[str, str] | None) -> list[dict[str, str]]:
+    store = LocalStore.from_env(env)
+    try:
+        store.initialize()
+        receipts = sorted(
+            store.list_receipts(),
+            key=lambda receipt: (receipt.created_at, receipt.id),
+            reverse=True,
+        )
+        return [
+            {
+                "id": receipt.id,
+                "task_id": receipt.task_id,
+                "capability": receipt.capability,
+                "target": receipt.target,
+                "status": receipt.result.status,
+                "summary": receipt.result.summary,
+            }
+            for receipt in receipts[:12]
+        ]
+    finally:
+        store.close()
