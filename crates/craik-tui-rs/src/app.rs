@@ -335,6 +335,9 @@ impl InteractiveApp {
                     self.transcript
                         .push(TranscriptEntry::error("Gateway error", &error));
                     self.in_flight = false;
+                    if self.state.working_phase.as_deref() == Some("waiting") {
+                        self.state.working_phase = None;
+                    }
                 }
                 WorkerMessage::Closed(message) => {
                     self.last_error = Some(message.clone());
@@ -2453,6 +2456,176 @@ mod tests {
     }
 
     #[test]
+    fn prompt_submission_stream_lifecycle_reaches_completed_state() {
+        let events = [
+            event(
+                "prompt.submitted",
+                None,
+                Some("task_review"),
+                json!({"source": "jsonl", "prompt_preview": "Review the implementation plan"}),
+            ),
+            event(
+                "model.selected",
+                None,
+                Some("task_review"),
+                json!({
+                    "provider_id": "provider_anthropic",
+                    "provider_family": "anthropic",
+                    "model": "claude-opus-4-7",
+                    "profile": {
+                        "display_name": "Anthropic Claude Opus 4.7",
+                        "backend": "claude-code"
+                    }
+                }),
+            ),
+            event(
+                "run.working",
+                None,
+                Some("task_review"),
+                json!({"backend": "claude-code", "phase": "thinking", "message": "Planning changes"}),
+            ),
+            event(
+                "run.started",
+                Some("run_review"),
+                Some("task_review"),
+                json!({"backend": "claude-code", "provider_id": "provider_anthropic", "model": "claude-opus-4-7"}),
+            ),
+            event(
+                "tool.used",
+                Some("run_review"),
+                Some("task_review"),
+                json!({"tool": "Bash", "command": "cargo test", "message": "Running Rust tests"}),
+            ),
+            event(
+                "approval.requested",
+                Some("run_review"),
+                Some("task_review"),
+                json!({
+                    "approval_id": "approval_edit_plan",
+                    "message": "Edit crates/craik-tui-rs/src/app.rs?",
+                    "tool": "Edit",
+                    "target": "crates/craik-tui-rs/src/app.rs",
+                    "reason": "apply lifecycle polish"
+                }),
+            ),
+            event(
+                "approval.resolved",
+                Some("run_review"),
+                Some("task_review"),
+                json!({
+                    "approval_id": "approval_edit_plan",
+                    "decision": "approved",
+                    "operator": "user:ratatui"
+                }),
+            ),
+            event(
+                "file.changed",
+                Some("run_review"),
+                Some("task_review"),
+                json!({
+                    "target": "crates/craik-tui-rs/src/app.rs",
+                    "message": "Updated lifecycle handling"
+                }),
+            ),
+            event(
+                "run.output",
+                Some("run_review"),
+                Some("task_review"),
+                json!({"summary": "Reviewed the plan and hardened the TUI lifecycle."}),
+            ),
+            event(
+                "receipt.created",
+                Some("run_review"),
+                Some("task_review"),
+                json!({"receipt_id": "receipt_run_review_lifecycle"}),
+            ),
+            event(
+                "run.completed",
+                Some("run_review"),
+                Some("task_review"),
+                json!({"status": "completed", "backend": "claude-code"}),
+            ),
+        ];
+        let messages = events.into_iter().map(WorkerMessage::Event);
+        let mut app = InteractiveApp::for_test_with_messages(messages);
+        app.input = "Review the implementation plan".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.submit_input();
+
+        assert!(app.in_flight);
+        assert_eq!(app.state.working_phase.as_deref(), Some("waiting"));
+        assert!(app.input.is_empty());
+
+        app.drain_worker();
+
+        assert!(!app.in_flight);
+        assert_eq!(app.state.working_phase, None);
+        assert_eq!(app.state.run_status.as_deref(), Some("completed"));
+        assert_eq!(app.state.active_model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(
+            app.state.active_model_display_name.as_deref(),
+            Some("Anthropic Claude Opus 4.7")
+        );
+        assert_eq!(app.state.outputs.len(), 1);
+        assert_eq!(app.pending_approval_count(), 0);
+        assert_eq!(app.run_records.len(), 1);
+
+        let detail = app.selected_run_detail().expect("run detail");
+        assert!(detail.contains("Status: completed"));
+        assert!(detail.contains("Provider: provider_anthropic"));
+        assert!(detail.contains("Model: claude-opus-4-7"));
+        assert!(detail.contains("Tools: 1 latest Bash"));
+        assert!(detail.contains("Commands: 1 latest cargo test"));
+        assert!(detail.contains("Files: 1 latest crates/craik-tui-rs/src/app.rs"));
+        assert!(detail.contains("Approvals: 1 latest Edit crates/craik-tui-rs/src/app.rs?"));
+        assert!(detail.contains("Receipts: 1 latest receipt_run_review_lifecycle"));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Run state" && entry.body.contains("thinking"))
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approval approved")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Run completed")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "No model output")
+        );
+    }
+
+    #[test]
+    fn backend_error_unblocks_waiting_prompt_state() {
+        let mut app = InteractiveApp::for_test_with_messages([WorkerMessage::Error(
+            "backend event contract violation".to_owned(),
+        )]);
+        app.in_flight = true;
+        app.state.working_phase = Some("waiting".to_owned());
+
+        app.drain_worker();
+
+        assert!(!app.in_flight);
+        assert_eq!(app.state.working_phase, None);
+        assert_eq!(
+            app.last_error.as_deref(),
+            Some("backend event contract violation")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Gateway error")
+        );
+    }
+
+    #[test]
     fn approval_request_tracks_pending_state_and_actions() {
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
@@ -3229,5 +3402,20 @@ mod tests {
         app.record_event(&event);
 
         assert_eq!(app.transcript_scroll, 12);
+    }
+
+    fn event(
+        event_type: &str,
+        run_id: Option<&str>,
+        task_id: Option<&str>,
+        data: serde_json::Value,
+    ) -> GatewayEvent {
+        GatewayEvent {
+            event_type: event_type.to_owned(),
+            created_at: None,
+            run_id: run_id.map(str::to_owned),
+            task_id: task_id.map(str::to_owned),
+            data,
+        }
     }
 }
