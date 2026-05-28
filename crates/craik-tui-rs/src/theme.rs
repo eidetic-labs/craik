@@ -1,4 +1,6 @@
 use ratatui::style::{Color, Modifier, Style};
+#[cfg(test)]
+use std::cell::Cell;
 use std::env;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,6 +24,10 @@ struct Palette {
 }
 
 pub fn mode() -> ThemeMode {
+    #[cfg(test)]
+    if let Some(mode) = test_mode() {
+        return mode;
+    }
     let configured = env::var("CRAIK_TUI_THEME")
         .or_else(|_| env::var("CRAIK_THEME"))
         .unwrap_or_default()
@@ -140,8 +146,28 @@ fn mode_from_configured(configured: &str) -> ThemeMode {
 }
 
 #[cfg(test)]
+thread_local! {
+    static TEST_MODE: Cell<Option<ThemeMode>> = const { Cell::new(None) };
+}
+
+#[cfg(test)]
+fn test_mode() -> Option<ThemeMode> {
+    TEST_MODE.with(Cell::get)
+}
+
+#[cfg(test)]
+pub fn with_mode_for_test<T>(mode: ThemeMode, render: impl FnOnce() -> T) -> T {
+    TEST_MODE.with(|slot| {
+        let previous = slot.replace(Some(mode));
+        let result = render();
+        slot.set(previous);
+        result
+    })
+}
+
+#[cfg(test)]
 mod tests {
-    use super::{ThemeMode, mode_from_configured};
+    use super::{ThemeMode, mode, mode_from_configured, with_mode_for_test};
 
     #[test]
     fn theme_mode_parses_supported_values() {
@@ -149,5 +175,12 @@ mod tests {
         assert_eq!(mode_from_configured("light"), ThemeMode::Light);
         assert_eq!(mode_from_configured("monochrome"), ThemeMode::Monochrome);
         assert_eq!(mode_from_configured("mono"), ThemeMode::Monochrome);
+    }
+
+    #[test]
+    fn theme_mode_can_be_overridden_for_frame_tests() {
+        with_mode_for_test(ThemeMode::Light, || {
+            assert_eq!(mode(), ThemeMode::Light);
+        });
     }
 }

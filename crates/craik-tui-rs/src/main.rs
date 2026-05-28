@@ -512,6 +512,10 @@ mod tests {
         InteractiveApp, Terminal, TestBackend, draw_interactive_frame, input_panel_height,
         input_title,
     };
+    use crate::{
+        theme::{ThemeMode, with_mode_for_test},
+        transcript::TranscriptEntry,
+    };
     use craik_tui_rs::parse_gateway_events;
 
     const CLAUDE_CODE_STREAM: &str =
@@ -571,6 +575,98 @@ mod tests {
     }
 
     #[test]
+    fn visual_frame_regressions_cover_theme_variants() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.input = "Review the plan".to_owned();
+        app.input_cursor = app.input.len();
+
+        for mode in [ThemeMode::Dark, ThemeMode::Light, ThemeMode::Monochrome] {
+            let rendered = render_app_frame_with_theme(&app, 100, 24, mode);
+
+            assert!(rendered.contains("Transcript"));
+            assert!(rendered.contains("Prompt"));
+            assert!(rendered.contains("Review the plan"));
+            assert!(rendered.contains(match mode {
+                ThemeMode::Dark => "dark",
+                ThemeMode::Light => "light",
+                ThemeMode::Monochrome => "monochrome",
+            }));
+        }
+    }
+
+    #[test]
+    fn visual_frame_regression_covers_slash_autocomplete() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.slash_catalog = crate::gateway_events::slash_hints_from_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "slash.catalog",
+                    "data": {
+                        "commands": [
+                            {
+                                "name": "mode",
+                                "usage": "/mode [default|acceptEdits|plan|auto]",
+                                "summary": "Inspect or set Claude Code mode.",
+                                "category": "Run",
+                                "choices": {"mode": ["default", "acceptEdits", "plan", "auto"]},
+                                "current_value": "default"
+                            },
+                            {
+                                "name": "clear",
+                                "usage": "/clear",
+                                "summary": "Clear the current transcript.",
+                                "category": "Workflow",
+                                "requires_confirmation": true
+                            }
+                        ]
+                    }
+                }"#,
+            )
+            .expect("catalog fixture parses"),
+        );
+        app.input = "/mode ".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rendered = render_app_frame(&app, 104, 28);
+
+        assert!(rendered.contains("Slash commands"));
+        assert!(rendered.contains("/mode default"));
+        assert!(rendered.contains("current"));
+        assert!(rendered.contains("read-only"));
+    }
+
+    #[test]
+    fn visual_frame_regression_covers_code_and_pending_approval() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript.push(TranscriptEntry::assistant(
+            "Assistant",
+            "```rust\nfn main() {\n    let value = 42;\n}\n```",
+        ));
+        app.record_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "approval.requested",
+                    "data": {
+                        "approval_id": "approval_edit_1",
+                        "message": "Edit src/lib.rs?",
+                        "tool": "Edit",
+                        "target": "src/lib.rs",
+                        "reason": "apply requested change"
+                    }
+                }"#,
+            )
+            .expect("approval fixture parses"),
+        );
+
+        let rendered = render_app_frame(&app, 120, 34);
+
+        assert!(rendered.contains("fn main"));
+        assert!(rendered.contains("let value"));
+        assert!(rendered.contains("Approval pending"));
+        assert!(rendered.contains("approval_edit_1"));
+    }
+
+    #[test]
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
@@ -624,5 +720,14 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>()
+    }
+
+    fn render_app_frame_with_theme(
+        app: &InteractiveApp,
+        width: u16,
+        height: u16,
+        mode: ThemeMode,
+    ) -> String {
+        with_mode_for_test(mode, || render_app_frame(app, width, height))
     }
 }

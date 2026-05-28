@@ -169,9 +169,18 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     events = _events(stdout.getvalue())
 
     assert [event["type"] for event in events] == ["session.ready", "slash.catalog"]
-    names = {command["name"] for command in events[1]["data"]["commands"]}
+    commands = {command["name"]: command for command in events[1]["data"]["commands"]}
+    names = set(commands)
     assert "run" in names
     assert "status" in names
+    assert commands["mode"]["choices"] == {
+        "mode": ["default", "acceptEdits", "plan", "auto"]
+    }
+    assert commands["mode"]["current_value"] == "default"
+    assert commands["theme"]["choices"] == {"theme": ["dark", "light", "monochrome"]}
+    assert commands["theme"]["current_value"] == "dark"
+    assert commands["clear"]["requires_confirmation"] is True
+    assert "set" in commands["model"]["subcommands"]
 
 
 def test_jsonl_gateway_reports_persisted_session_history(tmp_path: Path) -> None:
