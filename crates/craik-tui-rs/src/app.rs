@@ -23,6 +23,37 @@ pub(crate) enum RunFilter {
     Completed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TranscriptJump {
+    Tool,
+    Approval,
+    Receipt,
+    Error,
+}
+
+impl TranscriptJump {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Tool => "tool",
+            Self::Approval => "approval",
+            Self::Receipt => "receipt",
+            Self::Error => "error",
+        }
+    }
+
+    fn matches(self, kind: TranscriptKind) -> bool {
+        match self {
+            Self::Tool => matches!(
+                kind,
+                TranscriptKind::Tool | TranscriptKind::Command | TranscriptKind::File
+            ),
+            Self::Approval => kind == TranscriptKind::Approval,
+            Self::Receipt => kind == TranscriptKind::Receipt,
+            Self::Error => kind == TranscriptKind::Error,
+        }
+    }
+}
+
 impl RunFilter {
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -95,6 +126,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
     pub(crate) search_match_index: Option<usize>,
+    pub(crate) transcript_jump: Option<TranscriptJump>,
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
@@ -133,6 +165,7 @@ impl InteractiveApp {
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
+            transcript_jump: None,
             backend,
             in_flight: false,
             last_error: None,
@@ -183,6 +216,7 @@ impl InteractiveApp {
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
+            transcript_jump: None,
             backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
@@ -445,6 +479,38 @@ impl InteractiveApp {
             }
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.search_active = true;
+                LoopAction::Continue
+            }
+            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Tool);
+                LoopAction::Continue
+            }
+            KeyCode::Char('T') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Tool);
+                LoopAction::Continue
+            }
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Approval);
+                LoopAction::Continue
+            }
+            KeyCode::Char('G') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Approval);
+                LoopAction::Continue
+            }
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Receipt);
+                LoopAction::Continue
+            }
+            KeyCode::Char('H') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Receipt);
+                LoopAction::Continue
+            }
+            KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_next_transcript_kind(TranscriptJump::Error);
+                LoopAction::Continue
+            }
+            KeyCode::Char('Z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.jump_to_previous_transcript_kind(TranscriptJump::Error);
                 LoopAction::Continue
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1278,6 +1344,62 @@ impl InteractiveApp {
             .collect()
     }
 
+    pub(crate) fn transcript_jump_summary(&self) -> Option<String> {
+        let jump = self.transcript_jump?;
+        let total = self
+            .transcript
+            .iter()
+            .filter(|entry| jump.matches(entry.kind))
+            .count();
+        if total == 0 {
+            return Some(format!("{}: none", jump.label()));
+        }
+        Some(format!("{}: {total} entries", jump.label()))
+    }
+
+    pub(crate) fn jump_to_next_transcript_kind(&mut self, jump: TranscriptJump) {
+        self.jump_to_transcript_kind(jump, true);
+    }
+
+    pub(crate) fn jump_to_previous_transcript_kind(&mut self, jump: TranscriptJump) {
+        self.jump_to_transcript_kind(jump, false);
+    }
+
+    fn jump_to_transcript_kind(&mut self, jump: TranscriptJump, forward: bool) {
+        let matches = self
+            .transcript
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| jump.matches(entry.kind).then_some(index))
+            .collect::<Vec<_>>();
+        if matches.is_empty() {
+            self.transcript_jump = Some(jump);
+            self.transcript.push(TranscriptEntry::system(
+                "Transcript jump",
+                &format!("No {} entries are available.", jump.label()),
+            ));
+            return;
+        }
+        let current_line =
+            transcript_entry_index_for_scroll(&self.transcript, self.transcript_scroll);
+        let selected = if forward {
+            matches
+                .iter()
+                .copied()
+                .find(|index| *index > current_line)
+                .unwrap_or(matches[0])
+        } else {
+            matches
+                .iter()
+                .rev()
+                .copied()
+                .find(|index| *index < current_line)
+                .unwrap_or_else(|| *matches.last().expect("matches not empty"))
+        };
+        self.transcript_jump = Some(jump);
+        self.transcript_scroll = line_count_after_entry_index(&self.transcript, selected);
+    }
+
     fn dispatch_next_queued(&mut self) {
         if self.in_flight {
             return;
@@ -2001,6 +2123,18 @@ fn line_count_after_entry_index(entries: &[TranscriptEntry], target_index: usize
         count += entry.body.lines().count().max(1) + 2;
     }
     count.min(u16::MAX as usize) as u16
+}
+
+fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -> usize {
+    let mut remaining = scroll as usize;
+    for (index, entry) in entries.iter().rev().enumerate() {
+        let lines = entry.body.lines().count().max(1) + 2;
+        if remaining <= lines {
+            return entries.len().saturating_sub(index + 1);
+        }
+        remaining = remaining.saturating_sub(lines);
+    }
+    0
 }
 
 #[cfg(test)]
@@ -2778,6 +2912,38 @@ mod tests {
         app.previous_search_match();
         assert_eq!(app.search_match_index, Some(0));
         assert_eq!(app.transcript_scroll, first_scroll);
+    }
+
+    #[test]
+    fn transcript_jump_moves_to_evidence_entries() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript = vec![
+            crate::transcript::TranscriptEntry::assistant("Answer", "done"),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Tool,
+                "Read",
+                "Path: README.md",
+            ),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Approval,
+                "Approval pending",
+                "ID: approval_1",
+            ),
+            crate::transcript::TranscriptEntry::new(
+                crate::transcript::TranscriptKind::Receipt,
+                "Receipt created",
+                "Receipt: receipt_1",
+            ),
+        ];
+
+        app.jump_to_next_transcript_kind(super::TranscriptJump::Approval);
+
+        assert_eq!(app.transcript_jump, Some(super::TranscriptJump::Approval));
+        assert_eq!(
+            app.transcript_jump_summary().as_deref(),
+            Some("approval: 1 entries")
+        );
+        assert!(app.transcript_scroll > 0);
     }
 
     #[test]

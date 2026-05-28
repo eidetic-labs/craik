@@ -384,6 +384,10 @@ fn transcript_title(
     };
     let bottom = offset.saturating_add(visible_height).min(total);
     let search_count = search_match_count(&app.transcript, &app.search_query);
+    let jump = app
+        .transcript_jump_summary()
+        .map(|summary| format!(" | Jump: {summary}"))
+        .unwrap_or_default();
     let detail_mode = if app.expand_transcript_details {
         "expanded"
     } else {
@@ -410,11 +414,11 @@ fn transcript_title(
     };
     if visible_width < 84 {
         return Line::from(format!(
-            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}"
+            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}{jump}"
         ));
     }
     Line::from(format!(
-        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}"
+        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}{jump}"
     ))
 }
 
