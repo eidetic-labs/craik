@@ -1,10 +1,13 @@
 use anyhow::{Context, bail};
+mod backend;
+
+use backend::{BackendSession, WorkerMessage};
 use craik_tui_rs::{
     GatewayAppState, GatewayCommand, GatewayEvent, app_state_from_events,
-    approval_command_sequence, encode_gateway_command, interrupt_command_sequence,
+    approval_command_sequence, format_gateway_contract_issues, interrupt_command_sequence,
     model_command_sequence, parse_gateway_events, prompt_command_sequence, render_dashboard_text,
     render_replay_text, run_backend_commands, slash_command_sequence, status_command_sequence,
-    summarize_gateway_events,
+    summarize_gateway_events, validate_gateway_events,
 };
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
@@ -22,13 +25,7 @@ use ratatui::{
 use std::{
     collections::VecDeque,
     env, fs,
-    io::{self, BufRead, IsTerminal, Write},
-    process::{Child, ChildStdin, Command, Stdio},
-    sync::{
-        Arc, Mutex,
-        mpsc::{self, Receiver},
-    },
-    thread,
+    io::{self, IsTerminal},
     time::Duration,
 };
 
@@ -154,17 +151,6 @@ struct InteractiveApp {
     queued_inputs: VecDeque<String>,
 }
 
-enum WorkerMessage {
-    Event(GatewayEvent),
-    Error(String),
-}
-
-struct BackendSession {
-    stdin: Option<Arc<Mutex<ChildStdin>>>,
-    receiver: Receiver<WorkerMessage>,
-    child: Option<Child>,
-}
-
 struct TranscriptEntry {
     kind: TranscriptKind,
     title: String,
@@ -220,14 +206,29 @@ impl InteractiveApp {
 
     #[cfg(test)]
     fn for_test() -> Self {
-        let (_stdin_sender, stdin_receiver) = mpsc::channel();
+        let (_stdin_sender, stdin_receiver) = std::sync::mpsc::channel();
+        Self::for_test_with_receiver(stdin_receiver)
+    }
+
+    #[cfg(test)]
+    fn for_test_with_messages(messages: impl IntoIterator<Item = WorkerMessage>) -> Self {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        for message in messages {
+            sender.send(message).expect("test worker message sends");
+        }
+        drop(sender);
+        Self::for_test_with_receiver(receiver)
+    }
+
+    #[cfg(test)]
+    fn for_test_with_receiver(receiver: std::sync::mpsc::Receiver<WorkerMessage>) -> Self {
         Self {
             state: GatewayAppState::default(),
             input: String::new(),
             input_cursor: 0,
             transcript: Vec::new(),
             transcript_scroll: 0,
-            backend: BackendSession::for_test(stdin_receiver),
+            backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
             pending_approvals: Vec::new(),
@@ -313,6 +314,13 @@ impl InteractiveApp {
                     self.transcript
                         .push(TranscriptEntry::error("Gateway error", &error));
                     self.in_flight = false;
+                }
+                WorkerMessage::Closed(message) => {
+                    self.last_error = Some(message.clone());
+                    self.transcript
+                        .push(TranscriptEntry::error("Gateway disconnected", &message));
+                    self.in_flight = false;
+                    self.state.working_phase = None;
                 }
             }
         }
@@ -488,6 +496,12 @@ impl InteractiveApp {
                     .unwrap_or("completed");
                 self.transcript
                     .push(TranscriptEntry::progress("Run completed", status));
+                if status == "completed" && self.state.outputs.is_empty() {
+                    self.transcript.push(TranscriptEntry::system(
+                        "No model output",
+                        "The Gateway reported completion before any assistant output event arrived.",
+                    ));
+                }
                 self.transcript_scroll = 0;
             }
             "slash.completed" => {
@@ -678,103 +692,6 @@ impl InteractiveApp {
     }
 }
 
-impl BackendSession {
-    fn start() -> anyhow::Result<Self> {
-        let mut child = Command::new("uv")
-            .args(["run", "craik", "tui-backend", "--jsonl"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("failed to start `uv run craik tui-backend --jsonl`")?;
-        let stdin = Arc::new(Mutex::new(
-            child
-                .stdin
-                .take()
-                .context("backend stdin was not captured")?,
-        ));
-        let stdout = child
-            .stdout
-            .take()
-            .context("backend stdout was not captured")?;
-        let stderr = child
-            .stderr
-            .take()
-            .context("backend stderr was not captured")?;
-        let (sender, receiver) = mpsc::channel();
-        let event_sender = sender.clone();
-        thread::spawn(move || {
-            let reader = io::BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(line) if line.trim().is_empty() => {}
-                    Ok(line) => match serde_json::from_str::<GatewayEvent>(&line) {
-                        Ok(event) => {
-                            let _ = event_sender.send(WorkerMessage::Event(event));
-                        }
-                        Err(error) => {
-                            let _ = event_sender.send(WorkerMessage::Error(format!(
-                                "failed to parse backend event: {error}: {line}"
-                            )));
-                        }
-                    },
-                    Err(error) => {
-                        let _ = event_sender.send(WorkerMessage::Error(format!(
-                            "backend read failed: {error}"
-                        )));
-                        break;
-                    }
-                }
-            }
-        });
-        thread::spawn(move || {
-            let reader = io::BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
-                if !line.trim().is_empty() {
-                    let _ = sender.send(WorkerMessage::Error(line));
-                }
-            }
-        });
-        Ok(Self {
-            stdin: Some(stdin),
-            receiver,
-            child: Some(child),
-        })
-    }
-
-    #[cfg(test)]
-    fn for_test(receiver: Receiver<WorkerMessage>) -> Self {
-        Self {
-            stdin: None,
-            receiver,
-            child: None,
-        }
-    }
-
-    fn send(&self, command: &GatewayCommand) -> anyhow::Result<()> {
-        let Some(stdin) = &self.stdin else {
-            return Ok(());
-        };
-        let mut stdin = stdin
-            .lock()
-            .map_err(|_| anyhow::anyhow!("backend stdin lock poisoned"))?;
-        stdin.write_all(encode_gateway_command(command)?.as_bytes())?;
-        stdin.write_all(b"\n")?;
-        stdin.flush()?;
-        Ok(())
-    }
-}
-
-impl Drop for BackendSession {
-    fn drop(&mut self) {
-        let _ = self.send(&GatewayCommand::SessionClose);
-        if let Some(child) = &mut self.child {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
-}
-
 impl TranscriptEntry {
     fn new(kind: TranscriptKind, title: &str, body: &str) -> Self {
         Self {
@@ -925,10 +842,8 @@ fn run_interactive_loop(
                 KeyCode::Down => {
                     app.history_next();
                 }
-                KeyCode::Char(ch) => {
-                    if !key.modifiers.contains(KeyModifiers::CONTROL) {
-                        app.insert_char(ch);
-                    }
+                KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.insert_char(ch);
                 }
                 _ => {}
             }
@@ -1082,34 +997,34 @@ fn is_request_terminal_event(event: &GatewayEvent) -> bool {
 
 fn summarize_slash_output(event: &GatewayEvent) -> Option<String> {
     let data = &event.data;
-    if let Some(payload) = data.get("payload") {
-        if let Some(items) = payload.as_array() {
-            if items.is_empty() {
-                return Some("No records.".to_owned());
-            }
-            let mut lines = vec![format!("{} records", items.len())];
-            for item in items.iter().take(6) {
-                if let Some(object) = item.as_object() {
-                    let id = object
-                        .get("id")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("record");
-                    let status = object
-                        .get("status")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("unknown");
-                    let runner = object
-                        .get("runner_id")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("runner unknown");
-                    lines.push(format!("- {id} [{status}] via {runner}"));
-                }
-            }
-            if items.len() > 6 {
-                lines.push(format!("- and {} more", items.len() - 6));
-            }
-            return Some(lines.join("\n"));
+    if let Some(payload) = data.get("payload")
+        && let Some(items) = payload.as_array()
+    {
+        if items.is_empty() {
+            return Some("No records.".to_owned());
         }
+        let mut lines = vec![format!("{} records", items.len())];
+        for item in items.iter().take(6) {
+            if let Some(object) = item.as_object() {
+                let id = object
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("record");
+                let status = object
+                    .get("status")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown");
+                let runner = object
+                    .get("runner_id")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("runner unknown");
+                lines.push(format!("- {id} [{status}] via {runner}"));
+            }
+        }
+        if items.len() > 6 {
+            lines.push(format!("- and {} more", items.len() - 6));
+        }
+        return Some(lines.join("\n"));
     }
     data.get("text")
         .and_then(|value| value.as_str())
@@ -1190,6 +1105,13 @@ fn render_replay(path: &str) -> anyhow::Result<String> {
 
 fn render_events(input: &str) -> anyhow::Result<String> {
     let events = parse_gateway_events(input)?;
+    let issues = validate_gateway_events(&events);
+    if !issues.is_empty() {
+        bail!(
+            "Gateway replay contains invalid events: {}",
+            format_gateway_contract_issues(&issues)
+        );
+    }
     let summary = summarize_gateway_events(&events);
     Ok(render_replay_text(&summary))
 }
@@ -1219,6 +1141,8 @@ fn usage() -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::backend::WorkerMessage;
+
     use super::{
         InteractiveApp, SlashHint, TranscriptEntry, TranscriptKind, input_cursor_position,
         is_request_terminal_event, render_transcript_lines, slash_suggestions,
@@ -1285,12 +1209,14 @@ mod tests {
     fn terminal_event_detection_covers_request_boundaries() {
         let completed = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
             data: json!({}),
         };
         let progress = GatewayEvent {
             event_type: "run.progress".to_owned(),
+            created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
             data: json!({}),
@@ -1298,5 +1224,50 @@ mod tests {
 
         assert!(is_request_terminal_event(&completed));
         assert!(!is_request_terminal_event(&progress));
+    }
+
+    #[test]
+    fn backend_close_unblocks_working_state() {
+        let mut app = InteractiveApp::for_test_with_messages([WorkerMessage::Closed(
+            "Gateway output stream closed.".to_owned(),
+        )]);
+        app.in_flight = true;
+        app.state.working_phase = Some("waiting".to_owned());
+
+        app.drain_worker();
+
+        assert!(!app.in_flight);
+        assert_eq!(app.state.working_phase, None);
+        assert_eq!(
+            app.last_error.as_deref(),
+            Some("Gateway output stream closed.")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Gateway disconnected")
+        );
+    }
+
+    #[test]
+    fn completed_run_without_output_is_visible() {
+        let completed = GatewayEvent {
+            event_type: "run.completed".to_owned(),
+            created_at: None,
+            run_id: Some("run_empty".to_owned()),
+            task_id: None,
+            data: json!({"status": "completed"}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([WorkerMessage::Event(completed)]);
+        app.in_flight = true;
+
+        app.drain_worker();
+
+        assert!(!app.in_flight);
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "No model output")
+        );
     }
 }

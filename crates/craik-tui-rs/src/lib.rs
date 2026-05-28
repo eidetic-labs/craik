@@ -11,10 +11,18 @@ use std::{
 pub struct GatewayEvent {
     #[serde(rename = "type")]
     pub event_type: String,
+    pub created_at: Option<String>,
     pub run_id: Option<String>,
     pub task_id: Option<String>,
     #[serde(default)]
     pub data: Value,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct GatewayContractIssue {
+    pub event_index: usize,
+    pub event_type: String,
+    pub message: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -248,6 +256,18 @@ pub fn parse_gateway_events(input: &str) -> anyhow::Result<Vec<GatewayEvent>> {
         .collect()
 }
 
+pub fn validate_gateway_event(event: &GatewayEvent) -> Vec<GatewayContractIssue> {
+    validate_gateway_event_at(event, 0)
+}
+
+pub fn validate_gateway_events(events: &[GatewayEvent]) -> Vec<GatewayContractIssue> {
+    events
+        .iter()
+        .enumerate()
+        .flat_map(|(index, event)| validate_gateway_event_at(event, index))
+        .collect()
+}
+
 pub fn summarize_gateway_events(events: &[GatewayEvent]) -> GatewayReplaySummary {
     let mut summary = GatewayReplaySummary::default();
     for event in events {
@@ -265,10 +285,10 @@ pub fn summarize_gateway_events(events: &[GatewayEvent]) -> GatewayReplaySummary
         {
             push_unique(&mut summary.receipt_ids, receipt_id);
         }
-        if event.event_type == "run.progress" {
-            if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
-                summary.progress_messages.push(message.to_owned());
-            }
+        if event.event_type == "run.progress"
+            && let Some(message) = event.data.get("message").and_then(|value| value.as_str())
+        {
+            summary.progress_messages.push(message.to_owned());
         }
         if event.event_type == "tool.used" {
             if let Some(tool) = event.data.get("tool").and_then(|value| value.as_str()) {
@@ -282,10 +302,10 @@ pub fn summarize_gateway_events(events: &[GatewayEvent]) -> GatewayReplaySummary
         if event.event_type == "file.changed" {
             push_files(&mut summary.file_paths, &event.data);
         }
-        if event.event_type == "approval.requested" {
-            if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
-                summary.approval_requests.push(message.to_owned());
-            }
+        if event.event_type == "approval.requested"
+            && let Some(message) = event.data.get("message").and_then(|value| value.as_str())
+        {
+            summary.approval_requests.push(message.to_owned());
         }
     }
     summary
@@ -297,6 +317,115 @@ pub fn app_state_from_events(events: &[GatewayEvent]) -> GatewayAppState {
         state.apply_event(event);
     }
     state
+}
+
+fn validate_gateway_event_at(
+    event: &GatewayEvent,
+    event_index: usize,
+) -> Vec<GatewayContractIssue> {
+    let mut issues = Vec::new();
+    if !known_event_type(&event.event_type) {
+        issues.push(contract_issue(
+            event_index,
+            event,
+            format!("unsupported event type `{}`", event.event_type),
+        ));
+        return issues;
+    }
+    if !event.data.is_object() {
+        issues.push(contract_issue(
+            event_index,
+            event,
+            "event data must be a JSON object",
+        ));
+        return issues;
+    }
+    match event.event_type.as_str() {
+        "prompt.submitted" => require_string(&mut issues, event_index, event, &["prompt_preview"]),
+        "session.ready" => require_string(&mut issues, event_index, event, &["transport"]),
+        "session.status" => require_string(&mut issues, event_index, event, &["state"]),
+        "model.changed" => require_string(&mut issues, event_index, event, &["model"]),
+        "model.selected" => require_one_string(
+            &mut issues,
+            event_index,
+            event,
+            &[&["backend"], &["profile", "backend"]],
+            "backend or profile.backend",
+        ),
+        "run.working" => {
+            require_string(&mut issues, event_index, event, &["backend"]);
+            require_string(&mut issues, event_index, event, &["phase"]);
+        }
+        "run.progress" => require_string(&mut issues, event_index, event, &["message"]),
+        "run.started" => require_run_id(&mut issues, event_index, event),
+        "tool.used" => {
+            require_string(&mut issues, event_index, event, &["tool"]);
+            require_one_string(
+                &mut issues,
+                event_index,
+                event,
+                &[&["target"], &["command"], &["message"]],
+                "target, command, or message",
+            );
+        }
+        "file.changed" => {
+            require_string(&mut issues, event_index, event, &["target"]);
+            require_one_string(
+                &mut issues,
+                event_index,
+                event,
+                &[&["text"], &["message"]],
+                "text or message",
+            );
+        }
+        "approval.requested" => {
+            require_string(&mut issues, event_index, event, &["message"]);
+            require_one_string(
+                &mut issues,
+                event_index,
+                event,
+                &[&["tool"], &["target"], &["reason"]],
+                "tool, target, or reason",
+            );
+        }
+        "approval.resolved" => {
+            require_string(&mut issues, event_index, event, &["approval_id"]);
+            require_string(&mut issues, event_index, event, &["decision"]);
+        }
+        "receipt.created" => {
+            require_run_id(&mut issues, event_index, event);
+            require_string(&mut issues, event_index, event, &["receipt_id"]);
+        }
+        "run.output" => {
+            require_run_id(&mut issues, event_index, event);
+            require_string(&mut issues, event_index, event, &["summary"]);
+        }
+        "run.completed" => {
+            require_run_id(&mut issues, event_index, event);
+            require_string(&mut issues, event_index, event, &["status"]);
+        }
+        "run.event" => require_one_string(
+            &mut issues,
+            event_index,
+            event,
+            &[&["text"], &["message"]],
+            "text or message",
+        ),
+        "slash.completed" => require_one_present(
+            &mut issues,
+            event_index,
+            event,
+            &["text", "payload"],
+            "text or payload",
+        ),
+        "slash.catalog" => require_array(&mut issues, event_index, event, &["commands"]),
+        "run.interrupt.requested" => require_run_id(&mut issues, event_index, event),
+        "approval.denied" | "error" => {
+            require_string(&mut issues, event_index, event, &["message"]);
+        }
+        _ => {}
+    }
+    issues
 }
 
 pub fn render_replay_text(summary: &GatewayReplaySummary) -> String {
@@ -404,7 +533,15 @@ pub fn run_backend_commands(commands: &[GatewayCommand]) -> anyhow::Result<Vec<G
     }
 
     let stdout = String::from_utf8(output.stdout).context("Gateway backend emitted non-UTF-8")?;
-    parse_gateway_events(&stdout)
+    let events = parse_gateway_events(&stdout)?;
+    let issues = validate_gateway_events(&events);
+    if !issues.is_empty() {
+        bail!(
+            "Gateway backend emitted invalid events: {}",
+            format_gateway_contract_issues(&issues)
+        );
+    }
+    Ok(events)
 }
 
 fn push_unique(values: &mut Vec<String>, value: &str) {
@@ -421,6 +558,140 @@ fn push_files(values: &mut Vec<String>, data: &Value) {
             }
         }
     }
+}
+
+fn known_event_type(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "prompt.submitted"
+            | "approval.resolved"
+            | "session.ready"
+            | "session.status"
+            | "slash.completed"
+            | "slash.catalog"
+            | "model.changed"
+            | "run.interrupt.requested"
+            | "run.started"
+            | "run.working"
+            | "run.progress"
+            | "run.event"
+            | "tool.used"
+            | "file.changed"
+            | "approval.requested"
+            | "approval.denied"
+            | "model.selected"
+            | "receipt.created"
+            | "run.output"
+            | "run.completed"
+            | "error"
+    )
+}
+
+fn contract_issue(
+    event_index: usize,
+    event: &GatewayEvent,
+    message: impl Into<String>,
+) -> GatewayContractIssue {
+    GatewayContractIssue {
+        event_index,
+        event_type: event.event_type.clone(),
+        message: message.into(),
+    }
+}
+
+fn require_run_id(
+    issues: &mut Vec<GatewayContractIssue>,
+    event_index: usize,
+    event: &GatewayEvent,
+) {
+    if event.run_id.as_deref().unwrap_or_default().is_empty() {
+        issues.push(contract_issue(event_index, event, "run_id is required"));
+    }
+}
+
+fn require_string(
+    issues: &mut Vec<GatewayContractIssue>,
+    event_index: usize,
+    event: &GatewayEvent,
+    path: &[&str],
+) {
+    if string_at(&event.data, path)
+        .as_deref()
+        .unwrap_or_default()
+        .is_empty()
+    {
+        issues.push(contract_issue(
+            event_index,
+            event,
+            format!("data.{} must be a non-empty string", path.join(".")),
+        ));
+    }
+}
+
+fn require_array(
+    issues: &mut Vec<GatewayContractIssue>,
+    event_index: usize,
+    event: &GatewayEvent,
+    path: &[&str],
+) {
+    let mut value = &event.data;
+    for key in path {
+        let Some(next) = value.get(key) else {
+            issues.push(contract_issue(
+                event_index,
+                event,
+                format!("data.{} must be an array", path.join(".")),
+            ));
+            return;
+        };
+        value = next;
+    }
+    if !value.is_array() {
+        issues.push(contract_issue(
+            event_index,
+            event,
+            format!("data.{} must be an array", path.join(".")),
+        ));
+    }
+}
+
+fn require_one_string(
+    issues: &mut Vec<GatewayContractIssue>,
+    event_index: usize,
+    event: &GatewayEvent,
+    paths: &[&[&str]],
+    label: &str,
+) {
+    if paths.iter().any(|path| {
+        !string_at(&event.data, path)
+            .as_deref()
+            .unwrap_or_default()
+            .is_empty()
+    }) {
+        return;
+    }
+    issues.push(contract_issue(
+        event_index,
+        event,
+        format!("data must include non-empty {label}"),
+    ));
+}
+
+fn require_one_present(
+    issues: &mut Vec<GatewayContractIssue>,
+    event_index: usize,
+    event: &GatewayEvent,
+    keys: &[&str],
+    label: &str,
+) {
+    if keys.iter().any(|key| event.data.get(key).is_some()) {
+        return;
+    }
+    issues.push(contract_issue(
+        event_index,
+        event,
+        format!("data must include {label}"),
+    ));
 }
 
 fn string_at(data: &Value, path: &[&str]) -> Option<String> {
@@ -500,6 +771,19 @@ fn render_activity(items: &[ActivityItem]) -> String {
         .join(", ")
 }
 
+pub fn format_gateway_contract_issues(issues: &[GatewayContractIssue]) -> String {
+    issues
+        .iter()
+        .map(|issue| {
+            format!(
+                "#{} {}: {}",
+                issue.event_index, issue.event_type, issue.message
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 pub fn status_command_sequence() -> Vec<GatewayCommand> {
     vec![GatewayCommand::SessionStatus, GatewayCommand::SessionClose]
 }
@@ -568,7 +852,7 @@ mod tests {
     use super::{
         GatewayCommand, GatewayEvent, app_state_from_events, encode_gateway_command,
         parse_gateway_events, render_dashboard_text, render_replay_text,
-        sample_gateway_command_json, summarize_gateway_events,
+        sample_gateway_command_json, summarize_gateway_events, validate_gateway_events,
     };
     use serde_json::json;
 
@@ -687,6 +971,7 @@ mod tests {
     fn model_changed_uses_active_profile_display_name() {
         let event = GatewayEvent {
             event_type: "model.changed".to_owned(),
+            created_at: None,
             run_id: None,
             task_id: None,
             data: json!({
@@ -718,6 +1003,7 @@ mod tests {
     fn slash_completed_summarizes_structured_run_lists() {
         let event = GatewayEvent {
             event_type: "slash.completed".to_owned(),
+            created_at: None,
             run_id: None,
             task_id: None,
             data: json!({
@@ -745,5 +1031,32 @@ mod tests {
                 "Slash command completed: 2 records\n- run_docs [completed] via claude-code\n- run_review [running] via provider_anthropic"
             ]
         );
+    }
+
+    #[test]
+    fn gateway_fixtures_satisfy_event_contract() {
+        for input in [
+            include_str!("../../../tests/fixtures/gateway/prompt_run.jsonl"),
+            include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl"),
+        ] {
+            let events = parse_gateway_events(input).expect("fixture parses");
+
+            assert_eq!(validate_gateway_events(&events), []);
+        }
+    }
+
+    #[test]
+    fn event_contract_reports_missing_required_fields() {
+        let events = parse_gateway_events(
+            r#"{"type":"run.completed","data":{"status":"completed"},"run_id":null,"task_id":null}"#,
+        )
+        .expect("fixture parses");
+
+        let issues = validate_gateway_events(&events);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].event_index, 0);
+        assert_eq!(issues[0].event_type, "run.completed");
+        assert_eq!(issues[0].message, "run_id is required");
     }
 }
