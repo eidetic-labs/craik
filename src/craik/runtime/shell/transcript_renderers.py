@@ -160,8 +160,8 @@ def render_run_summary(
 
 
 def render_claude_run_summary(payload: dict[str, object]) -> RenderableType:
-    """Render the final Claude Code run payload as an operator summary card."""
-    return render_run_summary(payload, title="Claude Code run summary")
+    """Render the final delegated model run payload as an operator summary card."""
+    return render_run_summary(payload, title="Audited run summary")
 
 
 def plain_transcript_label(role: str) -> str:

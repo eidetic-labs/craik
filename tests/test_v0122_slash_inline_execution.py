@@ -322,7 +322,7 @@ def test_run_claude_code_backend_creates_audited_artifacts(
     timeline = dispatch_slash_command("/run timeline task_upgrade_craik_docs", env=env)
 
     assert result.exit_code == 0, result.text
-    assert "Claude Code run" in result.text
+    assert "Audited run" in result.text
     assert isinstance(result.payload, dict)
     assert [event["type"] for event in result.payload["gateway_events"]][-1] == "run.completed"
     assert "Activity:" in result.text
@@ -434,7 +434,7 @@ def test_run_claude_code_backend_invokes_claude_without_auth_preflight(
     runs = dispatch_slash_command("/run list", env=env)
 
     assert result.exit_code == 0
-    assert "Claude Code run" in result.text
+    assert "Audited run" in result.text
     assert "task_upgrade_craik_docs" in runs.text
     assert calls
     assert ["claude", "auth", "status"] not in calls
@@ -488,7 +488,7 @@ def test_run_claude_code_backend_uses_cli_auth_without_stored_bearer_token(
     result = dispatch_slash_command("/run --backend=claude-code Upgrade Craik Docs", env=env)
 
     assert result.exit_code == 0, result.text
-    assert "Claude Code run" in result.text
+    assert "Audited run" in result.text
 
 
 def test_run_claude_code_backend_summarizes_activity_when_result_body_is_empty(
@@ -647,7 +647,7 @@ def test_run_claude_code_backend_records_interrupted_run(
     assert result.exit_code == 0
     assert "`interrupted`" in result.text
     assert '"status": "interrupted"' in inspected.text
-    assert "Claude Code run interrupted by operator." in inspected.text
+    assert "Audited run interrupted by operator." in inspected.text
 
 
 def test_run_claude_code_backend_observes_runtime_approval_event_without_intercepting(

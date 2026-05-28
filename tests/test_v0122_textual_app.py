@@ -216,7 +216,7 @@ def test_textual_run_claude_code_shows_waiting_indicator(
                     break
             assert not working.display
             assert not input_widget.disabled
-            assert "Claude Code: Claude Code is using `Read`." in app._transcript_lines
+            assert "Audited run: Claude Code is using `Read`." in app._transcript_lines
             assert app._transcript_lines[-1] == "done"
 
     asyncio.run(run())
@@ -246,7 +246,7 @@ def test_textual_run_claude_code_requires_modal_approval(tmp_path: Path) -> None
             await pilot.click("#confirm-yes")
             assert started.wait(1)
             assert (
-                "Claude Code run authority approved for this TUI dispatch."
+                "Audited run authority approved for this TUI dispatch."
                 in app._transcript_lines
             )
             release.set()
@@ -412,7 +412,7 @@ def test_textual_run_claude_code_full_path_approval_invokes_claude(
                     break
             assert calls
             assert any(
-                "Claude Code run `run_update_docs`" in line
+                "Audited run `run_update_docs`" in line
                 for line in app._transcript_lines
             )
             assert CLAUDE_CODE_RUN_APPROVED_ENV not in app.env
@@ -596,7 +596,7 @@ def test_claude_run_summary_surfaces_operator_artifacts() -> None:
         )
     )
 
-    assert "Claude Code run summary" in rendered
+    assert "Audited run summary" in rendered
     assert "task_docs" in rendered
     assert "docs/terminal-ui.md" in rendered
     assert "uv run pytest tests/test_v0122_textual_app.py" in rendered

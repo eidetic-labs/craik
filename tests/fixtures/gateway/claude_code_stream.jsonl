@@ -1,7 +1,7 @@
 {"created_at":"2026-05-26T12:10:00+00:00","data":{"source":"tui","prompt_preview":"Review the implementation plan on the desktop for the next phase"},"run_id":null,"task_id":null,"type":"prompt.submitted"}
 {"created_at":"2026-05-26T12:10:01+00:00","data":{"backend":"claude-code"},"run_id":null,"task_id":null,"type":"model.selected"}
 {"created_at":"2026-05-26T12:10:01.500000+00:00","data":{"backend":"claude-code","phase":"starting"},"run_id":null,"task_id":null,"type":"run.working"}
-{"created_at":"2026-05-26T12:10:02+00:00","data":{"message":"Preparing audited Claude Code run."},"run_id":null,"task_id":null,"type":"run.progress"}
+{"created_at":"2026-05-26T12:10:02+00:00","data":{"message":"Preparing audited model run."},"run_id":null,"task_id":null,"type":"run.progress"}
 {"created_at":"2026-05-26T12:10:03+00:00","data":{"message":"Claude Code is using `Read` on `/Users/bjones/Desktop/Craik_Backend_Plan.md`."},"run_id":null,"task_id":null,"type":"run.progress"}
 {"created_at":"2026-05-26T12:10:03+00:00","data":{"backend":"claude-code","kind":"tool_use","message":"Claude Code is using `Read` on `/Users/bjones/Desktop/Craik_Backend_Plan.md`.","tool":"Read","target":"/Users/bjones/Desktop/Craik_Backend_Plan.md","files":["/Users/bjones/Desktop/Craik_Backend_Plan.md"]},"run_id":null,"task_id":null,"type":"tool.used"}
 {"created_at":"2026-05-26T12:10:04+00:00","data":{"message":"Claude Code is using `Grep` on `src/craik/runtime/backend`."},"run_id":null,"task_id":null,"type":"run.progress"}

@@ -16,7 +16,7 @@ def test_gateway_replay_fixture_has_client_evaluation_contract() -> None:
     assert summary.run_ids == ["run_review_the_plan"]
     assert summary.task_ids == ["task_review_the_plan"]
     assert summary.receipt_ids == ["receipt_run_review_the_plan_claude_code"]
-    assert summary.progress_messages == ["Preparing audited Claude Code run."]
+    assert summary.progress_messages == ["Preparing audited model run."]
 
 
 def test_claude_code_replay_fixture_has_structured_activity_contract() -> None:

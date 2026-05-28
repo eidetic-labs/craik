@@ -55,7 +55,7 @@ the command behavior operators see outside the TUI.
 | `/model list` | List configured provider default model selectors. |
 | `/model set <provider/model>` | Set the active provider/model selector and persist a model profile. |
 | `/mode [default\|acceptEdits\|plan\|auto]` | Inspect or set Claude Code permission mode. |
-| `/run [--backend claude-code] <prompt>` | Create an audited Gateway task run; the Claude Code backend delegates execution to local `claude -p` with Claude Code tools enabled. |
+| `/run <prompt>` | Create an audited Gateway task run using the active provider/model profile. |
 | `/run list` | List persisted task runs. |
 | `/run inspect <run-or-task-id>` | Inspect persisted run state. |
 | `/run timeline <run-or-task-id>` | Show a chronological run event timeline. |
@@ -80,7 +80,7 @@ the command behavior operators see outside the TUI.
 `/doctor` renders the same redacted diagnostic report as `craik doctor --json`,
 including setup, gateway, channel, auth-profile, and local-store checks.
 
-`/run <prompt>` and `craik run prompt <prompt>` share the same Gateway path.
+`/run <prompt>` and `craik run <prompt>` share the same Gateway path.
 Both create task, case-file, run-output, receipt, handoff, and normalized
 Gateway event records. Shell-only commands such as `/copy`, `/clear`, and
 `/theme` remain presentation helpers; backend-affecting commands are expected
@@ -116,14 +116,12 @@ craik model set anthropic/claude-opus-4-7 \
   --option thinking=true
 ```
 
-`/run --backend claude-code <prompt>` opens an approval modal before it grants
-Claude Code repository read, documentation write, receipt write, and
-verification-command authority. Approvals and denials are visible in the TUI;
-approved runs persist an `approval.decide` receipt. Direct non-interactive
-dispatch requires `CRAIK_CLAUDE_CODE_RUN_APPROVED=1` to make that authority
-explicit.
+For local Anthropic CLI-backed runs, Craik records repository read,
+documentation write, receipt write, and verification-command authority in the
+run receipts. Approvals and denials are visible in the TUI; approved runs
+persist an `approval.decide` receipt when operator approval is required.
 
-During Claude Code runs, Craik parses the stream into structured activity:
+During local Anthropic CLI-backed runs, Craik parses the stream into structured activity:
 tool calls, file targets, shell commands, diff-like output, permission
 denials, and runtime approval requests. `/run inspect <run-or-task-id>`
 returns a card payload with four keys: `run` (the persisted task run row),
@@ -195,10 +193,10 @@ Destructive TUI actions confirm before they proceed. In v0.12.4, `/clear`
 opens a modal that describes the blast radius: the visible transcript is
 discarded, while persisted receipts and audit records remain stored.
 
-Claude Code runs are not destructive by definition, but they can grant local
-write and command-execution authority. The TUI therefore uses a non-destructive
-approval modal for `/run --backend claude-code <prompt>` before dispatching to
-the local `claude` binary.
+Audited model runs are not destructive by definition, but local CLI-backed
+runs can grant write and command-execution authority. The TUI therefore uses a
+non-destructive approval modal when explicit operator approval is required
+before dispatching to the local `claude` binary.
 
 If Claude Code emits a runtime approval request while the subprocess is
 running, the TUI records it as activity instead of opening another Craik modal.

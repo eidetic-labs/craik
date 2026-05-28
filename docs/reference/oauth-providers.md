@@ -127,8 +127,9 @@ and send `sk-ant-oat` tokens as bearer credentials with Claude Code beta
 headers. Operators can also set `ANTHROPIC_TOKEN` as a manual OAuth token
 override when they need a separately managed Anthropic token. Craik never
 writes these environment variables or refreshes the token; rotate the CLI
-token by re-running `claude setup-token`. The TUI Claude Code backend does not
-use this override; it delegates to the local `claude` binary's own auth.
+token by re-running `claude setup-token`. Local Anthropic CLI-backed TUI runs
+do not use this override; they delegate to the local `claude` binary's own
+auth.
 
 > **About Claude subscription billing:** Directly replaying
 > `CLAUDE_CODE_OAUTH_TOKEN` from a third-party HTTP client may route differently

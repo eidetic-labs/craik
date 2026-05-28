@@ -24,7 +24,7 @@ def run_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Create and execute an audited task run from the TUI."""
     if not args:
         text = (
-            "Usage: `/run <prompt>` or `/run --backend claude-code <prompt>`\n\n"
+            "Usage: `/run <prompt>`\n\n"
             "Also available: `/run list`, `/run inspect <run-or-task-id>`."
         )
         return CommandResult(payload=text, shape="markdown", text=text, command_name="run")
@@ -61,10 +61,9 @@ def run_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     ) as error:
         text = str(error)
         return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
-    label = "Claude Code run" if backend == "claude-code" else "Audited run"
+    label = "Audited run"
     text = _run_completion_text(label, payload)
-    shape: Literal["markdown", "card"] = "markdown" if backend == "claude-code" else "card"
-    return CommandResult(payload=payload, shape=shape, text=text, command_name="run")
+    return CommandResult(payload=payload, shape="card", text=text, command_name="run")
 
 
 def _create_and_execute_run(
