@@ -11,14 +11,35 @@ pub struct SlashHint {
     pub usage: String,
     pub summary: String,
     pub category: String,
+    pub choices: Vec<String>,
+    pub subcommands: Vec<String>,
+    pub requires_confirmation: bool,
+    pub current_value: Option<String>,
 }
 
-struct SlashSuggestion<'a> {
-    usage: &'a str,
-    summary: &'a str,
-    category: &'a str,
+#[cfg(test)]
+impl SlashHint {
+    pub fn new(name: &str, usage: &str, summary: &str, category: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            usage: usage.to_owned(),
+            summary: summary.to_owned(),
+            category: category.to_owned(),
+            choices: Vec::new(),
+            subcommands: Vec::new(),
+            requires_confirmation: false,
+            current_value: None,
+        }
+    }
+}
+
+struct SlashSuggestion {
+    usage: String,
+    summary: String,
+    category: String,
     exact_prefix: bool,
     score: usize,
+    hint: String,
 }
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
@@ -64,6 +85,10 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                     Style::default().fg(theme::amber()),
                 ),
                 Span::styled(format!("  {}", suggestion.summary), theme::dim_style()),
+                Span::styled(
+                    format!("  {}", suggestion.hint),
+                    right_hint_style(&suggestion.hint),
+                ),
             ])
         }));
     }
@@ -99,7 +124,12 @@ pub fn render_search_lines(
 fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String> {
     slash_suggestion_rows(input, slash_catalog)
         .into_iter()
-        .map(|hint| format!("{} [{}] - {}", hint.usage, hint.category, hint.summary))
+        .map(|hint| {
+            format!(
+                "{} [{}] - {} ({})",
+                hint.usage, hint.category, hint.summary, hint.hint
+            )
+        })
         .collect()
 }
 
@@ -119,19 +149,28 @@ pub fn slash_completion(input: &str, slash_catalog: &[SlashHint]) -> Option<Stri
     Some(format!("{command} "))
 }
 
-fn slash_suggestion_rows<'a>(
-    input: &str,
-    slash_catalog: &'a [SlashHint],
-) -> Vec<SlashSuggestion<'a>> {
+fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashSuggestion> {
     let input = input.trim_start();
     if !input.starts_with('/') {
         return Vec::new();
     }
-    let prefix = input
-        .trim_start_matches('/')
-        .split_whitespace()
-        .next()
-        .unwrap_or("");
+    let trimmed = input.trim_start_matches('/');
+    let mut tokens = trimmed.split_whitespace();
+    let prefix = tokens.next().unwrap_or("");
+    let selected_command = input
+        .ends_with(' ')
+        .then(|| {
+            slash_catalog
+                .iter()
+                .find(|hint| hint.name == prefix || hint.usage.starts_with(&format!("/{prefix} ")))
+        })
+        .flatten();
+    if let Some(command) = selected_command {
+        let drilldown = command_drilldown_rows(command);
+        if !drilldown.is_empty() {
+            return drilldown;
+        }
+    }
     let query = prefix.to_lowercase();
     let mut suggestions = slash_catalog
         .iter()
@@ -141,7 +180,11 @@ fn slash_suggestion_rows<'a>(
             let summary = hint.summary.to_lowercase();
             let exact_prefix = name.starts_with(&query);
             let fuzzy = fuzzy_subsequence_score(&query, &name)
-                .or_else(|| fuzzy_subsequence_score(&query, &usage))
+                .or_else(|| {
+                    (query.chars().count() > 2)
+                        .then(|| fuzzy_subsequence_score(&query, &usage))
+                        .flatten()
+                })
                 .or_else(|| {
                     (query.chars().count() > 1)
                         .then(|| fuzzy_subsequence_score(&query, &summary))
@@ -152,15 +195,16 @@ fn slash_suggestion_rows<'a>(
                 || (query.chars().count() > 1 && summary.contains(&query))
             {
                 Some(SlashSuggestion {
-                    usage: &hint.usage,
-                    summary: &hint.summary,
-                    category: &hint.category,
+                    usage: hint.usage.clone(),
+                    summary: hint.summary.clone(),
+                    category: hint.category.clone(),
                     exact_prefix,
                     score: if exact_prefix {
                         0
                     } else {
                         fuzzy.unwrap_or(500)
                     },
+                    hint: hint_right_hint(hint),
                 })
             } else {
                 None
@@ -172,8 +216,8 @@ fn slash_suggestion_rows<'a>(
             !hint.exact_prefix,
             hint.score,
             hint.usage.split_whitespace().next().unwrap_or("").len(),
-            hint.category,
-            hint.usage,
+            hint.category.clone(),
+            hint.usage.clone(),
         )
     });
     suggestions
@@ -185,8 +229,103 @@ fn slash_suggestion_rows<'a>(
             category: hint.category,
             exact_prefix: hint.exact_prefix,
             score: hint.score,
+            hint: hint.hint,
         })
         .collect()
+}
+
+fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
+    let choices = if hint.choices.is_empty() {
+        fallback_choices(&hint.name)
+    } else {
+        hint.choices.clone()
+    };
+    if !choices.is_empty() {
+        return choices
+            .into_iter()
+            .map(|choice| {
+                let current = hint.current_value.as_deref() == Some(choice.as_str());
+                SlashSuggestion {
+                    usage: format!("/{} {choice}", hint.name),
+                    summary: if current {
+                        "Current value"
+                    } else if hint.name == "mode" && choice == "plan" {
+                        "Read-only planning mode."
+                    } else {
+                        "Available value."
+                    }
+                    .to_owned(),
+                    category: hint.category.clone(),
+                    exact_prefix: current,
+                    score: if current { 0 } else { 1 },
+                    hint: if current {
+                        "● current".to_owned()
+                    } else if hint.name == "mode" && choice == "plan" {
+                        "read-only".to_owned()
+                    } else {
+                        "value".to_owned()
+                    },
+                }
+            })
+            .collect();
+    }
+    hint.subcommands
+        .iter()
+        .map(|subcommand| SlashSuggestion {
+            usage: format!("/{} {subcommand}", hint.name),
+            summary: "Subcommand.".to_owned(),
+            category: hint.category.clone(),
+            exact_prefix: true,
+            score: 0,
+            hint: "set ▸".to_owned(),
+        })
+        .collect()
+}
+
+fn hint_right_hint(hint: &SlashHint) -> String {
+    if hint.requires_confirmation {
+        return "⚠ confirms".to_owned();
+    }
+    if let Some(value) = &hint.current_value {
+        return format!("now: {value}");
+    }
+    if !hint.choices.is_empty() || !fallback_choices(&hint.name).is_empty() {
+        return "values ▸".to_owned();
+    }
+    if !hint.subcommands.is_empty() || usage_has_subcommands(&hint.usage) {
+        return "set ▸".to_owned();
+    }
+    String::new()
+}
+
+fn right_hint_style(hint: &str) -> Style {
+    if hint.contains('⚠') || hint.contains("read-only") {
+        Style::default()
+            .fg(theme::amber())
+            .add_modifier(Modifier::BOLD)
+    } else if hint.contains("current") || hint.starts_with("now:") {
+        Style::default().fg(theme::sage())
+    } else {
+        theme::mute_style()
+    }
+}
+
+fn usage_has_subcommands(usage: &str) -> bool {
+    usage.contains('|') || usage.contains('[')
+}
+
+fn fallback_choices(name: &str) -> Vec<String> {
+    match name {
+        "mode" => ["default", "acceptEdits", "plan", "auto"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        "theme" => ["dark", "light", "monochrome"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 fn fuzzy_subsequence_score(query: &str, candidate: &str) -> Option<usize> {
@@ -230,23 +369,13 @@ mod tests {
     #[test]
     fn slash_suggestions_use_catalog_usage() {
         let catalog = vec![
-            SlashHint {
-                name: "run".to_owned(),
-                usage: "/run <prompt>".to_owned(),
-                summary: "Run an audited prompt.".to_owned(),
-                category: "Run".to_owned(),
-            },
-            SlashHint {
-                name: "status".to_owned(),
-                usage: "/status".to_owned(),
-                summary: "Show readiness.".to_owned(),
-                category: "Session".to_owned(),
-            },
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
+            SlashHint::new("status", "/status", "Show readiness.", "Session"),
         ];
 
         assert_eq!(
             slash_suggestions("/r", &catalog),
-            ["/run <prompt> [Run] - Run an audited prompt."]
+            ["/run <prompt> [Run] - Run an audited prompt. ()"]
         );
     }
 
@@ -280,18 +409,13 @@ mod tests {
     #[test]
     fn input_rendering_stacks_slash_suggestions_for_scanning() {
         let catalog = vec![
-            SlashHint {
-                name: "run".to_owned(),
-                usage: "/run <prompt>".to_owned(),
-                summary: "Run an audited prompt.".to_owned(),
-                category: "Run".to_owned(),
-            },
-            SlashHint {
-                name: "receipt".to_owned(),
-                usage: "/receipt latest".to_owned(),
-                summary: "Show latest receipt.".to_owned(),
-                category: "Evidence".to_owned(),
-            },
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
+            SlashHint::new(
+                "receipt",
+                "/receipt latest",
+                "Show latest receipt.",
+                "Evidence",
+            ),
         ];
 
         let lines = render_input_lines("/r", &catalog);
@@ -317,18 +441,13 @@ mod tests {
     #[test]
     fn slash_completion_uses_first_matching_command_name() {
         let catalog = vec![
-            SlashHint {
-                name: "receipt".to_owned(),
-                usage: "/receipt latest".to_owned(),
-                summary: "Show latest receipt.".to_owned(),
-                category: "Evidence".to_owned(),
-            },
-            SlashHint {
-                name: "run".to_owned(),
-                usage: "/run <prompt>".to_owned(),
-                summary: "Run an audited prompt.".to_owned(),
-                category: "Run".to_owned(),
-            },
+            SlashHint::new(
+                "receipt",
+                "/receipt latest",
+                "Show latest receipt.",
+                "Evidence",
+            ),
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
         ];
 
         assert_eq!(slash_completion("/r", &catalog).as_deref(), Some("/run "));
@@ -336,16 +455,40 @@ mod tests {
 
     #[test]
     fn slash_suggestions_fall_back_to_summary_search() {
-        let catalog = vec![SlashHint {
-            name: "receipt".to_owned(),
-            usage: "/receipt latest".to_owned(),
-            summary: "Show latest provenance receipt.".to_owned(),
-            category: "Evidence".to_owned(),
-        }];
+        let catalog = vec![SlashHint::new(
+            "receipt",
+            "/receipt latest",
+            "Show latest provenance receipt.",
+            "Evidence",
+        )];
 
         assert_eq!(
             slash_suggestions("/provenance", &catalog),
-            ["/receipt latest [Evidence] - Show latest provenance receipt."]
+            ["/receipt latest [Evidence] - Show latest provenance receipt. ()"]
         );
+    }
+
+    #[test]
+    fn slash_suggestions_surface_choices_and_confirmation_flags() {
+        let mut mode = SlashHint::new(
+            "mode",
+            "/mode [default|acceptEdits|plan|auto]",
+            "Set mode.",
+            "Run",
+        );
+        mode.current_value = Some("default".to_owned());
+        let mut policy = SlashHint::new("policy", "/policy reset", "Reset policy.", "Workflow");
+        policy.requires_confirmation = true;
+        let catalog = vec![mode, policy];
+
+        let root = slash_suggestions("/po", &catalog);
+        assert_eq!(
+            root,
+            ["/policy reset [Workflow] - Reset policy. (⚠ confirms)"]
+        );
+
+        let choices = slash_suggestions("/mode ", &catalog).join("\n");
+        assert!(choices.contains("/mode default [Run] - Current value (● current)"));
+        assert!(choices.contains("/mode plan [Run] - Read-only planning mode. (read-only)"));
     }
 }

@@ -11,6 +11,13 @@ pub struct TranscriptEntry {
     pub kind: TranscriptKind,
     pub title: String,
     pub body: String,
+    cached_body: Vec<CachedBodyLine>,
+}
+
+#[derive(Clone)]
+struct CachedBodyLine {
+    text: String,
+    spans: Vec<Span<'static>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -38,6 +45,7 @@ impl TranscriptEntry {
             kind,
             title: title.to_owned(),
             body: body.to_owned(),
+            cached_body: parse_cached_body(kind, body),
         }
     }
 
@@ -148,12 +156,12 @@ fn render_entries(
         let entry_lines = entry_body_lines(entry, options.expand_details);
         let mut body_lines = entry_lines.iter().peekable();
         if body_lines.peek().is_none() {
-            lines.push(render_body_line(&entry.kind, "", options.search_query));
+            lines.push(render_body_line(&entry.kind, None, options.search_query));
         } else {
             for body_line in body_lines {
                 lines.push(render_body_line(
                     &entry.kind,
-                    body_line,
+                    Some(body_line),
                     options.search_query,
                 ));
             }
@@ -189,15 +197,14 @@ fn rendered_entry_line_count(
         .sum()
 }
 
-fn entry_body_lines(entry: &TranscriptEntry, expand_details: bool) -> Vec<String> {
-    let body_lines = entry.body.lines().map(str::to_owned).collect::<Vec<_>>();
-    if expand_details || !is_collapsible(&entry.kind) || body_lines.len() <= 2 {
-        return body_lines;
+fn entry_body_lines(entry: &TranscriptEntry, expand_details: bool) -> Vec<CachedBodyLine> {
+    if expand_details || !is_collapsible(&entry.kind) || entry.cached_body.len() <= 2 {
+        return entry.cached_body.clone();
     }
-    let hidden = body_lines.len().saturating_sub(1);
+    let hidden = entry.cached_body.len().saturating_sub(1);
     vec![
-        body_lines[0].clone(),
-        format!("... {hidden} detail lines hidden (Ctrl-E expand)"),
+        entry.cached_body[0].clone(),
+        CachedBodyLine::plain(format!("... {hidden} detail lines hidden (Ctrl-E expand)")),
     ]
 }
 
@@ -245,16 +252,21 @@ fn title_style(kind: &TranscriptKind) -> Style {
 
 fn render_body_line(
     kind: &TranscriptKind,
-    text: &str,
+    cached: Option<&CachedBodyLine>,
     search_query: Option<&str>,
 ) -> Line<'static> {
     let mut spans = vec![Span::styled("  ", theme::mute_style())];
-    if let Some(bullet) = text.strip_prefix("- ") {
+    let Some(cached) = cached else {
+        return highlight_search(spans, search_query);
+    };
+    if let Some(bullet) = cached.text.strip_prefix("- ") {
         spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
         spans.extend(value_spans(kind, bullet));
-    } else if let Some(diff) = diff_line_spans(text) {
+    } else if let Some(diff) = diff_line_spans(&cached.text) {
         spans.extend(diff);
-    } else if let Some((label, value)) = split_key_value(text) {
+    } else if !cached.spans.is_empty() {
+        spans.extend(cached.spans.clone());
+    } else if let Some((label, value)) = split_key_value(&cached.text) {
         spans.push(Span::styled(
             format!("{label}: "),
             Style::default()
@@ -263,9 +275,147 @@ fn render_body_line(
         ));
         spans.extend(value_spans(kind, value));
     } else {
-        spans.extend(value_spans(kind, text));
+        spans.extend(value_spans(kind, &cached.text));
     }
     highlight_search(spans, search_query)
+}
+
+impl CachedBodyLine {
+    fn plain(text: String) -> Self {
+        Self {
+            text,
+            spans: Vec::new(),
+        }
+    }
+
+    fn styled(text: String, spans: Vec<Span<'static>>) -> Self {
+        Self { text, spans }
+    }
+}
+
+fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
+    let mut lines = Vec::new();
+    let mut code_language: Option<String> = None;
+    for raw in body.lines() {
+        if let Some(language) = raw.trim_start().strip_prefix("```") {
+            let language = language.trim();
+            code_language = if code_language.is_some() {
+                None
+            } else {
+                Some(language.to_owned())
+            };
+            lines.push(CachedBodyLine::styled(
+                raw.to_owned(),
+                vec![Span::styled(
+                    raw.to_owned(),
+                    theme::mute_style().add_modifier(Modifier::BOLD),
+                )],
+            ));
+            continue;
+        }
+        if let Some(language) = code_language.as_deref() {
+            lines.push(CachedBodyLine::styled(
+                raw.to_owned(),
+                highlight_code_line(language, raw),
+            ));
+        } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System) {
+            lines.push(CachedBodyLine::styled(
+                raw.to_owned(),
+                highlight_typed_facts(raw),
+            ));
+        } else {
+            lines.push(CachedBodyLine::plain(raw.to_owned()));
+        }
+    }
+    lines
+}
+
+fn highlight_code_line(language: &str, text: &str) -> Vec<Span<'static>> {
+    let language = language.to_lowercase();
+    if text.trim().is_empty() {
+        return vec![Span::raw(String::new())];
+    }
+    let keywords: &[&str] = if matches!(language.as_str(), "rust" | "rs") {
+        &[
+            "fn", "let", "mut", "pub", "struct", "enum", "impl", "match", "if", "else", "for",
+            "while", "use", "mod", "trait", "return", "Self",
+        ]
+    } else if matches!(language.as_str(), "python" | "py") {
+        &[
+            "def", "class", "return", "if", "elif", "else", "for", "while", "import", "from", "as",
+            "try", "except", "with", "lambda",
+        ]
+    } else if matches!(language.as_str(), "json") {
+        &["true", "false", "null"]
+    } else {
+        &[
+            "const",
+            "let",
+            "var",
+            "function",
+            "return",
+            "if",
+            "else",
+            "for",
+            "while",
+            "class",
+            "import",
+            "export",
+            "from",
+            "type",
+            "interface",
+        ]
+    };
+    highlight_tokens(text, keywords)
+}
+
+fn highlight_tokens(text: &str, keywords: &[&str]) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut token = String::new();
+    for character in text.chars() {
+        if character.is_ascii_alphanumeric() || character == '_' {
+            token.push(character);
+            continue;
+        }
+        push_code_token(&mut spans, &token, keywords);
+        token.clear();
+        spans.push(Span::styled(character.to_string(), theme::primary_style()));
+    }
+    push_code_token(&mut spans, &token, keywords);
+    if spans.is_empty() {
+        spans.push(Span::raw(String::new()));
+    }
+    spans
+}
+
+fn push_code_token(spans: &mut Vec<Span<'static>>, token: &str, keywords: &[&str]) {
+    if token.is_empty() {
+        return;
+    }
+    let style = if keywords.contains(&token) {
+        theme::accent_style()
+    } else if token.chars().all(|character| character.is_ascii_digit()) {
+        Style::default().fg(theme::sage())
+    } else if token
+        .chars()
+        .next()
+        .is_some_and(|character| character.is_ascii_uppercase())
+    {
+        Style::default().fg(theme::cyan())
+    } else {
+        theme::primary_style()
+    };
+    spans.push(Span::styled(token.to_owned(), style));
+}
+
+fn highlight_typed_facts(text: &str) -> Vec<Span<'static>> {
+    if let Some((label, value)) = split_key_value(text) {
+        return vec![
+            Span::styled(format!("{label}: "), theme::accent_style()),
+            Span::styled(value.to_owned(), Style::default().fg(theme::sage())),
+        ];
+    }
+    Vec::new()
 }
 
 fn diff_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
@@ -465,6 +615,31 @@ mod tests {
         assert_eq!(body.spans[1].content, "Run ");
         assert_eq!(body.spans[2].content, "cargo test");
         assert_eq!(body.spans[2].style.fg, Some(crate::theme::amber()));
+    }
+
+    #[test]
+    fn assistant_body_highlights_fenced_code_blocks_from_cached_lines() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "```rust\nfn main() {\n    let value = 42;\n}\n```",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[2].spans[1].content, "fn");
+        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::accent()));
+        let let_span = lines[3]
+            .spans
+            .iter()
+            .find(|span| span.content.as_ref() == "let")
+            .expect("let keyword is highlighted");
+        assert_eq!(let_span.style.fg, Some(crate::theme::accent()));
+        let number_span = lines[3]
+            .spans
+            .iter()
+            .find(|span| span.content.as_ref() == "42")
+            .expect("number literal is highlighted");
+        assert_eq!(number_span.style.fg, Some(crate::theme::sage()));
     }
 
     #[test]
