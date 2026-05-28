@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any, TextIO
 
@@ -10,9 +11,14 @@ from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
 from craik.runtime.reviewing.approval_commands import approvals_decide_result
+from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
+    CLAUDE_PERMISSION_MODE_ENV,
+)
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 from craik.runtime.shell.readiness import resolve_readiness
+from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 from craik.runtime.shell.slash_commands import dispatch_slash_command
+from craik.runtime.shell.textual_widgets.theme_settings import current_theme
 from craik.runtime.store import LocalStore
 
 
@@ -166,12 +172,7 @@ def run_jsonl_gateway(
                         type="slash.catalog",
                         data={
                             "commands": [
-                                {
-                                    "name": spec.command_name,
-                                    "usage": spec.usage,
-                                    "summary": spec.summary,
-                                    "aliases": list(spec.aliases),
-                                }
+                                _slash_catalog_entry(spec, env)
                                 for spec in get_tui_slash_specs()
                             ],
                         },
@@ -189,6 +190,49 @@ def run_jsonl_gateway(
         except Exception as error:
             emit(BackendEvent(type="error", data={"message": str(error)}))
     return 0
+
+
+def _slash_catalog_entry(
+    spec: SlashCommandSpec,
+    env: dict[str, str] | None,
+) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "name": spec.command_name,
+        "usage": spec.usage,
+        "summary": spec.summary,
+        "aliases": list(spec.aliases),
+        "requires_confirmation": spec.requires_confirmation,
+    }
+    if spec.choices:
+        entry["choices"] = {key: list(values) for key, values in spec.choices.items()}
+    subcommands = _usage_subcommands(spec.usage)
+    if subcommands:
+        entry["subcommands"] = subcommands
+    current_value = _current_catalog_value(spec.command_name, env)
+    if current_value is not None:
+        entry["current_value"] = current_value
+    return entry
+
+
+def _usage_subcommands(usage: str) -> list[str]:
+    if "[" not in usage or "]" not in usage:
+        return []
+    inner = usage.split("[", 1)[1].split("]", 1)[0]
+    return [
+        token
+        for token in inner.replace("|", " ").split()
+        if not token.startswith("<")
+        and all(character.isalpha() or character == "-" for character in token)
+    ]
+
+
+def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str | None:
+    if command_name == "mode":
+        values = os.environ if env is None else env
+        return values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+    if command_name == "theme":
+        return current_theme(env)
+    return None
 
 
 def _required_text(message: dict[str, Any]) -> str:
