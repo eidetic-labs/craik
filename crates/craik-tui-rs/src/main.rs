@@ -193,7 +193,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         search_query: active_search_query(app),
     };
 
-    if app.transcript_focused {
+    if app.transcript_focused || area.width < 100 {
         render_transcript_panel(frame, app, vertical[0], &transcript_options);
     } else {
         let body = Layout::default()
@@ -281,7 +281,12 @@ fn render_transcript_panel(
     let transcript = Paragraph::new(render_transcript_lines(&app.transcript, options))
         .block(
             Block::default()
-                .title(transcript_title(app, options, transcript_height))
+                .title(transcript_title(
+                    app,
+                    options,
+                    transcript_height,
+                    area.width,
+                ))
                 .borders(Borders::ALL),
         )
         .scroll((
@@ -301,6 +306,7 @@ fn transcript_title(
     app: &InteractiveApp,
     options: &TranscriptRenderOptions<'_>,
     visible_height: u16,
+    visible_width: u16,
 ) -> Line<'static> {
     let total = transcript_line_count(&app.transcript, options);
     let offset = transcript_scroll_offset(
@@ -336,6 +342,11 @@ fn transcript_title(
     } else {
         String::new()
     };
+    if visible_width < 84 {
+        return Line::from(format!(
+            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}"
+        ));
+    }
     Line::from(format!(
         "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}"
     ))
@@ -393,6 +404,10 @@ fn usage() -> String {
 #[cfg(test)]
 mod tests {
     use super::{InteractiveApp, Terminal, TestBackend, draw_interactive_frame};
+    use craik_tui_rs::parse_gateway_events;
+
+    const CLAUDE_CODE_STREAM: &str =
+        include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
 
     #[test]
     fn interactive_frame_renders_core_regions() {
@@ -419,5 +434,64 @@ mod tests {
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Review the plan"));
         assert!(rendered.contains("Craik"));
+    }
+
+    #[test]
+    fn fixture_backed_wide_frame_renders_activity_and_evidence_context() {
+        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let rendered = render_app_frame(&app, 140, 34);
+
+        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Activity"));
+        assert!(rendered.contains("Receipts: 2"));
+        assert!(rendered.contains("Tools"));
+        assert!(rendered.contains("Approvals seen"));
+        assert!(rendered.contains("normalized Gateway"));
+        assert!(rendered.contains("Run completed"));
+    }
+
+    #[test]
+    fn fixture_backed_narrow_frame_prioritizes_transcript_over_activity_panel() {
+        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let rendered = render_app_frame(&app, 72, 24);
+
+        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Prompt"));
+        assert!(rendered.contains("receipt_run_review_desktop_plan"));
+        assert!(!rendered.contains("Activity"));
+    }
+
+    #[test]
+    fn terminal_setup_does_not_capture_mouse_or_enter_alternate_screen() {
+        let source = include_str!("main.rs");
+
+        assert!(!source.contains(&["Enter", "AlternateScreen"].concat()));
+        assert!(!source.contains(&["Enable", "MouseCapture"].concat()));
+        assert!(!source.contains(&["Disable", "MouseCapture"].concat()));
+    }
+
+    fn app_from_fixture(input: &str) -> InteractiveApp {
+        let events = parse_gateway_events(input).expect("fixture parses");
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        for event in events {
+            app.state.apply_event(&event);
+            app.record_event(&event);
+        }
+        app
+    }
+
+    fn render_app_frame(app: &InteractiveApp, width: u16, height: u16) -> String {
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).expect("test terminal is created");
+        terminal
+            .draw(|frame| draw_interactive_frame(frame, app))
+            .expect("interactive frame renders");
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
     }
 }
