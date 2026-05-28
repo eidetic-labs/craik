@@ -44,12 +44,18 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     }
     let suggestions = slash_suggestion_rows(input, slash_catalog);
     if !suggestions.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "Slash commands",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "Slash commands",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "  Tab completes / type to filter",
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
         lines.extend(suggestions.into_iter().map(|suggestion| {
             let prefix = if suggestion.exact_prefix { ">" } else { " " };
             Line::from(vec![
@@ -317,5 +323,20 @@ mod tests {
         ];
 
         assert_eq!(slash_completion("/r", &catalog).as_deref(), Some("/run "));
+    }
+
+    #[test]
+    fn slash_suggestions_fall_back_to_summary_search() {
+        let catalog = vec![SlashHint {
+            name: "receipt".to_owned(),
+            usage: "/receipt latest".to_owned(),
+            summary: "Show latest provenance receipt.".to_owned(),
+            category: "Evidence".to_owned(),
+        }];
+
+        assert_eq!(
+            slash_suggestions("/provenance", &catalog),
+            ["/receipt latest [Evidence] - Show latest provenance receipt."]
+        );
     }
 }

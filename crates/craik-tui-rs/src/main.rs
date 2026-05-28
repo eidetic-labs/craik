@@ -204,6 +204,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
 
         let selected_approval_summary = app.selected_approval_summary();
         let selected_approval_preview = app.selected_approval_preview();
+        let selected_run_summary = app.selected_run_summary();
+        let selected_run_detail = app.selected_run_detail();
         let activity = Paragraph::new(render_activity_panel(
             &app.state,
             ActivityMetrics {
@@ -214,6 +216,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
                 latest_pending_approval: app.latest_pending_approval(),
                 selected_approval_summary: selected_approval_summary.as_deref(),
                 selected_approval_preview: selected_approval_preview.as_deref(),
+                selected_run_summary: selected_run_summary.as_deref(),
+                selected_run_detail: selected_run_detail.as_deref(),
             },
         ))
         .block(Block::default().title("Activity").borders(Borders::ALL))

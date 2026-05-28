@@ -25,6 +25,22 @@ struct PendingApproval {
     command: Option<String>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RunRecord {
+    pub(crate) run_id: String,
+    pub(crate) task_id: Option<String>,
+    pub(crate) prompt: Option<String>,
+    pub(crate) model: Option<String>,
+    pub(crate) provider: Option<String>,
+    pub(crate) status: Option<String>,
+    pub(crate) receipts: Vec<String>,
+    pub(crate) tools: Vec<String>,
+    pub(crate) files: Vec<String>,
+    pub(crate) commands: Vec<String>,
+    pub(crate) approvals: Vec<String>,
+    pub(crate) outputs: Vec<String>,
+}
+
 pub(crate) struct InteractiveApp {
     pub(crate) state: GatewayAppState,
     pub(crate) input: String,
@@ -45,6 +61,9 @@ pub(crate) struct InteractiveApp {
     history: Vec<String>,
     history_index: Option<usize>,
     pub(crate) queued_inputs: VecDeque<String>,
+    pub(crate) run_records: Vec<RunRecord>,
+    pub(crate) selected_run_index: Option<usize>,
+    last_prompt_preview: Option<String>,
 }
 
 impl InteractiveApp {
@@ -76,6 +95,9 @@ impl InteractiveApp {
             history: Vec::new(),
             history_index: None,
             queued_inputs: VecDeque::new(),
+            run_records: Vec::new(),
+            selected_run_index: None,
+            last_prompt_preview: None,
         };
         app.send_commands([GatewayCommand::SessionStatus, GatewayCommand::SlashCatalog]);
         Ok(app)
@@ -115,6 +137,9 @@ impl InteractiveApp {
             history: Vec::new(),
             history_index: None,
             queued_inputs: VecDeque::new(),
+            run_records: Vec::new(),
+            selected_run_index: None,
+            last_prompt_preview: None,
         }
     }
 
@@ -228,8 +253,26 @@ impl InteractiveApp {
     }
 
     pub(crate) fn selected_approval_preview(&self) -> Option<String> {
-        self.selected_pending_approval()
-            .map(PendingApproval::preview_text)
+        self.selected_pending_approval().map(|approval| {
+            approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+        })
+    }
+
+    pub(crate) fn selected_run_summary(&self) -> Option<String> {
+        let run = self.selected_run()?;
+        let position = self.selected_run_index.unwrap_or_default() + 1;
+        let total = self.run_records.len();
+        let status = run.status.as_deref().unwrap_or("active");
+        Some(format!("{position}/{total} {} [{status}]", run.run_id))
+    }
+
+    pub(crate) fn selected_run_detail(&self) -> Option<String> {
+        self.selected_run().map(RunRecord::detail_text)
+    }
+
+    fn selected_run(&self) -> Option<&RunRecord> {
+        let index = self.selected_run_index?;
+        self.run_records.get(index)
     }
 
     fn selected_pending_approval(&self) -> Option<&PendingApproval> {
@@ -278,6 +321,14 @@ impl InteractiveApp {
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.expand_transcript_details = !self.expand_transcript_details;
                 self.transcript_scroll = 0;
+                LoopAction::Continue
+            }
+            KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_next_run();
+                LoopAction::Continue
+            }
+            KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_previous_run();
                 LoopAction::Continue
             }
             KeyCode::Tab => {
@@ -384,6 +435,7 @@ impl InteractiveApp {
     }
 
     pub(crate) fn record_event(&mut self, event: &GatewayEvent) {
+        self.record_run_event(event);
         match event.event_type.as_str() {
             "session.ready" => {
                 self.transcript
@@ -407,6 +459,7 @@ impl InteractiveApp {
                     .get("prompt_preview")
                     .and_then(|value| value.as_str())
                     .unwrap_or("prompt submitted");
+                self.last_prompt_preview = Some(preview.to_owned());
                 self.transcript
                     .push(TranscriptEntry::progress("Submitted", preview));
             }
@@ -419,7 +472,7 @@ impl InteractiveApp {
             "run.started" => {
                 let run_id = event.run_id.as_deref().unwrap_or("run");
                 self.transcript.push(TranscriptEntry::progress(
-                    "Run started",
+                    &format!("Run {run_id} started"),
                     &summarize_run_event(event, run_id),
                 ));
             }
@@ -482,7 +535,7 @@ impl InteractiveApp {
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
                     "Approval pending",
-                    &approval.request_text(),
+                    &approval.request_text(self.state.receipt_ids.last().map(String::as_str)),
                 ));
                 self.follow_tail_after_transcript_update();
             }
@@ -611,6 +664,84 @@ impl InteractiveApp {
             }
             _ => {}
         }
+    }
+
+    fn record_run_event(&mut self, event: &GatewayEvent) {
+        let Some(run_id) = event.run_id.as_deref() else {
+            return;
+        };
+        let index = self.ensure_run_record(run_id);
+        self.selected_run_index = Some(index);
+        let run = &mut self.run_records[index];
+        if run.task_id.is_none() {
+            run.task_id = event.task_id.clone();
+        }
+        if run.prompt.is_none() {
+            run.prompt = self.last_prompt_preview.clone();
+        }
+        if run.model.is_none() {
+            run.model = string_data(event, "model");
+        }
+        if run.provider.is_none() {
+            run.provider =
+                string_data(event, "provider_id").or_else(|| string_data(event, "provider_family"));
+        }
+        match event.event_type.as_str() {
+            "run.started" => {
+                run.status = Some("running".to_owned());
+            }
+            "run.completed" => {
+                run.status = string_data(event, "status").or_else(|| Some("completed".to_owned()));
+            }
+            "tool.used" => {
+                if let Some(tool) = string_data(event, "tool") {
+                    push_unique_string(&mut run.tools, tool);
+                }
+                if let Some(command) = string_data(event, "command") {
+                    push_unique_string(&mut run.commands, command);
+                }
+                if let Some(target) = string_data(event, "target") {
+                    push_unique_string(&mut run.files, target);
+                }
+            }
+            "file.changed" => {
+                if let Some(target) = string_data(event, "target") {
+                    push_unique_string(&mut run.files, target);
+                }
+            }
+            "approval.requested" => {
+                if let Some(message) = string_data(event, "message") {
+                    push_unique_string(&mut run.approvals, message);
+                }
+            }
+            "receipt.created" => {
+                if let Some(receipt_id) = string_data(event, "receipt_id") {
+                    push_unique_string(&mut run.receipts, receipt_id);
+                }
+            }
+            "run.output" => {
+                if let Some(summary) = string_data(event, "summary") {
+                    run.outputs.push(summary);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn ensure_run_record(&mut self, run_id: &str) -> usize {
+        if let Some(index) = self
+            .run_records
+            .iter()
+            .position(|candidate| candidate.run_id == run_id)
+        {
+            return index;
+        }
+        self.run_records.push(RunRecord {
+            run_id: run_id.to_owned(),
+            prompt: self.last_prompt_preview.clone(),
+            ..RunRecord::default()
+        });
+        self.run_records.len() - 1
     }
 
     pub(crate) fn insert_char(&mut self, ch: char) {
@@ -799,7 +930,11 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::new(
             TranscriptKind::Approval,
             "Approving",
-            &format!("ID: {}\n{}", approval.id, approval.preview_text()),
+            &format!(
+                "ID: {}\n{}",
+                approval.id,
+                approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+            ),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
             approval_id: approval.id,
@@ -820,7 +955,11 @@ impl InteractiveApp {
         self.transcript.push(TranscriptEntry::new(
             TranscriptKind::Approval,
             "Denying",
-            &format!("ID: {}\n{}", approval.id, approval.preview_text()),
+            &format!(
+                "ID: {}\n{}",
+                approval.id,
+                approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+            ),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
             approval_id: approval.id,
@@ -858,6 +997,44 @@ impl InteractiveApp {
             })
             .unwrap_or(0);
         self.selected_approval_index = Some(previous);
+    }
+
+    pub(crate) fn select_next_run(&mut self) {
+        if self.run_records.is_empty() {
+            self.selected_run_index = None;
+            return;
+        }
+        let next = self
+            .selected_run_index
+            .map(|index| (index + 1) % self.run_records.len())
+            .unwrap_or(0);
+        self.selected_run_index = Some(next);
+        self.transcript.push(TranscriptEntry::system(
+            "Run selected",
+            &self.selected_run_detail().unwrap_or_default(),
+        ));
+    }
+
+    pub(crate) fn select_previous_run(&mut self) {
+        if self.run_records.is_empty() {
+            self.selected_run_index = None;
+            return;
+        }
+        let previous = self
+            .selected_run_index
+            .map(|index| {
+                if index == 0 {
+                    self.run_records.len() - 1
+                } else {
+                    index - 1
+                }
+            })
+            .unwrap_or_else(|| self.run_records.len() - 1);
+        self.selected_run_index = Some(previous);
+        self.transcript.push(TranscriptEntry::system(
+            "Run selected",
+            &self.selected_run_detail().unwrap_or_default(),
+        ));
     }
 
     fn normalize_selected_approval(&mut self) {
@@ -915,14 +1092,14 @@ impl PendingApproval {
         }
     }
 
-    fn request_text(&self) -> String {
+    fn request_text(&self, latest_receipt: Option<&str>) -> String {
         format!(
             "{}\nActions: Ctrl-A approve / Ctrl-X deny / Ctrl-N Ctrl-P select",
-            self.preview_text()
+            self.preview_text(latest_receipt)
         )
     }
 
-    fn preview_text(&self) -> String {
+    fn preview_text(&self, latest_receipt: Option<&str>) -> String {
         let mut lines = vec![
             "Review required".to_owned(),
             "State: pending".to_owned(),
@@ -941,6 +1118,29 @@ impl PendingApproval {
         push_optional_line(&mut lines, "Command", self.command.as_deref());
         push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         push_optional_line(&mut lines, "Risk", self.risk.as_deref());
+        push_optional_line(&mut lines, "Latest receipt", latest_receipt);
+        lines.join("\n")
+    }
+}
+
+impl RunRecord {
+    fn detail_text(&self) -> String {
+        let mut lines = vec![
+            format!("Run: {}", self.run_id),
+            format!("Status: {}", self.status.as_deref().unwrap_or("active")),
+        ];
+        push_optional_line(&mut lines, "Task", self.task_id.as_deref());
+        push_optional_line(&mut lines, "Prompt", self.prompt.as_deref());
+        push_optional_line(&mut lines, "Provider", self.provider.as_deref());
+        push_optional_line(&mut lines, "Model", self.model.as_deref());
+        push_count_line(&mut lines, "Tools", &self.tools);
+        push_count_line(&mut lines, "Files", &self.files);
+        push_count_line(&mut lines, "Commands", &self.commands);
+        push_count_line(&mut lines, "Approvals", &self.approvals);
+        push_count_line(&mut lines, "Receipts", &self.receipts);
+        if let Some(output) = self.outputs.last() {
+            lines.push(format!("Latest output: {}", compact_text(output, 96)));
+        }
         lines.join("\n")
     }
 }
@@ -1036,6 +1236,29 @@ fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>)
     }
 }
 
+fn push_count_line(lines: &mut Vec<String>, label: &str, values: &[String]) {
+    let suffix = values
+        .last()
+        .map(|value| format!(" latest {}", compact_text(value, 48)))
+        .unwrap_or_default();
+    lines.push(format!("{label}: {}{suffix}", values.len()));
+}
+
+fn push_unique_string(values: &mut Vec<String>, value: String) {
+    if !values.iter().any(|candidate| candidate == &value) {
+        values.push(value);
+    }
+}
+
+fn compact_text(value: &str, max_chars: usize) -> String {
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_owned();
+    }
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
 fn push_optional_data_line(lines: &mut Vec<String>, event: &GatewayEvent, label: &str, key: &str) {
     if let Some(value) = string_data(event, key) {
         lines.push(format!("{label}: {value}"));
@@ -1116,6 +1339,13 @@ mod tests {
 
     #[test]
     fn approval_request_tracks_pending_state_and_actions() {
+        let receipt = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({"receipt_id": "receipt_before_approval"}),
+        };
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
             created_at: None,
@@ -1132,6 +1362,8 @@ mod tests {
         };
         let mut app = InteractiveApp::for_test_with_messages([]);
 
+        app.state.apply_event(&receipt);
+        app.record_event(&receipt);
         app.record_event(&approval);
 
         assert_eq!(app.pending_approval_count(), 1);
@@ -1145,6 +1377,11 @@ mod tests {
                 .expect("approval preview")
                 .contains("Risk: writes source files")
         );
+        assert!(
+            app.selected_approval_preview()
+                .expect("approval preview")
+                .contains("Latest receipt: receipt_before_approval")
+        );
         let entry = app.transcript.last().expect("approval transcript entry");
         assert_eq!(entry.title, "Approval pending");
         assert!(entry.body.contains("Review required"));
@@ -1154,7 +1391,68 @@ mod tests {
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
+        assert!(
+            entry
+                .body
+                .contains("Latest receipt: receipt_before_approval")
+        );
         assert!(entry.body.contains("Ctrl-A approve / Ctrl-X deny"));
+    }
+
+    #[test]
+    fn run_records_collect_evidence_and_can_be_navigated() {
+        let first = GatewayEvent {
+            event_type: "run.started".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: Some("task_1".to_owned()),
+            data: json!({"model": "claude-sonnet", "provider_id": "provider_anthropic"}),
+        };
+        let tool = GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: Some("task_1".to_owned()),
+            data: json!({"tool": "Bash", "command": "cargo test", "message": "ran tests"}),
+        };
+        let receipt = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: Some("task_1".to_owned()),
+            data: json!({"receipt_id": "receipt_run_1"}),
+        };
+        let second = GatewayEvent {
+            event_type: "run.started".to_owned(),
+            created_at: None,
+            run_id: Some("run_2".to_owned()),
+            task_id: Some("task_2".to_owned()),
+            data: json!({"model": "gpt-5.4", "provider_id": "provider_openai"}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&first);
+        app.record_event(&tool);
+        app.record_event(&receipt);
+        app.record_event(&second);
+
+        assert_eq!(app.run_records.len(), 2);
+        assert_eq!(
+            app.selected_run_summary().as_deref(),
+            Some("2/2 run_2 [running]")
+        );
+
+        app.select_previous_run();
+
+        assert_eq!(
+            app.selected_run_summary().as_deref(),
+            Some("1/2 run_1 [running]")
+        );
+        let detail = app.selected_run_detail().expect("run detail");
+        assert!(detail.contains("Provider: provider_anthropic"));
+        assert!(detail.contains("Tools: 1 latest Bash"));
+        assert!(detail.contains("Commands: 1 latest cargo test"));
+        assert!(detail.contains("Receipts: 1 latest receipt_run_1"));
     }
 
     #[test]
