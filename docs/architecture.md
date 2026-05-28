@@ -95,6 +95,20 @@ receipt log. The runtime's read surface.</p>
 
 </div>
 
+## Terminal UI Strategy
+
+Craik's terminal interface is an Experience-layer client of the Gateway, not
+an execution backend. The production command still launches the maintained
+legacy Textual runtime today, but new terminal UI development targets Rust and
+Ratatui.
+
+The Ratatui client should consume the Gateway JSONL event contract and render
+the full provenance stream: model selection, assistant output, working state,
+tool calls, file targets, shell commands, approvals, denials, receipts,
+handoffs, and final run summaries. Provider-specific behavior belongs behind
+the Gateway, runner adapters, and capability layers; the TUI should display
+those events without owning provider execution.
+
 ## Runtime flow
 
 A task moves through the layers in a deterministic sequence.

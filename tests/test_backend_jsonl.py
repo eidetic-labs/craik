@@ -153,3 +153,16 @@ def test_jsonl_gateway_approval_decision_event(tmp_path: Path) -> None:
     assert events[1]["data"]["payload"]["receipt"]["id"] == (
         "receipt_approval_approval_jsonl_approved"
     )
+
+
+def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
+    stdin = io.StringIO('{"type":"slash.catalog"}\n{"type":"session.close"}\n')
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == ["session.ready", "slash.catalog"]
+    names = {command["name"] for command in events[1]["data"]["commands"]}
+    assert "run" in names
+    assert "status" in names

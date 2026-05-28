@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from craik.runtime.auth.login import auth_status_payload
@@ -14,6 +17,10 @@ from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    start_reviewed_local_process,
+)
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.contract_runtime.run_helpers import run_command
@@ -169,6 +176,8 @@ def run_tui(
     lines: Iterable[str] | None = None,
 ) -> int:
     """Run the terminal UI, falling back to a single render in noninteractive mode."""
+    if (env or {}).get("CRAIK_TUI_RUNTIME") == "rust":
+        return run_ratatui_tui(env=env)
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
     scripted = iter(lines) if lines is not None else None
     if interactive and scripted is None:
@@ -205,6 +214,37 @@ def run_tui(
         output_func(result.text)
         if result.exit_shell:
             return result.exit_code
+
+
+def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
+    """Launch the developer Rust/Ratatui terminal UI client."""
+    manifest = ratatui_manifest_path()
+    if manifest is None:
+        print("Rust TUI crate not found; run from a Craik source checkout.", file=sys.stderr)
+        return 2
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        print("Cargo was not found; install Rust before launching the Rust TUI.", file=sys.stderr)
+        return 2
+    try:
+        process = start_reviewed_local_process(
+            [cargo, "run", "--manifest-path", str(manifest)],
+            env={**dict(os.environ), **(env or {})},
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+    except LocalProcessStartError:
+        print("Cargo could not be started; verify your Rust installation.", file=sys.stderr)
+        return 2
+    return process.wait()
+
+
+def ratatui_manifest_path() -> Path | None:
+    """Return the Rust TUI manifest path when running from a source checkout."""
+    root = Path(__file__).resolve().parents[4]
+    manifest = root / "crates" / "craik-tui-rs" / "Cargo.toml"
+    return manifest if manifest.exists() else None
 
 
 def dispatch_tui_input(

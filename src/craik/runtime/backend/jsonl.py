@@ -10,6 +10,7 @@ from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
 from craik.runtime.reviewing.approval_commands import approvals_decide_result
+from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 from craik.runtime.shell.readiness import resolve_readiness
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 
@@ -126,6 +127,24 @@ def run_jsonl_gateway(
                             "exit_code": slash_result.exit_code,
                             "payload": slash_result.payload,
                             "shape": slash_result.payload_shape,
+                        },
+                    )
+                )
+                continue
+            if message_type == "slash.catalog":
+                emit(
+                    BackendEvent(
+                        type="slash.catalog",
+                        data={
+                            "commands": [
+                                {
+                                    "name": spec.command_name,
+                                    "usage": spec.usage,
+                                    "summary": spec.summary,
+                                    "aliases": list(spec.aliases),
+                                }
+                                for spec in get_tui_slash_specs()
+                            ],
                         },
                     )
                 )

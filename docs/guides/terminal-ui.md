@@ -26,7 +26,7 @@ next actions from inside the same interface.
 ## Launch
 
 Use `craik` in an interactive terminal. Craik detects the TTY and launches
-the Textual TUI by default:
+the current Textual TUI by default:
 
 ```sh
 craik
@@ -56,6 +56,45 @@ CRAIK_NO_TUI=1 craik
 
 Non-TTY use stays plain-output by design. Piped commands, CI jobs, and
 scripted invocations do not open the TUI.
+
+## Runtime Direction
+
+Craik is moving new terminal UI development to Rust and Ratatui. The existing
+Textual TUI remains available as the maintained legacy runtime while the Rust
+client reaches feature parity. New terminal UX work should target the Ratatui
+client and the JSONL Gateway protocol rather than adding Textual-only surface
+area.
+
+The Rust TUI must stay a frontend client, not a parallel backend. It should
+consume the same Gateway event stream as other operator surfaces: prompt and
+slash submissions, model selection, run lifecycle, assistant text, tool calls,
+file targets, commands, approval and denial events, receipts, provenance, and
+final summaries.
+
+The Ratatui client prototype lives in `crates/craik-tui-rs`. It can replay
+Gateway JSONL fixtures and can issue live Gateway commands for status checks,
+prompt submission, slash submission, model selection, approval decisions, and
+run interruption:
+
+```sh
+cargo run --manifest-path crates/craik-tui-rs/Cargo.toml
+cargo run --manifest-path crates/craik-tui-rs/Cargo.toml -- --status
+cargo run --manifest-path crates/craik-tui-rs/Cargo.toml -- --slash "/run list"
+craik tui-rs
+CRAIK_TUI_RUNTIME=rust craik tui
+```
+
+Launching without arguments opens the interactive Ratatui 0.30 prototype when
+stdin is a terminal. The prototype keeps one `craik tui-backend --jsonl`
+Gateway session open, renders typed transcript rows for user, assistant, run,
+tool, file, command, approval, receipt, and error events, and has an activity
+pane, cursor-aware prompt composer, and footer. It streams Gateway events from
+reader threads into the UI so status, tool, file, approval, receipt, and
+completion updates can appear while the backend is running. `Alt-Enter`
+inserts a newline in the composer, Up/Down navigate prompt history,
+PageUp/PageDown scroll the transcript, `Ctrl-A` approves the latest actionable
+approval request, and `Ctrl-X` denies it. Piped stdin still replays Gateway
+JSONL for test fixtures and CI evaluation.
 
 ## Layout
 
@@ -159,7 +198,7 @@ path used by `craik run <prompt>` and `craik tui-backend --jsonl`.
 The Gateway emits lifecycle events for prompt submission, model/profile
 selection, run start, progress, receipts, outputs, completion, and errors.
 That keeps the TUI responsive while the backend is working and gives future
-Textual, Rust, desktop, and channel clients the same provenance stream.
+Rust, desktop, channel, and legacy Textual clients the same provenance stream.
 
 `craik tui-backend --jsonl` is the first frontend protocol. It reads JSONL
 messages from stdin:
@@ -169,6 +208,7 @@ messages from stdin:
 {"type":"model.set","model":"anthropic/claude-opus-4-7","reasoning_effort":"high"}
 {"type":"prompt.submit","text":"Review the plan"}
 {"type":"slash.submit","text":"/run list"}
+{"type":"slash.catalog"}
 {"type":"approval.decide","approval_id":"approval_123","decision":"approved","reason":"reviewed"}
 {"type":"run.interrupt","run_id":"run_123","reason":"operator requested stop"}
 ```
