@@ -12,6 +12,8 @@ pub struct ActivityMetrics<'a> {
     pub latest_pending_approval: Option<&'a str>,
     pub selected_approval_summary: Option<&'a str>,
     pub selected_approval_preview: Option<&'a str>,
+    pub selected_run_summary: Option<&'a str>,
+    pub selected_run_detail: Option<&'a str>,
 }
 
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
@@ -41,6 +43,22 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             )
         ),
         format!("  Backend: {}", state.backend.as_deref().unwrap_or("auto")),
+        "Gateway health".to_owned(),
+        format!(
+            "  Provider auth: {}",
+            provider_health_label(
+                state.active_provider_id.as_deref(),
+                state.backend.as_deref()
+            )
+        ),
+        format!(
+            "  Model routing: {}",
+            if state.active_model.is_some() || state.active_model_display_name.is_some() {
+                "ready"
+            } else {
+                "model not selected"
+            }
+        ),
         "Run".to_owned(),
         format!("  State: {run_state}"),
         format!(
@@ -53,12 +71,6 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         ),
         format!("  Queued: {}", metrics.queued_inputs),
     ];
-    if !state.run_ids.is_empty() {
-        lines.push("Recent runs".to_owned());
-        for run_id in state.run_ids.iter().rev().take(3) {
-            lines.push(format!("  {run_id}"));
-        }
-    }
     if let Some(receipt_id) = state.receipt_ids.last() {
         lines.push(format!("  Latest receipt: {receipt_id}"));
     }
@@ -71,6 +83,20 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         format!("  Approvals seen: {}", state.approval_requests.len()),
         format!("  Slash commands: {}", metrics.slash_commands),
     ]);
+    if !state.run_ids.is_empty() {
+        lines.push("Recent runs".to_owned());
+        for run_id in state.run_ids.iter().rev().take(3) {
+            lines.push(format!("  {run_id}"));
+        }
+        if let Some(summary) = metrics.selected_run_summary {
+            lines.push(format!("  Selected: {summary}"));
+        }
+        if let Some(detail) = metrics.selected_run_detail {
+            lines.push("  Selected detail".to_owned());
+            lines.extend(detail.lines().take(5).map(|line| format!("    {line}")));
+        }
+        lines.push("  Navigate: Ctrl-J next / Ctrl-K previous".to_owned());
+    }
     if metrics.pending_approvals > 0 {
         lines.extend([
             "Approval review".to_owned(),
@@ -90,7 +116,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             lines.push("  Context".to_owned());
             lines.extend(preview.lines().map(|line| format!("    {line}")));
         }
-        lines.push("  Actions: Ctrl-A approve / Ctrl-X deny".to_owned());
+        lines.push("  Actions: Ctrl-A approve / Ctrl-X deny after review".to_owned());
         if metrics.pending_approvals > 1 {
             lines.push("  Select: Ctrl-N next / Ctrl-P previous".to_owned());
         }
@@ -101,6 +127,15 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         lines.push(format!("Last error: {error}"));
     }
     lines.join("\n")
+}
+
+fn provider_health_label(provider_id: Option<&str>, backend: Option<&str>) -> &'static str {
+    match (provider_id, backend) {
+        (Some(_), Some(_)) => "ready",
+        (Some(_), None) => "provider selected",
+        (None, Some(_)) => "backend selected",
+        (None, None) => "waiting for provider",
+    }
 }
 
 pub fn status_line(
@@ -151,6 +186,8 @@ pub fn status_line(
         } else {
             " collapse"
         }),
+        Span::styled("  Ctrl-J/K", Style::default().fg(Color::LightBlue)),
+        Span::raw(" runs"),
         if pending_approval.is_some() {
             Span::raw("")
         } else {
@@ -315,6 +352,10 @@ mod tests {
                 latest_pending_approval: Some("approval_123"),
                 selected_approval_summary: Some("1/1 pending - approval_123 -> src/lib.rs"),
                 selected_approval_preview: Some("ID: approval_123\nTool: Edit\nTarget: src/lib.rs"),
+                selected_run_summary: Some("4/4 run_4 [completed]"),
+                selected_run_detail: Some(
+                    "Run: run_4\nStatus: completed\nTools: 2 latest Bash\nReceipts: 1 latest receipt_1",
+                ),
             },
         );
 
@@ -325,7 +366,11 @@ mod tests {
         assert!(rendered.contains("  Provider: anthropic (provider_anthropic)"));
         assert!(rendered.contains("Recent runs"));
         assert!(rendered.contains("  run_4"));
+        assert!(rendered.contains("  Selected: 4/4 run_4 [completed]"));
+        assert!(rendered.contains("  Navigate: Ctrl-J next / Ctrl-K previous"));
         assert!(rendered.contains("  Latest receipt: receipt_1"));
+        assert!(rendered.contains("Gateway health"));
+        assert!(rendered.contains("  Provider auth: provider selected"));
         assert!(rendered.contains("Evidence"));
         assert!(rendered.contains("  Receipts: 1"));
         assert!(rendered.contains("  Files: 1"));
