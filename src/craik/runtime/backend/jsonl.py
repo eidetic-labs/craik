@@ -243,7 +243,7 @@ def _int_or_none(value: object) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def _recent_receipts(env: dict[str, str] | None) -> list[dict[str, str]]:
+def _recent_receipts(env: dict[str, str] | None) -> list[dict[str, object]]:
     store = LocalStore.from_env(env)
     try:
         store.initialize()
@@ -256,12 +256,32 @@ def _recent_receipts(env: dict[str, str] | None) -> list[dict[str, str]]:
             {
                 "id": receipt.id,
                 "task_id": receipt.task_id,
+                "actor": receipt.actor,
                 "capability": receipt.capability,
                 "target": receipt.target,
+                "policy": receipt.policy_profile,
+                "reason": receipt.reason,
                 "status": receipt.result.status,
                 "summary": receipt.result.summary,
+                "created_at": receipt.created_at.isoformat(),
+                "auth_profile_id": receipt.auth_profile_id,
+                "operator_subject": receipt.operator_subject,
+                "tools": _metadata_strings(receipt.result.metadata, "tools"),
+                "files": _metadata_strings(receipt.result.metadata, "files"),
+                "commands": _metadata_strings(receipt.result.metadata, "commands"),
+                "approvals": _metadata_strings(receipt.result.metadata, "approvals"),
+                "outputs": _metadata_strings(receipt.result.metadata, "outputs"),
+                "evidence_ids": _metadata_strings(receipt.result.metadata, "evidence_ids"),
+                "handoff_ids": _metadata_strings(receipt.result.metadata, "handoff_ids"),
             }
             for receipt in receipts[:12]
         ]
     finally:
         store.close()
+
+
+def _metadata_strings(metadata: dict[str, Any], key: str) -> list[str]:
+    value = metadata.get(key)
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]

@@ -164,14 +164,20 @@ fn run_interactive_loop(
         app.drain_worker();
         terminal.draw(|frame| draw_interactive_frame(frame, &app))?;
 
-        if event::poll(Duration::from_millis(80))?
-            && let Event::Key(key) = event::read()?
-        {
-            if key.kind != KeyEventKind::Press {
-                continue;
-            }
-            if app.handle_key(key) == LoopAction::Exit {
-                break;
+        if event::poll(Duration::from_millis(80))? {
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    if app.handle_key(key) == LoopAction::Exit {
+                        break;
+                    }
+                }
+                Event::Paste(text) => {
+                    app.paste_text(&text);
+                }
+                _ => {}
             }
         }
     }
@@ -226,11 +232,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         frame.render_widget(activity, body[1]);
     }
 
-    let input_title = if app.search_active {
-        "Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel"
-    } else {
-        "Prompt  Enter sends / Alt-Enter newline"
-    };
+    let input_title = input_title(app);
     let input_block = Block::default()
         .title(Line::from(vec![Span::styled(
             input_title,
@@ -281,10 +283,23 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
     if app.search_active {
         5
     } else if app.input.trim_start().starts_with('/') {
-        10
+        12
     } else {
-        7
+        let content_lines = app.input_line_count().min(8) as u16;
+        (content_lines + 5).clamp(8, 13)
     }
+}
+
+fn input_title(app: &InteractiveApp) -> String {
+    if app.search_active {
+        return "Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
+    }
+    let (line, col) = app.input_cursor_line_col();
+    format!(
+        "Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Alt-Enter newline / Ctrl-U start / Ctrl-K end / Ctrl-W word",
+        app.input_line_count(),
+        app.input_char_count()
+    )
 }
 
 fn render_transcript_panel(
@@ -426,6 +441,7 @@ fn usage() -> String {
 mod tests {
     use super::{
         InteractiveApp, Terminal, TestBackend, draw_interactive_frame, input_panel_height,
+        input_title,
     };
     use craik_tui_rs::parse_gateway_events;
 
@@ -488,11 +504,22 @@ mod tests {
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 7);
+        assert_eq!(input_panel_height(&app), 8);
         app.input = "/r".to_owned();
-        assert_eq!(input_panel_height(&app), 10);
+        assert_eq!(input_panel_height(&app), 12);
         app.search_active = true;
         assert_eq!(input_panel_height(&app), 5);
+    }
+
+    #[test]
+    fn prompt_input_height_grows_with_multiline_content() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        assert_eq!(input_panel_height(&app), 8);
+        app.input = "one\ntwo\nthree\nfour".to_owned();
+
+        assert_eq!(input_panel_height(&app), 9);
+        assert!(input_title(&app).contains("4 line(s)"));
     }
 
     #[test]

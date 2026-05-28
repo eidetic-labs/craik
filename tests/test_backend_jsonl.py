@@ -193,10 +193,23 @@ def test_jsonl_gateway_reports_persisted_session_history(tmp_path: Path) -> None
         {
             "id": "receipt_history_1",
             "task_id": "task_history_1",
+            "actor": "agent:test",
             "capability": "shell.test",
             "target": "pytest",
+            "policy": "strict",
+            "reason": "Validate session history.",
             "status": "passed",
             "summary": "History receipt.",
+            "created_at": "2026-05-26T12:00:00+00:00",
+            "auth_profile_id": None,
+            "operator_subject": None,
+            "tools": ["Bash"],
+            "files": ["tests/test_backend_jsonl.py"],
+            "commands": ["uv run pytest tests/test_backend_jsonl.py"],
+            "approvals": ["approval_history_1"],
+            "outputs": ["History receipt."],
+            "evidence_ids": ["evidence_history_1"],
+            "handoff_ids": ["handoff_history_1"],
         }
     ]
 
@@ -236,7 +249,15 @@ def _receipt(receipt_id: str, *, task_id: str) -> CapabilityReceipt:
         result=ReceiptResult(
             status="passed",
             summary="History receipt.",
-            metadata={},
+            metadata={
+                "tools": ["Bash"],
+                "files": ["tests/test_backend_jsonl.py"],
+                "commands": ["uv run pytest tests/test_backend_jsonl.py"],
+                "approvals": ["approval_history_1"],
+                "outputs": ["History receipt."],
+                "evidence_ids": ["evidence_history_1"],
+                "handoff_ids": ["handoff_history_1"],
+            },
         ),
         redacted=True,
         created_at=datetime(2026, 5, 26, 12, 0, tzinfo=UTC),
