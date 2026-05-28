@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Position, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
 };
 
@@ -11,21 +11,42 @@ pub struct SlashHint {
 }
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
-    let mut lines = input
-        .lines()
-        .map(|line| Line::from(Span::raw(line.to_owned())))
-        .collect::<Vec<_>>();
-    if lines.is_empty() {
-        lines.push(Line::from(Span::styled(
-            "Type a prompt or /command",
+    let mut lines = if input.is_empty() {
+        vec![Line::from(Span::styled(
+            "Type a prompt or /command...",
             Style::default().fg(Color::DarkGray),
-        )));
+        ))]
+    } else {
+        input
+            .split('\n')
+            .map(|line| {
+                Line::from(Span::styled(
+                    line.to_owned(),
+                    Style::default().fg(Color::White),
+                ))
+            })
+            .collect::<Vec<_>>()
+    };
+    if !input.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Ready ", Style::default().fg(Color::Green)),
+            Span::styled("Enter sends", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" / Alt-Enter newline", Style::default().fg(Color::DarkGray)),
+        ]));
     }
     let suggestions = slash_suggestions(input, slash_catalog);
     if !suggestions.is_empty() {
         lines.push(Line::from(vec![
-            Span::styled("Suggestions ", Style::default().fg(Color::Cyan)),
-            Span::raw(suggestions.join("  ")),
+            Span::styled(
+                "Suggestions ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                suggestions.join("  "),
+                Style::default().fg(Color::LightCyan),
+            ),
         ]));
     }
     lines
@@ -67,7 +88,7 @@ pub fn input_cursor_position(input: &str, input_cursor: usize, area: Rect) -> Po
 
 #[cfg(test)]
 mod tests {
-    use super::{SlashHint, input_cursor_position, slash_suggestions};
+    use super::{SlashHint, input_cursor_position, render_input_lines, slash_suggestions};
     use ratatui::layout::Rect;
 
     #[test]
@@ -99,5 +120,25 @@ mod tests {
 
         assert_eq!(position.x, 13);
         assert_eq!(position.y, 21);
+    }
+
+    #[test]
+    fn input_rendering_preserves_trailing_blank_line() {
+        let lines = render_input_lines("hello\n", &[]);
+
+        assert_eq!(lines[0].to_string(), "hello");
+        assert_eq!(lines[1].to_string(), "");
+        assert!(lines[2].to_string().contains("Enter sends"));
+    }
+
+    #[test]
+    fn placeholder_is_visible_when_input_is_empty() {
+        let lines = render_input_lines("", &[]);
+
+        assert_eq!(lines[0].to_string(), "Type a prompt or /command...");
+        assert_eq!(
+            lines[0].spans[0].style.fg,
+            Some(ratatui::style::Color::DarkGray)
+        );
     }
 }
