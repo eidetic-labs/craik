@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import subprocess
+import shutil
 import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -17,6 +17,10 @@ from craik.runtime.i18n.messages import text as localize_text
 from craik.runtime.paths import resolve_craik_paths
 from craik.runtime.policy.redaction import redact
 from craik.runtime.policy.text import sanitize_runtime_text
+from craik.runtime.sandbox.local_process_backend import (
+    LocalProcessStartError,
+    start_reviewed_local_process,
+)
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.contract_runtime.result_adapter import to_slash_command_result
 from craik.runtime.shell.contract_runtime.run_helpers import run_command
@@ -218,12 +222,22 @@ def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
     if manifest is None:
         print("Rust TUI crate not found; run from a Craik source checkout.", file=sys.stderr)
         return 2
-    completed = subprocess.run(
-        ["cargo", "run", "--manifest-path", str(manifest)],
-        env={**dict(os.environ), **(env or {})},
-        check=False,
-    )
-    return completed.returncode
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        print("Cargo was not found; install Rust before launching the Rust TUI.", file=sys.stderr)
+        return 2
+    try:
+        process = start_reviewed_local_process(
+            [cargo, "run", "--manifest-path", str(manifest)],
+            env={**dict(os.environ), **(env or {})},
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+    except LocalProcessStartError:
+        print("Cargo could not be started; verify your Rust installation.", file=sys.stderr)
+        return 2
+    return process.wait()
 
 
 def ratatui_manifest_path() -> Path | None:

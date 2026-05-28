@@ -44,16 +44,20 @@ def test_tui_starts_without_config_and_renders_nonblank(tmp_path: Path) -> None:
 def test_tui_rs_command_launches_ratatui_runtime(monkeypatch, tmp_path: Path) -> None:
     calls: list[list[str]] = []
 
-    class Completed:
-        returncode = 0
+    class Process:
+        def wait(self) -> int:
+            return 0
 
-    def fake_run(command, **kwargs):
+    def fake_start_process(command, **kwargs):
         calls.append(command)
-        assert kwargs["check"] is False
         assert kwargs["env"]["CRAIK_HOME"] == str(tmp_path / "home")
-        return Completed()
+        return Process()
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        "craik.runtime.shell.tui.start_reviewed_local_process",
+        fake_start_process,
+    )
 
     exit_code = run_ratatui_tui(env={"CRAIK_HOME": str(tmp_path / "home")})
     result = runner.invoke(app, ["tui-rs"], env={"CRAIK_HOME": str(tmp_path / "home")})
@@ -61,26 +65,31 @@ def test_tui_rs_command_launches_ratatui_runtime(monkeypatch, tmp_path: Path) ->
     assert exit_code == 0
     assert result.exit_code == 0
     assert calls
-    assert calls[0][:3] == ["cargo", "run", "--manifest-path"]
+    assert calls[0][:3] == ["/usr/bin/cargo", "run", "--manifest-path"]
     assert calls[0][3] == str(ratatui_manifest_path())
 
 
 def test_tui_runtime_env_can_select_rust(monkeypatch, tmp_path: Path) -> None:
     calls: list[list[str]] = []
 
-    class Completed:
-        returncode = 0
+    class Process:
+        def wait(self) -> int:
+            return 0
 
-    def fake_run(command, **kwargs):
+    def fake_start_process(command, **kwargs):
         calls.append(command)
-        return Completed()
+        return Process()
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("craik.runtime.shell.tui.shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        "craik.runtime.shell.tui.start_reviewed_local_process",
+        fake_start_process,
+    )
 
     exit_code = run_tui(env={"CRAIK_HOME": str(tmp_path / "home"), "CRAIK_TUI_RUNTIME": "rust"})
 
     assert exit_code == 0
-    assert calls[0][:2] == ["cargo", "run"]
+    assert calls[0][:2] == ["/usr/bin/cargo", "run"]
 
 
 def test_tui_fixture_mode_status_and_store_panels(tmp_path: Path) -> None:
