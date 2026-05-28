@@ -202,6 +202,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             .split(vertical[0]);
         render_transcript_panel(frame, app, body[0], &transcript_options);
 
+        let selected_approval_summary = app.selected_approval_summary();
+        let selected_approval_preview = app.selected_approval_preview();
         let activity = Paragraph::new(render_activity_panel(
             &app.state,
             ActivityMetrics {
@@ -210,6 +212,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
                 last_error: app.last_error.as_deref(),
                 pending_approvals: app.pending_approval_count(),
                 latest_pending_approval: app.latest_pending_approval(),
+                selected_approval_summary: selected_approval_summary.as_deref(),
+                selected_approval_preview: selected_approval_preview.as_deref(),
             },
         ))
         .block(Block::default().title("Activity").borders(Borders::ALL))
