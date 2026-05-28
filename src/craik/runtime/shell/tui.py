@@ -160,11 +160,7 @@ def render_approval_modal(
 def complete_tui_command(prefix: str) -> list[str]:
     """Return slash-command completions for TUI autocomplete."""
     normalized = prefix if prefix.startswith("/") else f"/{prefix}"
-    return [
-        name
-        for name in _autocomplete_names(get_tui_registry())
-        if name.startswith(normalized)
-    ]
+    return [name for name in _autocomplete_names(get_tui_registry()) if name.startswith(normalized)]
 
 
 def run_tui(
@@ -218,26 +214,48 @@ def run_tui(
 
 def run_ratatui_tui(*, env: dict[str, str] | None = None) -> int:
     """Launch the developer Rust/Ratatui terminal UI client."""
-    manifest = ratatui_manifest_path()
-    if manifest is None:
-        print("Rust TUI crate not found; run from a Craik source checkout.", file=sys.stderr)
+    command = ratatui_command()
+    if command is None:
+        print(
+            "Rust TUI binary was not found and no source checkout fallback is available.",
+            file=sys.stderr,
+        )
         return 2
-    cargo = shutil.which("cargo")
-    if cargo is None:
-        print("Cargo was not found; install Rust before launching the Rust TUI.", file=sys.stderr)
-        return 2
+    if command[0] == "cargo" or command[0].endswith("/cargo"):
+        cargo = shutil.which("cargo")
+        if cargo is None:
+            print(
+                "Cargo was not found; install Rust before launching the Rust TUI.",
+                file=sys.stderr,
+            )
+            return 2
+        command = [cargo, *command[1:]]
     try:
         process = start_reviewed_local_process(
-            [cargo, "run", "--manifest-path", str(manifest)],
+            command,
             env={**dict(os.environ), **(env or {})},
             stdin=sys.stdin,
             stdout=sys.stdout,
             stderr=sys.stderr,
         )
     except LocalProcessStartError:
-        print("Cargo could not be started; verify your Rust installation.", file=sys.stderr)
+        print(
+            "Rust TUI could not be started; verify the installed binary or Rust toolchain.",
+            file=sys.stderr,
+        )
         return 2
     return process.wait()
+
+
+def ratatui_command() -> list[str] | None:
+    """Return the preferred command for launching the Rust/Ratatui TUI."""
+    installed = shutil.which("craik-tui-rs")
+    if installed is not None:
+        return [installed]
+    manifest = ratatui_manifest_path()
+    if manifest is None:
+        return None
+    return ["cargo", "run", "--manifest-path", str(manifest)]
 
 
 def ratatui_manifest_path() -> Path | None:

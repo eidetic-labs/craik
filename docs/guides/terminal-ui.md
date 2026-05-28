@@ -74,14 +74,15 @@ final summaries.
 The Ratatui client prototype lives in `crates/craik-tui-rs`. It can replay
 Gateway JSONL fixtures and can issue live Gateway commands for status checks,
 prompt submission, slash submission, model selection, approval decisions, and
-run interruption:
+run interruption. `craik tui-rs` first looks for an installed `craik-tui-rs`
+binary, then falls back to `cargo run` when launched from a source checkout:
 
 ```sh
+craik tui-rs
+CRAIK_TUI_RUNTIME=rust craik tui
 cargo run --manifest-path crates/craik-tui-rs/Cargo.toml
 cargo run --manifest-path crates/craik-tui-rs/Cargo.toml -- --status
 cargo run --manifest-path crates/craik-tui-rs/Cargo.toml -- --slash "/run list"
-craik tui-rs
-CRAIK_TUI_RUNTIME=rust craik tui
 ```
 
 Launching without arguments opens the interactive Ratatui 0.30 prototype when
