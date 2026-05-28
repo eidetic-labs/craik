@@ -16,6 +16,12 @@ pub struct ActivityMetrics<'a> {
 
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
     let model = model_label(state, "not selected");
+    let run_state = run_state_label(
+        state,
+        metrics.pending_approvals,
+        metrics.queued_inputs,
+        metrics.last_error,
+    );
     let mut lines = vec![
         "Session".to_owned(),
         format!(
@@ -36,6 +42,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
         ),
         format!("  Backend: {}", state.backend.as_deref().unwrap_or("auto")),
         "Run".to_owned(),
+        format!("  State: {run_state}"),
         format!(
             "  Status: {}",
             state.run_status.as_deref().unwrap_or("idle")
@@ -55,8 +62,8 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
     ];
     if metrics.pending_approvals > 0 {
         lines.extend([
-            "Approvals pending".to_owned(),
-            format!("  Pending: {}", metrics.pending_approvals),
+            "Approval review".to_owned(),
+            format!("  Queue: {} pending", metrics.pending_approvals),
         ]);
         if let Some(summary) = metrics.selected_approval_summary {
             lines.push(format!("  Selected: {summary}"));
@@ -69,7 +76,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             ));
         }
         if let Some(preview) = metrics.selected_approval_preview {
-            lines.push("  Preview".to_owned());
+            lines.push("  Context".to_owned());
             lines.extend(preview.lines().map(|line| format!("    {line}")));
         }
         lines.push("  Actions: Ctrl-A approve / Ctrl-X deny".to_owned());
@@ -93,7 +100,7 @@ pub fn status_line(
     search_active: bool,
     details_collapsed: bool,
 ) -> Line<'static> {
-    let request_state = if in_flight { "working" } else { "ready" };
+    let request_state = footer_state_label(state, in_flight, pending_approval.is_some());
     let model = compact_label(model_label(state, "model not selected"), 42);
     let approval_label = pending_approval.map(|approval_id| compact_label(approval_id, 24));
     Line::from(vec![
@@ -109,11 +116,7 @@ pub fn status_line(
         Span::styled(
             request_state,
             Style::default()
-                .fg(if in_flight {
-                    Color::Yellow
-                } else {
-                    Color::Green
-                })
+                .fg(status_color(request_state))
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(" | ", Style::default().fg(Color::DarkGray)),
@@ -201,6 +204,62 @@ fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
         .unwrap_or(fallback)
 }
 
+fn run_state_label(
+    state: &GatewayAppState,
+    pending_approvals: usize,
+    queued_inputs: usize,
+    last_error: Option<&str>,
+) -> &'static str {
+    if last_error.is_some() {
+        return "error";
+    }
+    if pending_approvals > 0 {
+        return "waiting for approval";
+    }
+    if queued_inputs > 0 {
+        return "queued";
+    }
+    if matches!(state.working_phase.as_deref(), Some("thinking")) {
+        return "thinking";
+    }
+    match state.run_status.as_deref() {
+        Some("running") => "working",
+        Some("completed") => "completed",
+        Some("interrupt requested") => "interrupt requested",
+        Some("failed") | Some("error") => "error",
+        Some(_) => "working",
+        None => "idle",
+    }
+}
+
+fn footer_state_label(
+    state: &GatewayAppState,
+    in_flight: bool,
+    has_pending_approval: bool,
+) -> &'static str {
+    if has_pending_approval {
+        "waiting for approval"
+    } else if matches!(state.working_phase.as_deref(), Some("thinking")) {
+        "thinking"
+    } else if in_flight || matches!(state.run_status.as_deref(), Some("running")) {
+        "working"
+    } else if matches!(state.run_status.as_deref(), Some("completed")) {
+        "completed"
+    } else {
+        "ready"
+    }
+}
+
+fn status_color(state: &str) -> Color {
+    match state {
+        "waiting for approval" => Color::LightRed,
+        "thinking" => Color::LightYellow,
+        "working" => Color::Yellow,
+        "completed" | "ready" => Color::Green,
+        _ => Color::White,
+    }
+}
+
 fn provider_label(provider_id: Option<&str>, provider_family: Option<&str>) -> String {
     match (provider_id, provider_family) {
         (Some(id), Some(family)) if id != family => format!("{family} ({id})"),
@@ -234,16 +293,17 @@ mod tests {
             ActivityMetrics {
                 slash_commands: 12,
                 queued_inputs: 2,
-                last_error: Some("gateway disconnected"),
+                last_error: None,
                 pending_approvals: 1,
                 latest_pending_approval: Some("approval_123"),
-                selected_approval_summary: Some("1/1 approval_123 -> src/lib.rs"),
+                selected_approval_summary: Some("1/1 pending - approval_123 -> src/lib.rs"),
                 selected_approval_preview: Some("ID: approval_123\nTool: Edit\nTarget: src/lib.rs"),
             },
         );
 
         assert!(rendered.contains("Session"));
         assert!(rendered.contains("  State: ready"));
+        assert!(rendered.contains("  State: waiting for approval"));
         assert!(rendered.contains("  Model: Anthropic Claude Opus 4.7"));
         assert!(rendered.contains("  Provider: anthropic (provider_anthropic)"));
         assert!(rendered.contains("Evidence"));
@@ -252,11 +312,12 @@ mod tests {
         assert!(rendered.contains("  Commands: 1"));
         assert!(rendered.contains("  Slash commands: 12"));
         assert!(rendered.contains("  Queued: 2"));
-        assert!(rendered.contains("Approvals pending"));
-        assert!(rendered.contains("  Selected: 1/1 approval_123 -> src/lib.rs"));
+        assert!(rendered.contains("Approval review"));
+        assert!(rendered.contains("  Queue: 1 pending"));
+        assert!(rendered.contains("  Selected: 1/1 pending - approval_123 -> src/lib.rs"));
+        assert!(rendered.contains("  Context"));
         assert!(rendered.contains("    Tool: Edit"));
         assert!(rendered.contains("    Target: src/lib.rs"));
-        assert!(rendered.contains("Last error: gateway disconnected"));
     }
 
     #[test]
@@ -270,6 +331,29 @@ mod tests {
 
         assert!(rendered.contains("anthropic/claude-sonnet"));
         assert!(rendered.contains("working"));
+    }
+
+    #[test]
+    fn status_line_surfaces_thinking_and_approval_states() {
+        let thinking = GatewayAppState {
+            working_phase: Some("thinking".to_owned()),
+            ..GatewayAppState::default()
+        };
+        let approval = GatewayAppState {
+            run_status: Some("running".to_owned()),
+            ..GatewayAppState::default()
+        };
+
+        assert!(
+            status_line(&thinking, true, None, false, false, false)
+                .to_string()
+                .contains("thinking")
+        );
+        assert!(
+            status_line(&approval, true, Some("approval_123"), false, false, false)
+                .to_string()
+                .contains("waiting for approval")
+        );
     }
 
     #[test]
