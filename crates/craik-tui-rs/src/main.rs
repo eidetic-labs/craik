@@ -6,7 +6,7 @@ mod input;
 mod render;
 mod transcript;
 
-use app::InteractiveApp;
+use app::{InteractiveApp, LoopAction};
 use craik_tui_rs::{
     app_state_from_events, approval_command_sequence, format_gateway_contract_issues,
     interrupt_command_sequence, model_command_sequence, parse_gateway_events,
@@ -15,7 +15,7 @@ use craik_tui_rs::{
     validate_gateway_events,
 };
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, Event, KeyEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -229,60 +229,8 @@ fn run_interactive_loop(
             if key.kind != KeyEventKind::Press {
                 continue;
             }
-            match key.code {
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    if app.in_flight {
-                        app.request_interrupt();
-                    } else {
-                        break;
-                    }
-                }
-                KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.approve_latest();
-                }
-                KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.deny_latest();
-                }
-                KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => app.insert_newline(),
-                KeyCode::Enter => app.submit_input(),
-                KeyCode::Backspace => {
-                    app.backspace();
-                }
-                KeyCode::Delete => {
-                    app.delete();
-                }
-                KeyCode::Esc => {
-                    app.clear_input();
-                }
-                KeyCode::Left => {
-                    app.move_cursor_left();
-                }
-                KeyCode::Right => {
-                    app.move_cursor_right();
-                }
-                KeyCode::Home => {
-                    app.move_cursor_home();
-                }
-                KeyCode::End => {
-                    app.move_cursor_end();
-                }
-                KeyCode::PageUp => {
-                    app.scroll_transcript_up();
-                }
-                KeyCode::PageDown => {
-                    app.scroll_transcript_down();
-                }
-                KeyCode::Up => {
-                    app.history_previous();
-                }
-                KeyCode::Down => {
-                    app.history_next();
-                }
-                KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    app.insert_char(ch);
-                }
-                _ => {}
+            if app.handle_key(key) == LoopAction::Exit {
+                break;
             }
         }
     }
