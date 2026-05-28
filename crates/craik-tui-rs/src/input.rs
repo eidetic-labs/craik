@@ -1,8 +1,10 @@
 use ratatui::{
     layout::{Position, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
 };
+
+use crate::theme;
 
 pub struct SlashHint {
     pub name: String,
@@ -16,65 +18,52 @@ struct SlashSuggestion<'a> {
     summary: &'a str,
     category: &'a str,
     exact_prefix: bool,
+    score: usize,
 }
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     let mut lines = if input.is_empty() {
         vec![Line::from(Span::styled(
             "Type a prompt or /command...",
-            Style::default().fg(Color::DarkGray),
+            theme::dim_style(),
         ))]
     } else {
         input
             .split('\n')
-            .map(|line| {
-                Line::from(Span::styled(
-                    line.to_owned(),
-                    Style::default().fg(Color::White),
-                ))
-            })
+            .map(|line| Line::from(Span::styled(line.to_owned(), theme::primary_style())))
             .collect::<Vec<_>>()
     };
     if !input.is_empty() {
         lines.push(Line::from(vec![
-            Span::styled("Ready ", Style::default().fg(Color::Green)),
+            Span::styled("Ready ", Style::default().fg(theme::sage())),
             Span::styled("Enter sends", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(" / Alt-Enter newline", Style::default().fg(Color::DarkGray)),
+            Span::styled(" / Alt-Enter newline", theme::dim_style()),
         ]));
     }
     let suggestions = slash_suggestion_rows(input, slash_catalog);
     if !suggestions.is_empty() {
+        let total = slash_catalog.len();
         lines.push(Line::from(vec![
+            Span::styled("▌ Slash commands", theme::accent_style()),
             Span::styled(
-                "Slash commands",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "  Tab completes / type to filter",
-                Style::default().fg(Color::DarkGray),
+                format!(
+                    "  {} of {total}  Tab completes / Enter runs / Esc closes",
+                    suggestions.len()
+                ),
+                theme::dim_style(),
             ),
         ]));
         lines.extend(suggestions.into_iter().map(|suggestion| {
-            let prefix = if suggestion.exact_prefix { ">" } else { " " };
+            let prefix = if suggestion.exact_prefix { "▸" } else { " " };
             Line::from(vec![
-                Span::styled(prefix, Style::default().fg(Color::Green)),
+                Span::styled(prefix, Style::default().fg(theme::sage())),
                 Span::raw(" "),
-                Span::styled(
-                    suggestion.usage.to_owned(),
-                    Style::default()
-                        .fg(Color::LightCyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(suggestion.usage.to_owned(), theme::accent_style()),
                 Span::styled(
                     format!(" [{}]", suggestion.category),
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(theme::amber()),
                 ),
-                Span::styled(
-                    format!("  {}", suggestion.summary),
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled(format!("  {}", suggestion.summary), theme::dim_style()),
             ])
         }));
     }
@@ -87,8 +76,8 @@ pub fn render_search_lines(
     selected_match: Option<usize>,
 ) -> Vec<Line<'static>> {
     let mut lines = vec![Line::from(vec![
-        Span::styled("/", Style::default().fg(Color::Cyan)),
-        Span::styled(query.to_owned(), Style::default().fg(Color::White)),
+        Span::styled("▌ /", theme::accent_style()),
+        Span::styled(query.to_owned(), theme::primary_style()),
     ])];
     let summary = if query.trim().is_empty() {
         "Type to search transcript".to_owned()
@@ -100,11 +89,8 @@ pub fn render_search_lines(
         format!("{match_count} matches")
     };
     lines.push(Line::from(vec![
-        Span::styled(summary, Style::default().fg(Color::DarkGray)),
-        Span::styled(
-            "  Ctrl-N next / Ctrl-P previous",
-            Style::default().fg(Color::DarkGray),
-        ),
+        Span::styled(summary, theme::dim_style()),
+        Span::styled("  Ctrl-N next / Ctrl-P previous", theme::dim_style()),
     ]));
     lines
 }
@@ -146,25 +132,35 @@ fn slash_suggestion_rows<'a>(
         .split_whitespace()
         .next()
         .unwrap_or("");
-    let exact_matches = slash_catalog
-        .iter()
-        .filter(|hint| hint.name.starts_with(prefix))
-        .collect::<Vec<_>>();
-    let candidates = if exact_matches.is_empty() {
-        slash_catalog.iter().collect::<Vec<_>>()
-    } else {
-        exact_matches
-    };
-    let mut suggestions = candidates
+    let query = prefix.to_lowercase();
+    let mut suggestions = slash_catalog
         .iter()
         .filter_map(|hint| {
-            let exact_prefix = hint.name.starts_with(prefix);
-            if exact_prefix || hint.summary.to_lowercase().contains(&prefix.to_lowercase()) {
+            let name = hint.name.to_lowercase();
+            let usage = hint.usage.to_lowercase();
+            let summary = hint.summary.to_lowercase();
+            let exact_prefix = name.starts_with(&query);
+            let fuzzy = fuzzy_subsequence_score(&query, &name)
+                .or_else(|| fuzzy_subsequence_score(&query, &usage))
+                .or_else(|| {
+                    (query.chars().count() > 1)
+                        .then(|| fuzzy_subsequence_score(&query, &summary))
+                        .flatten()
+                });
+            if exact_prefix
+                || fuzzy.is_some()
+                || (query.chars().count() > 1 && summary.contains(&query))
+            {
                 Some(SlashSuggestion {
                     usage: &hint.usage,
                     summary: &hint.summary,
                     category: &hint.category,
                     exact_prefix,
+                    score: if exact_prefix {
+                        0
+                    } else {
+                        fuzzy.unwrap_or(500)
+                    },
                 })
             } else {
                 None
@@ -174,6 +170,7 @@ fn slash_suggestion_rows<'a>(
     suggestions.sort_by_key(|hint| {
         (
             !hint.exact_prefix,
+            hint.score,
             hint.usage.split_whitespace().next().unwrap_or("").len(),
             hint.category,
             hint.usage,
@@ -187,8 +184,23 @@ fn slash_suggestion_rows<'a>(
             summary: hint.summary,
             category: hint.category,
             exact_prefix: hint.exact_prefix,
+            score: hint.score,
         })
         .collect()
+}
+
+fn fuzzy_subsequence_score(query: &str, candidate: &str) -> Option<usize> {
+    if query.is_empty() {
+        return Some(0);
+    }
+    let mut score = 0;
+    let mut cursor = 0;
+    for needle in query.chars() {
+        let found = candidate[cursor..].find(needle)?;
+        score += found;
+        cursor += found + needle.len_utf8();
+    }
+    Some(score)
 }
 
 pub fn input_cursor_position(input: &str, input_cursor: usize, area: Rect) -> Position {
@@ -262,10 +274,7 @@ mod tests {
         let lines = render_input_lines("", &[]);
 
         assert_eq!(lines[0].to_string(), "Type a prompt or /command...");
-        assert_eq!(
-            lines[0].spans[0].style.fg,
-            Some(ratatui::style::Color::DarkGray)
-        );
+        assert_eq!(lines[0].spans[0].style.fg, Some(crate::theme::dim()));
     }
 
     #[test]
@@ -293,15 +302,15 @@ mod tests {
             .join("\n");
 
         assert!(rendered.contains("Slash commands"));
-        assert!(rendered.contains("> /run <prompt> [Run]  Run an audited prompt."));
-        assert!(rendered.contains("> /receipt latest [Evidence]  Show latest receipt."));
+        assert!(rendered.contains("▸ /run <prompt> [Run]  Run an audited prompt."));
+        assert!(rendered.contains("▸ /receipt latest [Evidence]  Show latest receipt."));
     }
 
     #[test]
     fn search_rendering_shows_query_and_match_count() {
         let lines = render_search_lines("cargo", 3, Some(1));
 
-        assert_eq!(lines[0].to_string(), "/cargo");
+        assert_eq!(lines[0].to_string(), "▌ /cargo");
         assert!(lines[1].to_string().contains("Match 2 of 3"));
     }
 

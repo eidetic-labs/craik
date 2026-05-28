@@ -4,6 +4,7 @@ mod backend;
 mod gateway_events;
 mod input;
 mod render;
+mod theme;
 mod transcript;
 
 use app::{InteractiveApp, LoopAction};
@@ -23,7 +24,7 @@ use ratatui::{
     Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Padding, Paragraph, Wrap},
 };
@@ -134,6 +135,7 @@ fn main() -> anyhow::Result<()> {
             Paragraph::new(rendered.clone()).block(
                 Block::default()
                     .title("Craik Gateway")
+                    .border_style(theme::mute_style())
                     .borders(Borders::ALL),
             ),
             frame.area(),
@@ -232,7 +234,13 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
                 backend_connected: app.backend_connected,
             },
         ))
-        .block(Block::default().title("Activity").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("Activity")
+                .title_style(theme::accent_style())
+                .border_style(theme::mute_style())
+                .borders(Borders::LEFT),
+        )
         .wrap(Wrap { trim: false });
         frame.render_widget(activity, side[0]);
 
@@ -240,7 +248,9 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             .block(
                 Block::default()
                     .title("Run provenance  Ctrl-J/K select  Ctrl-L filter")
-                    .borders(Borders::ALL),
+                    .title_style(theme::accent_style())
+                    .border_style(theme::mute_style())
+                    .borders(Borders::LEFT),
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(provenance, side[1]);
@@ -251,6 +261,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             .block(
                 Block::default()
                     .title("Help  Esc closes")
+                    .title_style(theme::accent_style())
+                    .border_style(theme::mute_style())
                     .borders(Borders::ALL)
                     .padding(Padding::horizontal(1)),
             )
@@ -262,9 +274,11 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let input_block = Block::default()
         .title(Line::from(vec![Span::styled(
             input_title,
-            Style::default().add_modifier(Modifier::BOLD),
+            theme::accent_style(),
         )]))
-        .borders(Borders::ALL)
+        .borders(Borders::LEFT)
+        .border_style(Style::default().fg(theme::accent()))
+        .style(theme::surface_style())
         .padding(Padding::horizontal(1));
     let input_inner = input_block.inner(vertical[1]);
     let mut input_lines = if app.search_active {
@@ -282,15 +296,14 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             input_lines.push(Line::from(Span::styled(
                 "Readiness",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::amber())
                     .add_modifier(Modifier::BOLD),
             )));
-            input_lines.extend(context.lines().map(|line| {
-                Line::from(Span::styled(
-                    format!("  {line}"),
-                    Style::default().fg(Color::DarkGray),
-                ))
-            }));
+            input_lines.extend(
+                context
+                    .lines()
+                    .map(|line| Line::from(Span::styled(format!("  {line}"), theme::dim_style()))),
+            );
         }
     }
     let input = Paragraph::new(input_lines)
@@ -373,7 +386,9 @@ fn render_transcript_panel(
                 transcript_height,
                 area.width,
             ))
-            .borders(Borders::ALL),
+            .title_style(theme::accent_style())
+            .border_style(theme::mute_style())
+            .borders(Borders::LEFT),
     )
     .scroll((
         offset.saturating_sub(transcript_render_window_start(offset)),
@@ -526,7 +541,7 @@ mod tests {
         assert!(rendered.contains("Activity"));
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Review the plan"));
-        assert!(rendered.contains("Craik"));
+        assert!(rendered.contains("default"));
     }
 
     #[test]
