@@ -218,7 +218,10 @@ impl InteractiveApp {
             .or(approval.command.as_deref())
             .or(approval.tool.as_deref())
             .unwrap_or("target unavailable");
-        Some(format!("{position}/{total} {} -> {subject}", approval.id))
+        Some(format!(
+            "{position}/{total} pending - {} -> {subject}",
+            approval.id
+        ))
     }
 
     pub(crate) fn selected_approval_preview(&self) -> Option<String> {
@@ -466,7 +469,7 @@ impl InteractiveApp {
                 }
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
-                    "Approval requested",
+                    "Approval pending",
                     &approval.request_text(),
                 ));
                 self.follow_tail_after_transcript_update();
@@ -874,13 +877,15 @@ impl PendingApproval {
 
     fn request_text(&self) -> String {
         format!(
-            "{}\nActions: Ctrl-A approve / Ctrl-X deny · Ctrl-N/Ctrl-P select",
+            "{}\nActions: Ctrl-A approve / Ctrl-X deny / Ctrl-N Ctrl-P select",
             self.preview_text()
         )
     }
 
     fn preview_text(&self) -> String {
         let mut lines = vec![
+            "Review required".to_owned(),
+            "State: pending".to_owned(),
             format!(
                 "ID: {}",
                 if self.id.is_empty() {
@@ -1097,7 +1102,7 @@ mod tests {
         assert_eq!(app.latest_pending_approval(), Some("approval_edit_123"));
         assert_eq!(
             app.selected_approval_summary().as_deref(),
-            Some("1/1 approval_edit_123 -> src/lib.rs")
+            Some("1/1 pending - approval_edit_123 -> src/lib.rs")
         );
         assert!(
             app.selected_approval_preview()
@@ -1105,7 +1110,9 @@ mod tests {
                 .contains("Risk: writes source files")
         );
         let entry = app.transcript.last().expect("approval transcript entry");
-        assert_eq!(entry.title, "Approval requested");
+        assert_eq!(entry.title, "Approval pending");
+        assert!(entry.body.contains("Review required"));
+        assert!(entry.body.contains("State: pending"));
         assert!(entry.body.contains("ID: approval_edit_123"));
         assert!(entry.body.contains("Request: Edit src/lib.rs?"));
         assert!(entry.body.contains("Tool: Edit"));
@@ -1149,7 +1156,7 @@ mod tests {
         assert_eq!(app.latest_pending_approval(), Some("approval_bash_2"));
         assert_eq!(
             app.selected_approval_summary().as_deref(),
-            Some("2/2 approval_bash_2 -> cargo test")
+            Some("2/2 pending - approval_bash_2 -> cargo test")
         );
 
         app.select_previous_approval();
@@ -1157,7 +1164,7 @@ mod tests {
         assert_eq!(app.latest_pending_approval(), Some("approval_edit_1"));
         assert_eq!(
             app.selected_approval_summary().as_deref(),
-            Some("1/2 approval_edit_1 -> src/first.rs")
+            Some("1/2 pending - approval_edit_1 -> src/first.rs")
         );
 
         app.deny_selected();
@@ -1215,7 +1222,7 @@ mod tests {
         assert_eq!(app.latest_pending_approval(), Some("approval_one"));
         assert_eq!(
             app.selected_approval_summary().as_deref(),
-            Some("1/1 approval_one -> one.rs")
+            Some("1/1 pending - approval_one -> one.rs")
         );
     }
 
