@@ -69,6 +69,9 @@ pub fn status_line(
     state: &GatewayAppState,
     in_flight: bool,
     pending_approval: Option<&str>,
+    transcript_focused: bool,
+    search_active: bool,
+    details_collapsed: bool,
 ) -> Line<'static> {
     let request_state = if in_flight { "working" } else { "ready" };
     let model = compact_label(model_label(state, "model not selected"), 42);
@@ -96,6 +99,24 @@ pub fn status_line(
         Span::styled(" | ", Style::default().fg(Color::DarkGray)),
         Span::styled("Enter", Style::default().fg(Color::LightGreen)),
         Span::raw(" send"),
+        Span::styled("  Ctrl-F", Style::default().fg(Color::LightBlue)),
+        Span::raw(if search_active {
+            " search active"
+        } else {
+            " search"
+        }),
+        Span::styled("  Ctrl-R", Style::default().fg(Color::LightBlue)),
+        Span::raw(if transcript_focused {
+            " split"
+        } else {
+            " focus"
+        }),
+        Span::styled("  Ctrl-E", Style::default().fg(Color::LightBlue)),
+        Span::raw(if details_collapsed {
+            " expand"
+        } else {
+            " collapse"
+        }),
         if pending_approval.is_some() {
             Span::raw("")
         } else {
@@ -209,7 +230,7 @@ mod tests {
             ..GatewayAppState::default()
         };
 
-        let rendered = status_line(&state, true, None).to_string();
+        let rendered = status_line(&state, true, None, false, false, false).to_string();
 
         assert!(rendered.contains("anthropic/claude-sonnet"));
         assert!(rendered.contains("working"));
@@ -224,7 +245,7 @@ mod tests {
             ..GatewayAppState::default()
         };
 
-        let rendered = status_line(&state, false, None).to_string();
+        let rendered = status_line(&state, false, None, false, false, false).to_string();
 
         assert!(rendered.contains("Anthropic Claude Opus 4.7 Extended Thin..."));
         assert!(!rendered.contains("Thinking Preview"));
@@ -234,10 +255,29 @@ mod tests {
     fn status_line_prioritizes_pending_approval_actions() {
         let state = GatewayAppState::default();
 
-        let rendered = status_line(&state, true, Some("approval_run_edit_123456789")).to_string();
+        let rendered = status_line(
+            &state,
+            true,
+            Some("approval_run_edit_123456789"),
+            false,
+            false,
+            false,
+        )
+        .to_string();
 
         assert!(rendered.contains("Approval approval_run_edit_123..."));
         assert!(rendered.contains("Ctrl-A approve"));
         assert!(rendered.contains("Ctrl-X deny"));
+    }
+
+    #[test]
+    fn status_line_shows_transcript_modes() {
+        let state = GatewayAppState::default();
+
+        let rendered = status_line(&state, false, None, true, true, true).to_string();
+
+        assert!(rendered.contains("Ctrl-F search active"));
+        assert!(rendered.contains("Ctrl-R split"));
+        assert!(rendered.contains("Ctrl-E expand"));
     }
 }

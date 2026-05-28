@@ -66,6 +66,23 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     lines
 }
 
+pub fn render_search_lines(query: &str, match_count: usize) -> Vec<Line<'static>> {
+    let mut lines = vec![Line::from(vec![
+        Span::styled("/", Style::default().fg(Color::Cyan)),
+        Span::styled(query.to_owned(), Style::default().fg(Color::White)),
+    ])];
+    let summary = if query.trim().is_empty() {
+        "Type to search transcript".to_owned()
+    } else {
+        format!("{match_count} matches")
+    };
+    lines.push(Line::from(Span::styled(
+        summary,
+        Style::default().fg(Color::DarkGray),
+    )));
+    lines
+}
+
 #[cfg(test)]
 fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String> {
     slash_suggestion_rows(input, slash_catalog)
@@ -116,7 +133,10 @@ pub fn input_cursor_position(input: &str, input_cursor: usize, area: Rect) -> Po
 
 #[cfg(test)]
 mod tests {
-    use super::{SlashHint, input_cursor_position, render_input_lines, slash_suggestions};
+    use super::{
+        SlashHint, input_cursor_position, render_input_lines, render_search_lines,
+        slash_suggestions,
+    };
     use ratatui::layout::Rect;
 
     #[test]
@@ -195,5 +215,13 @@ mod tests {
         assert!(rendered.contains("Suggestions"));
         assert!(rendered.contains("  /run <prompt>  Run an audited prompt."));
         assert!(rendered.contains("  /receipt latest  Show latest receipt."));
+    }
+
+    #[test]
+    fn search_rendering_shows_query_and_match_count() {
+        let lines = render_search_lines("cargo", 3);
+
+        assert_eq!(lines[0].to_string(), "/cargo");
+        assert_eq!(lines[1].to_string(), "3 matches");
     }
 }

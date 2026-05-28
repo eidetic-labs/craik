@@ -20,6 +20,10 @@ pub(crate) struct InteractiveApp {
     pub(crate) input_cursor: usize,
     pub(crate) transcript: Vec<TranscriptEntry>,
     pub(crate) transcript_scroll: u16,
+    pub(crate) transcript_focused: bool,
+    pub(crate) expand_transcript_details: bool,
+    pub(crate) search_active: bool,
+    pub(crate) search_query: String,
     backend: BackendSession,
     pub(crate) in_flight: bool,
     pub(crate) last_error: Option<String>,
@@ -45,6 +49,10 @@ impl InteractiveApp {
                 ),
             ],
             transcript_scroll: 0,
+            transcript_focused: false,
+            expand_transcript_details: true,
+            search_active: false,
+            search_query: String::new(),
             backend,
             in_flight: false,
             last_error: None,
@@ -78,6 +86,10 @@ impl InteractiveApp {
             input_cursor: 0,
             transcript: Vec::new(),
             transcript_scroll: 0,
+            transcript_focused: false,
+            expand_transcript_details: true,
+            search_active: false,
+            search_query: String::new(),
             backend: BackendSession::for_test(receiver),
             in_flight: false,
             last_error: None,
@@ -182,6 +194,9 @@ impl InteractiveApp {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
+        if self.search_active {
+            return self.handle_search_key(key);
+        }
         match key.code {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.in_flight {
@@ -198,6 +213,19 @@ impl InteractiveApp {
             }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.deny_latest();
+                LoopAction::Continue
+            }
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.search_active = true;
+                LoopAction::Continue
+            }
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.transcript_focused = !self.transcript_focused;
+                LoopAction::Continue
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.expand_transcript_details = !self.expand_transcript_details;
+                self.transcript_scroll = 0;
                 LoopAction::Continue
             }
             KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
@@ -229,11 +257,19 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Home => {
-                self.move_cursor_home();
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.scroll_transcript_top();
+                } else {
+                    self.move_cursor_home();
+                }
                 LoopAction::Continue
             }
             KeyCode::End => {
-                self.move_cursor_end();
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.scroll_transcript_bottom();
+                } else {
+                    self.move_cursor_end();
+                }
                 LoopAction::Continue
             }
             KeyCode::PageUp => {
@@ -258,6 +294,32 @@ impl InteractiveApp {
             }
             _ => LoopAction::Continue,
         }
+    }
+
+    fn handle_search_key(&mut self, key: KeyEvent) -> LoopAction {
+        match key.code {
+            KeyCode::Esc => {
+                self.search_active = false;
+            }
+            KeyCode::Enter => {
+                self.search_active = false;
+            }
+            KeyCode::Backspace => {
+                self.search_query.pop();
+            }
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {}
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.next_search_match();
+            }
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.previous_search_match();
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.search_query.push(ch);
+            }
+            _ => {}
+        }
+        LoopAction::Continue
     }
 
     fn record_event(&mut self, event: &GatewayEvent) {
@@ -305,7 +367,7 @@ impl InteractiveApp {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
                     self.transcript
                         .push(TranscriptEntry::progress("Progress", message));
-                    self.transcript_scroll = 0;
+                    self.follow_tail_after_transcript_update();
                 }
             }
             "tool.used" => {
@@ -323,7 +385,7 @@ impl InteractiveApp {
                     let text = summarize_tool_event(event, message);
                     self.transcript
                         .push(TranscriptEntry::new(kind, tool, &text));
-                    self.transcript_scroll = 0;
+                    self.follow_tail_after_transcript_update();
                 }
             }
             "file.changed" => {
@@ -343,7 +405,7 @@ impl InteractiveApp {
                     target,
                     &format!("Path: {target}\nSummary: {text}"),
                 ));
-                self.transcript_scroll = 0;
+                self.follow_tail_after_transcript_update();
             }
             "approval.requested" => {
                 let approval_id = event
@@ -377,7 +439,7 @@ impl InteractiveApp {
                         message
                     ),
                 ));
-                self.transcript_scroll = 0;
+                self.follow_tail_after_transcript_update();
             }
             "approval.resolved" => {
                 let approval_id = event
@@ -427,7 +489,7 @@ impl InteractiveApp {
                 if let Some(summary) = event.data.get("summary").and_then(|value| value.as_str()) {
                     self.transcript
                         .push(TranscriptEntry::assistant("Assistant", summary));
-                    self.transcript_scroll = 0;
+                    self.follow_tail_after_transcript_update();
                 }
             }
             "run.event" => {
@@ -443,7 +505,7 @@ impl InteractiveApp {
                     };
                     self.transcript
                         .push(TranscriptEntry::new(kind, "Event", text));
-                    self.transcript_scroll = 0;
+                    self.follow_tail_after_transcript_update();
                 }
             }
             "run.completed" => {
@@ -460,20 +522,20 @@ impl InteractiveApp {
                         "The Gateway reported completion before any assistant output event arrived.",
                     ));
                 }
-                self.transcript_scroll = 0;
+                self.follow_tail_after_transcript_update();
             }
             "slash.completed" => {
                 let text = summarize_slash_output(event)
                     .unwrap_or_else(|| "Slash command completed.".to_owned());
                 self.transcript
                     .push(TranscriptEntry::system("Slash command", &text));
-                self.transcript_scroll = 0;
+                self.follow_tail_after_transcript_update();
             }
             "error" => {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
                     self.transcript
                         .push(TranscriptEntry::error("Gateway error", message));
-                    self.transcript_scroll = 0;
+                    self.follow_tail_after_transcript_update();
                 }
             }
             _ => {}
@@ -555,6 +617,49 @@ impl InteractiveApp {
 
     pub(crate) fn scroll_transcript_down(&mut self) {
         self.transcript_scroll = self.transcript_scroll.saturating_sub(4);
+    }
+
+    pub(crate) fn scroll_transcript_top(&mut self) {
+        self.transcript_scroll = u16::MAX;
+    }
+
+    pub(crate) fn scroll_transcript_bottom(&mut self) {
+        self.transcript_scroll = 0;
+    }
+
+    fn follow_tail_after_transcript_update(&mut self) {
+        if self.transcript_scroll == 0 {
+            self.scroll_transcript_bottom();
+        }
+    }
+
+    pub(crate) fn next_search_match(&mut self) {
+        if self.search_query.trim().is_empty() {
+            return;
+        }
+        if let Some(lines_after) = self
+            .transcript
+            .iter()
+            .rev()
+            .find(|entry| entry_matches_search(entry, &self.search_query))
+            .map(|entry| line_count_after_entry(&self.transcript, entry))
+        {
+            self.transcript_scroll = lines_after;
+        }
+    }
+
+    pub(crate) fn previous_search_match(&mut self) {
+        if self.search_query.trim().is_empty() {
+            return;
+        }
+        if let Some(lines_after) = self
+            .transcript
+            .iter()
+            .find(|entry| entry_matches_search(entry, &self.search_query))
+            .map(|entry| line_count_after_entry(&self.transcript, entry))
+        {
+            self.transcript_scroll = lines_after;
+        }
     }
 
     fn dispatch_next_queued(&mut self) {
@@ -665,6 +770,29 @@ fn summarize_tool_event(event: &GatewayEvent, fallback_message: &str) -> String 
     }
     lines.push(format!("Detail: {fallback_message}"));
     lines.join("\n")
+}
+
+fn entry_matches_search(entry: &TranscriptEntry, query: &str) -> bool {
+    let query = query.to_lowercase();
+    !query.trim().is_empty()
+        && (entry.title.to_lowercase().contains(&query)
+            || entry.body.to_lowercase().contains(&query))
+}
+
+fn line_count_after_entry(entries: &[TranscriptEntry], target: &TranscriptEntry) -> u16 {
+    let mut found = false;
+    let mut count = 0usize;
+    for entry in entries {
+        if std::ptr::eq(entry, target) {
+            found = true;
+            count = 0;
+            continue;
+        }
+        if found {
+            count += entry.body.lines().count().max(1) + 2;
+        }
+    }
+    count.min(u16::MAX as usize) as u16
 }
 
 #[cfg(test)]
@@ -846,5 +974,44 @@ mod tests {
         assert_eq!(action, LoopAction::Continue);
         assert!(app.input.is_empty());
         assert_eq!(app.input_cursor, 0);
+    }
+
+    #[test]
+    fn ctrl_f_enters_search_mode_and_escape_exits_it() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
+        assert!(app.search_active);
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert!(!app.search_active);
+        assert_eq!(app.search_query, "r");
+    }
+
+    #[test]
+    fn ctrl_r_toggles_transcript_focus() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+
+        assert!(app.transcript_focused);
+    }
+
+    #[test]
+    fn incoming_transcript_events_do_not_reset_scrolled_back_view() {
+        let event = GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({"message": "still working"}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript_scroll = 12;
+
+        app.record_event(&event);
+
+        assert_eq!(app.transcript_scroll, 12);
     }
 }

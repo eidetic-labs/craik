@@ -16,10 +16,9 @@ use craik_tui_rs::{
 };
 use crossterm::{
     event::{self, Event, KeyEventKind},
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
-use input::{input_cursor_position, render_input_lines};
+use input::{input_cursor_position, render_input_lines, render_search_lines};
 use ratatui::{
     Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
@@ -34,7 +33,10 @@ use std::{
     io::{self, IsTerminal},
     time::Duration,
 };
-use transcript::{render_transcript_lines, transcript_scroll_offset};
+use transcript::{
+    TranscriptRenderOptions, render_transcript_lines, search_match_count, transcript_line_count,
+    transcript_scroll_offset,
+};
 
 fn main() -> anyhow::Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -144,13 +146,12 @@ fn main() -> anyhow::Result<()> {
 
 fn run_interactive_app() -> anyhow::Result<()> {
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
     let result = run_interactive_loop(&mut terminal);
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     result
 }
@@ -187,59 +188,158 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             Constraint::Length(1),
         ])
         .split(area);
-    let body = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
-        .split(vertical[0]);
+    let transcript_options = TranscriptRenderOptions {
+        expand_details: app.expand_transcript_details,
+        search_query: active_search_query(app),
+    };
 
-    let transcript_height = body[0].height.saturating_sub(2);
-    let transcript = Paragraph::new(render_transcript_lines(&app.transcript))
-        .block(Block::default().title("Transcript").borders(Borders::ALL))
-        .scroll((
-            transcript_scroll_offset(&app.transcript, app.transcript_scroll, transcript_height),
-            0,
+    if app.transcript_focused {
+        render_transcript_panel(frame, app, vertical[0], &transcript_options);
+    } else {
+        let body = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(68), Constraint::Percentage(32)])
+            .split(vertical[0]);
+        render_transcript_panel(frame, app, body[0], &transcript_options);
+
+        let activity = Paragraph::new(render_activity_panel(
+            &app.state,
+            ActivityMetrics {
+                slash_commands: app.slash_catalog.len(),
+                queued_inputs: app.queued_inputs.len(),
+                last_error: app.last_error.as_deref(),
+                pending_approvals: app.pending_approval_count(),
+                latest_pending_approval: app.latest_pending_approval(),
+            },
         ))
+        .block(Block::default().title("Activity").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
-    frame.render_widget(transcript, body[0]);
+        frame.render_widget(activity, body[1]);
+    }
 
-    let activity = Paragraph::new(render_activity_panel(
-        &app.state,
-        ActivityMetrics {
-            slash_commands: app.slash_catalog.len(),
-            queued_inputs: app.queued_inputs.len(),
-            last_error: app.last_error.as_deref(),
-            pending_approvals: app.pending_approval_count(),
-            latest_pending_approval: app.latest_pending_approval(),
-        },
-    ))
-    .block(Block::default().title("Activity").borders(Borders::ALL))
-    .wrap(Wrap { trim: false });
-    frame.render_widget(activity, body[1]);
-
+    let input_title = if app.search_active {
+        "Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel"
+    } else {
+        "Prompt  Enter sends / Alt-Enter newline"
+    };
     let input_block = Block::default()
         .title(Line::from(vec![Span::styled(
-            "Prompt  Enter sends / Alt-Enter newline",
+            input_title,
             Style::default().add_modifier(Modifier::BOLD),
         )]))
         .borders(Borders::ALL)
         .padding(Padding::horizontal(1));
     let input_inner = input_block.inner(vertical[1]);
-    let input = Paragraph::new(render_input_lines(&app.input, &app.slash_catalog))
+    let input_lines = if app.search_active {
+        render_search_lines(
+            &app.search_query,
+            search_match_count(&app.transcript, &app.search_query),
+        )
+    } else {
+        render_input_lines(&app.input, &app.slash_catalog)
+    };
+    let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
     frame.render_widget(input, vertical[1]);
-    frame.set_cursor_position(input_cursor_position(
-        &app.input,
-        app.input_cursor,
-        input_inner,
-    ));
+    if app.search_active {
+        frame.set_cursor_position(input_cursor_position(
+            &app.search_query,
+            app.search_query.len(),
+            input_inner,
+        ));
+    } else {
+        frame.set_cursor_position(input_cursor_position(
+            &app.input,
+            app.input_cursor,
+            input_inner,
+        ));
+    }
 
     let footer = Paragraph::new(status_line(
         &app.state,
         app.in_flight,
         app.latest_pending_approval(),
+        app.transcript_focused,
+        app.search_active,
+        !app.expand_transcript_details,
     ));
     frame.render_widget(footer, vertical[2]);
+}
+
+fn render_transcript_panel(
+    frame: &mut Frame<'_>,
+    app: &InteractiveApp,
+    area: ratatui::layout::Rect,
+    options: &TranscriptRenderOptions<'_>,
+) {
+    let transcript_height = area.height.saturating_sub(2);
+    let transcript = Paragraph::new(render_transcript_lines(&app.transcript, options))
+        .block(
+            Block::default()
+                .title(transcript_title(app, options, transcript_height))
+                .borders(Borders::ALL),
+        )
+        .scroll((
+            transcript_scroll_offset(
+                &app.transcript,
+                options,
+                app.transcript_scroll,
+                transcript_height,
+            ),
+            0,
+        ))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(transcript, area);
+}
+
+fn transcript_title(
+    app: &InteractiveApp,
+    options: &TranscriptRenderOptions<'_>,
+    visible_height: u16,
+) -> Line<'static> {
+    let total = transcript_line_count(&app.transcript, options);
+    let offset = transcript_scroll_offset(
+        &app.transcript,
+        options,
+        app.transcript_scroll,
+        visible_height,
+    );
+    let top = if total == 0 {
+        0
+    } else {
+        offset.saturating_add(1)
+    };
+    let bottom = offset.saturating_add(visible_height).min(total);
+    let search_count = search_match_count(&app.transcript, &app.search_query);
+    let detail_mode = if app.expand_transcript_details {
+        "expanded"
+    } else {
+        "collapsed"
+    };
+    let tail_mode = if app.transcript_scroll == 0 {
+        "following"
+    } else {
+        "scrolled back"
+    };
+    let focus_mode = if app.transcript_focused {
+        "focused"
+    } else {
+        "split"
+    };
+    let search = if active_search_query(app).is_some() {
+        format!(" | Search: {} matches", search_count)
+    } else {
+        String::new()
+    };
+    Line::from(format!(
+        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}"
+    ))
+}
+
+fn active_search_query(app: &InteractiveApp) -> Option<&str> {
+    let query = app.search_query.trim();
+    (!query.is_empty()).then_some(query)
 }
 
 fn render_replay(path: &str) -> anyhow::Result<String> {
