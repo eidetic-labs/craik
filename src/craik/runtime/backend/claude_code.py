@@ -111,7 +111,7 @@ class ClaudeCodeExecution:
 
 
 class ClaudeCodeInterrupted(RuntimeError):
-    """Raised when the operator interrupts a Claude Code run."""
+    """Raised when the operator interrupts a local Claude run."""
 
 
 @contextmanager
@@ -150,7 +150,7 @@ def execute_claude_code_run(
 ) -> dict[str, object]:
     store = LocalStore.from_env(env)
     try:
-        _emit_claude_code_progress("Preparing audited Claude Code run.")
+        _emit_claude_code_progress("Preparing audited model run.")
         store.initialize()
         project = _project_for_cwd(store)
         if require_operator_approval:
@@ -311,7 +311,7 @@ def execute_claude_code_run(
             final_run.id,
             agent="runner:claude-code",
             commands_run=[_claude_code_command_summary(env)],
-            tests_run=["Claude Code backend executed from the TUI"],
+            tests_run=["Local Anthropic CLI run executed from the TUI"],
         )
         final_run = store.get_task_run(final_run.id) or final_run
         return {
@@ -433,7 +433,7 @@ def _execute_claude_code_prompt(
         _set_claude_code_process(None)
     output = "\n".join(part for part in output_parts if part.strip()).strip()
     if cancel_event is not None and cancel_event.is_set():
-        raise ClaudeCodeInterrupted("Claude Code run interrupted by operator.")
+        raise ClaudeCodeInterrupted("Audited run interrupted by operator.")
     if return_code != 0:
         detail = _safe_cli_detail(output)
         raise RuntimeError("Claude Code prompt failed" + (f": {detail}" if detail else ""))

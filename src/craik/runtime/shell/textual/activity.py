@@ -90,8 +90,8 @@ class CraikAppActivityMixin:
             self.env[CLAUDE_CODE_RUN_APPROVED_ENV] = "1"
             self._claude_code_approval_inflight = True
             self._write_transcript(
-                "Claude Code run authority approved for this TUI dispatch.",
-                plain_text="Claude Code run authority approved for this TUI dispatch.",
+                "Audited run authority approved for this TUI dispatch.",
+                plain_text="Audited run authority approved for this TUI dispatch.",
             )
         self._submit_text(request.command_text, skip_confirmation=True)
 

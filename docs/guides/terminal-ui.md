@@ -110,7 +110,7 @@ The TUI uses slash commands as the primary operator control surface:
 /model list
 /model set openai/gpt-4o-mini
 /mode acceptEdits
-/run --backend claude-code Update the docs
+/run Update the docs
 /run list
 /run inspect <run-or-task-id>
 /run timeline <run-or-task-id>
@@ -147,20 +147,15 @@ without the slash, such as `provider`, Craik shows a toast with
 `/mcp verbose` to inspect policy, receipt, redaction, and advertised tool
 metadata, or add `--json` when another tool needs structured output.
 
-Use `/run --backend claude-code <prompt>` to create a Craik task, case file,
-run, output record, receipt, and handoff while delegating execution to the
-local Claude Code CLI with the default Claude Code tool set enabled. The
-backend uses the active `/model set ...` selector for `opus`, `sonnet`, or
-`haiku`, and honors the current Claude permission mode shown in the footer.
-Before the run starts, the TUI asks for one-time authority to read the
-repository, write documentation files, write Craik receipts/handoffs, and run
-verification commands. Approving creates an `approval.decide` receipt attached
-to the run; denying stops before a task is created. Non-interactive dispatch
-must set `CRAIK_CLAUDE_CODE_RUN_APPROVED=1` deliberately or the backend
-rejects the Claude Code run.
+Use `/run <prompt>` to create a Craik task, case file, run, output record,
+receipt, and handoff through the audited Gateway path. The Gateway uses the
+active `/model set ...` selector and chooses the configured provider runtime.
+When the active Anthropic profile uses local Claude CLI authentication, Craik
+delegates execution to the local `claude` binary and honors the current Claude
+permission mode shown in the footer.
 
 Raw prompts and `/run <prompt>` now enter the same audited Gateway session
-path used by `craik run prompt <prompt>` and `craik tui-backend --jsonl`.
+path used by `craik run <prompt>` and `craik tui-backend --jsonl`.
 The Gateway emits lifecycle events for prompt submission, model/profile
 selection, run start, progress, receipts, outputs, completion, and errors.
 That keeps the TUI responsive while the backend is working and gives future
@@ -192,28 +187,28 @@ status bar's `Claude <mode>` chip and the activity panel header:
 | `plan` | Claude Code plans without writing or executing — useful for previewing intent. |
 | `auto` | Claude Code proceeds through edits and tool calls without per-call prompts. |
 
-Plan mode asks Claude Code to plan without editing; switch to Accept Edits or
-Auto before `/run --backend claude-code ...` when you want it to modify files.
-During execution the TUI streams Claude Code progress events into the
-transcript, including assistant text, tool-use markers, tool targets, and
-permission-denial summaries. Craik also persists the raw Claude Code stream
-events, parsed progress events, structured tool events, changed-file targets,
-commands, permission denials, and runtime approval requests in the run output
-so failures can be inspected later. Diff-like tool output highlights added,
-removed, and hunk lines in the transcript. Use `/run list` and
+Plan mode asks Claude to plan without editing; switch to Accept Edits or Auto
+before `/run ...` when you want it to modify files. During execution the TUI
+streams model progress events into the transcript, including assistant text,
+tool-use markers, tool targets, and permission-denial summaries. Craik also
+persists the raw model stream events, parsed progress events, structured tool
+events, changed-file targets, commands, permission denials, and runtime
+approval requests in the run output so failures can be inspected later.
+Diff-like tool output highlights added, removed, and hunk lines in the
+transcript. Use `/run list` and
 `/run inspect <run-or-task-id>` to review the recorded run state, outputs,
 receipts, and activity summary after execution.
-If Claude Code emits a runtime approval-request event, Craik records and
+If the model runtime emits a runtime approval-request event, Craik records and
 displays it as activity without opening a second Craik modal. The local Claude
-Code `-p` stream path does not provide a reliable channel for Craik to send a
-modal decision back into the same subprocess, so mid-run approval events remain
+CLI stream path does not provide a reliable channel for Craik to send a modal
+decision back into the same subprocess, so mid-run approval events remain
 observational. Use `/mode acceptEdits` or `/mode auto` before starting the run
-when you want Claude Code to proceed through edits with fewer native prompts.
+when you want Claude to proceed through edits with fewer native prompts.
 While a run is active, the input remains available. Submitting another prompt
 queues it and shows the queue count in the activity panel; Craik dispatches
 the next queued item after the active run completes. Use `/run timeline
 <run-or-task-id>` for a chronological event view.
-Press `Ctrl+C` while a Claude Code run is active to request interruption. Craik
+Press `Ctrl+C` while an audited run is active to request interruption. Craik
 terminates the active Claude subprocess, records the run as `interrupted`, and
 persists an interruption receipt/handoff summary. `/stop` and `/interrupt`
 also request interruption when the composer is available, but `Ctrl+C` is the
@@ -310,7 +305,7 @@ and `Esc` returns focus to the prompt. Search is current-session only.
 | `Ctrl+R` | Open reverse history search above the input region. |
 | `Ctrl+G` | Open the current input buffer in `$EDITOR`. |
 | `Ctrl+X` then `Ctrl+E` | Emacs-style chord that also opens `$EDITOR` on the current input. |
-| `Ctrl+C` | Interrupt the active run (Claude Code run or model prompt). |
+| `Ctrl+C` | Interrupt the active run or model prompt. |
 | `Ctrl+Shift+C` or `Ctrl+Y` | Copy the current transcript view to the clipboard. |
 | `Shift+Tab` | Cycle the Claude Code permission mode (default → acceptEdits → plan → auto). |
 | `Shift+Enter`, `Ctrl+J`, `Alt+Enter` | Insert a newline in the input region. |

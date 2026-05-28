@@ -446,7 +446,7 @@ class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
 
     def action_interrupt_run(self) -> None:
         if not self._interrupt_active_claude_code_run():
-            self._toast("No interruptible Claude Code run is active.", severity="information")
+            self._toast("No interruptible audited run is active.", severity="information")
 
     def action_insert_newline(self) -> None:
         input_widget = self.query_one("#input", CraikInput)

@@ -2282,7 +2282,7 @@ Options:
 
 ## `craik run`
 
-Execute, inspect, and recover single-agent task runs.
+Execute, inspect, and recover single-agent task runs. Use `craik run "prompt"` for a direct audited prompt run.
 
 ```text
 craik run COMMAND [ARGS]...

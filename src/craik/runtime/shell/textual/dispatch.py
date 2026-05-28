@@ -38,7 +38,6 @@ from craik.runtime.shell.textual_widgets.status_bar import StatusBar
 from craik.runtime.shell.textual_widgets.toast_queue import ToastQueue, ToastSeverity
 from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicator
 from craik.runtime.shell.transcript_renderers import (
-    render_claude_run_summary,
     render_run_summary,
 )
 from craik.runtime.shell.tui_interactive_prompts import open_interactive_prompt_modal
@@ -98,12 +97,12 @@ class CraikAppDispatchMixin:
             if self._model_prompt_active:
                 self._queue_input(text)
                 return
-            self._run_backend_label = "Claude Code"
+            self._run_backend_label = self._active_model_label()
             self._prepare_active_claude_code_run()
             self._set_working(True)
             self._write_transcript(
-                _claude_progress_markup("Dispatching Claude Code run."),
-                plain_text="Claude Code: Dispatching Claude Code run.",
+                _claude_progress_markup("Dispatching audited run."),
+                plain_text="Audited run: Dispatching audited run.",
             )
         thread = threading.Thread(
             target=self._dispatch_slash_worker,
@@ -201,7 +200,9 @@ class CraikAppDispatchMixin:
         transcript = self.query_one("#transcript", RichLog)
         result = to_slash_command_result(contract_result)
         if _is_claude_code_run_result(contract_result):
-            transcript.write(render_claude_run_summary(contract_result.payload))
+            transcript.write(
+                render_run_summary(contract_result.payload, title="Audited run summary")
+            )
         else:
             transcript.write(format_command_result(contract_result, kind="tui"))
         if result.text.strip():
@@ -220,7 +221,7 @@ class CraikAppDispatchMixin:
         self.call_from_thread(
             self._write_transcript,
             _claude_progress_markup(message),
-            plain_text=f"Claude Code: {message}",
+            plain_text=f"Audited run: {message}",
         )
 
     def _emit_gateway_event(self, event: BackendEvent) -> None:
@@ -293,11 +294,10 @@ class CraikAppDispatchMixin:
             indicator.display = True
             activity.display = True
             self._reset_run_activity()
-            if self._run_backend_label != "Claude Code":
-                self._current_run_phase = "thinking"
-                self._last_run_event = (
-                    f"{self._run_backend_label} is thinking. You can keep typing to queue input."
-                )
+            self._current_run_phase = "thinking"
+            self._last_run_event = (
+                f"{self._run_backend_label} is thinking. You can keep typing to queue input."
+            )
             indicator.set_elapsed(
                 0,
                 backend=self._run_backend_label,

@@ -241,6 +241,7 @@ def _non_response_transcript_line(line: str) -> bool:
     return (
         stripped.startswith(">")
         or stripped.startswith("Queued input #")
+        or stripped.startswith("Audited run:")
         or stripped.startswith("Claude Code:")
         or stripped.startswith("Transcript exported to ")
         or stripped in {"Audited run summary", "Transcript cleared. Receipts remain audited."}
@@ -292,7 +293,7 @@ def _is_audited_run_payload(payload: object) -> bool:
 def _claude_code_run_approval_request(text: str, *, mode: str = "Default") -> ConfirmationRequest:
     posture = _claude_permission_mode_posture(mode)
     message = (
-        "Approve this Claude Code run once?\n\n"
+        "Approve this audited model run once?\n\n"
         f"Current mode: {mode} — {posture}\n\n"
         "- Read repository: .\n"
         "- Write documentation: docs/, README.md, CHANGELOG.md\n"
@@ -302,7 +303,7 @@ def _claude_code_run_approval_request(text: str, *, mode: str = "Default") -> Co
     )
     return ConfirmationRequest(
         text,
-        "Approve Claude Code run authority?",
+        "Approve audited run authority?",
         message,
         confirm_label="Approve once",
         cancel_label="Deny",
@@ -409,4 +410,3 @@ def _claude_permission_mode_posture(mode: str) -> str:
     if normalized == "auto":
         return "Claude Code tools can proceed with minimal interruption."
     return "Claude Code follows its normal tool permission gates."
-

@@ -39,7 +39,7 @@ def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
             capability="receipt.write",
             target=CapabilityTarget(paths=["craik-runtime"]),
             operations=["write"],
-            reason="Allow Craik to persist receipts for the delegated Claude Code run.",
+            reason="Allow Craik to persist receipts for the delegated model run.",
             approved_by="user:tui",
         ),
         CapabilityGrant(
@@ -65,7 +65,7 @@ def _require_claude_code_run_approval(env: dict[str, str] | None) -> None:
     if values.get(CLAUDE_CODE_RUN_APPROVED_ENV) == "1":
         return
     raise ValueError(
-        "Claude Code run requires operator approval for repo.write.docs, "
+        "Audited run requires operator approval for repo.write.docs, "
         "receipt.write, and shell.test. Use the TUI or set "
         f"`{CLAUDE_CODE_RUN_APPROVED_ENV}=1` for a deliberate non-interactive run."
     )
@@ -86,7 +86,7 @@ def _put_claude_code_approval_receipt(
         else "Craik selected Claude Code as the default attested backend for Anthropic marker auth."
     )
     summary = (
-        "Operator approved Claude Code run authority for this task."
+        "Operator approved audited run authority for this task."
         if operator_approved
         else "Craik delegated the task to Claude Code to capture stream provenance."
     )
