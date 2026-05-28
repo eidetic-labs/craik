@@ -8,14 +8,19 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.contracts.models import RunOutput
 from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.provider_events import (
+    model_display_name,
+    provider_default_model,
+    provider_family,
+    provider_tool_call_events,
+)
 from craik.runtime.modeling import ModelProfile, ModelSettingsStore
 from craik.runtime.projects.project_registry import ProjectRegistry
-from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.providers.provider_runner import ProviderBackedRunExecutor
 from craik.runtime.store import LocalStore
 from craik.runtime.work.case_files import CaseFileAssembler
@@ -138,8 +143,8 @@ def execute_prompt(
         CaseFileAssembler(store).build(task.id)
         provider_id, model = active_provider_and_model(env)
         active_profile = active_model_profile(env)
-        provider_family = _provider_family(provider_id)
-        display_name = _model_display_name(
+        selected_provider_family = provider_family(provider_id)
+        display_name = model_display_name(
             provider_id=provider_id,
             model=model,
             profile=active_profile,
@@ -150,7 +155,7 @@ def execute_prompt(
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": model,
                     "display_name": display_name,
                     "profile": active_profile.as_dict() if active_profile is not None else None,
@@ -164,7 +169,7 @@ def execute_prompt(
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": model,
                     "phase": "thinking",
                 },
@@ -176,7 +181,7 @@ def execute_prompt(
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": model,
                     "message": f"{display_name} is preparing an audited provider run.",
                 },
@@ -198,12 +203,12 @@ def execute_prompt(
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": resolved_model,
                 },
             )
         )
-        for event in _provider_tool_call_events(
+        for event in provider_tool_call_events(
             result,
             run_id=result.run.id,
             task_id=task.id,
@@ -216,7 +221,7 @@ def execute_prompt(
                 task_id=task.id,
                 data={
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": resolved_model,
                     "message": (
                         f"{display_name} returned {len(result.provider_results)} "
@@ -241,7 +246,7 @@ def execute_prompt(
                         data={
                             "receipt_id": receipt_id,
                             "provider_id": provider_id,
-                            "provider_family": provider_family,
+                            "provider_family": selected_provider_family,
                         },
                     )
                 )
@@ -253,7 +258,7 @@ def execute_prompt(
                 data={
                     "summary": result.run.stop_reason,
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": resolved_model,
                 },
             )
@@ -266,7 +271,7 @@ def execute_prompt(
                 data={
                     "status": result.run.status,
                     "provider_id": provider_id,
-                    "provider_family": provider_family,
+                    "provider_family": selected_provider_family,
                     "model": resolved_model,
                 },
             )
@@ -352,7 +357,7 @@ def active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | No
         "lm-studio": "provider_local_lm_studio",
         "vllm": "provider_local_vllm",
     }.get(provider_name, provider_name)
-    return provider_id, model or _provider_default_model(provider_id)
+    return provider_id, model or provider_default_model(provider_id)
 
 
 def active_model_profile(env: dict[str, str] | None) -> ModelProfile | None:
@@ -379,69 +384,6 @@ def _title_from_prompt(prompt: str) -> str:
 
 def _clip(value: str, limit: int = 240) -> str:
     return value if len(value) <= limit else f"{value[: limit - 1]}..."
-
-
-def _provider_default_model(provider_id: str) -> str | None:
-    provider = default_model_provider_registry().get(provider_id)
-    if provider is None:
-        return None
-    default_model = provider.metadata.get("default_model")
-    return default_model if isinstance(default_model, str) and default_model else None
-
-
-def _provider_family(provider_id: str) -> str | None:
-    provider = default_model_provider_registry().get(provider_id)
-    if provider is None:
-        return None
-    return provider.provider
-
-
-def _model_display_name(
-    *,
-    provider_id: str,
-    model: str | None,
-    profile: ModelProfile | None,
-) -> str:
-    if profile is not None and profile.display_name:
-        return profile.display_name
-    provider = default_model_provider_registry().get(provider_id)
-    provider_name = provider.name if provider is not None else provider_id
-    return f"{provider_name} {model}" if model else provider_name
-
-
-def _provider_tool_call_events(
-    result: Any,
-    *,
-    run_id: str,
-    task_id: str,
-) -> list[BackendEvent]:
-    events: list[BackendEvent] = []
-    for index, provider_result in enumerate(result.provider_results, start=1):
-        for call in provider_result.tool_calls:
-            if not isinstance(call, dict):
-                continue
-            tool = call.get("name") or call.get("tool") or call.get("type")
-            tool_name = str(tool) if tool else "provider_tool"
-            events.append(
-                BackendEvent(
-                    type="tool.used",
-                    run_id=run_id,
-                    task_id=task_id,
-                    data={
-                        "provider_id": provider_result.provider_id,
-                        "provider_family": provider_result.provider_family,
-                        "model": provider_result.model,
-                        "response_id": provider_result.response_id,
-                        "tool": tool_name,
-                        "target": tool_name,
-                        "message": (
-                            f"{provider_result.provider_family} provider used `{tool_name}` "
-                            f"during step {index}."
-                        ),
-                    },
-                )
-            )
-    return events
 
 
 def _anthropic_marker_uses_claude_code(env: dict[str, str] | None) -> bool:
