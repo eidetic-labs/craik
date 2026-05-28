@@ -368,7 +368,7 @@ impl InteractiveApp {
         LoopAction::Continue
     }
 
-    fn record_event(&mut self, event: &GatewayEvent) {
+    pub(crate) fn record_event(&mut self, event: &GatewayEvent) {
         match event.event_type.as_str() {
             "session.ready" => {
                 self.transcript
