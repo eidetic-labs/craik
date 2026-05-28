@@ -3070,12 +3070,12 @@ mod tests {
     #[test]
     fn tab_completes_visible_slash_command() {
         let mut app = InteractiveApp::for_test_with_messages([]);
-        app.slash_catalog = vec![SlashHint {
-            name: "run".to_owned(),
-            usage: "/run <prompt>".to_owned(),
-            summary: "Run an audited prompt.".to_owned(),
-            category: "Run".to_owned(),
-        }];
+        app.slash_catalog = vec![SlashHint::new(
+            "run",
+            "/run <prompt>",
+            "Run an audited prompt.",
+            "Run",
+        )];
         app.input = "/r".to_owned();
         app.input_cursor = app.input.len();
 

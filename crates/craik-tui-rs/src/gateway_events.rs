@@ -29,8 +29,58 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
                     .and_then(|value| value.as_str())
                     .map(str::to_owned)
                     .unwrap_or_else(|| slash_category(name)),
+                choices: choices_from_object(object),
+                subcommands: subcommands_from_usage(
+                    object
+                        .get("usage")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default(),
+                ),
+                requires_confirmation: object
+                    .get("requires_confirmation")
+                    .or_else(|| object.get("requiresConfirmation"))
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false),
+                current_value: object
+                    .get("current_value")
+                    .or_else(|| object.get("current"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned),
             })
         })
+        .collect()
+}
+
+fn choices_from_object(object: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    let Some(choices) = object.get("choices") else {
+        return Vec::new();
+    };
+    if let Some(array) = choices.as_array() {
+        return array
+            .iter()
+            .filter_map(|value| value.as_str().map(str::to_owned))
+            .collect();
+    }
+    choices
+        .as_object()
+        .into_iter()
+        .flat_map(|items| items.values())
+        .flat_map(|value| value.as_array().into_iter().flatten())
+        .filter_map(|value| value.as_str().map(str::to_owned))
+        .collect()
+}
+
+fn subcommands_from_usage(usage: &str) -> Vec<String> {
+    usage
+        .split(['[', ']', '|'])
+        .flat_map(|chunk| chunk.split_whitespace())
+        .filter(|token| {
+            token
+                .chars()
+                .all(|character| character.is_ascii_alphabetic() || character == '-')
+        })
+        .filter(|token| !matches!(*token, "prompt" | "provider" | "model" | "approval"))
+        .map(str::to_owned)
         .collect()
 }
 
@@ -133,6 +183,8 @@ mod tests {
             data: json!({
                 "commands": [
                     {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt.", "category": "Run"},
+                    {"name": "theme", "usage": "/theme [dark|light|monochrome]", "summary": "Set theme.", "choices": {"theme": ["dark", "light", "monochrome"]}, "current_value": "dark"},
+                    {"name": "logout", "usage": "/logout [profile]", "summary": "Log out.", "requires_confirmation": true},
                     {"name": "status", "usage": "/status", "summary": "Show Gateway status."}
                 ]
             }),
@@ -140,12 +192,15 @@ mod tests {
 
         let hints = slash_hints_from_event(&event);
 
-        assert_eq!(hints.len(), 2);
+        assert_eq!(hints.len(), 4);
         assert_eq!(hints[0].name, "run");
         assert_eq!(hints[0].usage, "/run <prompt>");
         assert_eq!(hints[0].category, "Run");
-        assert_eq!(hints[1].summary, "Show Gateway status.");
-        assert_eq!(hints[1].category, "Session");
+        assert_eq!(hints[1].choices, ["dark", "light", "monochrome"]);
+        assert_eq!(hints[1].current_value.as_deref(), Some("dark"));
+        assert!(hints[2].requires_confirmation);
+        assert_eq!(hints[3].summary, "Show Gateway status.");
+        assert_eq!(hints[3].category, "Session");
     }
 
     #[test]

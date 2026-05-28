@@ -191,6 +191,8 @@ pub fn status_line(
     let mut spans = vec![
         Span::styled(" default ", mode_pill_style("default")),
         Span::raw("  "),
+        Span::styled(theme::mode_label(), theme::mute_style()),
+        Span::raw("  "),
         Span::styled(model, theme::primary_style()),
         Span::raw(" "),
         Span::styled(effort, effort_style(effort)),
