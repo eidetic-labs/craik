@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from craik.cli import app
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.store import AuthProfileStore
+from craik.runtime.backend.claude_code_settings import anthropic_uses_claude_cli_marker
 from craik.runtime.backend.session import (
     active_provider_and_model,
     execute_prompt,
@@ -126,6 +127,32 @@ def test_gateway_model_selection_supports_local_provider_aliases(tmp_path: Path)
     assert settings.active_profile.display_name == "Ollama llama3.2"
     assert live_provider_enabled(env) is True
     assert live_provider_enabled({**env, "CRAIK_FIXTURE": "1"}) is False
+
+
+def test_gateway_repairs_legacy_active_model_without_profile(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    store = ModelSettingsStore.from_env(env)
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text(
+        json.dumps(
+            {
+                "active_model": "anthropic/claude-opus-4-7",
+                "aliases": {},
+                "fallbacks": [],
+                "profiles": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+
+    settings = store.load()
+
+    assert settings.active_profile_id == "anthropic-claude-opus-4-7"
+    assert settings.active_profile is not None
+    assert settings.active_profile.provider_id == "provider_anthropic"
+    assert active_provider_and_model(env) == ("provider_anthropic", "claude-opus-4-7")
+    assert anthropic_uses_claude_cli_marker(env) is True
 
 
 def test_gateway_payload_includes_active_model_profile(tmp_path: Path, monkeypatch) -> None:
