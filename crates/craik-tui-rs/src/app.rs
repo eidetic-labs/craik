@@ -5,7 +5,14 @@ use crate::{
     transcript::{TranscriptEntry, TranscriptKind},
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::VecDeque;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoopAction {
+    Continue,
+    Exit,
+}
 
 pub(crate) struct InteractiveApp {
     pub(crate) state: GatewayAppState,
@@ -161,6 +168,85 @@ impl InteractiveApp {
                     self.state.working_phase = None;
                 }
             }
+        }
+    }
+
+    pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
+        match key.code {
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.in_flight {
+                    self.request_interrupt();
+                    LoopAction::Continue
+                } else {
+                    LoopAction::Exit
+                }
+            }
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => LoopAction::Exit,
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.approve_latest();
+                LoopAction::Continue
+            }
+            KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.deny_latest();
+                LoopAction::Continue
+            }
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.insert_newline();
+                LoopAction::Continue
+            }
+            KeyCode::Enter => {
+                self.submit_input();
+                LoopAction::Continue
+            }
+            KeyCode::Backspace => {
+                self.backspace();
+                LoopAction::Continue
+            }
+            KeyCode::Delete => {
+                self.delete();
+                LoopAction::Continue
+            }
+            KeyCode::Esc => {
+                self.clear_input();
+                LoopAction::Continue
+            }
+            KeyCode::Left => {
+                self.move_cursor_left();
+                LoopAction::Continue
+            }
+            KeyCode::Right => {
+                self.move_cursor_right();
+                LoopAction::Continue
+            }
+            KeyCode::Home => {
+                self.move_cursor_home();
+                LoopAction::Continue
+            }
+            KeyCode::End => {
+                self.move_cursor_end();
+                LoopAction::Continue
+            }
+            KeyCode::PageUp => {
+                self.scroll_transcript_up();
+                LoopAction::Continue
+            }
+            KeyCode::PageDown => {
+                self.scroll_transcript_down();
+                LoopAction::Continue
+            }
+            KeyCode::Up => {
+                self.history_previous();
+                LoopAction::Continue
+            }
+            KeyCode::Down => {
+                self.history_next();
+                LoopAction::Continue
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.insert_char(ch);
+                LoopAction::Continue
+            }
+            _ => LoopAction::Continue,
         }
     }
 
@@ -537,9 +623,10 @@ impl InteractiveApp {
 
 #[cfg(test)]
 mod tests {
-    use super::InteractiveApp;
+    use super::{InteractiveApp, LoopAction};
     use crate::backend::WorkerMessage;
     use craik_tui_rs::GatewayEvent;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
 
     #[test]
@@ -585,5 +672,42 @@ mod tests {
                 .iter()
                 .any(|entry| entry.title == "No model output")
         );
+    }
+
+    #[test]
+    fn ctrl_c_exits_when_idle() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        let action = app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+        assert_eq!(action, LoopAction::Exit);
+    }
+
+    #[test]
+    fn ctrl_c_interrupts_when_request_is_in_flight() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.in_flight = true;
+
+        let action = app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+
+        assert_eq!(action, LoopAction::Continue);
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Interrupt")
+        );
+    }
+
+    #[test]
+    fn escape_clears_input() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.input = "hello".to_owned();
+        app.input_cursor = app.input.len();
+
+        let action = app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert_eq!(action, LoopAction::Continue);
+        assert!(app.input.is_empty());
+        assert_eq!(app.input_cursor, 0);
     }
 }
