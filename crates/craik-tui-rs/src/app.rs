@@ -1,7 +1,7 @@
 use crate::{
     backend::{BackendSession, WorkerMessage},
     gateway_events::{is_request_terminal_event, slash_hints_from_event, summarize_slash_output},
-    input::{SlashHint, slash_completion},
+    input::{SlashHint, slash_completion_at, slash_suggestion_count},
     transcript::{TranscriptEntry, TranscriptKind},
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent, format_gateway_error_event};
@@ -183,6 +183,7 @@ pub(crate) struct InteractiveApp {
     pending_approvals: Vec<PendingApproval>,
     selected_approval_index: Option<usize>,
     pub(crate) slash_catalog: Vec<SlashHint>,
+    pub(crate) slash_selected_index: usize,
     history: Vec<String>,
     history_index: Option<usize>,
     pub(crate) queued_inputs: VecDeque<String>,
@@ -222,6 +223,7 @@ impl InteractiveApp {
             pending_approvals: Vec::new(),
             selected_approval_index: None,
             slash_catalog: Vec::new(),
+            slash_selected_index: 0,
             history: Vec::new(),
             history_index: None,
             queued_inputs: VecDeque::new(),
@@ -279,6 +281,7 @@ impl InteractiveApp {
             pending_approvals: Vec::new(),
             selected_approval_index: None,
             slash_catalog: Vec::new(),
+            slash_selected_index: 0,
             history: Vec::new(),
             history_index: None,
             queued_inputs: VecDeque::new(),
@@ -957,11 +960,19 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.select_next_run();
+                if self.slash_palette_active() {
+                    self.select_next_slash_suggestion();
+                } else {
+                    self.select_next_run();
+                }
                 LoopAction::Continue
             }
             KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.select_previous_run();
+                if self.slash_palette_active() {
+                    self.select_previous_slash_suggestion();
+                } else {
+                    self.select_previous_run();
+                }
                 LoopAction::Continue
             }
             KeyCode::Tab => {
@@ -1021,7 +1032,9 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Up => {
-                if self.input_has_multiple_lines() && !self.cursor_is_on_first_line() {
+                if self.slash_palette_active() {
+                    self.select_previous_slash_suggestion();
+                } else if self.input_has_multiple_lines() && !self.cursor_is_on_first_line() {
                     self.move_cursor_up_line();
                 } else {
                     self.history_previous();
@@ -1029,7 +1042,9 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Down => {
-                if self.input_has_multiple_lines() && !self.cursor_is_on_last_line() {
+                if self.slash_palette_active() {
+                    self.select_next_slash_suggestion();
+                } else if self.input_has_multiple_lines() && !self.cursor_is_on_last_line() {
                     self.move_cursor_down_line();
                 } else {
                     self.history_next();
@@ -1655,11 +1670,13 @@ impl InteractiveApp {
     pub(crate) fn insert_char(&mut self, ch: char) {
         self.input.insert(self.input_cursor, ch);
         self.input_cursor += ch.len_utf8();
+        self.reset_slash_selection();
     }
 
     pub(crate) fn insert_newline(&mut self) {
         self.input.insert(self.input_cursor, '\n');
         self.input_cursor += 1;
+        self.reset_slash_selection();
     }
 
     pub(crate) fn paste_text(&mut self, text: &str) {
@@ -1668,20 +1685,25 @@ impl InteractiveApp {
         }
         self.input.insert_str(self.input_cursor, text);
         self.input_cursor += text.len();
+        self.reset_slash_selection();
     }
 
     pub(crate) fn clear_input(&mut self) {
         self.input.clear();
         self.input_cursor = 0;
+        self.reset_slash_selection();
     }
 
     pub(crate) fn complete_slash_input(&mut self) {
         if self.input_cursor != self.input.len() {
             return;
         }
-        if let Some(completion) = slash_completion(&self.input, &self.slash_catalog) {
+        if let Some(completion) =
+            slash_completion_at(&self.input, &self.slash_catalog, self.slash_selected_index)
+        {
             self.input = completion;
             self.input_cursor = self.input.len();
+            self.clamp_slash_selection();
         }
     }
 
@@ -1692,6 +1714,7 @@ impl InteractiveApp {
         if let Some((index, _)) = self.input[..self.input_cursor].char_indices().last() {
             self.input.replace_range(index..self.input_cursor, "");
             self.input_cursor = index;
+            self.reset_slash_selection();
         }
     }
 
@@ -1702,6 +1725,7 @@ impl InteractiveApp {
         if let Some(ch) = self.input[self.input_cursor..].chars().next() {
             let next = self.input_cursor + ch.len_utf8();
             self.input.replace_range(self.input_cursor..next, "");
+            self.reset_slash_selection();
         }
     }
 
@@ -1746,6 +1770,7 @@ impl InteractiveApp {
             .unwrap_or(0);
         self.input.replace_range(line_start..self.input_cursor, "");
         self.input_cursor = line_start;
+        self.reset_slash_selection();
     }
 
     pub(crate) fn delete_to_line_end(&mut self) {
@@ -1754,6 +1779,7 @@ impl InteractiveApp {
             .map(|index| self.input_cursor + index)
             .unwrap_or(self.input.len());
         self.input.replace_range(self.input_cursor..line_end, "");
+        self.reset_slash_selection();
     }
 
     pub(crate) fn delete_previous_word(&mut self) {
@@ -1775,6 +1801,48 @@ impl InteractiveApp {
             .unwrap_or(0);
         self.input.replace_range(word_start..self.input_cursor, "");
         self.input_cursor = word_start;
+        self.reset_slash_selection();
+    }
+
+    pub(crate) fn slash_palette_active(&self) -> bool {
+        self.input_cursor == self.input.len()
+            && self.input.trim_start().starts_with('/')
+            && slash_suggestion_count(&self.input, &self.slash_catalog) > 0
+    }
+
+    pub(crate) fn select_next_slash_suggestion(&mut self) {
+        let count = slash_suggestion_count(&self.input, &self.slash_catalog);
+        if count == 0 {
+            self.slash_selected_index = 0;
+            return;
+        }
+        self.slash_selected_index = (self.slash_selected_index + 1) % count;
+    }
+
+    pub(crate) fn select_previous_slash_suggestion(&mut self) {
+        let count = slash_suggestion_count(&self.input, &self.slash_catalog);
+        if count == 0 {
+            self.slash_selected_index = 0;
+            return;
+        }
+        self.slash_selected_index = if self.slash_selected_index == 0 {
+            count - 1
+        } else {
+            self.slash_selected_index.min(count) - 1
+        };
+    }
+
+    fn reset_slash_selection(&mut self) {
+        self.slash_selected_index = 0;
+    }
+
+    fn clamp_slash_selection(&mut self) {
+        let count = slash_suggestion_count(&self.input, &self.slash_catalog);
+        if count == 0 {
+            self.slash_selected_index = 0;
+        } else {
+            self.slash_selected_index = self.slash_selected_index.min(count - 1);
+        }
     }
 
     pub(crate) fn input_line_count(&self) -> usize {
@@ -4668,6 +4736,50 @@ mod tests {
 
         assert_eq!(app.input, "/run ");
         assert_eq!(app.input_cursor, app.input.len());
+    }
+
+    #[test]
+    fn slash_palette_selection_drives_tab_completion() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.slash_catalog = vec![
+            SlashHint::new(
+                "receipt",
+                "/receipt latest",
+                "Show latest receipt.",
+                "Evidence",
+            ),
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
+        ];
+        app.input = "/r".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert_eq!(app.slash_selected_index, 1);
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+        assert_eq!(app.input, "/run ");
+        assert_eq!(app.input_cursor, app.input.len());
+    }
+
+    #[test]
+    fn slash_palette_drilldown_completion_fills_selected_value() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let mut mode = SlashHint::new(
+            "mode",
+            "/mode [default|acceptEdits|plan|auto]",
+            "Set mode.",
+            "Run",
+        );
+        mode.current_value = Some("default".to_owned());
+        app.slash_catalog = vec![mode];
+        app.input = "/mode ".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+        assert_eq!(app.input, "/mode plan ");
     }
 
     #[test]
