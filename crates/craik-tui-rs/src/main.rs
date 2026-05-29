@@ -586,7 +586,7 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             }
             continue;
         }
-        if line == "Preview" || line == "Source request" || line == "Craik governance" {
+        if line == "Preview" || line == "Source request" || line == "Craik context" {
             rendered.push(Line::from(Span::styled(
                 line.to_owned(),
                 theme::accent_style(),
@@ -631,11 +631,11 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
         }
         if let Some((label, value)) = line.split_once(':') {
             let label_style = match label {
-                "Queue" | "State" => theme::dim_style(),
+                "Queue" => theme::dim_style(),
                 "Risk" | "Warning" => Style::default()
                     .fg(theme::amber())
                     .add_modifier(Modifier::BOLD),
-                "Target" | "Command" | "Tool" | "Capability" | "Scope" | "Size" => {
+                "What" | "Target" | "Command" | "Tool" | "Capability" | "Scope" | "Size" => {
                     theme::mute_style().add_modifier(Modifier::BOLD)
                 }
                 _ => theme::mute_style(),
@@ -1234,7 +1234,7 @@ mod tests {
         assert!(input_row > modal_row);
         assert!(rows.iter().any(|row| row.contains("via Claude Code")));
         assert!(rows.iter().any(|row| row.contains("Source request")));
-        assert!(rows.iter().any(|row| row.contains("Craik governance")));
+        assert!(rows.iter().any(|row| row.contains("Craik context")));
         assert!(rows.iter().any(|row| row.contains("Warning:")));
         assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
         assert!(
