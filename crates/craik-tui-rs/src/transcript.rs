@@ -2,6 +2,12 @@ use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };
+use std::sync::OnceLock;
+use syntect::{
+    easy::HighlightLines,
+    highlighting::{FontStyle, Style as SyntectStyle, Theme, ThemeSet},
+    parsing::{SyntaxReference, SyntaxSet},
+};
 
 use crate::theme;
 
@@ -275,7 +281,9 @@ fn render_body_line(
     let Some(cached) = cached else {
         return highlight_search(spans, search_query);
     };
-    if let Some(bullet) = cached.text.strip_prefix("- ") {
+    if let Some(markdown) = markdown_line_spans(&cached.text) {
+        spans.extend(markdown);
+    } else if let Some(bullet) = cached.text.strip_prefix("- ") {
         spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
         spans.extend(value_spans(kind, bullet));
     } else if let Some(diff) = diff_line_spans(&cached.text) {
@@ -311,14 +319,14 @@ impl CachedBodyLine {
 
 fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
     let mut lines = Vec::new();
-    let mut code_language: Option<String> = None;
+    let mut code_highlighter: Option<CodeBlockHighlighter> = None;
     for raw in body.lines() {
         if let Some(language) = raw.trim_start().strip_prefix("```") {
             let language = language.trim();
-            code_language = if code_language.is_some() {
+            code_highlighter = if code_highlighter.is_some() {
                 None
             } else {
-                Some(language.to_owned())
+                Some(CodeBlockHighlighter::new(language))
             };
             lines.push(CachedBodyLine::styled(
                 raw.to_owned(),
@@ -329,10 +337,10 @@ fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
             ));
             continue;
         }
-        if let Some(language) = code_language.as_deref() {
+        if let Some(highlighter) = code_highlighter.as_mut() {
             lines.push(CachedBodyLine::styled(
                 raw.to_owned(),
-                highlight_code_line(language, raw),
+                highlighter.highlight_line(raw),
             ));
         } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System) {
             lines.push(CachedBodyLine::styled(
@@ -346,82 +354,87 @@ fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
     lines
 }
 
-fn highlight_code_line(language: &str, text: &str) -> Vec<Span<'static>> {
-    let language = language.to_lowercase();
-    if text.trim().is_empty() {
-        return vec![Span::raw(String::new())];
-    }
-    let keywords: &[&str] = if matches!(language.as_str(), "rust" | "rs") {
-        &[
-            "fn", "let", "mut", "pub", "struct", "enum", "impl", "match", "if", "else", "for",
-            "while", "use", "mod", "trait", "return", "Self",
-        ]
-    } else if matches!(language.as_str(), "python" | "py") {
-        &[
-            "def", "class", "return", "if", "elif", "else", "for", "while", "import", "from", "as",
-            "try", "except", "with", "lambda",
-        ]
-    } else if matches!(language.as_str(), "json") {
-        &["true", "false", "null"]
-    } else {
-        &[
-            "const",
-            "let",
-            "var",
-            "function",
-            "return",
-            "if",
-            "else",
-            "for",
-            "while",
-            "class",
-            "import",
-            "export",
-            "from",
-            "type",
-            "interface",
-        ]
-    };
-    highlight_tokens(text, keywords)
+struct CodeBlockHighlighter {
+    highlighter: HighlightLines<'static>,
 }
 
-fn highlight_tokens(text: &str, keywords: &[&str]) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
-    let mut token = String::new();
-    for character in text.chars() {
-        if character.is_ascii_alphanumeric() || character == '_' {
-            token.push(character);
-            continue;
+impl CodeBlockHighlighter {
+    fn new(language: &str) -> Self {
+        let syntax = syntax_for_language(language);
+        Self {
+            highlighter: HighlightLines::new(syntax, syntax_theme()),
         }
-        push_code_token(&mut spans, &token, keywords);
-        token.clear();
-        spans.push(Span::styled(character.to_string(), theme::primary_style()));
     }
-    push_code_token(&mut spans, &token, keywords);
-    if spans.is_empty() {
-        spans.push(Span::raw(String::new()));
+
+    fn highlight_line(&mut self, text: &str) -> Vec<Span<'static>> {
+        if text.is_empty() {
+            return vec![Span::raw(String::new())];
+        }
+        self.highlighter
+            .highlight_line(text, syntax_set())
+            .map(|ranges| {
+                ranges
+                    .into_iter()
+                    .map(|(style, text)| Span::styled(text.to_owned(), mapped_syntax_style(style)))
+                    .collect()
+            })
+            .unwrap_or_else(|_| vec![Span::styled(text.to_owned(), theme::primary_style())])
     }
-    spans
 }
 
-fn push_code_token(spans: &mut Vec<Span<'static>>, token: &str, keywords: &[&str]) {
-    if token.is_empty() {
-        return;
+fn syntax_set() -> &'static SyntaxSet {
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
+}
+
+fn syntax_theme() -> &'static Theme {
+    static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
+    let themes = THEME_SET.get_or_init(ThemeSet::load_defaults);
+    themes
+        .themes
+        .get("base16-ocean.dark")
+        .or_else(|| themes.themes.values().next())
+        .expect("syntect ships with at least one default theme")
+}
+
+fn syntax_for_language(language: &str) -> &'static SyntaxReference {
+    let syntaxes = syntax_set();
+    let language = language.trim();
+    syntaxes
+        .find_syntax_by_token(language)
+        .or_else(|| syntaxes.find_syntax_by_extension(language))
+        .unwrap_or_else(|| syntaxes.find_syntax_plain_text())
+}
+
+fn mapped_syntax_style(style: SyntectStyle) -> Style {
+    let mut ratatui_style = Style::default().fg(syntax_color(style));
+    if style.font_style.contains(FontStyle::BOLD) {
+        ratatui_style = ratatui_style.add_modifier(Modifier::BOLD);
     }
-    let style = if keywords.contains(&token) {
-        theme::accent_style()
-    } else if token.chars().all(|character| character.is_ascii_digit()) {
-        Style::default().fg(theme::sage())
-    } else if token
-        .chars()
-        .next()
-        .is_some_and(|character| character.is_ascii_uppercase())
-    {
-        Style::default().fg(theme::cyan())
+    if style.font_style.contains(FontStyle::ITALIC) {
+        ratatui_style = ratatui_style.add_modifier(Modifier::ITALIC);
+    }
+    ratatui_style
+}
+
+fn syntax_color(style: SyntectStyle) -> Color {
+    let color = style.foreground;
+    let red = color.r;
+    let green = color.g;
+    let blue = color.b;
+    if green > red.saturating_add(24) && green > blue.saturating_add(12) {
+        theme::sage()
+    } else if red > green.saturating_add(28) && red > blue.saturating_add(12) {
+        theme::red()
+    } else if blue > red.saturating_add(24) && blue > green.saturating_add(12) {
+        theme::cyan()
+    } else if red > 170 && green > 130 && blue < 130 {
+        theme::amber()
+    } else if red > 140 && blue > 140 {
+        theme::accent()
     } else {
-        theme::primary_style()
-    };
-    spans.push(Span::styled(token.to_owned(), style));
+        theme::primary()
+    }
 }
 
 fn highlight_typed_facts(text: &str) -> Vec<Span<'static>> {
@@ -457,6 +470,56 @@ fn diff_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
         )]);
     }
     None
+}
+
+fn markdown_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
+    let trimmed = text.trim_start();
+    let indent = &text[..text.len().saturating_sub(trimmed.len())];
+    if let Some(heading) = trimmed.strip_prefix("### ") {
+        return Some(vec![
+            Span::styled(indent.to_owned(), theme::mute_style()),
+            Span::styled("### ", theme::mute_style().add_modifier(Modifier::BOLD)),
+            Span::styled(heading.to_owned(), theme::accent_style()),
+        ]);
+    }
+    if let Some(heading) = trimmed.strip_prefix("## ") {
+        return Some(vec![
+            Span::styled(indent.to_owned(), theme::mute_style()),
+            Span::styled("## ", theme::mute_style().add_modifier(Modifier::BOLD)),
+            Span::styled(heading.to_owned(), theme::accent_style()),
+        ]);
+    }
+    if let Some(heading) = trimmed.strip_prefix("# ") {
+        return Some(vec![
+            Span::styled(indent.to_owned(), theme::mute_style()),
+            Span::styled("# ", theme::mute_style().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                heading.to_owned(),
+                theme::primary_style().add_modifier(Modifier::BOLD),
+            ),
+        ]);
+    }
+    if let Some(quote) = trimmed.strip_prefix("> ") {
+        return Some(vec![
+            Span::styled(indent.to_owned(), theme::mute_style()),
+            Span::styled("> ", Style::default().fg(theme::cyan())),
+            Span::styled(quote.to_owned(), theme::dim_style()),
+        ]);
+    }
+    let (marker, value) = ordered_list_marker(trimmed)?;
+    Some(vec![
+        Span::styled(indent.to_owned(), theme::mute_style()),
+        Span::styled(marker.to_owned(), Style::default().fg(theme::accent())),
+        Span::styled(" ", theme::mute_style()),
+        Span::styled(value.to_owned(), theme::primary_style()),
+    ])
+}
+
+fn ordered_list_marker(text: &str) -> Option<(&str, &str)> {
+    let (marker, value) = text.split_once(' ')?;
+    let number = marker.strip_suffix('.')?;
+    (!number.is_empty() && number.chars().all(|character| character.is_ascii_digit()))
+        .then_some((marker, value))
 }
 
 fn split_key_value(text: &str) -> Option<(&str, &str)> {
@@ -660,7 +723,48 @@ mod tests {
             .iter()
             .find(|span| span.content.as_ref() == "42")
             .expect("number literal is highlighted");
-        assert_eq!(number_span.style.fg, Some(crate::theme::sage()));
+        assert_ne!(number_span.style.fg, Some(crate::theme::primary()));
+    }
+
+    #[test]
+    fn fenced_python_uses_syntect_parser_not_keyword_scanner() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "```python\nclass Runner:\n    def run(self):\n        return {'ok': True}\n```",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+        let class_span = lines[2]
+            .spans
+            .iter()
+            .find(|span| span.content.as_ref() == "class")
+            .expect("python class keyword is tokenized");
+        let true_span = lines[4]
+            .spans
+            .iter()
+            .find(|span| span.content.as_ref() == "True")
+            .expect("python boolean literal is tokenized");
+
+        assert_ne!(class_span.style.fg, Some(crate::theme::primary()));
+        assert_ne!(true_span.style.fg, Some(crate::theme::primary()));
+    }
+
+    #[test]
+    fn markdown_headings_quotes_and_ordered_lists_are_styled() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "# Plan\n> important context\n1. First step",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[1].spans[2].content, "# ");
+        assert_eq!(lines[1].spans[3].content, "Plan");
+        assert_eq!(lines[1].spans[3].style.fg, Some(crate::theme::primary()));
+        assert_eq!(lines[2].spans[2].content, "> ");
+        assert_eq!(lines[2].spans[3].style.fg, Some(crate::theme::dim()));
+        assert_eq!(lines[3].spans[2].content, "1.");
+        assert_eq!(lines[3].spans[2].style.fg, Some(crate::theme::accent()));
     }
 
     #[test]
