@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import difflib
-import hashlib
 import json
 from pathlib import Path
+
+from craik.runtime.backend.claude_code_events import (
+    approval_request_event,
+    hidden_status_event,
+    is_approval_request_event,
+)
 
 
 def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str | None]:
@@ -26,7 +31,7 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
                 return (
                     [
                         *denial_events,
-                        _hidden_status_event(
+                        hidden_status_event(
                             kind="result",
                             message="Claude Code returned a final result.",
                         ),
@@ -37,7 +42,7 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
         if text:
             return (
                 [
-                    _hidden_status_event(
+                    hidden_status_event(
                         kind="result",
                         message="Claude Code returned a final result.",
                     )
@@ -48,7 +53,7 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
             detail = _safe_cli_detail(json.dumps(event, sort_keys=True))
             return ([{"kind": "error", "message": detail}], None)
         return (
-            [_hidden_status_event(kind="result", message="Claude Code completed.")],
+            [hidden_status_event(kind="result", message="Claude Code completed.")],
             None,
         )
     if event_type == "assistant":
@@ -59,8 +64,8 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
             if item.get("kind") == "assistant_text" and item.get("text")
         ).strip()
         return events, final_text or None
-    if _is_approval_request_event(event):
-        approval = _approval_request_event(event)
+    if is_approval_request_event(event):
+        approval = approval_request_event(event)
         return ([approval], None)
     if event_type == "system":
         if subtype:
@@ -78,7 +83,7 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
     if event_type:
         return (
             [
-                _hidden_status_event(
+                hidden_status_event(
                     kind="event",
                     message=f"Claude Code event: {event_type}.",
                 )
@@ -86,14 +91,6 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
             None,
         )
     return [], None
-
-
-def _hidden_status_event(*, kind: str, message: str) -> dict[str, object]:
-    return {
-        "kind": kind,
-        "message": message,
-        "transcript_visibility": "hidden",
-    }
 
 
 def _claude_result_text(event: dict[str, object]) -> str:
@@ -402,37 +399,6 @@ def _permission_denial_text(event: dict[str, object]) -> str | None:
     return "Claude Code permission denied: " + "; ".join(
         _safe_cli_detail(item) for item in summaries
     )
-
-
-def _is_approval_request_event(event: dict[str, object]) -> bool:
-    event_type = str(event.get("type") or "").lower()
-    subtype = str(event.get("subtype") or "").lower()
-    if "approval" in event_type or "permission_request" in event_type:
-        return True
-    return "approval" in subtype or "permission_request" in subtype
-
-
-def _approval_request_event(event: dict[str, object]) -> dict[str, object]:
-    raw_tool = event.get("tool_name") or event.get("tool") or event.get("name")
-    raw_target = event.get("target") or event.get("path") or event.get("file_path")
-    raw_reason = event.get("reason") or event.get("message") or event.get("description")
-    tool = str(raw_tool or "tool")
-    target = str(raw_target or "unspecified target")
-    reason = str(raw_reason or "Claude Code requested runtime approval.")
-    return {
-        "kind": "approval_request",
-        "approval_id": _approval_request_id(tool=tool, target=target, reason=reason),
-        "message": f"Claude Code requests approval for `{tool}` on `{target}`: {reason}",
-        "tool": tool,
-        "target": target,
-        "reason": reason,
-        "raw": event,
-    }
-
-
-def _approval_request_id(*, tool: str, target: str, reason: str) -> str:
-    digest = hashlib.sha256(f"{tool}\0{target}\0{reason}".encode()).hexdigest()[:12]
-    return f"approval_claude_code_{digest}"
 
 
 def _looks_like_diff(text: str) -> bool:
