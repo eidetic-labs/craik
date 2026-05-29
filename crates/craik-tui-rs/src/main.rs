@@ -241,7 +241,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .style(theme::surface_style())
         .padding(Padding::horizontal(1));
     let input_inner = input_block.inner(vertical[1]);
-    let mut input_lines = if app.search_active {
+    let input_lines = if app.search_active {
         render_search_lines(
             &app.search_query,
             search_match_count(&app.transcript, &app.search_query),
@@ -250,22 +250,6 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     } else {
         render_input_lines(&app.input, &app.slash_catalog)
     };
-    if !app.search_active {
-        let context = app.prompt_context();
-        if !context.is_empty() {
-            input_lines.push(Line::from(Span::styled(
-                "Readiness",
-                Style::default()
-                    .fg(theme::amber())
-                    .add_modifier(Modifier::BOLD),
-            )));
-            input_lines.extend(
-                context
-                    .lines()
-                    .map(|line| Line::from(Span::styled(format!("  {line}"), theme::dim_style()))),
-            );
-        }
-    }
     let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
@@ -619,11 +603,10 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
     if app.search_active {
         5
     } else if app.input.trim_start().starts_with('/') {
-        10
+        9
     } else {
         let content_lines = app.input_line_count().min(8) as u16;
-        let context_lines = app.prompt_context().lines().count().min(4) as u16;
-        (content_lines + context_lines + 3).clamp(6, 13)
+        (content_lines + 5).clamp(8, 14)
     }
 }
 
@@ -631,13 +614,7 @@ fn input_title(app: &InteractiveApp) -> String {
     if app.search_active {
         return "▌Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
     }
-    let line_count = app.input_line_count();
-    let char_count = app.input_char_count();
-    if line_count > 1 {
-        format!("▌Prompt  {line_count} lines · {char_count} chars")
-    } else {
-        "▌Prompt".to_owned()
-    }
+    String::new()
 }
 
 fn render_transcript_panel(
@@ -849,11 +826,11 @@ mod tests {
         assert!(rendered.contains("Transcript"));
         assert!(!rendered.contains("Activity"));
         assert!(!rendered.contains("Run provenance"));
-        assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Review the plan"));
         assert!(rendered.contains("default"));
         assert_eq!(rows.len(), 24);
-        assert!(rows.iter().any(|row| row.trim_end().ends_with("▌Prompt")));
+        assert!(!rows.iter().any(|row| row.contains("▌Prompt")));
+        assert!(!rendered.contains("Type a prompt"));
         assert!(!rendered.contains("Enter sends"));
         assert!(!rendered.contains("Alt-Enter newline"));
     }
@@ -883,7 +860,6 @@ mod tests {
         assert!(rendered.contains("Filter"));
         assert!(rendered.contains("receipt_run_review_desktop_plan"));
         assert!(rendered.contains("Ctrl-R runs"));
-        assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Continue analysis"));
         assert!(rendered.contains("esc chat"));
     }
@@ -928,7 +904,6 @@ mod tests {
         let rendered = render_app_frame(&app, 72, 24);
 
         assert!(rendered.contains("Transcript"));
-        assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("receipt_run_review_desktop_plan"));
         assert!(!rendered.contains("Activity"));
     }
@@ -958,8 +933,8 @@ mod tests {
             let rendered = render_app_frame_with_theme(&app, 100, 24, mode);
 
             assert!(rendered.contains("Transcript"));
-            assert!(rendered.contains("Prompt"));
             assert!(rendered.contains("Review the plan"));
+            assert!(!rendered.contains("▌Prompt"));
         }
     }
 
@@ -1000,13 +975,13 @@ mod tests {
         let rows = render_app_frame_rows(&app, 104, 28);
         let rendered = rows.join("\n");
 
-        assert!(rendered.contains("/ command palette"));
+        assert!(rendered.contains("/ commands"));
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
         let palette_row = rows
             .iter()
-            .position(|row| row.contains("/ command palette"))
+            .position(|row| row.contains("/ commands"))
             .expect("palette visible");
         let typed_input_row = rows
             .iter()
@@ -1041,7 +1016,7 @@ mod tests {
 
         let rendered = render_app_frame(&app, 104, 28);
 
-        assert!(rendered.contains("4 of 4"));
+        assert!(rendered.contains("3 of 4"));
         assert!(
             rendered.find("/help").expect("help visible")
                 < rendered.find("/setup").expect("setup visible")
@@ -1052,8 +1027,7 @@ mod tests {
                     .find("/auth [login|logout|status]")
                     .expect("auth visible")
         );
-        assert!(rendered.contains("/clear"));
-        assert!(rendered.contains("⚠ confirms"));
+        assert!(!rendered.contains("/clear"));
     }
 
     #[test]
@@ -1068,12 +1042,12 @@ mod tests {
             .iter()
             .position(|row| row.contains("▌EVIDENCE"))
             .expect("evidence overlay title is visible");
-        let prompt_row = rows
+        let input_row = rows
             .iter()
-            .position(|row| row.contains("▌Prompt"))
-            .expect("prompt remains visible below overlay");
+            .position(|row| row.contains("Continue analysis"))
+            .expect("input remains visible below overlay");
 
-        assert!(prompt_row > overlay_row);
+        assert!(input_row > overlay_row);
         assert!(rows.iter().any(|row| row.contains("Filter")));
         assert!(rows.iter().any(|row| row.contains("item(s)")));
         assert!(rows.iter().any(|row| row.contains("Ctrl-R runs")));
@@ -1159,12 +1133,12 @@ mod tests {
             .iter()
             .position(|row| row.contains("Approval required"))
             .expect("approval modal title is visible");
-        let prompt_row = rows
+        let input_row = rows
             .iter()
-            .position(|row| row.contains("▌Prompt"))
-            .expect("prompt remains visible below modal");
+            .position(|row| row.contains("Review approval context"))
+            .expect("input remains visible below modal");
 
-        assert!(prompt_row > modal_row);
+        assert!(input_row > modal_row);
         assert!(rows.iter().any(|row| row.contains("via Claude Code")));
         assert!(rows.iter().any(|row| row.contains("Source request")));
         assert!(rows.iter().any(|row| row.contains("Craik governance")));
@@ -1208,9 +1182,9 @@ mod tests {
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 6);
+        assert_eq!(input_panel_height(&app), 8);
         app.input = "/r".to_owned();
-        assert_eq!(input_panel_height(&app), 10);
+        assert_eq!(input_panel_height(&app), 9);
         app.search_active = true;
         assert_eq!(input_panel_height(&app), 5);
     }
@@ -1219,11 +1193,11 @@ mod tests {
     fn prompt_input_height_grows_with_multiline_content() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 6);
+        assert_eq!(input_panel_height(&app), 8);
         app.input = "one\ntwo\nthree\nfour".to_owned();
 
         assert_eq!(input_panel_height(&app), 9);
-        assert!(input_title(&app).contains("4 lines"));
+        assert_eq!(input_title(&app), "");
         assert!(!input_title(&app).contains("Enter sends"));
     }
 
