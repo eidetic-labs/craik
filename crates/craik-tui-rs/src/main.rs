@@ -262,10 +262,10 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         let help = Paragraph::new(app.help_text())
             .block(
                 Block::default()
-                    .title("Help  Esc closes")
+                    .title("▌HELP  Esc closes")
                     .title_style(theme::accent_style())
                     .border_style(theme::mute_style())
-                    .borders(Borders::ALL)
+                    .borders(Borders::LEFT)
                     .padding(Padding::horizontal(1)),
             )
             .wrap(Wrap { trim: false });
@@ -422,6 +422,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
+        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     let detail = Paragraph::new(app.selected_overlay_detail())
         .block(
@@ -432,6 +433,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
+        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, area);
     frame.render_widget(list, list_area);
@@ -538,11 +540,11 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
 
 fn input_title(app: &InteractiveApp) -> String {
     if app.search_active {
-        return "Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
+        return "▌Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
     }
     let (line, col) = app.input_cursor_line_col();
     format!(
-        "Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
+        "▌Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
         app.input_line_count(),
         app.input_char_count()
     )
@@ -636,13 +638,24 @@ fn transcript_title(
         String::new()
     };
     if visible_width < 84 {
-        return Line::from(format!(
-            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}{jump}"
-        ));
+        return Line::from(vec![
+            Span::styled("▌Transcript ", theme::accent_style()),
+            Span::styled(
+                format!("{top}-{bottom}/{total}  {tail_mode}  {detail_mode}{search}{jump}"),
+                theme::mute_style(),
+            ),
+        ]);
     }
-    Line::from(format!(
-        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}{jump}"
-    ))
+    Line::from(vec![
+        Span::styled("▌Transcript ", theme::accent_style()),
+        Span::styled(format!("{focus_mode}  "), theme::primary_style()),
+        Span::styled(
+            format!(
+                "lines {top}-{bottom}/{total}  tail {tail_mode}  details {detail_mode}{search}{jump}"
+            ),
+            theme::mute_style(),
+        ),
+    ])
 }
 
 fn active_search_query(app: &InteractiveApp) -> Option<&str> {
