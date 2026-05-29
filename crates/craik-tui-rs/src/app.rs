@@ -168,7 +168,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
     pub(crate) active_overlay: Option<ActiveOverlay>,
-    approval_overlay_reviewed: bool,
+    pub(crate) approval_overlay_reviewed: bool,
     pub(crate) overlay_filter: String,
     pub(crate) overlay_selected_index: usize,
     pub(crate) overlay_scroll: u16,
@@ -2370,11 +2370,12 @@ impl PendingApproval {
 
     fn request_text(&self, latest_receipt: Option<&str>) -> String {
         let mut lines = vec![
-            "Approval required".to_owned(),
+            format!("Review required: {}", self.subject_label()),
+            "State: waiting for operator decision".to_owned(),
+            format!("Approval: {}", self.id_label()),
             format!("Origin: {}", self.origin_label()),
-            format!("ID: {}", self.id),
-            format!("Request: {}", self.message),
         ];
+        push_optional_line(&mut lines, "Request", Some(self.message.as_str()));
         push_optional_line(&mut lines, "Tool", self.tool.as_deref());
         push_optional_line(&mut lines, "Target", self.target.as_deref());
         push_optional_line(&mut lines, "Command", self.command.as_deref());
@@ -2384,7 +2385,10 @@ impl PendingApproval {
             "Receipt",
             self.receipt_id.as_deref().or(latest_receipt),
         );
-        lines.push("Actions: Ctrl-A review/approve  Ctrl-X review/deny  Esc defer".to_owned());
+        if self.risk.as_deref().is_some_and(is_high_risk_text) {
+            lines.push("Risk: high - review before deciding".to_owned());
+        }
+        lines.push("Actions: Ctrl-A open review  Ctrl-X open denial review  Esc defer".to_owned());
         lines.join("\n")
     }
 
@@ -2449,6 +2453,24 @@ impl PendingApproval {
             Some(origin) => origin,
             None => "craik governance",
         }
+    }
+
+    fn id_label(&self) -> &str {
+        if self.id.is_empty() {
+            "unknown"
+        } else {
+            self.id.as_str()
+        }
+    }
+
+    fn subject_label(&self) -> &str {
+        self.target
+            .as_deref()
+            .or(self.command.as_deref())
+            .or(self.resource.as_deref())
+            .or(self.tool.as_deref())
+            .or(self.capability.as_deref())
+            .unwrap_or("approval request")
     }
 
     fn has_governance_context(&self) -> bool {
@@ -3605,14 +3627,16 @@ mod tests {
         );
         let entry = app.transcript.last().expect("approval transcript entry");
         assert_eq!(entry.title, "Approval pending");
-        assert!(entry.body.contains("Approval required"));
+        assert!(entry.body.contains("Review required: src/lib.rs"));
+        assert!(entry.body.contains("State: waiting for operator decision"));
+        assert!(entry.body.contains("Approval: approval_edit_123"));
         assert!(entry.body.contains("Request: Edit src/lib.rs?"));
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
         assert!(entry.body.contains("Receipt: receipt_before_approval"));
-        assert!(entry.body.contains("Ctrl-A review/approve"));
-        assert!(entry.body.contains("Ctrl-X review/deny"));
+        assert!(entry.body.contains("Ctrl-A open review"));
+        assert!(entry.body.contains("Ctrl-X open denial review"));
     }
 
     #[test]
