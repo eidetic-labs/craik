@@ -1034,7 +1034,7 @@ mod tests {
                         "commands": [
                             {
                                 "name": "mode",
-                                "usage": "/mode [default|acceptEdits|plan|auto]",
+                                "usage": "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
                                 "summary": "Inspect or set Claude Code mode.",
                                 "category": "Run",
                                 "choices": {"mode": ["default", "acceptEdits", "plan", "auto"]},

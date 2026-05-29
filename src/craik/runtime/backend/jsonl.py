@@ -15,6 +15,7 @@ from craik.runtime.backend.event_contract import (
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
+from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.reviewing.approval_commands import approvals_decide_result
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
     CLAUDE_PERMISSION_MODE_ENV,
@@ -79,7 +80,7 @@ def run_jsonl_gateway(
                 emit(
                     BackendEvent(
                         type="session.status",
-                        data=resolve_readiness(env).as_dict(),
+                        data=_session_status_data(env),
                     )
                 )
                 continue
@@ -113,10 +114,7 @@ def run_jsonl_gateway(
                 emit(
                     BackendEvent(
                         type="model.changed",
-                        data={
-                            "model": model,
-                            "payload": result.payload,
-                        },
+                        data=_model_changed_data(model, result.payload),
                     )
                 )
                 continue
@@ -162,6 +160,9 @@ def run_jsonl_gateway(
             if message_type == "slash.submit":
                 text = _required_text(message)
                 slash_result = dispatch_slash_command(text, env=env)
+                slash_state_event = _slash_state_event(text, slash_result.payload, env)
+                if slash_state_event is not None:
+                    emit(slash_state_event)
                 emit(
                     BackendEvent(
                         type="slash.completed",
@@ -180,8 +181,7 @@ def run_jsonl_gateway(
                         type="slash.catalog",
                         data={
                             "commands": [
-                                _slash_catalog_entry(spec, env)
-                                for spec in get_tui_slash_specs()
+                                _slash_catalog_entry(spec, env) for spec in get_tui_slash_specs()
                             ],
                         },
                     )
@@ -305,6 +305,81 @@ def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str
     return None
 
 
+def _session_status_data(env: dict[str, str] | None) -> dict[str, object]:
+    data = resolve_readiness(env).as_dict()
+    data["claude_permission_mode"] = _claude_permission_mode(env)
+    settings = ModelSettingsStore.from_env(env).load()
+    if settings.active_model is not None:
+        data["model"] = settings.active_model
+    active_profile = settings.active_profile
+    if active_profile is not None:
+        data.update(_profile_status_data(active_profile.as_dict()))
+    return data
+
+
+def _slash_state_event(
+    text: str,
+    payload: object,
+    env: dict[str, str] | None,
+) -> BackendEvent | None:
+    tokens = text.strip().split()
+    command = tokens[0] if tokens else ""
+    if command == "/mode":
+        return BackendEvent(type="session.status", data=_session_status_data(env))
+    if command == "/model" and len(tokens) >= 2 and tokens[1] == "set":
+        if isinstance(payload, dict):
+            model = _string_or_none(payload.get("active_model"))
+            if model is not None:
+                return BackendEvent(type="model.changed", data=_model_changed_data(model, payload))
+    return None
+
+
+def _model_changed_data(model: str, payload: object) -> dict[str, object]:
+    data: dict[str, object] = {"model": model}
+    if isinstance(payload, dict):
+        data["payload"] = payload
+        active_profile = _active_profile_payload(payload)
+        if active_profile is not None:
+            data.update(_profile_status_data(active_profile))
+    return data
+
+
+def _active_profile_payload(payload: dict[str, object]) -> dict[str, object] | None:
+    active_profile = payload.get("active_profile")
+    if isinstance(active_profile, dict):
+        return active_profile
+    active_profile_id = _string_or_none(payload.get("active_profile_id"))
+    profiles = payload.get("profiles")
+    if active_profile_id is None or not isinstance(profiles, dict):
+        return None
+    profile = profiles.get(active_profile_id)
+    return profile if isinstance(profile, dict) else None
+
+
+def _profile_status_data(profile: dict[str, object]) -> dict[str, object]:
+    data: dict[str, object] = {"profile": profile}
+    for output_key, input_key in [
+        ("provider_id", "provider_id"),
+        ("provider_family", "provider_family"),
+        ("display_name", "display_name"),
+        ("backend", "backend"),
+    ]:
+        value = _string_or_none(profile.get(input_key))
+        if value is not None:
+            data[output_key] = value
+    options = profile.get("options")
+    if isinstance(options, dict):
+        effort = _string_or_none(options.get("reasoning_effort"))
+        if effort is not None:
+            data["reasoning_effort"] = effort
+    return data
+
+
+def _claude_permission_mode(env: dict[str, str] | None) -> str:
+    values = os.environ if env is None else env
+    return values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+
+
 def _required_text(message: dict[str, Any]) -> str:
     text = message.get("text")
     if not isinstance(text, str) or not text.strip():
@@ -333,11 +408,11 @@ def _string_or_default(value: object, default: str) -> str:
 
 def _model_options(message: dict[str, Any]) -> dict[str, object]:
     passthrough = message.get("options")
-    option_items = [
-        f"{key}={value}"
-        for key, value in passthrough.items()
-        if isinstance(key, str)
-    ] if isinstance(passthrough, dict) else []
+    option_items = (
+        [f"{key}={value}" for key, value in passthrough.items() if isinstance(key, str)]
+        if isinstance(passthrough, dict)
+        else []
+    )
     return parse_model_options(
         reasoning_effort=_string_or_none(message.get("reasoning_effort")),
         service_tier=_string_or_none(message.get("service_tier")),

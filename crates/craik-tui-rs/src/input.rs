@@ -448,10 +448,17 @@ fn usage_has_subcommands(usage: &str) -> bool {
 
 fn fallback_choices(name: &str) -> Vec<String> {
     match name {
-        "mode" => ["default", "acceptEdits", "plan", "auto"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
+        "mode" => [
+            "default",
+            "acceptEdits",
+            "plan",
+            "auto",
+            "dontAsk",
+            "bypassPermissions",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
         "theme" => ["dark", "light", "monochrome"]
             .into_iter()
             .map(str::to_owned)
@@ -681,7 +688,7 @@ mod tests {
     fn slash_completion_uses_selected_candidate_and_drilldown_value() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto]",
+            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -721,7 +728,7 @@ mod tests {
     fn slash_suggestions_surface_choices_and_confirmation_flags() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto]",
+            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -745,7 +752,7 @@ mod tests {
     fn slash_palette_renders_current_and_confirm_hints_as_row_metadata() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto]",
+            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
             "Inspect or set mode.",
             "Run",
         );
@@ -759,7 +766,7 @@ mod tests {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  run  Inspect or set mode."));
+        assert!(root.contains("/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]  run  Inspect or set mode."));
         assert!(root.contains("now: default"));
         assert!(root.contains("run  Inspect or set mode."));
 

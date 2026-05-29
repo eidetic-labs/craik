@@ -116,6 +116,7 @@ pub struct GatewayAppState {
     pub active_model: Option<String>,
     pub active_model_display_name: Option<String>,
     pub active_reasoning_effort: Option<String>,
+    pub active_permission_mode: Option<String>,
     pub active_provider_id: Option<String>,
     pub active_provider_family: Option<String>,
     pub backend: Option<String>,
@@ -156,6 +157,8 @@ impl GatewayAppState {
             }
             "session.status" => {
                 self.readiness_state = string_at(&event.data, &["state"]);
+                self.active_permission_mode = permission_mode(&event.data);
+                self.apply_model_state(&event.data);
             }
             "session.history" => {
                 for item in array_at(&event.data, &["receipts"]) {
@@ -168,21 +171,10 @@ impl GatewayAppState {
                 }
             }
             "model.changed" => {
-                self.active_model = string_at(&event.data, &["model"]);
-                self.active_provider_id = string_at(&event.data, &["provider_id"]);
-                self.active_provider_family = string_at(&event.data, &["provider_family"]);
-                self.active_model_display_name = model_changed_display_name(&event.data)
-                    .or_else(|| string_at(&event.data, &["display_name"]));
-                self.active_reasoning_effort = reasoning_effort(&event.data);
+                self.apply_model_state(&event.data);
             }
             "model.selected" => {
-                self.active_model = string_at(&event.data, &["model"]);
-                self.active_provider_id = string_at(&event.data, &["provider_id"]);
-                self.active_provider_family = string_at(&event.data, &["provider_family"]);
-                self.active_model_display_name =
-                    string_at(&event.data, &["profile", "display_name"])
-                        .or_else(|| string_at(&event.data, &["display_name"]));
-                self.active_reasoning_effort = reasoning_effort(&event.data);
+                self.apply_model_state(&event.data);
                 self.backend = string_at(&event.data, &["backend"])
                     .or_else(|| string_at(&event.data, &["profile", "backend"]));
             }
@@ -275,6 +267,34 @@ impl GatewayAppState {
                 );
             }
             _ => {}
+        }
+    }
+
+    fn apply_model_state(&mut self, data: &Value) {
+        if let Some(model) = string_at(data, &["model"]) {
+            self.active_model = Some(model);
+        }
+        if let Some(provider_id) = string_at(data, &["provider_id"])
+            .or_else(|| string_at(data, &["profile", "provider_id"]))
+            .or_else(|| string_at(data, &["payload", "active_profile", "provider_id"]))
+        {
+            self.active_provider_id = Some(provider_id);
+        }
+        if let Some(provider_family) = string_at(data, &["provider_family"])
+            .or_else(|| string_at(data, &["profile", "provider_family"]))
+            .or_else(|| string_at(data, &["payload", "active_profile", "provider_family"]))
+        {
+            self.active_provider_family = Some(provider_family);
+        }
+        if let Some(display_name) = model_changed_display_name(data)
+            .or_else(|| string_at(data, &["profile", "display_name"]))
+            .or_else(|| string_at(data, &["payload", "active_profile", "display_name"]))
+            .or_else(|| string_at(data, &["display_name"]))
+        {
+            self.active_model_display_name = Some(display_name);
+        }
+        if let Some(effort) = reasoning_effort(data) {
+            self.active_reasoning_effort = Some(effort);
         }
     }
 }
@@ -655,6 +675,12 @@ fn reasoning_effort(data: &Value) -> Option<String> {
     string_at(data, &["reasoning_effort"])
         .or_else(|| string_at(data, &["profile", "options", "reasoning_effort"]))
         .or_else(|| {
+            string_at(
+                data,
+                &["payload", "active_profile", "options", "reasoning_effort"],
+            )
+        })
+        .or_else(|| {
             let active_profile_id = string_at(data, &["payload", "active_profile_id"])?;
             string_at(
                 data,
@@ -667,6 +693,10 @@ fn reasoning_effort(data: &Value) -> Option<String> {
                 ],
             )
         })
+}
+
+fn permission_mode(data: &Value) -> Option<String> {
+    string_at(data, &["claude_permission_mode"]).or_else(|| string_at(data, &["permission_mode"]))
 }
 
 fn summarize_slash_completed(data: &Value) -> Option<String> {
@@ -1133,6 +1163,39 @@ mod tests {
         let state = app_state_from_events(&[event]);
 
         assert_eq!(state.active_reasoning_effort.as_deref(), Some("max"));
+    }
+
+    #[test]
+    fn session_status_updates_mode_and_active_model() {
+        let event = GatewayEvent {
+            event_type: "session.status".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "state": "fully-ready",
+                "claude_permission_mode": "auto",
+                "model": "anthropic/claude-opus-4-7",
+                "provider_id": "provider_anthropic",
+                "provider_family": "anthropic",
+                "display_name": "Anthropic Claude Opus 4.7",
+                "reasoning_effort": "high"
+            }),
+        };
+
+        let state = app_state_from_events(&[event]);
+
+        assert_eq!(state.readiness_state.as_deref(), Some("fully-ready"));
+        assert_eq!(state.active_permission_mode.as_deref(), Some("auto"));
+        assert_eq!(
+            state.active_model.as_deref(),
+            Some("anthropic/claude-opus-4-7")
+        );
+        assert_eq!(
+            state.active_provider_id.as_deref(),
+            Some("provider_anthropic")
+        );
+        assert_eq!(state.active_reasoning_effort.as_deref(), Some("high"));
     }
 
     #[test]

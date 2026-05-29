@@ -22,6 +22,7 @@ from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.jsonl import run_jsonl_gateway
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.approvals import open_approval_request
+from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.store import LocalStore
 
 runner = CliRunner()
@@ -110,8 +111,7 @@ def test_gateway_event_fixture_corpus_covers_contract_event_types() -> None:
     observed: set[str] = set()
     for fixture_path in sorted(GATEWAY_FIXTURE_DIR.glob("*.jsonl")):
         observed.update(
-            str(event["type"])
-            for event in _events(fixture_path.read_text(encoding="utf-8"))
+            str(event["type"]) for event in _events(fixture_path.read_text(encoding="utf-8"))
         )
 
     assert observed == set(_contract_event_types())
@@ -148,10 +148,16 @@ def test_gateway_event_contract_reports_required_fields() -> None:
 
 
 def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command(
+        "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
+        env=env,
+    )
+    dispatch_slash_command("/mode auto", env=env)
     stdin = io.StringIO('{"type":"session.status"}\n{"type":"session.close"}\n')
     stdout = io.StringIO()
 
-    exit_code = run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    exit_code = run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
     events = _events(stdout.getvalue())
 
     assert exit_code == 0
@@ -161,6 +167,11 @@ def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
     assert "approval.decide" in events[0]["data"]["capabilities"]
     assert events[1]["type"] == "session.status"
     assert events[1]["data"]["state"] == "unconfigured"
+    assert events[1]["data"]["claude_permission_mode"] == "auto"
+    assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
+    assert events[1]["data"]["provider_id"] == "provider_anthropic"
+    assert events[1]["data"]["provider_family"] == "anthropic"
+    assert events[1]["data"]["reasoning_effort"] == "high"
 
 
 def test_jsonl_gateway_executes_prompt_with_run_events(tmp_path: Path, monkeypatch) -> None:
@@ -226,10 +237,45 @@ def test_jsonl_gateway_model_set_and_interrupt_events(tmp_path: Path) -> None:
     ]
     model_payload = events[1]["data"]["payload"]
     active_profile_id = model_payload["active_profile_id"]
+    assert events[1]["data"]["provider_id"] == "provider_anthropic"
+    assert events[1]["data"]["provider_family"] == "anthropic"
+    assert events[1]["data"]["reasoning_effort"] == "high"
     assert model_payload["profiles"][active_profile_id]["display_name"] == (
         "Anthropic Claude Opus 4.7 High"
     )
     assert events[2]["run_id"] == "run_review_the_plan"
+
+
+def test_jsonl_gateway_slash_model_and_mode_emit_state_events(tmp_path: Path) -> None:
+    stdin = io.StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "slash.submit",
+                        "text": "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
+                    }
+                ),
+                json.dumps({"type": "slash.submit", "text": "/mode auto"}),
+                "",
+            ]
+        )
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == [
+        "session.ready",
+        "model.changed",
+        "slash.completed",
+        "session.status",
+        "slash.completed",
+    ]
+    assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
+    assert events[1]["data"]["reasoning_effort"] == "high"
+    assert events[3]["data"]["claude_permission_mode"] == "auto"
 
 
 def test_jsonl_gateway_approval_decision_event(tmp_path: Path) -> None:
@@ -287,7 +333,14 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert "run" in names
     assert "status" in names
     assert commands["mode"]["choices"] == {
-        "mode": ["default", "acceptEdits", "plan", "auto"]
+        "mode": [
+            "default",
+            "acceptEdits",
+            "plan",
+            "auto",
+            "dontAsk",
+            "bypassPermissions",
+        ]
     }
     assert commands["mode"]["current_value"] == "default"
     assert commands["theme"]["choices"] == {"theme": ["dark", "light", "monochrome"]}
@@ -297,7 +350,9 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert commands["clear"]["requires_confirmation"] is True
     assert commands["clear"]["confirm_message"].startswith("This discards")
     assert "set" in commands["model"]["subcommands"]
-    assert commands["model"]["examples"] == ["/model set openai/gpt-4o-mini"]
+    assert commands["model"]["examples"] == [
+        "/model set openai/gpt-4o-mini --reasoning-effort high"
+    ]
 
 
 def test_jsonl_gateway_reports_persisted_session_history(tmp_path: Path) -> None:

@@ -110,11 +110,7 @@ def normalize_specs(specs: list[SlashCommandSpec]) -> list[SlashCommandSpec]:
     for spec in specs:
         if spec.empty_state is None:
             spec = spec.model_copy(
-                update={
-                    "empty_state": EmptyState(
-                        message=f"No {spec.command_name} results found."
-                    )
-                }
+                update={"empty_state": EmptyState(message=f"No {spec.command_name} results found.")}
             )
         normalized[spec.name] = spec
     return list(normalized.values())
@@ -171,9 +167,18 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         kwargs["choices"] = {"theme": ("dark", "light", "monochrome")}
     if name == "/model":
         kwargs["args_schema"] = ModelArgs
-        kwargs["example"] = "/model set openai/gpt-4o-mini"
+        kwargs["example"] = "/model set openai/gpt-4o-mini --reasoning-effort high"
     if name == "/mode":
-        kwargs["choices"] = {"mode": ("default", "acceptEdits", "plan", "auto")}
+        kwargs["choices"] = {
+            "mode": (
+                "default",
+                "acceptEdits",
+                "plan",
+                "auto",
+                "dontAsk",
+                "bypassPermissions",
+            )
+        }
         kwargs["example"] = "/mode acceptEdits"
     if name == "/provider":
         kwargs["example"] = "/provider login openai"
@@ -211,7 +216,7 @@ def _builtin_usage(name: str) -> str:
         "/export": "/export transcript",
         "/provider": "/provider [login <provider>]",
         "/model": "/model [set <provider/model>]",
-        "/mode": "/mode [default|acceptEdits|plan|auto]",
+        "/mode": "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
         "/policy": "/policy reset",
         "/migrate": "/migrate apply",
         "/sessions": "/sessions",
