@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,9 @@ from craik.runtime.store import LocalStore
 
 runner = CliRunner()
 
+CONTRACT_DOCS_PATH = Path("docs/reference/tui-gateway-events.md")
+GATEWAY_FIXTURE_DIR = Path("tests/fixtures/gateway")
+
 
 def _env(tmp_path: Path) -> dict[str, str]:
     return {"CRAIK_HOME": str(tmp_path / ".craik")}
@@ -42,15 +46,75 @@ def _events(output: str) -> list[dict[str, object]]:
     return [json.loads(line) for line in output.splitlines() if line.strip()]
 
 
+def _contract_event_types() -> dict[str, object]:
+    event_types = gateway_event_contract()["event_types"]
+    assert isinstance(event_types, dict)
+    return event_types
+
+
+def _contract_required_fields(rule: object) -> str:
+    assert isinstance(rule, dict)
+    requirements = rule["requirements"]
+    assert isinstance(requirements, list)
+    rendered: list[str] = []
+    for requirement in requirements:
+        assert isinstance(requirement, dict)
+        kind = requirement["kind"]
+        if kind == "non_empty_string":
+            path = str(requirement["path"]).removeprefix("data.")
+            rendered.append(f"{path} string")
+        elif kind == "array":
+            path = str(requirement["path"]).removeprefix("data.")
+            rendered.append(f"{path} array")
+        elif kind in {"one_non_empty_string", "one_present"}:
+            paths = [str(path).removeprefix("data.") for path in requirement["paths"]]
+            if len(paths) == 2:
+                rendered.append(f"one of {paths[0]} or {paths[1]}")
+            else:
+                rendered.append(f"one of {', '.join(paths[:-1])}, or {paths[-1]}")
+        else:
+            raise AssertionError(f"unsupported contract requirement kind: {kind}")
+
+    return "; ".join(rendered)
+
+
+def _documented_required_fields() -> dict[str, str]:
+    docs = CONTRACT_DOCS_PATH.read_text(encoding="utf-8")
+    table_pattern = re.compile(r"^\| `(?P<event>[^`]+)` \| (?P<fields>.+) \|$", re.MULTILINE)
+    return {
+        match.group("event"): match.group("fields").replace("`", "")
+        for match in table_pattern.finditer(docs)
+    }
+
+
 def test_gateway_event_contract_validates_fixture_corpus() -> None:
-    fixture_dir = Path("tests/fixtures/gateway")
-    fixture_paths = sorted(fixture_dir.glob("*.jsonl"))
+    fixture_paths = sorted(GATEWAY_FIXTURE_DIR.glob("*.jsonl"))
 
     assert fixture_paths
     for fixture_path in fixture_paths:
         events = _events(fixture_path.read_text(encoding="utf-8"))
 
         assert validate_gateway_events(events) == [], fixture_path
+
+
+def test_gateway_event_contract_docs_table_matches_contract() -> None:
+    expected = {
+        event_type: _contract_required_fields(rule)
+        for event_type, rule in _contract_event_types().items()
+    }
+
+    assert _documented_required_fields() == expected
+
+
+def test_gateway_event_fixture_corpus_covers_contract_event_types() -> None:
+    observed: set[str] = set()
+    for fixture_path in sorted(GATEWAY_FIXTURE_DIR.glob("*.jsonl")):
+        observed.update(
+            str(event["type"])
+            for event in _events(fixture_path.read_text(encoding="utf-8"))
+        )
+
+    assert observed == set(_contract_event_types())
 
 
 def test_gateway_event_contract_is_single_source_for_known_events() -> None:
