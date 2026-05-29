@@ -115,6 +115,7 @@ pub struct GatewayAppState {
     pub readiness_state: Option<String>,
     pub active_model: Option<String>,
     pub active_model_display_name: Option<String>,
+    pub active_reasoning_effort: Option<String>,
     pub active_provider_id: Option<String>,
     pub active_provider_family: Option<String>,
     pub backend: Option<String>,
@@ -172,6 +173,7 @@ impl GatewayAppState {
                 self.active_provider_family = string_at(&event.data, &["provider_family"]);
                 self.active_model_display_name = model_changed_display_name(&event.data)
                     .or_else(|| string_at(&event.data, &["display_name"]));
+                self.active_reasoning_effort = reasoning_effort(&event.data);
             }
             "model.selected" => {
                 self.active_model = string_at(&event.data, &["model"]);
@@ -180,6 +182,7 @@ impl GatewayAppState {
                 self.active_model_display_name =
                     string_at(&event.data, &["profile", "display_name"])
                         .or_else(|| string_at(&event.data, &["display_name"]));
+                self.active_reasoning_effort = reasoning_effort(&event.data);
                 self.backend = string_at(&event.data, &["backend"])
                     .or_else(|| string_at(&event.data, &["profile", "backend"]));
             }
@@ -648,6 +651,24 @@ fn model_changed_display_name(data: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn reasoning_effort(data: &Value) -> Option<String> {
+    string_at(data, &["reasoning_effort"])
+        .or_else(|| string_at(data, &["profile", "options", "reasoning_effort"]))
+        .or_else(|| {
+            let active_profile_id = string_at(data, &["payload", "active_profile_id"])?;
+            string_at(
+                data,
+                &[
+                    "payload",
+                    "profiles",
+                    active_profile_id.as_str(),
+                    "options",
+                    "reasoning_effort",
+                ],
+            )
+        })
+}
+
 fn summarize_slash_completed(data: &Value) -> Option<String> {
     if let Some(payload) = data.get("payload") {
         if let Some(items) = payload.as_array() {
@@ -1068,7 +1089,10 @@ mod tests {
                     "active_profile_id": "anthropic-opus",
                     "profiles": {
                         "anthropic-opus": {
-                            "display_name": "Anthropic Claude Opus 4.7 High"
+                            "display_name": "Anthropic Claude Opus 4.7 High",
+                            "options": {
+                                "reasoning_effort": "high"
+                            }
                         }
                     }
                 }
@@ -1085,6 +1109,30 @@ mod tests {
             state.active_model_display_name.as_deref(),
             Some("Anthropic Claude Opus 4.7 High")
         );
+        assert_eq!(state.active_reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn model_selected_uses_profile_reasoning_effort() {
+        let event = GatewayEvent {
+            event_type: "model.selected".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "model": "claude-opus-4-7",
+                "profile": {
+                    "display_name": "Anthropic Claude Opus 4.7",
+                    "options": {
+                        "reasoning_effort": "max"
+                    }
+                }
+            }),
+        };
+
+        let state = app_state_from_events(&[event]);
+
+        assert_eq!(state.active_reasoning_effort.as_deref(), Some("max"));
     }
 
     #[test]
