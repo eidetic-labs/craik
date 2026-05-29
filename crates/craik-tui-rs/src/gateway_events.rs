@@ -29,18 +29,26 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
                     .and_then(|value| value.as_str())
                     .map(str::to_owned)
                     .unwrap_or_else(|| slash_category(name)),
+                aliases: string_array_from_object(object, "aliases"),
                 choices: choices_from_object(object),
-                subcommands: subcommands_from_usage(
-                    object
-                        .get("usage")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or_default(),
-                ),
+                subcommands: explicit_or_usage_subcommands(object),
                 requires_confirmation: object
                     .get("requires_confirmation")
                     .or_else(|| object.get("requiresConfirmation"))
                     .and_then(|value| value.as_bool())
                     .unwrap_or(false),
+                confirm_message: object
+                    .get("confirm_message")
+                    .or_else(|| object.get("confirmMessage"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned),
+                cli_mirror: object
+                    .get("cli_mirror")
+                    .or_else(|| object.get("cliMirror"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned),
+                required_args: string_array_from_object(object, "required_args"),
+                examples: string_array_from_object(object, "examples"),
                 current_value: object
                     .get("current_value")
                     .or_else(|| object.get("current"))
@@ -48,6 +56,19 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
                     .map(str::to_owned),
             })
         })
+        .collect()
+}
+
+fn string_array_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> Vec<String> {
+    object
+        .get(key)
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.as_str().map(str::to_owned))
         .collect()
 }
 
@@ -68,6 +89,21 @@ fn choices_from_object(object: &serde_json::Map<String, serde_json::Value>) -> V
         .flat_map(|value| value.as_array().into_iter().flatten())
         .filter_map(|value| value.as_str().map(str::to_owned))
         .collect()
+}
+
+fn explicit_or_usage_subcommands(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    let explicit = string_array_from_object(object, "subcommands");
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    subcommands_from_usage(
+        object
+            .get("usage")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default(),
+    )
 }
 
 fn subcommands_from_usage(usage: &str) -> Vec<String> {
@@ -182,9 +218,9 @@ mod tests {
             task_id: None,
             data: json!({
                 "commands": [
-                    {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt.", "category": "Run"},
-                    {"name": "theme", "usage": "/theme [dark|light|monochrome]", "summary": "Set theme.", "choices": {"theme": ["dark", "light", "monochrome"]}, "current_value": "dark"},
-                    {"name": "logout", "usage": "/logout [profile]", "summary": "Log out.", "requires_confirmation": true},
+                    {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt.", "category": "Run", "cli_mirror": "run prompt"},
+                    {"name": "theme", "usage": "/theme [dark|light|monochrome]", "summary": "Set theme.", "choices": {"theme": ["dark", "light", "monochrome"]}, "current_value": "dark", "mutating": true, "aliases": ["style"], "examples": ["/theme light"]},
+                    {"name": "logout", "usage": "/logout [profile]", "summary": "Log out.", "requires_confirmation": true, "confirm_message": "This command changes local Craik state."},
                     {"name": "status", "usage": "/status", "summary": "Show Gateway status."}
                 ]
             }),
@@ -198,7 +234,14 @@ mod tests {
         assert_eq!(hints[0].category, "Run");
         assert_eq!(hints[1].choices, ["dark", "light", "monochrome"]);
         assert_eq!(hints[1].current_value.as_deref(), Some("dark"));
+        assert_eq!(hints[1].aliases, ["style"]);
+        assert_eq!(hints[1].examples, ["/theme light"]);
         assert!(hints[2].requires_confirmation);
+        assert_eq!(
+            hints[2].confirm_message.as_deref(),
+            Some("This command changes local Craik state.")
+        );
+        assert_eq!(hints[0].cli_mirror.as_deref(), Some("run prompt"));
         assert_eq!(hints[3].summary, "Show Gateway status.");
         assert_eq!(hints[3].category, "Session");
     }

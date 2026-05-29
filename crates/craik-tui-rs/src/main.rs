@@ -28,9 +28,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
 };
-use render::{
-    ActivityMetrics, StatusLineMetrics, render_activity_panel, render_provenance_panel, status_line,
-};
+use render::{StatusLineMetrics, status_line};
 use std::{
     env, fs,
     io::{self, IsTerminal},
@@ -211,59 +209,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         search_query: active_search_query(app),
     };
 
-    if app.transcript_focused || area.width < 100 {
-        render_transcript_panel(frame, app, vertical[0], &transcript_options);
-    } else {
-        let body = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(64), Constraint::Percentage(36)])
-            .split(vertical[0]);
-        render_transcript_panel(frame, app, body[0], &transcript_options);
-
-        let side = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(44), Constraint::Percentage(56)])
-            .split(body[1]);
-        let selected_approval_summary = app.selected_approval_summary();
-        let selected_approval_preview = app.selected_approval_preview();
-        let selected_run_summary = app.selected_run_summary();
-        let selected_run_detail = app.selected_run_detail();
-        let activity = Paragraph::new(render_activity_panel(
-            &app.state,
-            ActivityMetrics {
-                slash_commands: app.slash_catalog.len(),
-                queued_inputs: app.queued_inputs.len(),
-                last_error: app.last_error.as_deref(),
-                pending_approvals: app.pending_approval_count(),
-                latest_pending_approval: app.latest_pending_approval(),
-                selected_approval_summary: selected_approval_summary.as_deref(),
-                selected_approval_preview: selected_approval_preview.as_deref(),
-                selected_run_summary: selected_run_summary.as_deref(),
-                selected_run_detail: selected_run_detail.as_deref(),
-                backend_connected: app.backend_connected,
-            },
-        ))
-        .block(
-            Block::default()
-                .title("Activity")
-                .title_style(theme::accent_style())
-                .border_style(theme::mute_style())
-                .borders(Borders::LEFT),
-        )
-        .wrap(Wrap { trim: false });
-        frame.render_widget(activity, side[0]);
-
-        let provenance = Paragraph::new(render_provenance_panel(&app.selected_run_provenance()))
-            .block(
-                Block::default()
-                    .title("Run provenance  Ctrl-J/K select  Ctrl-L filter")
-                    .title_style(theme::accent_style())
-                    .border_style(theme::mute_style())
-                    .borders(Borders::LEFT),
-            )
-            .wrap(Wrap { trim: false });
-        frame.render_widget(provenance, side[1]);
-    }
+    render_transcript_panel(frame, app, vertical[0], &transcript_options);
 
     if app.help_visible {
         let help = Paragraph::new(app.help_text())
@@ -780,12 +726,12 @@ mod tests {
                 "../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"
             ),
             "provider_anthropic_messages",
-            "Anthropic Claude Sonnet 4",
+            "Sonnet 4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
             "provider_openai_responses",
-            "OpenAI GPT-5.4",
+            "GPT-5.4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
@@ -808,7 +754,8 @@ mod tests {
         let rendered = rows.join("\n");
 
         assert!(rendered.contains("Transcript"));
-        assert!(rendered.contains("Activity"));
+        assert!(!rendered.contains("Activity"));
+        assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Review the plan"));
         assert!(rendered.contains("default"));
@@ -820,16 +767,13 @@ mod tests {
     }
 
     #[test]
-    fn fixture_backed_wide_frame_renders_activity_and_evidence_context() {
+    fn fixture_backed_wide_frame_keeps_chat_home_full_width() {
         let app = app_from_fixture(CLAUDE_CODE_STREAM);
         let rendered = render_app_frame(&app, 140, 42);
 
         assert!(rendered.contains("Transcript"));
-        assert!(rendered.contains("Activity"));
-        assert!(rendered.contains("Run provenance"));
-        assert!(rendered.contains("Receipts: 2"));
-        assert!(rendered.contains("Tools"));
-        assert!(rendered.contains("Approvals seen"));
+        assert!(!rendered.contains("Activity"));
+        assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("normalized Gateway"));
         assert!(rendered.contains("Run completed"));
     }
@@ -899,17 +843,16 @@ mod tests {
 
     #[test]
     fn provider_fixtures_render_provider_neutral_tui_frames() {
-        for (input, provider_id, display_name) in PROVIDER_FIXTURES {
+        for (input, provider_id, model_fragment) in PROVIDER_FIXTURES {
             let app = app_from_fixture(input);
             let rendered = render_app_frame(&app, 144, 38);
 
             assert!(rendered.contains("Transcript"));
-            assert!(rendered.contains("Activity"));
-            assert!(rendered.contains("Run provenance"));
+            assert!(!rendered.contains("Activity"));
+            assert!(!rendered.contains("Run provenance"));
             assert!(rendered.contains(*provider_id));
-            assert!(rendered.contains(*display_name));
+            assert!(rendered.contains(*model_fragment));
             assert!(rendered.contains("Run completed"));
-            assert!(rendered.contains("Receipts: 1"));
         }
     }
 
@@ -955,7 +898,8 @@ mod tests {
                                 "usage": "/clear",
                                 "summary": "Clear the current transcript.",
                                 "category": "Workflow",
-                                "requires_confirmation": true
+                                "requires_confirmation": true,
+                                "confirm_message": "This discards the current session transcript."
                             }
                         ]
                     }
@@ -972,6 +916,45 @@ mod tests {
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
+    }
+
+    #[test]
+    fn visual_frame_regression_uses_catalog_order_for_slash_root() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.slash_catalog = crate::gateway_events::slash_hints_from_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "slash.catalog",
+                    "data": {
+                        "commands": [
+                            {"name": "help", "usage": "/help", "summary": "Show slash-command help."},
+                            {"name": "setup", "usage": "/setup", "summary": "Show setup guidance."},
+                            {"name": "auth", "usage": "/auth [login|logout|status]", "summary": "Manage auth.", "subcommands": ["login", "logout", "status"]},
+                            {"name": "clear", "usage": "/clear", "summary": "Clear the transcript.", "requires_confirmation": true}
+                        ]
+                    }
+                }"#,
+            )
+            .expect("catalog fixture parses"),
+        );
+        app.input = "/".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rendered = render_app_frame(&app, 104, 28);
+
+        assert!(rendered.contains("4 of 4"));
+        assert!(
+            rendered.find("/help").expect("help visible")
+                < rendered.find("/setup").expect("setup visible")
+        );
+        assert!(
+            rendered.find("/setup").expect("setup visible")
+                < rendered
+                    .find("/auth [login|logout|status]")
+                    .expect("auth visible")
+        );
+        assert!(rendered.contains("/clear"));
+        assert!(rendered.contains("⚠ confirms"));
     }
 
     #[test]

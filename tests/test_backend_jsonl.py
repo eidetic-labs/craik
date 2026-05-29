@@ -292,8 +292,12 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert commands["mode"]["current_value"] == "default"
     assert commands["theme"]["choices"] == {"theme": ["dark", "light", "monochrome"]}
     assert commands["theme"]["current_value"] == "dark"
+    assert commands["theme"]["mutating"] is True
+    assert commands["theme"]["cli_mirror"] == "theme"
     assert commands["clear"]["requires_confirmation"] is True
+    assert commands["clear"]["confirm_message"].startswith("This discards")
     assert "set" in commands["model"]["subcommands"]
+    assert commands["model"]["examples"] == ["/model set openai/gpt-4o-mini"]
 
 
 def test_jsonl_gateway_reports_persisted_session_history(tmp_path: Path) -> None:

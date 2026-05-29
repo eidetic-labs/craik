@@ -429,6 +429,7 @@ impl InteractiveApp {
             .map(|approval| approval.id.as_str())
     }
 
+    #[cfg(test)]
     pub(crate) fn selected_approval_summary(&self) -> Option<String> {
         let approval = self.selected_pending_approval()?;
         let position = self.selected_approval_index.unwrap_or_default() + 1;
@@ -445,10 +446,12 @@ impl InteractiveApp {
         ))
     }
 
+    #[cfg(test)]
     pub(crate) fn selected_approval_preview(&self) -> Option<String> {
         self.selected_approval_detail_text()
     }
 
+    #[cfg(test)]
     pub(crate) fn selected_run_summary(&self) -> Option<String> {
         let run = self.selected_run()?;
         let visible = self.filtered_run_indexes();
