@@ -572,15 +572,37 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
         }
         if let Some(diff) = line.strip_prefix("  +") {
             rendered.push(Line::from(vec![
-                Span::styled("  +", Style::default().fg(theme::sage())),
-                Span::styled(diff.to_owned(), Style::default().fg(theme::sage())),
+                Span::styled(
+                    "  +",
+                    Style::default()
+                        .fg(theme::sage())
+                        .bg(theme::sage_surface())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    diff.to_owned(),
+                    Style::default()
+                        .fg(theme::primary())
+                        .bg(theme::sage_surface()),
+                ),
             ]));
             continue;
         }
         if let Some(diff) = line.strip_prefix("  -") {
             rendered.push(Line::from(vec![
-                Span::styled("  -", Style::default().fg(theme::red())),
-                Span::styled(diff.to_owned(), Style::default().fg(theme::red())),
+                Span::styled(
+                    "  -",
+                    Style::default()
+                        .fg(theme::red())
+                        .bg(theme::red_surface())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    diff.to_owned(),
+                    Style::default()
+                        .fg(theme::primary())
+                        .bg(theme::red_surface()),
+                ),
             ]));
             continue;
         }
@@ -899,6 +921,18 @@ mod tests {
         assert!(rendered.contains("[Ctrl-A] approve"));
         assert!(rendered.contains("[Ctrl-X] deny"));
         assert!(rendered.contains("[Esc] defer"));
+        let removed = lines
+            .iter()
+            .find(|line| line.to_string().contains("- old"))
+            .expect("removed diff line is rendered");
+        let added = lines
+            .iter()
+            .find(|line| line.to_string().contains("+ new"))
+            .expect("added diff line is rendered");
+        assert_eq!(removed.spans[0].style.bg, Some(crate::theme::red_surface()));
+        assert_eq!(removed.spans[1].style.bg, Some(crate::theme::red_surface()));
+        assert_eq!(added.spans[0].style.bg, Some(crate::theme::sage_surface()));
+        assert_eq!(added.spans[1].style.bg, Some(crate::theme::sage_surface()));
     }
 
     #[test]

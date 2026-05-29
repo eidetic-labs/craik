@@ -24,6 +24,7 @@ pub struct TranscriptEntry {
 struct CachedBodyLine {
     text: String,
     spans: Vec<Span<'static>>,
+    diff_context: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -286,17 +287,24 @@ fn render_body_line(
     cached: Option<&CachedBodyLine>,
     search_query: Option<&str>,
 ) -> Line<'static> {
-    let mut spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
     let Some(cached) = cached else {
+        let spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
         return highlight_search(spans, search_query);
     };
+    if let Some(diff) = diff_line_spans(kind, cached) {
+        let mut spans = vec![Span::styled(
+            body_prefix(kind),
+            body_prefix_style(kind).bg(diff.background),
+        )];
+        spans.extend(diff.spans);
+        return highlight_search(spans, search_query);
+    }
+    let mut spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
     if let Some(markdown) = markdown_line_spans(&cached.text) {
         spans.extend(markdown);
     } else if let Some(bullet) = cached.text.strip_prefix("- ") {
         spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
         spans.extend(value_spans(kind, bullet));
-    } else if let Some(diff) = diff_line_spans(&cached.text) {
-        spans.extend(diff);
     } else if !cached.spans.is_empty() {
         spans.extend(cached.spans.clone());
     } else if let Some((label, value)) = split_key_value(&cached.text) {
@@ -324,49 +332,82 @@ impl CachedBodyLine {
         Self {
             text,
             spans: Vec::new(),
+            diff_context: false,
         }
     }
 
     fn styled(text: String, spans: Vec<Span<'static>>) -> Self {
-        Self { text, spans }
+        Self {
+            text,
+            spans,
+            diff_context: false,
+        }
+    }
+
+    fn diff(text: String, spans: Vec<Span<'static>>) -> Self {
+        Self {
+            text,
+            spans,
+            diff_context: true,
+        }
     }
 }
 
 fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
     let mut lines = Vec::new();
     let mut code_highlighter: Option<CodeBlockHighlighter> = None;
+    let mut code_block_is_diff = false;
+    let body_is_diff = matches!(kind, TranscriptKind::File)
+        && body.lines().any(|line| {
+            line.starts_with("---") || line.starts_with("+++") || line.starts_with("@@")
+        });
     for raw in body.lines() {
         if let Some(language) = raw.trim_start().strip_prefix("```") {
             let language = language.trim();
-            code_highlighter = if code_highlighter.is_some() {
-                None
+            if code_highlighter.is_some() {
+                code_highlighter = None;
+                code_block_is_diff = false;
             } else {
-                Some(CodeBlockHighlighter::new(language))
+                code_block_is_diff = is_diff_language(language);
+                code_highlighter = Some(CodeBlockHighlighter::new(language));
             };
-            lines.push(CachedBodyLine::styled(
+            let fence_spans = vec![Span::styled(
                 raw.to_owned(),
-                vec![Span::styled(
-                    raw.to_owned(),
-                    theme::mute_style().add_modifier(Modifier::BOLD),
-                )],
-            ));
+                theme::mute_style().add_modifier(Modifier::BOLD),
+            )];
+            lines.push(if code_block_is_diff {
+                CachedBodyLine::diff(raw.to_owned(), fence_spans)
+            } else {
+                CachedBodyLine::styled(raw.to_owned(), fence_spans)
+            });
             continue;
         }
         if let Some(highlighter) = code_highlighter.as_mut() {
-            lines.push(CachedBodyLine::styled(
-                raw.to_owned(),
-                highlighter.highlight_line(raw),
-            ));
+            let spans = highlighter.highlight_line(raw);
+            lines.push(if code_block_is_diff {
+                CachedBodyLine::diff(raw.to_owned(), spans)
+            } else {
+                CachedBodyLine::styled(raw.to_owned(), spans)
+            });
         } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System) {
             lines.push(CachedBodyLine::styled(
                 raw.to_owned(),
                 highlight_typed_facts(raw),
             ));
+        } else if body_is_diff {
+            lines.push(CachedBodyLine::diff(raw.to_owned(), Vec::new()));
         } else {
             lines.push(CachedBodyLine::plain(raw.to_owned()));
         }
     }
     lines
+}
+
+fn is_diff_language(language: &str) -> bool {
+    matches!(
+        language.trim().to_ascii_lowercase().as_str(),
+        "diff" | "patch" | "udiff"
+    )
 }
 
 struct CodeBlockHighlighter {
@@ -465,26 +506,51 @@ fn highlight_typed_facts(text: &str) -> Vec<Span<'static>> {
     Vec::new()
 }
 
-fn diff_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
+struct DiffLine {
+    background: Color,
+    spans: Vec<Span<'static>>,
+}
+
+fn diff_line_spans(kind: &TranscriptKind, cached: &CachedBodyLine) -> Option<DiffLine> {
+    let text = cached.text.as_str();
     if text.starts_with("+++") || text.starts_with("---") {
-        return Some(vec![Span::styled(
-            text.to_owned(),
-            theme::mute_style().add_modifier(Modifier::BOLD),
-        )]);
+        return Some(DiffLine {
+            background: Color::Reset,
+            spans: vec![Span::styled(
+                text.to_owned(),
+                theme::mute_style().add_modifier(Modifier::BOLD),
+            )],
+        });
     }
-    if text.starts_with('+') {
-        return Some(vec![Span::styled(
-            text.to_owned(),
-            Style::default().fg(theme::sage()),
-        )]);
+    let diff_context = cached.diff_context
+        || matches!(
+            kind,
+            TranscriptKind::Tool | TranscriptKind::Command | TranscriptKind::Approval
+        );
+    if !diff_context {
+        return None;
     }
-    if text.starts_with('-') {
-        return Some(vec![Span::styled(
-            text.to_owned(),
-            Style::default().fg(theme::red()),
-        )]);
-    }
-    None
+    let (marker, value, foreground, background) = if let Some(value) = text.strip_prefix('+') {
+        ("+", value, theme::sage(), theme::sage_surface())
+    } else if let Some(value) = text.strip_prefix('-') {
+        ("-", value, theme::red(), theme::red_surface())
+    } else {
+        return None;
+    };
+    let base_style = Style::default().fg(theme::primary()).bg(background);
+    Some(DiffLine {
+        background,
+        spans: vec![
+            Span::styled(
+                marker.to_owned(),
+                Style::default()
+                    .fg(foreground)
+                    .bg(background)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(value.to_owned(), base_style),
+        ],
+    })
 }
 
 fn markdown_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
@@ -809,8 +875,61 @@ mod tests {
         assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::mute()));
         assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::mute()));
         assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::red()));
+        assert_eq!(
+            lines[3].spans[1].style.bg,
+            Some(crate::theme::red_surface())
+        );
+        assert_eq!(
+            lines[3].spans[2].style.bg,
+            Some(crate::theme::red_surface())
+        );
         assert_eq!(lines[4].spans[1].style.fg, Some(crate::theme::sage()));
-        assert_eq!(lines[5].spans[1].to_string(), "* ");
+        assert_eq!(
+            lines[4].spans[1].style.bg,
+            Some(crate::theme::sage_surface())
+        );
+        assert_eq!(
+            lines[4].spans[2].style.bg,
+            Some(crate::theme::sage_surface())
+        );
+        assert_eq!(
+            lines[5].spans[1].style.bg,
+            Some(crate::theme::red_surface())
+        );
+    }
+
+    #[test]
+    fn markdown_bullets_are_not_tinted_as_diff_outside_diff_context() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "- keep markdown bullet\n+ not a diff addition",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[1].spans[1].to_string(), "* ");
+        assert_eq!(lines[1].spans[1].style.bg, None);
+        assert_eq!(lines[2].spans[1].style.bg, None);
+    }
+
+    #[test]
+    fn fenced_diff_blocks_use_background_tints() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "```diff\n-old\n+new\n context\n```",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(
+            lines[2].spans[1].style.bg,
+            Some(crate::theme::red_surface())
+        );
+        assert_eq!(
+            lines[3].spans[1].style.bg,
+            Some(crate::theme::sage_surface())
+        );
+        assert_eq!(lines[4].spans[1].style.bg, None);
     }
 
     #[test]
