@@ -746,6 +746,7 @@ impl InteractiveApp {
         items
     }
 
+    #[cfg(test)]
     pub(crate) fn prompt_context(&self) -> String {
         let mut lines = Vec::new();
         if !self.backend_connected {
@@ -1762,10 +1763,6 @@ impl InteractiveApp {
 
     pub(crate) fn input_line_count(&self) -> usize {
         self.input.lines().count().max(1)
-    }
-
-    pub(crate) fn input_char_count(&self) -> usize {
-        self.input.chars().count()
     }
 
     #[cfg(test)]

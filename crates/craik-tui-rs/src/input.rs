@@ -54,7 +54,7 @@ struct SlashSuggestion {
     query: String,
 }
 
-const MAX_SLASH_SUGGESTIONS: usize = 4;
+const MAX_SLASH_SUGGESTIONS: usize = 3;
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     let suggestions = slash_suggestion_rows(input, slash_catalog);
@@ -62,9 +62,8 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     if !suggestions.is_empty() {
         let total = slash_catalog.len();
         lines.push(Line::from(vec![
-            Span::styled("▌ ", theme::accent_style()),
             Span::styled("/", theme::accent_style()),
-            Span::styled(" command palette", theme::primary_style()),
+            Span::styled(" commands", theme::primary_style()),
             Span::styled(
                 format!("  {} of {total}", suggestions.len()),
                 theme::dim_style(),
@@ -81,7 +80,7 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                     theme::mute_style()
                 };
             let mut command_spans = vec![
-                Span::styled("  ", theme::mute_style()),
+                Span::styled(" ", theme::mute_style()),
                 Span::styled(prefix, Style::default().fg(theme::sage())),
                 Span::raw("  "),
             ];
@@ -94,7 +93,7 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
             }
             lines.push(Line::from(command_spans));
             lines.push(Line::from(vec![
-                Span::styled("     ", theme::mute_style()),
+                Span::styled("    ", theme::mute_style()),
                 Span::styled(suggestion.category.to_uppercase(), category_style),
                 Span::styled("  ", theme::mute_style()),
                 Span::styled(suggestion.summary, theme::dim_style()),
@@ -103,10 +102,7 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     }
 
     let input_lines = if input.is_empty() {
-        vec![Line::from(Span::styled(
-            "Type a prompt or /command...",
-            theme::dim_style(),
-        ))]
+        vec![Line::from("")]
     } else {
         input
             .split('\n')
@@ -509,11 +505,10 @@ mod tests {
     }
 
     #[test]
-    fn placeholder_is_visible_when_input_is_empty() {
+    fn empty_input_renders_without_instructional_prompt_copy() {
         let lines = render_input_lines("", &[]);
 
-        assert_eq!(lines[0].to_string(), "Type a prompt or /command...");
-        assert_eq!(lines[0].spans[0].style.fg, Some(crate::theme::dim()));
+        assert_eq!(lines[0].to_string(), "");
     }
 
     #[test]
@@ -535,7 +530,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("/ command palette"));
+        assert!(rendered.contains("/ commands"));
         assert!(rendered.contains("▸  /run <prompt>"));
         assert!(rendered.contains("RUN  Run an audited prompt."));
         assert!(rendered.contains("▸  /receipt latest"));
@@ -543,7 +538,7 @@ mod tests {
 
         let palette_row = lines
             .iter()
-            .position(|line| line.to_string().contains("/ command palette"))
+            .position(|line| line.to_string().contains("/ commands"))
             .expect("palette header is visible");
         let input_row = lines
             .iter()
@@ -571,9 +566,10 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("4 of 5"));
+        assert!(rendered.contains("3 of 5"));
         assert!(rendered.contains("/help"));
-        assert!(rendered.contains("/health"));
+        assert!(rendered.contains("/handoff"));
+        assert!(!rendered.contains("/health"));
         assert!(!rendered.contains("/headers"));
     }
 
