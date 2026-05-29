@@ -221,7 +221,7 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
 
 fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
     match kind {
-        TranscriptKind::System => ("SYSTEM", theme::cyan()),
+        TranscriptKind::System => ("CRAIK", theme::cyan()),
         TranscriptKind::User => ("YOU", theme::sage()),
         TranscriptKind::Assistant => ("MODEL", theme::primary()),
         TranscriptKind::Progress => ("RUN", theme::amber()),
@@ -231,6 +231,22 @@ fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
         TranscriptKind::Approval => ("APPROVE", theme::red()),
         TranscriptKind::Receipt => ("RECEIPT", theme::cyan()),
         TranscriptKind::Error => ("ERROR", theme::red()),
+    }
+}
+
+fn body_prefix(kind: &TranscriptKind) -> &'static str {
+    match kind {
+        TranscriptKind::User => "  ▌ ",
+        TranscriptKind::Assistant => "    ",
+        _ => "  │ ",
+    }
+}
+
+fn body_prefix_style(kind: &TranscriptKind) -> Style {
+    match kind {
+        TranscriptKind::User => Style::default().fg(theme::sage()),
+        TranscriptKind::Assistant => theme::mute_style(),
+        _ => Style::default().fg(label_color(kind)),
     }
 }
 
@@ -255,7 +271,7 @@ fn render_body_line(
     cached: Option<&CachedBodyLine>,
     search_query: Option<&str>,
 ) -> Line<'static> {
-    let mut spans = vec![Span::styled("  ", theme::mute_style())];
+    let mut spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
     let Some(cached) = cached else {
         return highlight_search(spans, search_query);
     };
@@ -411,7 +427,10 @@ fn push_code_token(spans: &mut Vec<Span<'static>>, token: &str, keywords: &[&str
 fn highlight_typed_facts(text: &str) -> Vec<Span<'static>> {
     if let Some((label, value)) = split_key_value(text) {
         return vec![
-            Span::styled(format!("{label}: "), theme::accent_style()),
+            Span::styled(
+                format!("{label}: "),
+                theme::mute_style().add_modifier(Modifier::BOLD),
+            ),
             Span::styled(value.to_owned(), Style::default().fg(theme::sage())),
         ];
     }
@@ -569,6 +588,7 @@ mod tests {
     #[test]
     fn rendering_labels_entry_kinds() {
         let entries = vec![
+            TranscriptEntry::system("Gateway", "connected"),
             TranscriptEntry::user("You", "hello"),
             TranscriptEntry::new(TranscriptKind::Tool, "Read", "README.md"),
             TranscriptEntry::error("Gateway", "failed"),
@@ -580,6 +600,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
+        assert!(rendered.contains("CRAIK Gateway"));
         assert!(rendered.contains("YOU You"));
         assert!(rendered.contains("TOOL Read"));
         assert!(rendered.contains("ERROR Gateway"));
@@ -695,7 +716,22 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines.len(), 3);
-        assert_eq!(lines[1].spans[0].content, "  ");
+        assert_eq!(lines[1].spans[0].content, "  │ ");
+    }
+
+    #[test]
+    fn user_model_and_craik_body_lanes_are_distinct() {
+        let entries = vec![
+            TranscriptEntry::user("You", "review this"),
+            TranscriptEntry::assistant("Assistant", "Looks good."),
+            TranscriptEntry::system("Gateway", "Receipt: receipt_1"),
+        ];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[1].spans[0].content, "  ▌ ");
+        assert_eq!(lines[4].spans[0].content, "    ");
+        assert_eq!(lines[7].spans[0].content, "  │ ");
     }
 
     #[test]
