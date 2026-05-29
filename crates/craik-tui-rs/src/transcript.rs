@@ -75,6 +75,11 @@ impl TranscriptEntry {
     pub fn error(title: &str, body: &str) -> Self {
         Self::new(TranscriptKind::Error, title, body)
     }
+
+    pub fn update_body(&mut self, body: &str) {
+        self.body = body.to_owned();
+        self.cached_body = parse_cached_body(self.kind, body);
+    }
 }
 
 #[cfg(test)]

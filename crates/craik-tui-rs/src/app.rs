@@ -1307,7 +1307,10 @@ impl InteractiveApp {
                         TranscriptKind::Tool
                     };
                     let text = summarize_tool_event(event, tool, message);
-                    if !recent_transcript_entry_matches(&self.transcript, kind, tool, &text) {
+                    if append_grouped_tool_transcript(&mut self.transcript, kind, tool, &text) {
+                        self.follow_tail_after_transcript_update();
+                    } else if !recent_transcript_entry_matches(&self.transcript, kind, tool, &text)
+                    {
                         self.transcript
                             .push(TranscriptEntry::new(kind, tool, &text));
                         self.follow_tail_after_transcript_update();
@@ -2875,6 +2878,132 @@ fn recent_transcript_entry_matches(
     })
 }
 
+fn append_grouped_tool_transcript(
+    entries: &mut [TranscriptEntry],
+    kind: TranscriptKind,
+    title: &str,
+    body: &str,
+) -> bool {
+    let Some(last) = entries.last_mut() else {
+        return false;
+    };
+    if last.kind != kind
+        || normalize_transcript_text(&last.title) != normalize_transcript_text(title)
+    {
+        return false;
+    }
+
+    let grouped = grouped_tool_transcript_body(title, &last.body, body);
+    last.update_body(&grouped);
+    true
+}
+
+fn grouped_tool_transcript_body(title: &str, existing_body: &str, next_body: &str) -> String {
+    let previous_count = grouped_tool_event_count(existing_body).unwrap_or(1);
+    let count = previous_count.saturating_add(1);
+    let latest_detail = tool_detail_line(next_body).unwrap_or_else(|| compact_text(next_body, 120));
+    let mut details = grouped_tool_recent_details(existing_body);
+    if details.is_empty() {
+        details.push(CountedDetail {
+            text: tool_detail_line(existing_body)
+                .unwrap_or_else(|| compact_text(existing_body, 120)),
+            count: 1,
+        });
+    }
+    push_counted_detail(&mut details, latest_detail.clone());
+
+    let mut lines = vec![format!("Tool: {title}"), format!("Events: {count}")];
+    lines.extend(tool_context_lines(next_body));
+    lines.push(format!("Latest: {latest_detail}"));
+    lines.push("Recent:".to_owned());
+    for detail in details.iter().rev().take(4).rev() {
+        if detail.count > 1 {
+            lines.push(format!("- {} (x{})", detail.text, detail.count));
+        } else {
+            lines.push(format!("- {}", detail.text));
+        }
+    }
+    lines.join("\n")
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CountedDetail {
+    text: String,
+    count: usize,
+}
+
+fn grouped_tool_event_count(body: &str) -> Option<usize> {
+    body.lines()
+        .find_map(|line| line.strip_prefix("Events: ")?.parse::<usize>().ok())
+}
+
+fn grouped_tool_recent_details(body: &str) -> Vec<CountedDetail> {
+    body.lines()
+        .filter_map(|line| parse_counted_detail(line.strip_prefix("- ")?))
+        .collect()
+}
+
+fn parse_counted_detail(value: &str) -> Option<CountedDetail> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some((text, count_text)) = trimmed.rsplit_once(" (x")
+        && let Some(count_text) = count_text.strip_suffix(')')
+        && let Ok(count) = count_text.parse::<usize>()
+    {
+        return Some(CountedDetail {
+            text: text.to_owned(),
+            count,
+        });
+    }
+    Some(CountedDetail {
+        text: trimmed.to_owned(),
+        count: 1,
+    })
+}
+
+fn push_counted_detail(details: &mut Vec<CountedDetail>, detail: String) {
+    if detail.trim().is_empty() {
+        return;
+    }
+    if let Some(existing) = details.iter_mut().find(|existing| {
+        normalize_transcript_text(&existing.text) == normalize_transcript_text(&detail)
+    }) {
+        existing.count = existing.count.saturating_add(1);
+        return;
+    }
+    details.push(CountedDetail {
+        text: detail,
+        count: 1,
+    });
+    let overflow = details.len().saturating_sub(4);
+    if overflow > 0 {
+        details.drain(0..overflow);
+    }
+}
+
+fn tool_detail_line(body: &str) -> Option<String> {
+    body.lines()
+        .find_map(|line| line.strip_prefix("Detail: "))
+        .or_else(|| body.lines().find_map(|line| line.strip_prefix("Latest: ")))
+        .map(str::to_owned)
+}
+
+fn tool_context_lines(body: &str) -> Vec<String> {
+    body.lines()
+        .filter(|line| {
+            line.starts_with("Provider: ")
+                || line.starts_with("Family: ")
+                || line.starts_with("Model: ")
+                || line.starts_with("Response: ")
+                || line.starts_with("Command: ")
+                || line.starts_with("Target: ")
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
 fn normalize_transcript_text(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -3097,6 +3226,7 @@ mod tests {
     use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
+    use crate::transcript::TranscriptKind;
     use craik_tui_rs::{ActivityItem, GatewayEvent};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
@@ -4160,6 +4290,65 @@ mod tests {
                 .count(),
             1
         );
+        let grouped_entry = app
+            .transcript
+            .last()
+            .expect("grouped tool transcript entry");
+        assert!(grouped_entry.body.contains("Events: 2"));
+        assert!(
+            grouped_entry
+                .body
+                .contains("Latest: Command completed successfully.")
+        );
+        assert!(
+            grouped_entry
+                .body
+                .contains("- Command completed successfully. (x2)")
+        );
+    }
+
+    #[test]
+    fn consecutive_tool_events_group_by_tool_title_without_hiding_context() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let glob_event = GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "tool": "Glob",
+                "target": "src/**/*.rs",
+                "message": "Claude Code is using Glob."
+            }),
+        };
+        let read_event = GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "tool": "Read",
+                "target": "README.md",
+                "message": "Claude Code is using Read on README.md."
+            }),
+        };
+
+        app.record_event(&glob_event);
+        app.record_event(&glob_event);
+        app.record_event(&read_event);
+        app.record_event(&read_event);
+
+        let tool_entries = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Tool)
+            .collect::<Vec<_>>();
+        assert_eq!(tool_entries.len(), 2);
+        assert_eq!(tool_entries[0].title, "Glob");
+        assert!(tool_entries[0].body.contains("Events: 2"));
+        assert!(tool_entries[0].body.contains("Target: src/**/*.rs"));
+        assert!(tool_entries[1].body.contains("Events: 2"));
+        assert!(tool_entries[1].body.contains("Target: README.md"));
     }
 
     #[test]
