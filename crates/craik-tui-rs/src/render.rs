@@ -23,6 +23,7 @@ pub struct ActivityMetrics<'a> {
 pub struct StatusLineMetrics<'a> {
     pub in_flight: bool,
     pub pending_approval: Option<&'a str>,
+    pub approval_reviewed: bool,
     pub backend_connected: bool,
     pub queued_inputs: usize,
     pub active_overlay: Option<&'a str>,
@@ -221,24 +222,51 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             label: "chat".to_owned(),
             urgent: false,
         });
-        middle.push(FooterHint {
-            key: match overlay {
-                "Memory" => "⌃e",
-                "Evidence" => "⌃r",
-                "Runs" => "⌃e",
-                "Approvals" => "⌃a",
-                _ => "⌃m",
-            },
-            label: match overlay {
-                "Memory" => "evidence",
-                "Evidence" => "runs",
-                "Runs" => "evidence",
-                "Approvals" => "approve",
-                _ => "memory",
+        if overlay == "Approvals" {
+            if metrics.pending_approval.is_some() {
+                middle.push(FooterHint {
+                    key: "⌃a",
+                    label: if metrics.approval_reviewed {
+                        "approve reviewed".to_owned()
+                    } else {
+                        "review selected".to_owned()
+                    },
+                    urgent: true,
+                });
+                middle.push(FooterHint {
+                    key: "⌃x",
+                    label: if metrics.approval_reviewed {
+                        "deny reviewed".to_owned()
+                    } else {
+                        "review before deny".to_owned()
+                    },
+                    urgent: metrics.approval_reviewed,
+                });
+            } else {
+                middle.push(FooterHint {
+                    key: "⌃a",
+                    label: "none pending".to_owned(),
+                    urgent: false,
+                });
             }
-            .to_owned(),
-            urgent: overlay == "Approvals",
-        });
+        } else {
+            middle.push(FooterHint {
+                key: match overlay {
+                    "Memory" => "⌃e",
+                    "Evidence" => "⌃r",
+                    "Runs" => "⌃e",
+                    _ => "⌃m",
+                },
+                label: match overlay {
+                    "Memory" => "evidence",
+                    "Evidence" => "runs",
+                    "Runs" => "evidence",
+                    _ => "memory",
+                }
+                .to_owned(),
+                urgent: false,
+            });
+        }
     } else if !metrics.backend_connected {
         middle.push(FooterHint {
             key: "⌃b",
@@ -253,7 +281,7 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
     } else if let Some(approval_id) = metrics.pending_approval {
         middle.push(FooterHint {
             key: "⌃a",
-            label: format!("approvals {}", compact_label(approval_id, 14)),
+            label: format!("review {}", compact_label(approval_id, 14)),
             urgent: true,
         });
         middle.push(FooterHint {
@@ -293,7 +321,12 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             urgent: false,
         });
     }
-    for hint in middle.into_iter().take(2) {
+    let middle_limit = if metrics.active_overlay == Some("Approvals") {
+        3
+    } else {
+        2
+    };
+    for hint in middle.into_iter().take(middle_limit) {
         if !hints.iter().any(|existing| existing.key == hint.key) {
             hints.push(hint);
         }
@@ -499,6 +532,7 @@ mod tests {
         StatusLineMetrics {
             in_flight: false,
             pending_approval: None,
+            approval_reviewed: false,
             backend_connected: true,
             queued_inputs: 0,
             active_overlay: None,
@@ -657,9 +691,41 @@ mod tests {
         )
         .to_string();
 
-        assert!(rendered.contains("approvals"));
+        assert!(rendered.contains("review"));
+        assert!(rendered.contains("approval_ru"));
         assert!(rendered.contains("⌃a"));
         assert!(rendered.contains("? help"));
+    }
+
+    #[test]
+    fn status_line_distinguishes_approval_review_from_decision() {
+        let state = GatewayAppState::default();
+
+        let review = status_line(
+            &state,
+            StatusLineMetrics {
+                active_overlay: Some("Approvals"),
+                pending_approval: Some("approval_123"),
+                approval_reviewed: false,
+                ..status_metrics()
+            },
+        )
+        .to_string();
+        assert!(review.contains("⌃a review selected"));
+        assert!(review.contains("review before deny"));
+
+        let decide = status_line(
+            &state,
+            StatusLineMetrics {
+                active_overlay: Some("Approvals"),
+                pending_approval: Some("approval_123"),
+                approval_reviewed: true,
+                ..status_metrics()
+            },
+        )
+        .to_string();
+        assert!(decide.contains("⌃a approve reviewed"));
+        assert!(decide.contains("⌃x deny reviewed"));
     }
 
     #[test]
