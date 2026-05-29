@@ -54,6 +54,8 @@ struct SlashSuggestion {
     query: String,
 }
 
+const MAX_SLASH_SUGGESTIONS: usize = 4;
+
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     let mut lines = if input.is_empty() {
         vec![Line::from(Span::styled(
@@ -88,7 +90,7 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                 theme::dim_style(),
             ),
         ]));
-        lines.extend(suggestions.into_iter().map(|suggestion| {
+        for suggestion in suggestions {
             let prefix = if suggestion.exact_prefix { "▸" } else { " " };
             let category_style =
                 if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
@@ -98,26 +100,26 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                 } else {
                     theme::mute_style()
                 };
-            let mut spans = vec![
+            let mut command_spans = vec![
                 Span::styled("  ", theme::mute_style()),
                 Span::styled(prefix, Style::default().fg(theme::sage())),
                 Span::raw("  "),
             ];
-            spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
-            spans.extend([
-                Span::styled(
-                    format!("  {}", suggestion.category.to_lowercase()),
-                    category_style,
-                ),
-                Span::styled("  - ", theme::mute_style()),
+            command_spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
+            if !suggestion.hint.is_empty() {
+                command_spans.extend([
+                    Span::styled("  ", theme::mute_style()),
+                    Span::styled(suggestion.hint.clone(), right_hint_style(&suggestion.hint)),
+                ]);
+            }
+            lines.push(Line::from(command_spans));
+            lines.push(Line::from(vec![
+                Span::styled("     ", theme::mute_style()),
+                Span::styled(suggestion.category.to_uppercase(), category_style),
+                Span::styled("  ", theme::mute_style()),
                 Span::styled(suggestion.summary, theme::dim_style()),
-                Span::styled(
-                    format!("  {}", suggestion.hint),
-                    right_hint_style(&suggestion.hint),
-                ),
-            ]);
-            Line::from(spans)
-        }));
+            ]));
+        }
     }
     lines
 }
@@ -249,7 +251,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
     suggestions.sort_by_key(|hint| (!hint.exact_prefix, hint.score, hint.catalog_index));
     suggestions
         .into_iter()
-        .take(8)
+        .take(MAX_SLASH_SUGGESTIONS)
         .map(|hint| SlashSuggestion {
             usage: hint.usage,
             summary: hint.summary,
@@ -495,8 +497,33 @@ mod tests {
             .join("\n");
 
         assert!(rendered.contains("/ command palette"));
-        assert!(rendered.contains("▸  /run <prompt>  run  - Run an audited prompt."));
-        assert!(rendered.contains("▸  /receipt latest  evidence  - Show latest receipt."));
+        assert!(rendered.contains("▸  /run <prompt>"));
+        assert!(rendered.contains("RUN  Run an audited prompt."));
+        assert!(rendered.contains("▸  /receipt latest"));
+        assert!(rendered.contains("EVIDENCE  Show latest receipt."));
+    }
+
+    #[test]
+    fn slash_palette_limits_rows_to_preserve_composer_space() {
+        let catalog = vec![
+            SlashHint::new("help", "/help", "Show help.", "Session"),
+            SlashHint::new("history", "/history", "Show history.", "Session"),
+            SlashHint::new("handoff", "/handoff", "Create handoff.", "Workflow"),
+            SlashHint::new("health", "/health", "Show health.", "Session"),
+            SlashHint::new("headers", "/headers", "Show headers.", "Debug"),
+        ];
+
+        let lines = render_input_lines("/h", &catalog);
+        let rendered = lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("4 of 5"));
+        assert!(rendered.contains("/help"));
+        assert!(rendered.contains("/health"));
+        assert!(!rendered.contains("/headers"));
     }
 
     #[test]
@@ -562,5 +589,43 @@ mod tests {
         let choices = slash_suggestions("/mode ", &catalog).join("\n");
         assert!(choices.contains("/mode default [Run] - Current value (● current)"));
         assert!(choices.contains("/mode plan [Run] - Read-only planning mode. (read-only)"));
+    }
+
+    #[test]
+    fn slash_palette_renders_current_and_confirm_hints_as_row_metadata() {
+        let mut mode = SlashHint::new(
+            "mode",
+            "/mode [default|acceptEdits|plan|auto]",
+            "Inspect or set mode.",
+            "Run",
+        );
+        mode.current_value = Some("default".to_owned());
+        let mut clear = SlashHint::new("clear", "/clear", "Clear transcript.", "Workflow");
+        clear.requires_confirmation = true;
+        let catalog = vec![mode, clear];
+
+        let root = render_input_lines("/m", &catalog)
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  now: default"));
+        assert!(root.contains("RUN  Inspect or set mode."));
+
+        let confirm = render_input_lines("/c", &catalog)
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(confirm.contains("/clear  ⚠ confirms"));
+        assert!(confirm.contains("WORKFLOW  Clear transcript."));
+
+        let drilldown = render_input_lines("/mode ", &catalog)
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(drilldown.contains("/mode default  ● current"));
+        assert!(drilldown.contains("/mode plan  read-only"));
     }
 }
