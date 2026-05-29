@@ -22,6 +22,8 @@ struct Palette {
     cyan: Color,
     red: Color,
     surface: Color,
+    sage_surface: Color,
+    red_surface: Color,
 }
 
 pub fn mode() -> ThemeMode {
@@ -80,6 +82,14 @@ pub fn surface() -> Color {
     palette().surface
 }
 
+pub fn sage_surface() -> Color {
+    palette().sage_surface
+}
+
+pub fn red_surface() -> Color {
+    palette().red_surface
+}
+
 pub fn primary_style() -> Style {
     Style::default().fg(primary())
 }
@@ -119,6 +129,8 @@ fn palette() -> Palette {
             cyan: Color::Rgb(134, 184, 196),
             red: Color::Rgb(207, 139, 139),
             surface: Color::Rgb(25, 25, 31),
+            sage_surface: Color::Rgb(24, 43, 31),
+            red_surface: Color::Rgb(48, 29, 31),
         },
         ThemeMode::Light => Palette {
             accent: Color::Rgb(124, 114, 199),
@@ -130,6 +142,8 @@ fn palette() -> Palette {
             cyan: Color::Rgb(55, 120, 137),
             red: Color::Rgb(176, 77, 77),
             surface: Color::Rgb(243, 243, 247),
+            sage_surface: Color::Rgb(220, 240, 224),
+            red_surface: Color::Rgb(246, 222, 222),
         },
         ThemeMode::Monochrome => Palette {
             accent: Color::Gray,
@@ -141,6 +155,8 @@ fn palette() -> Palette {
             cyan: Color::Gray,
             red: Color::Gray,
             surface: Color::Reset,
+            sage_surface: Color::Reset,
+            red_surface: Color::Reset,
         },
     }
 }
