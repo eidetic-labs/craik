@@ -248,7 +248,7 @@ fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
         TranscriptKind::File => ("file", theme::mute()),
         TranscriptKind::Command => ("cmd", theme::mute()),
         TranscriptKind::Approval => ("approval", theme::red()),
-        TranscriptKind::Receipt => ("receipt", theme::mute()),
+        TranscriptKind::Receipt => ("evidence", theme::mute()),
         TranscriptKind::Error => ("error", theme::red()),
     }
 }
@@ -284,10 +284,8 @@ fn body_prefix(kind: &TranscriptKind) -> &'static str {
         TranscriptKind::Assistant => "    ",
         TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
         TranscriptKind::System | TranscriptKind::Progress => "  · ",
-        TranscriptKind::Tool
-        | TranscriptKind::File
-        | TranscriptKind::Command
-        | TranscriptKind::Receipt => "  · ",
+        TranscriptKind::Receipt => "  ⌁ ",
+        TranscriptKind::Tool | TranscriptKind::File | TranscriptKind::Command => "  · ",
     }
 }
 
@@ -1031,9 +1029,9 @@ mod tests {
 
         assert_eq!(lines[0].spans[1].content, "assistant ");
         assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
-        assert_eq!(lines[3].spans[1].content, "receipt ");
+        assert_eq!(lines[3].spans[1].content, "evidence ");
         assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::mute()));
-        assert_eq!(lines[4].spans[0].content, "  · ");
+        assert_eq!(lines[4].spans[0].content, "  ⌁ ");
         assert_eq!(lines[5].spans[1].content, "approval ");
         assert_eq!(lines[6].spans[0].content, "  ! ");
         assert_eq!(lines[6].spans[0].style.fg, Some(crate::theme::red()));

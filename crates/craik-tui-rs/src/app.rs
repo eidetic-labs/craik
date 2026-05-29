@@ -641,17 +641,7 @@ impl InteractiveApp {
 
     fn evidence_overlay_items(&self) -> Vec<OverlayItem> {
         let mut items = Vec::new();
-        items.extend(
-            self.state
-                .receipt_ids
-                .iter()
-                .rev()
-                .map(|receipt| OverlayItem {
-                    title: receipt.clone(),
-                    summary: "receipt".to_owned(),
-                    detail: format!("Receipt\nID: {receipt}"),
-                }),
-        );
+        items.extend(self.receipt_overlay_items());
         items.extend(self.state.file_paths.iter().rev().map(|path| OverlayItem {
             title: path.clone(),
             summary: "file".to_owned(),
@@ -680,6 +670,40 @@ impl InteractiveApp {
             });
         }
         items
+    }
+
+    fn receipt_overlay_items(&self) -> Vec<OverlayItem> {
+        self.state
+            .receipt_ids
+            .iter()
+            .rev()
+            .map(|receipt| {
+                let run = self.run_for_receipt(receipt);
+                let detail = run
+                    .map(|run| run.receipt_overlay_detail(receipt))
+                    .unwrap_or_else(|| format!("Receipt\nID: {receipt}"));
+                OverlayItem {
+                    title: receipt.clone(),
+                    summary: run
+                        .map(|run| {
+                            format!(
+                                "receipt · {} · {} provenance item(s)",
+                                run.status.as_deref().unwrap_or("active"),
+                                run.provenance.len()
+                            )
+                        })
+                        .unwrap_or_else(|| "receipt".to_owned()),
+                    detail,
+                }
+            })
+            .collect()
+    }
+
+    fn run_for_receipt(&self, receipt_id: &str) -> Option<&RunRecord> {
+        self.run_records
+            .iter()
+            .rev()
+            .find(|run| run.receipts.iter().any(|receipt| receipt == receipt_id))
     }
 
     fn runs_overlay_items(&self) -> Vec<OverlayItem> {
@@ -1411,8 +1435,8 @@ impl InteractiveApp {
                 {
                     self.transcript.push(TranscriptEntry::new(
                         TranscriptKind::Receipt,
-                        "Receipt created",
-                        &summarize_receipt_event(event, receipt_id),
+                        "Evidence saved",
+                        &summarize_receipt_marker(event, receipt_id),
                     ));
                     self.follow_tail_after_transcript_update();
                 }
@@ -1575,6 +1599,7 @@ impl InteractiveApp {
             "receipt.created" => {
                 if let Some(receipt_id) = string_data(event, "receipt_id") {
                     push_unique_string(&mut run.receipts, receipt_id);
+                    push_unique_string(&mut run.receipt_details, receipt_detail_from_event(event));
                 }
                 collect_event_provenance(event, run);
             }
@@ -2596,6 +2621,30 @@ impl RunRecord {
         push_markdown_section(&mut lines, "Outputs", &self.outputs);
         lines.join("\n")
     }
+
+    fn receipt_overlay_detail(&self, receipt_id: &str) -> String {
+        let mut lines = vec![
+            "Receipt".to_owned(),
+            format!("ID: {receipt_id}"),
+            format!("Run: {}", self.run_id),
+            format!("Status: {}", self.status.as_deref().unwrap_or("active")),
+        ];
+        push_optional_line(&mut lines, "Task", self.task_id.as_deref());
+        push_optional_line(&mut lines, "Provider", self.provider.as_deref());
+        push_optional_line(&mut lines, "Model", self.model.as_deref());
+        push_matching_detail_section(
+            &mut lines,
+            "Receipt detail",
+            &self.receipt_details,
+            receipt_id,
+        );
+        push_detail_section(&mut lines, "Provenance", &self.provenance);
+        push_detail_section(&mut lines, "Tools", &self.tools);
+        push_detail_section(&mut lines, "Files", &self.files);
+        push_detail_section(&mut lines, "Commands", &self.commands);
+        push_detail_section(&mut lines, "Approvals", &self.approvals);
+        lines.join("\n")
+    }
 }
 
 fn summarize_session_ready_event(event: &GatewayEvent) -> String {
@@ -2672,17 +2721,22 @@ fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str
     lines.join("\n")
 }
 
-fn summarize_receipt_event(event: &GatewayEvent, receipt_id: &str) -> String {
-    let mut lines = vec![format!("Receipt: {receipt_id}")];
+fn summarize_receipt_marker(event: &GatewayEvent, receipt_id: &str) -> String {
+    let mut parts = vec![compact_text(receipt_id, 42)];
     if let Some(run_id) = event.run_id.as_deref() {
-        lines.push(format!("Run: {run_id}"));
+        parts.push(format!("run {}", compact_text(run_id, 28)));
     }
-    if let Some(task_id) = event.task_id.as_deref() {
-        lines.push(format!("Task: {task_id}"));
+    if let Some(provider) = event
+        .data
+        .get("provider_id")
+        .and_then(|value| value.as_str())
+    {
+        parts.push(compact_text(provider, 32));
     }
-    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
-    push_optional_data_line(&mut lines, event, "Family", "provider_family");
-    lines.join("\n")
+    format!(
+        "Saved evidence. Ctrl-E opens details. {}",
+        parts.join(" · ")
+    )
 }
 
 fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
@@ -2812,6 +2866,23 @@ fn push_detail_section(lines: &mut Vec<String>, label: &str, values: &[String]) 
     if values.len() > 8 {
         lines.push(format!("- ... {} more", values.len() - 8));
     }
+}
+
+fn push_matching_detail_section(
+    lines: &mut Vec<String>,
+    label: &str,
+    values: &[String],
+    needle: &str,
+) {
+    let matching = values
+        .iter()
+        .filter(|value| value.contains(needle))
+        .cloned()
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        return;
+    }
+    push_detail_section(lines, label, &matching);
 }
 
 fn push_unique_string(values: &mut Vec<String>, value: String) {
@@ -3170,6 +3241,26 @@ fn receipt_detail(receipt: &serde_json::Value) -> String {
     }
     if let Some(summary) = receipt.get("summary").and_then(|value| value.as_str()) {
         parts.push(format!("summary={}", compact_text(summary, 96)));
+    }
+    parts.join(" | ")
+}
+
+fn receipt_detail_from_event(event: &GatewayEvent) -> String {
+    let mut parts = Vec::new();
+    if let Some(id) = string_data(event, "receipt_id") {
+        parts.push(format!("id={id}"));
+    }
+    if let Some(run_id) = event.run_id.as_deref() {
+        parts.push(format!("run={run_id}"));
+    }
+    if let Some(task_id) = event.task_id.as_deref() {
+        parts.push(format!("task={task_id}"));
+    }
+    if let Some(provider) = string_data(event, "provider_id") {
+        parts.push(format!("provider={provider}"));
+    }
+    if let Some(family) = string_data(event, "provider_family") {
+        parts.push(format!("family={family}"));
     }
     parts.join(" | ")
 }
@@ -4453,6 +4544,7 @@ mod tests {
 
         app.state.apply_event(&model);
         app.record_event(&model);
+        app.state.apply_event(&receipt);
         app.record_event(&receipt);
 
         assert_eq!(app.state.active_model.as_deref(), Some("claude-opus-4-7"));
@@ -4467,15 +4559,26 @@ mod tests {
         );
 
         let receipt_entry = app.transcript.last().expect("receipt transcript entry");
-        assert_eq!(receipt_entry.title, "Receipt created");
-        assert!(
-            receipt_entry
-                .body
-                .contains("Receipt: receipt_run_1_provider")
-        );
-        assert!(receipt_entry.body.contains("Run: run_1"));
-        assert!(receipt_entry.body.contains("Task: task_1"));
-        assert!(receipt_entry.body.contains("Provider: provider_anthropic"));
+        assert_eq!(receipt_entry.title, "Evidence saved");
+        assert!(receipt_entry.body.contains("receipt_run_1_provider"));
+        assert!(receipt_entry.body.contains("Ctrl-E opens details"));
+        assert!(receipt_entry.body.contains("run run_1"));
+        assert!(receipt_entry.body.contains("provider_anthropic"));
+
+        app.open_overlay(ActiveOverlay::Evidence);
+        let detail = app
+            .overlay_items()
+            .into_iter()
+            .find(|item| item.title == "receipt_run_1_provider")
+            .expect("receipt appears in evidence overlay")
+            .detail;
+        assert!(detail.contains("Receipt"));
+        assert!(detail.contains("Run: run_1"));
+        assert!(detail.contains("Task: task_1"));
+        assert!(detail.contains("Provider: provider_anthropic"));
+        assert!(detail.contains("Receipt detail:"));
+        assert!(detail.contains("provider=provider_anthropic"));
+        assert!(detail.contains("Provenance:"));
     }
 
     #[test]
@@ -4822,8 +4925,8 @@ mod tests {
             ),
             crate::transcript::TranscriptEntry::new(
                 crate::transcript::TranscriptKind::Receipt,
-                "Receipt created",
-                "Receipt: receipt_1",
+                "Evidence saved",
+                "Saved evidence. Ctrl-E opens details. receipt_1",
             ),
         ];
 
