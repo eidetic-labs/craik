@@ -57,7 +57,7 @@ Issues = "https://github.com/eidetic-labs/craik/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/craik"]
-artifacts = ["src/craik/py.typed"]
+artifacts = ["src/craik/py.typed", "src/craik/runtime/backend/gateway_event_contract.json"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

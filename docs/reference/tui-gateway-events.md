@@ -5,6 +5,11 @@ The Rust/Ratatui TUI consumes newline-delimited JSON events from
 writing them to stdout, and the Rust TUI validates every received event before
 rendering it.
 
+The machine-readable contract lives at
+`src/craik/runtime/backend/gateway_event_contract.json`. Python and Rust
+validators both read that artifact; docs and fixtures should be updated with it
+when the event surface changes.
+
 Each event is a JSON object with:
 
 - `type`: one of the supported event names below.

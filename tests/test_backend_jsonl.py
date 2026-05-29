@@ -12,6 +12,8 @@ from craik.cli import app
 from craik.contracts.models import CapabilityReceipt, ReceiptResult
 from craik.runtime.backend import jsonl as jsonl_backend
 from craik.runtime.backend.event_contract import (
+    gateway_event_contract,
+    known_event_types,
     validate_gateway_event,
     validate_gateway_events,
 )
@@ -49,6 +51,21 @@ def test_gateway_event_contract_validates_fixture_corpus() -> None:
         events = _events(fixture_path.read_text(encoding="utf-8"))
 
         assert validate_gateway_events(events) == [], fixture_path
+
+
+def test_gateway_event_contract_is_single_source_for_known_events() -> None:
+    contract = gateway_event_contract()
+    event_types = contract["event_types"]
+
+    assert set(event_types) == known_event_types()
+    assert event_types["run.completed"]["requirements"] == [
+        {"kind": "non_empty_string", "path": "run_id", "message": "run_id is required"},
+        {
+            "kind": "non_empty_string",
+            "path": "data.status",
+            "message": "data.status must be a non-empty string",
+        },
+    ]
 
 
 def test_gateway_event_contract_reports_required_fields() -> None:
