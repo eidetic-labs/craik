@@ -2785,7 +2785,7 @@ Options:
 
 ## `craik tui`
 
-Launch the keyboard-first terminal UI.
+Launch the terminal UI. Rust/Ratatui is preferred for interactive terminals.
 
 ```text
 craik tui [OPTIONS]
@@ -2810,10 +2810,22 @@ Options:
 
 ## `craik tui-rs`
 
-Launch the developer Rust/Ratatui terminal UI.
+Launch the Rust/Ratatui terminal UI.
 
 ```text
 craik tui-rs [OPTIONS]
+```
+
+Options:
+
+- `-n, --name`: Operator-visible shell session name.
+
+## `craik tui-textual`
+
+Launch the legacy Python/Textual terminal UI.
+
+```text
+craik tui-textual [OPTIONS]
 ```
 
 Options:

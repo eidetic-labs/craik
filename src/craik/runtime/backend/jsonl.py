@@ -7,6 +7,10 @@ import os
 import sys
 from typing import Any, TextIO
 
+from craik.runtime.backend.event_contract import (
+    format_gateway_event_contract_issues,
+    validate_gateway_event,
+)
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
@@ -34,6 +38,12 @@ def run_jsonl_gateway(
 
     def emit(event: BackendEvent | dict[str, Any]) -> None:
         payload = event.as_dict() if isinstance(event, BackendEvent) else event
+        issues = validate_gateway_event(payload)
+        if issues:
+            raise ValueError(
+                "Gateway backend emitted invalid event: "
+                f"{format_gateway_event_contract_issues(issues)}"
+            )
         output_stream.write(json.dumps(payload, sort_keys=True) + "\n")
         output_stream.flush()
 

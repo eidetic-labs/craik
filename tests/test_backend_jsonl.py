@@ -10,6 +10,12 @@ from typer.testing import CliRunner
 
 from craik.cli import app
 from craik.contracts.models import CapabilityReceipt, ReceiptResult
+from craik.runtime.backend import jsonl as jsonl_backend
+from craik.runtime.backend.event_contract import (
+    validate_gateway_event,
+    validate_gateway_events,
+)
+from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.jsonl import run_jsonl_gateway
 from craik.runtime.paths import ensure_craik_home
 from craik.runtime.reviewing.approvals import open_approval_request
@@ -32,6 +38,32 @@ def _repo(tmp_path: Path, monkeypatch) -> None:
 
 def _events(output: str) -> list[dict[str, object]]:
     return [json.loads(line) for line in output.splitlines() if line.strip()]
+
+
+def test_gateway_event_contract_validates_fixture_corpus() -> None:
+    fixture_dir = Path("tests/fixtures/gateway")
+    fixture_paths = sorted(fixture_dir.glob("*.jsonl"))
+
+    assert fixture_paths
+    for fixture_path in fixture_paths:
+        events = _events(fixture_path.read_text(encoding="utf-8"))
+
+        assert validate_gateway_events(events) == [], fixture_path
+
+
+def test_gateway_event_contract_reports_required_fields() -> None:
+    issues = validate_gateway_event(
+        {
+            "type": "run.completed",
+            "run_id": None,
+            "task_id": None,
+            "data": {"status": "completed"},
+        }
+    )
+
+    assert len(issues) == 1
+    assert issues[0].event_type == "run.completed"
+    assert issues[0].message == "run_id is required"
 
 
 def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
@@ -244,6 +276,22 @@ def test_jsonl_gateway_reports_malformed_and_unsupported_messages(tmp_path: Path
     assert any("Expecting value" in message for message in errors)
     assert any("unsupported JSONL message type" in message for message in errors)
     assert any("prompt.submit requires non-empty text" in message for message in errors)
+
+
+def test_jsonl_gateway_rejects_invalid_backend_events(tmp_path: Path, monkeypatch) -> None:
+    def _execute_prompt(*args: object, stream, **kwargs: object) -> None:
+        stream(BackendEvent(type="run.completed", data={"status": "completed"}))
+
+    monkeypatch.setattr(jsonl_backend, "execute_prompt", _execute_prompt)
+    stdin = io.StringIO('{"type":"prompt.submit","text":"Review contract"}\n')
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == ["session.ready", "error"]
+    assert "Gateway backend emitted invalid event" in events[1]["data"]["message"]
+    assert "`run.completed`: run_id is required" in events[1]["data"]["message"]
 
 
 def _receipt(receipt_id: str, *, task_id: str) -> CapabilityReceipt:
