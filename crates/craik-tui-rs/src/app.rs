@@ -1768,6 +1768,7 @@ impl InteractiveApp {
         self.input.chars().count()
     }
 
+    #[cfg(test)]
     pub(crate) fn input_cursor_line_col(&self) -> (usize, usize) {
         let before_cursor = &self.input[..self.input_cursor.min(self.input.len())];
         let line = before_cursor.bytes().filter(|byte| *byte == b'\n').count();

@@ -107,14 +107,6 @@ pub fn selected_style() -> Style {
         .add_modifier(Modifier::BOLD)
 }
 
-pub fn mode_label() -> &'static str {
-    match mode() {
-        ThemeMode::Dark => "dark",
-        ThemeMode::Light => "light",
-        ThemeMode::Monochrome => "monochrome",
-    }
-}
-
 fn palette() -> Palette {
     match mode() {
         ThemeMode::Dark => Palette {

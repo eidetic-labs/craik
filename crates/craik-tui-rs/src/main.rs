@@ -619,11 +619,11 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
     if app.search_active {
         5
     } else if app.input.trim_start().starts_with('/') {
-        12
+        10
     } else {
         let content_lines = app.input_line_count().min(8) as u16;
         let context_lines = app.prompt_context().lines().count().min(4) as u16;
-        (content_lines + context_lines + 5).clamp(8, 15)
+        (content_lines + context_lines + 3).clamp(6, 13)
     }
 }
 
@@ -631,12 +631,13 @@ fn input_title(app: &InteractiveApp) -> String {
     if app.search_active {
         return "▌Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
     }
-    let (line, col) = app.input_cursor_line_col();
-    format!(
-        "▌Prompt  {} line(s) · {} char(s) · cursor {line}:{col}",
-        app.input_line_count(),
-        app.input_char_count()
-    )
+    let line_count = app.input_line_count();
+    let char_count = app.input_char_count();
+    if line_count > 1 {
+        format!("▌Prompt  {line_count} lines · {char_count} chars")
+    } else {
+        "▌Prompt".to_owned()
+    }
 }
 
 fn render_transcript_panel(
@@ -852,10 +853,9 @@ mod tests {
         assert!(rendered.contains("Review the plan"));
         assert!(rendered.contains("default"));
         assert_eq!(rows.len(), 24);
-        assert!(
-            rows.iter()
-                .any(|row| row.contains("▌Prompt") && row.contains("cursor"))
-        );
+        assert!(rows.iter().any(|row| row.trim_end().ends_with("▌Prompt")));
+        assert!(!rendered.contains("Enter sends"));
+        assert!(!rendered.contains("Alt-Enter newline"));
     }
 
     #[test]
@@ -960,11 +960,6 @@ mod tests {
             assert!(rendered.contains("Transcript"));
             assert!(rendered.contains("Prompt"));
             assert!(rendered.contains("Review the plan"));
-            assert!(rendered.contains(match mode {
-                ThemeMode::Dark => "dark",
-                ThemeMode::Light => "light",
-                ThemeMode::Monochrome => "monochrome",
-            }));
         }
     }
 
@@ -1013,16 +1008,13 @@ mod tests {
             .iter()
             .position(|row| row.contains("/ command palette"))
             .expect("palette visible");
-        let prompt_anchor_row = rows
-            .iter()
-            .position(|row| row.contains("▔ prompt"))
-            .expect("prompt anchor visible");
         let typed_input_row = rows
             .iter()
             .rposition(|row| row.contains("/mode "))
             .expect("typed input visible");
-        assert!(palette_row < prompt_anchor_row);
-        assert!(prompt_anchor_row < typed_input_row);
+        assert!(palette_row < typed_input_row);
+        assert!(!rendered.contains("Enter sends"));
+        assert!(!rendered.contains("Alt-Enter newline"));
     }
 
     #[test]
@@ -1216,9 +1208,9 @@ mod tests {
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 8);
+        assert_eq!(input_panel_height(&app), 6);
         app.input = "/r".to_owned();
-        assert_eq!(input_panel_height(&app), 12);
+        assert_eq!(input_panel_height(&app), 10);
         app.search_active = true;
         assert_eq!(input_panel_height(&app), 5);
     }
@@ -1227,11 +1219,11 @@ mod tests {
     fn prompt_input_height_grows_with_multiline_content() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 8);
+        assert_eq!(input_panel_height(&app), 6);
         app.input = "one\ntwo\nthree\nfour".to_owned();
 
-        assert_eq!(input_panel_height(&app), 11);
-        assert!(input_title(&app).contains("4 line(s)"));
+        assert_eq!(input_panel_height(&app), 9);
+        assert!(input_title(&app).contains("4 lines"));
         assert!(!input_title(&app).contains("Enter sends"));
     }
 
