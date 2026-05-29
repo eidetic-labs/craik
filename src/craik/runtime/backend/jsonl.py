@@ -8,6 +8,7 @@ import sys
 from typing import Any, TextIO
 
 from craik.runtime.backend.event_contract import (
+    GatewayEventContractIssue,
     format_gateway_event_contract_issues,
     validate_gateway_event,
 )
@@ -40,10 +41,7 @@ def run_jsonl_gateway(
         payload = event.as_dict() if isinstance(event, BackendEvent) else event
         issues = validate_gateway_event(payload)
         if issues:
-            raise ValueError(
-                "Gateway backend emitted invalid event: "
-                f"{format_gateway_event_contract_issues(issues)}"
-            )
+            raise GatewayContractViolation(payload, issues)
         output_stream.write(json.dumps(payload, sort_keys=True) + "\n")
         output_stream.flush()
 
@@ -198,8 +196,59 @@ def run_jsonl_gateway(
                 "session.history, session.close"
             )
         except Exception as error:
-            emit(BackendEvent(type="error", data={"message": str(error)}))
+            if isinstance(error, GatewayContractViolation):
+                emit(error.as_event())
+            else:
+                emit(BackendEvent(type="error", data={"message": str(error)}))
     return 0
+
+
+class GatewayContractViolation(ValueError):
+    """Raised when a backend emitter violates the Gateway event contract."""
+
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        issues: list[GatewayEventContractIssue],
+    ) -> None:
+        self.payload = payload
+        self.issues = issues
+        super().__init__(_contract_violation_message(payload, issues))
+
+    def as_event(self) -> BackendEvent:
+        event_type = _string_or_default(self.payload.get("type"), "<missing>")
+        data = self.payload.get("data")
+        data_object = data if isinstance(data, dict) else {}
+        return BackendEvent(
+            type="error",
+            run_id=_string_or_none(self.payload.get("run_id")),
+            task_id=_string_or_none(self.payload.get("task_id")),
+            data={
+                "kind": "contract_violation",
+                "message": str(self),
+                "event_type": event_type,
+                "issues": [issue.message for issue in self.issues],
+                "backend": _string_or_none(data_object.get("backend")),
+                "provider_id": _string_or_none(data_object.get("provider_id")),
+                "provider_family": _string_or_none(data_object.get("provider_family")),
+                "model": _string_or_none(data_object.get("model")),
+                "recovery": (
+                    "Update the backend emitter or the Gateway event contract so "
+                    "the event includes the required fields before retrying."
+                ),
+            },
+        )
+
+
+def _contract_violation_message(
+    payload: dict[str, Any],
+    issues: list[GatewayEventContractIssue],
+) -> str:
+    event_type = _string_or_default(payload.get("type"), "<missing>")
+    return (
+        "Gateway backend emitted invalid event "
+        f"`{event_type}`: {format_gateway_event_contract_issues(issues)}"
+    )
 
 
 def _slash_catalog_entry(

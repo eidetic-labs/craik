@@ -372,7 +372,11 @@ def test_jsonl_gateway_rejects_invalid_backend_events(tmp_path: Path, monkeypatc
 
     assert [event["type"] for event in events] == ["session.ready", "error"]
     assert "Gateway backend emitted invalid event" in events[1]["data"]["message"]
-    assert "`run.completed`: run_id is required" in events[1]["data"]["message"]
+    assert "event 0 `run.completed`: run_id is required" in events[1]["data"]["message"]
+    assert events[1]["data"]["kind"] == "contract_violation"
+    assert events[1]["data"]["event_type"] == "run.completed"
+    assert events[1]["data"]["issues"] == ["run_id is required"]
+    assert "required fields before retrying" in events[1]["data"]["recovery"]
 
 
 def _receipt(receipt_id: str, *, task_id: str) -> CapabilityReceipt:
