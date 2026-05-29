@@ -3184,7 +3184,7 @@ fn line_count_after_entry_index(entries: &[TranscriptEntry], target_index: usize
         if index <= target_index {
             continue;
         }
-        count += entry.body.lines().count().max(1) + 2;
+        count += transcript_entry_visual_line_count(entry);
     }
     count.min(u16::MAX as usize) as u16
 }
@@ -3192,13 +3192,30 @@ fn line_count_after_entry_index(entries: &[TranscriptEntry], target_index: usize
 fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -> usize {
     let mut remaining = scroll as usize;
     for (index, entry) in entries.iter().rev().enumerate() {
-        let lines = entry.body.lines().count().max(1) + 2;
+        let lines = transcript_entry_visual_line_count(entry);
         if remaining <= lines {
             return entries.len().saturating_sub(index + 1);
         }
         remaining = remaining.saturating_sub(lines);
     }
     0
+}
+
+fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
+    let separator = if matches!(
+        entry.kind,
+        TranscriptKind::System
+            | TranscriptKind::Progress
+            | TranscriptKind::Tool
+            | TranscriptKind::File
+            | TranscriptKind::Command
+            | TranscriptKind::Receipt
+    ) {
+        0
+    } else {
+        1
+    };
+    1 + entry.body.lines().count().max(1) + separator
 }
 
 #[cfg(test)]

@@ -133,7 +133,7 @@ pub fn render_transcript_lines_window(
     let mut cursor = 0;
     let mut visible_entries = Vec::new();
     for entry in entries {
-        let entry_line_count = 2 + entry_body_lines(entry, options.expand_details).len().max(1);
+        let entry_line_count = rendered_single_entry_line_count(entry, options);
         let entry_end = cursor + entry_line_count;
         if entry_end >= start && cursor <= end {
             visible_entries.push(entry);
@@ -157,10 +157,7 @@ fn render_entries(
         lines.push(highlight_search(
             vec![
                 Span::styled("▌ ", Style::default().fg(color)),
-                Span::styled(
-                    format!("{label} "),
-                    Style::default().fg(color).add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(format!("{label} "), label_style(&entry.kind, color)),
                 Span::styled(entry.title.clone(), title_style(&entry.kind)),
             ],
             options.search_query,
@@ -178,7 +175,9 @@ fn render_entries(
                 ));
             }
         }
-        lines.push(Line::default());
+        if entry_separator_lines(&entry.kind) > 0 {
+            lines.push(Line::default());
+        }
     }
     lines
 }
@@ -205,8 +204,16 @@ fn rendered_entry_line_count(
 ) -> usize {
     entries
         .iter()
-        .map(|entry| 2 + entry_body_lines(entry, options.expand_details).len().max(1))
+        .map(|entry| rendered_single_entry_line_count(entry, options))
         .sum()
+}
+
+fn rendered_single_entry_line_count(
+    entry: &TranscriptEntry,
+    options: &TranscriptRenderOptions<'_>,
+) -> usize {
+    1 + entry_body_lines(entry, options.expand_details).len().max(1)
+        + entry_separator_lines(&entry.kind)
 }
 
 fn entry_body_lines(entry: &TranscriptEntry, expand_details: bool) -> Vec<CachedBodyLine> {
@@ -246,24 +253,53 @@ fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
     }
 }
 
+fn label_style(kind: &TranscriptKind, color: Color) -> Style {
+    let base = Style::default().fg(color);
+    if is_evidence_kind(kind) {
+        base
+    } else {
+        base.add_modifier(Modifier::BOLD)
+    }
+}
+
+fn entry_separator_lines(kind: &TranscriptKind) -> usize {
+    if is_evidence_kind(kind) { 0 } else { 1 }
+}
+
+fn is_evidence_kind(kind: &TranscriptKind) -> bool {
+    matches!(
+        kind,
+        TranscriptKind::System
+            | TranscriptKind::Progress
+            | TranscriptKind::Tool
+            | TranscriptKind::File
+            | TranscriptKind::Command
+            | TranscriptKind::Receipt
+    )
+}
+
 fn body_prefix(kind: &TranscriptKind) -> &'static str {
     match kind {
         TranscriptKind::User => "  ▌ ",
         TranscriptKind::Assistant => "    ",
         TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
-        _ => "  ┆ ",
+        TranscriptKind::System | TranscriptKind::Progress => "  · ",
+        TranscriptKind::Tool
+        | TranscriptKind::File
+        | TranscriptKind::Command
+        | TranscriptKind::Receipt => "  · ",
     }
 }
 
 fn body_prefix_style(kind: &TranscriptKind) -> Style {
     match kind {
         TranscriptKind::User => Style::default().fg(theme::sage()),
-        TranscriptKind::Assistant => theme::dim_style(),
+        TranscriptKind::Assistant => theme::mute_style(),
         TranscriptKind::Approval | TranscriptKind::Error => Style::default()
             .fg(theme::red())
             .add_modifier(Modifier::BOLD),
         TranscriptKind::Progress => Style::default().fg(theme::amber()),
-        _ => theme::mute_style(),
+        _ => theme::dim_style(),
     }
 }
 
@@ -662,12 +698,17 @@ fn value_spans(kind: &TranscriptKind, text: &str) -> Vec<Span<'static>> {
             text.to_owned(),
             Style::default().fg(theme::red()),
         )),
-        _ => return highlight_inline_code(text),
+        TranscriptKind::Assistant | TranscriptKind::User => {
+            return highlight_inline_code(text, theme::primary_style());
+        }
+        TranscriptKind::System | TranscriptKind::Progress | TranscriptKind::Tool => {
+            return highlight_inline_code(text, theme::dim_style());
+        }
     }
     spans
 }
 
-fn highlight_inline_code(text: &str) -> Vec<Span<'static>> {
+fn highlight_inline_code(text: &str, base_style: Style) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     for (index, part) in text.split('`').enumerate() {
         if part.is_empty() {
@@ -681,11 +722,11 @@ fn highlight_inline_code(text: &str) -> Vec<Span<'static>> {
                     .add_modifier(Modifier::BOLD),
             ));
         } else {
-            spans.push(Span::raw(part.to_owned()));
+            spans.push(Span::styled(part.to_owned(), base_style));
         }
     }
     if spans.is_empty() {
-        spans.push(Span::raw(String::new()));
+        spans.push(Span::styled(String::new(), base_style));
     }
     spans
 }
@@ -733,6 +774,7 @@ mod tests {
         TranscriptEntry, TranscriptKind, TranscriptRenderOptions, render_transcript_lines,
         render_transcript_lines_window, search_match_count, transcript_scroll_offset,
     };
+    use ratatui::style::Modifier;
 
     #[test]
     fn rendering_labels_entry_kinds() {
@@ -764,11 +806,11 @@ mod tests {
 
         assert_eq!(
             transcript_scroll_offset(&entries, &TranscriptRenderOptions::expanded(), 0, 2),
-            6
+            5
         );
         assert_eq!(
             transcript_scroll_offset(&entries, &TranscriptRenderOptions::expanded(), 2, 2),
-            4
+            3
         );
     }
 
@@ -958,8 +1000,8 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines.len(), 3);
-        assert_eq!(lines[1].spans[0].content, "  ┆ ");
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[1].spans[0].content, "  · ");
     }
 
     #[test]
@@ -974,7 +1016,7 @@ mod tests {
 
         assert_eq!(lines[1].spans[0].content, "  ▌ ");
         assert_eq!(lines[4].spans[0].content, "    ");
-        assert_eq!(lines[7].spans[0].content, "  ┆ ");
+        assert_eq!(lines[7].spans[0].content, "  · ");
     }
 
     #[test]
@@ -991,10 +1033,40 @@ mod tests {
         assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
         assert_eq!(lines[3].spans[1].content, "RECEIPT ");
         assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::mute()));
-        assert_eq!(lines[4].spans[0].content, "  ┆ ");
-        assert_eq!(lines[6].spans[1].content, "APPROVE ");
-        assert_eq!(lines[7].spans[0].content, "  ! ");
-        assert_eq!(lines[7].spans[0].style.fg, Some(crate::theme::red()));
+        assert_eq!(lines[4].spans[0].content, "  · ");
+        assert_eq!(lines[5].spans[1].content, "APPROVE ");
+        assert_eq!(lines[6].spans[0].content, "  ! ");
+        assert_eq!(lines[6].spans[0].style.fg, Some(crate::theme::red()));
+    }
+
+    #[test]
+    fn evidence_rows_are_denser_than_conversation_rows() {
+        let conversation = vec![TranscriptEntry::assistant("Assistant", "Model response")];
+        let evidence = vec![TranscriptEntry::new(
+            TranscriptKind::Tool,
+            "Read",
+            "Target: README.md",
+        )];
+
+        let conversation_lines =
+            render_transcript_lines(&conversation, &TranscriptRenderOptions::expanded());
+        let evidence_lines =
+            render_transcript_lines(&evidence, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(conversation_lines.len(), 3);
+        assert_eq!(evidence_lines.len(), 2);
+        assert_eq!(evidence_lines[0].spans[1].content, "TOOL ");
+        assert_eq!(
+            evidence_lines[0].spans[1].style.fg,
+            Some(crate::theme::mute())
+        );
+        assert!(
+            !evidence_lines[0].spans[1]
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert_eq!(evidence_lines[1].spans[0].content, "  · ");
     }
 
     #[test]
