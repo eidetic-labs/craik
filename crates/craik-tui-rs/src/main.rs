@@ -429,7 +429,6 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
-        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     let detail = Paragraph::new(app.selected_overlay_detail())
         .block(
@@ -440,7 +439,6 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
-        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, area);
     frame.render_widget(list, list_area);
@@ -507,60 +505,76 @@ fn approval_overlay_title(body: &str) -> Line<'static> {
 }
 
 fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
-    body.lines()
-        .map(|line| {
-            if line.starts_with("Actions:") {
-                return Line::from(vec![
-                    Span::styled("Actions: ", theme::mute_style()),
-                    Span::styled(
-                        "[Ctrl-A] approve",
-                        Style::default()
-                            .fg(theme::sage())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("  "),
-                    Span::styled(
-                        "[Ctrl-X] deny",
-                        Style::default()
-                            .fg(theme::red())
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("  "),
-                    Span::styled("[Esc] defer", theme::dim_style()),
-                ]);
+    let has_actions = body.lines().any(|line| line.starts_with("Actions:"));
+    let mut rendered = Vec::new();
+    for line in body.lines() {
+        if line.starts_with("Actions:") {
+            continue;
+        }
+        if line.starts_with("Warning:") {
+            rendered.push(Line::from(Span::styled(
+                line.to_owned(),
+                Style::default()
+                    .fg(theme::amber())
+                    .add_modifier(Modifier::BOLD),
+            )));
+            continue;
+        }
+        if line == "Review required" || line == "Preview" {
+            rendered.push(Line::from(Span::styled(
+                line.to_owned(),
+                theme::accent_style(),
+            )));
+            if line == "Review required" && has_actions {
+                rendered.push(approval_actions_line());
             }
-            if line.starts_with("Warning:") {
-                return Line::from(Span::styled(
-                    line.to_owned(),
-                    Style::default()
-                        .fg(theme::amber())
-                        .add_modifier(Modifier::BOLD),
-                ));
-            }
-            if line == "Review required" || line == "Preview" {
-                return Line::from(Span::styled(line.to_owned(), theme::accent_style()));
-            }
-            if let Some(diff) = line.strip_prefix("  +") {
-                return Line::from(vec![
-                    Span::styled("  +", Style::default().fg(theme::sage())),
-                    Span::styled(diff.to_owned(), Style::default().fg(theme::sage())),
-                ]);
-            }
-            if let Some(diff) = line.strip_prefix("  -") {
-                return Line::from(vec![
-                    Span::styled("  -", Style::default().fg(theme::red())),
-                    Span::styled(diff.to_owned(), Style::default().fg(theme::red())),
-                ]);
-            }
-            if let Some((label, value)) = line.split_once(':') {
-                return Line::from(vec![
-                    Span::styled(format!("{label}: "), theme::mute_style()),
-                    Span::styled(value.trim_start().to_owned(), theme::primary_style()),
-                ]);
-            }
-            Line::from(line.to_owned())
-        })
-        .collect()
+            continue;
+        }
+        if let Some(diff) = line.strip_prefix("  +") {
+            rendered.push(Line::from(vec![
+                Span::styled("  +", Style::default().fg(theme::sage())),
+                Span::styled(diff.to_owned(), Style::default().fg(theme::sage())),
+            ]));
+            continue;
+        }
+        if let Some(diff) = line.strip_prefix("  -") {
+            rendered.push(Line::from(vec![
+                Span::styled("  -", Style::default().fg(theme::red())),
+                Span::styled(diff.to_owned(), Style::default().fg(theme::red())),
+            ]));
+            continue;
+        }
+        if let Some((label, value)) = line.split_once(':') {
+            rendered.push(Line::from(vec![
+                Span::styled(format!("{label}: "), theme::mute_style()),
+                Span::styled(value.trim_start().to_owned(), theme::primary_style()),
+            ]));
+            continue;
+        }
+        rendered.push(Line::from(line.to_owned()));
+    }
+    rendered
+}
+
+fn approval_actions_line() -> Line<'static> {
+    Line::from(vec![
+        Span::styled("Actions: ", theme::mute_style()),
+        Span::styled(
+            "[Ctrl-A] approve",
+            Style::default()
+                .fg(theme::sage())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled(
+            "[Ctrl-X] deny",
+            Style::default()
+                .fg(theme::red())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("  "),
+        Span::styled("[Esc] defer", theme::dim_style()),
+    ])
 }
 
 fn input_panel_height(app: &InteractiveApp) -> u16 {
@@ -581,7 +595,7 @@ fn input_title(app: &InteractiveApp) -> String {
     }
     let (line, col) = app.input_cursor_line_col();
     format!(
-        "▌Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
+        "▌Prompt  {} line(s) · {} char(s) · cursor {line}:{col}",
         app.input_line_count(),
         app.input_char_count()
     )
@@ -787,29 +801,22 @@ mod tests {
 
     #[test]
     fn interactive_frame_renders_core_regions() {
-        let backend = TestBackend::new(100, 24);
-        let mut terminal = Terminal::new(backend).expect("test terminal is created");
         let mut app = InteractiveApp::for_test_with_messages([]);
         app.input = "Review the plan".to_owned();
         app.input_cursor = app.input.len();
-
-        terminal
-            .draw(|frame| draw_interactive_frame(frame, &app))
-            .expect("interactive frame renders");
-
-        let rendered = terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
+        let rows = render_app_frame_rows(&app, 100, 24);
+        let rendered = rows.join("\n");
 
         assert!(rendered.contains("Transcript"));
         assert!(rendered.contains("Activity"));
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Review the plan"));
         assert!(rendered.contains("default"));
+        assert_eq!(rows.len(), 24);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("▌Prompt") && row.contains("cursor"))
+        );
     }
 
     #[test]
@@ -961,10 +968,77 @@ mod tests {
 
         let rendered = render_app_frame(&app, 104, 28);
 
-        assert!(rendered.contains("/ commands"));
+        assert!(rendered.contains("/ command palette"));
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
+    }
+
+    #[test]
+    fn visual_frame_regression_preserves_evidence_overlay_rows() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = Some(ActiveOverlay::Evidence);
+        app.input = "Continue analysis".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 120, 34);
+        let overlay_row = rows
+            .iter()
+            .position(|row| row.contains("▌EVIDENCE"))
+            .expect("evidence overlay title is visible");
+        let prompt_row = rows
+            .iter()
+            .position(|row| row.contains("▌Prompt"))
+            .expect("prompt remains visible below overlay");
+
+        assert!(prompt_row > overlay_row);
+        assert!(rows.iter().any(|row| row.contains("Filter")));
+        assert!(rows.iter().any(|row| row.contains("Ctrl-R runs")));
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("receipt_run_review_desktop_plan"))
+        );
+    }
+
+    #[test]
+    fn visual_frame_regression_preserves_approval_modal_rows() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "approval.requested",
+                    "data": {
+                        "approval_id": "approval_edit_1",
+                        "message": "Edit src/lib.rs?",
+                        "origin": "claude-code",
+                        "tool": "Edit",
+                        "target": "src/lib.rs",
+                        "risk": "writes source files",
+                        "preview": "- old\n+ new"
+                    }
+                }"#,
+            )
+            .expect("approval fixture parses"),
+        );
+        app.active_overlay = Some(ActiveOverlay::Approvals);
+        app.input = "Review approval context".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 120, 34);
+        let modal_row = rows
+            .iter()
+            .position(|row| row.contains("Approval required"))
+            .expect("approval modal title is visible");
+        let prompt_row = rows
+            .iter()
+            .position(|row| row.contains("▌Prompt"))
+            .expect("prompt remains visible below modal");
+
+        assert!(prompt_row > modal_row);
+        assert!(rows.iter().any(|row| row.contains("claude-code")));
+        assert!(rows.iter().any(|row| row.contains("Warning:")));
+        assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
+        assert!(rows.iter().any(|row| row.contains("  + new")));
     }
 
     #[test]
@@ -1018,6 +1092,7 @@ mod tests {
 
         assert_eq!(input_panel_height(&app), 11);
         assert!(input_title(&app).contains("4 line(s)"));
+        assert!(!input_title(&app).contains("Enter sends"));
     }
 
     #[test]
@@ -1040,18 +1115,22 @@ mod tests {
     }
 
     fn render_app_frame(app: &InteractiveApp, width: u16, height: u16) -> String {
+        render_app_frame_rows(app, width, height).join("\n")
+    }
+
+    fn render_app_frame_rows(app: &InteractiveApp, width: u16, height: u16) -> Vec<String> {
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).expect("test terminal is created");
         terminal
             .draw(|frame| draw_interactive_frame(frame, app))
             .expect("interactive frame renders");
-        terminal
-            .backend()
-            .buffer()
+        let buffer = terminal.backend().buffer();
+        let width = buffer.area.width as usize;
+        buffer
             .content()
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>()
+            .chunks(width)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect()
     }
 
     fn render_app_frame_with_theme(
