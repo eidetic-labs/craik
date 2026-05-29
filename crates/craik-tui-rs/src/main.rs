@@ -28,7 +28,9 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Padding, Paragraph, Wrap},
 };
-use render::{ActivityMetrics, render_activity_panel, render_provenance_panel, status_line};
+use render::{
+    ActivityMetrics, StatusLineMetrics, render_activity_panel, render_provenance_panel, status_line,
+};
 use std::{
     env, fs,
     io::{self, IsTerminal},
@@ -326,11 +328,15 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
 
     let footer = Paragraph::new(status_line(
         &app.state,
-        app.in_flight,
-        app.latest_pending_approval(),
-        app.transcript_focused,
-        app.search_active,
-        !app.expand_transcript_details,
+        StatusLineMetrics {
+            in_flight: app.in_flight,
+            pending_approval: app.latest_pending_approval(),
+            backend_connected: app.backend_connected,
+            queued_inputs: app.queued_inputs.len(),
+            transcript_focused: app.transcript_focused,
+            search_active: app.search_active,
+            details_collapsed: !app.expand_transcript_details,
+        },
     ));
     frame.render_widget(footer, vertical[2]);
 }

@@ -19,6 +19,16 @@ pub struct ActivityMetrics<'a> {
     pub backend_connected: bool,
 }
 
+pub struct StatusLineMetrics<'a> {
+    pub in_flight: bool,
+    pub pending_approval: Option<&'a str>,
+    pub backend_connected: bool,
+    pub queued_inputs: usize,
+    pub transcript_focused: bool,
+    pub search_active: bool,
+    pub details_collapsed: bool,
+}
+
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
     let model = model_label(state, "not selected");
     let run_state = run_state_label(
@@ -176,18 +186,19 @@ fn provider_health_label(provider_id: Option<&str>, backend: Option<&str>) -> &'
     }
 }
 
-pub fn status_line(
-    state: &GatewayAppState,
-    in_flight: bool,
-    pending_approval: Option<&str>,
-    transcript_focused: bool,
-    search_active: bool,
-    _details_collapsed: bool,
-) -> Line<'static> {
-    let request_state = footer_state_label(state, in_flight, pending_approval.is_some());
+pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> Line<'static> {
+    let request_state = footer_state_label(
+        state,
+        metrics.in_flight,
+        metrics.pending_approval.is_some(),
+        metrics.backend_connected,
+        metrics.queued_inputs,
+    );
     let model = compact_model_label(model_label(state, "model not selected"));
     let effort = effort_label(state).unwrap_or("default");
-    let approval_label = pending_approval.map(|approval_id| compact_label(approval_id, 18));
+    let approval_label = metrics
+        .pending_approval
+        .map(|approval_id| compact_label(approval_id, 18));
     let mut spans = vec![
         Span::styled(" default ", mode_pill_style("default")),
         Span::raw("  "),
@@ -218,6 +229,18 @@ pub fn status_line(
                 Style::default().fg(theme::amber()),
             ),
         ]);
+    } else if !metrics.backend_connected {
+        spans.extend([
+            Span::raw("   "),
+            Span::styled("⌃b", Style::default().fg(theme::red())),
+            Span::styled(" reconnect", Style::default().fg(theme::red())),
+        ]);
+    } else if metrics.queued_inputs > 0 {
+        spans.extend([
+            Span::raw("   "),
+            Span::styled("queued ", theme::accent_style()),
+            Span::styled(metrics.queued_inputs.to_string(), theme::dim_style()),
+        ]);
     } else if !state.receipt_ids.is_empty() {
         spans.extend([
             Span::raw("   "),
@@ -235,7 +258,7 @@ pub fn status_line(
         Span::raw("   "),
         Span::styled("⌃r", theme::accent_style()),
         Span::styled(
-            if transcript_focused {
+            if metrics.transcript_focused {
                 " split"
             } else {
                 " runs"
@@ -245,8 +268,10 @@ pub fn status_line(
         Span::raw("   "),
         Span::styled("?", theme::accent_style()),
         Span::styled(
-            if search_active {
+            if metrics.search_active {
                 " search active"
+            } else if metrics.details_collapsed {
+                " details collapsed"
             } else {
                 " help"
             },
@@ -254,7 +279,11 @@ pub fn status_line(
         ),
         Span::raw("   "),
         Span::styled(
-            if in_flight { "⌃c stop" } else { "⌃c exit" },
+            if metrics.in_flight {
+                "⌃c stop"
+            } else {
+                "⌃c exit"
+            },
             Style::default().fg(theme::red()),
         ),
     ]);
@@ -347,9 +376,15 @@ fn footer_state_label(
     state: &GatewayAppState,
     in_flight: bool,
     has_pending_approval: bool,
+    backend_connected: bool,
+    queued_inputs: usize,
 ) -> &'static str {
-    if has_pending_approval {
+    if !backend_connected {
+        "disconnected"
+    } else if has_pending_approval {
         "waiting for approval"
+    } else if queued_inputs > 0 {
+        "queued"
     } else if matches!(state.working_phase.as_deref(), Some("thinking")) {
         "thinking"
     } else if in_flight || matches!(state.run_status.as_deref(), Some("running")) {
@@ -363,6 +398,7 @@ fn footer_state_label(
 
 fn status_color(state: &str) -> Color {
     match state {
+        "disconnected" => theme::red(),
         "waiting for approval" => theme::amber(),
         "thinking" | "working" => theme::amber(),
         "completed" | "ready" => theme::sage(),
@@ -372,6 +408,7 @@ fn status_color(state: &str) -> Color {
 
 fn status_glyph(state: &str) -> &'static str {
     match state {
+        "disconnected" => "×",
         "thinking" | "working" => "◐",
         _ => "●",
     }
@@ -416,8 +453,20 @@ fn provider_label(provider_id: Option<&str>, provider_family: Option<&str>) -> S
 
 #[cfg(test)]
 mod tests {
-    use super::{ActivityMetrics, render_activity_panel, status_line};
+    use super::{ActivityMetrics, StatusLineMetrics, render_activity_panel, status_line};
     use craik_tui_rs::GatewayAppState;
+
+    fn status_metrics() -> StatusLineMetrics<'static> {
+        StatusLineMetrics {
+            in_flight: false,
+            pending_approval: None,
+            backend_connected: true,
+            queued_inputs: 0,
+            transcript_focused: false,
+            search_active: false,
+            details_collapsed: false,
+        }
+    }
 
     #[test]
     fn activity_panel_prefers_display_model_and_shows_counts() {
@@ -491,7 +540,14 @@ mod tests {
             ..GatewayAppState::default()
         };
 
-        let rendered = status_line(&state, true, None, false, false, false).to_string();
+        let rendered = status_line(
+            &state,
+            StatusLineMetrics {
+                in_flight: true,
+                ..status_metrics()
+            },
+        )
+        .to_string();
 
         assert!(rendered.contains("claude-sonnet"));
         assert!(rendered.contains("working"));
@@ -509,14 +565,27 @@ mod tests {
         };
 
         assert!(
-            status_line(&thinking, true, None, false, false, false)
-                .to_string()
-                .contains("thinking")
+            status_line(
+                &thinking,
+                StatusLineMetrics {
+                    in_flight: true,
+                    ..status_metrics()
+                },
+            )
+            .to_string()
+            .contains("thinking")
         );
         assert!(
-            status_line(&approval, true, Some("approval_123"), false, false, false)
-                .to_string()
-                .contains("waiting for approval")
+            status_line(
+                &approval,
+                StatusLineMetrics {
+                    in_flight: true,
+                    pending_approval: Some("approval_123"),
+                    ..status_metrics()
+                },
+            )
+            .to_string()
+            .contains("waiting for approval")
         );
     }
 
@@ -529,7 +598,7 @@ mod tests {
             ..GatewayAppState::default()
         };
 
-        let rendered = status_line(&state, false, None, false, false, false).to_string();
+        let rendered = status_line(&state, status_metrics()).to_string();
 
         assert!(rendered.contains("Opus 4.7 Extended"));
         assert!(!rendered.contains("Thinking Preview"));
@@ -541,11 +610,11 @@ mod tests {
 
         let rendered = status_line(
             &state,
-            true,
-            Some("approval_run_edit_123456789"),
-            false,
-            false,
-            false,
+            StatusLineMetrics {
+                in_flight: true,
+                pending_approval: Some("approval_run_edit_123456789"),
+                ..status_metrics()
+            },
         )
         .to_string();
 
@@ -555,10 +624,38 @@ mod tests {
     }
 
     #[test]
+    fn status_line_surfaces_disconnected_reconnect_action() {
+        let state = GatewayAppState::default();
+
+        let rendered = status_line(
+            &state,
+            StatusLineMetrics {
+                backend_connected: false,
+                queued_inputs: 1,
+                ..status_metrics()
+            },
+        )
+        .to_string();
+
+        assert!(rendered.contains("disconnected"));
+        assert!(rendered.contains("⌃b"));
+        assert!(rendered.contains("reconnect"));
+    }
+
+    #[test]
     fn status_line_shows_transcript_modes() {
         let state = GatewayAppState::default();
 
-        let rendered = status_line(&state, false, None, true, true, true).to_string();
+        let rendered = status_line(
+            &state,
+            StatusLineMetrics {
+                transcript_focused: true,
+                search_active: true,
+                details_collapsed: true,
+                ..status_metrics()
+            },
+        )
+        .to_string();
 
         assert!(rendered.contains("search active"));
         assert!(rendered.contains("⌃r split"));
