@@ -900,7 +900,7 @@ mod tests {
         assert!(!rendered.contains("Activity"));
         assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("Review the plan"));
-        assert!(rendered.contains("default"));
+        assert!(rendered.contains("ask"));
         assert_eq!(rows.len(), 24);
         assert!(!rows.iter().any(|row| row.contains("▌Prompt")));
         assert!(!rendered.contains("Type a prompt"));
@@ -1034,11 +1034,11 @@ mod tests {
                         "commands": [
                             {
                                 "name": "mode",
-                                "usage": "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+                                "usage": "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
                                 "summary": "Inspect or set Claude Code mode.",
                                 "category": "Run",
-                                "choices": {"mode": ["default", "acceptEdits", "plan", "auto"]},
-                                "current_value": "default"
+                                "choices": {"mode": ["ask", "auto", "acceptEdits", "plan"]},
+                                "current_value": "ask"
                             },
                             {
                                 "name": "clear",
@@ -1061,7 +1061,7 @@ mod tests {
         let rendered = rows.join("\n");
 
         assert!(rendered.contains("/ commands"));
-        assert!(rendered.contains("/mode default"));
+        assert!(rendered.contains("/mode ask"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
         assert!(!rendered.contains("▸"));

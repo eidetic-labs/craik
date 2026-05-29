@@ -36,9 +36,7 @@ def model_list_result(env: dict[str, str] | None = None) -> CommandResult:
             "active_profile": (
                 settings.active_profile.as_dict() if settings.active_profile is not None else None
             ),
-            "profiles": {
-                key: profile.as_dict() for key, profile in settings.profiles.items()
-            },
+            "profiles": {key: profile.as_dict() for key, profile in settings.profiles.items()},
             "aliases": settings.aliases,
             "fallbacks": settings.fallbacks,
             "configured_profiles": auth_profiles,
@@ -103,6 +101,56 @@ def model_set_result(
     )
     store.save(updated)
     return CommandResult(payload=updated.as_dict(), shape="kv")
+
+
+def model_effort_result(
+    effort: str | None = None, env: dict[str, str] | None = None
+) -> CommandResult:
+    """Inspect or update reasoning effort for the active model profile."""
+    store = ModelSettingsStore.from_env(env)
+    settings = store.load()
+    profile = settings.active_profile
+    if settings.active_model is None or profile is None:
+        raise ValueError("effort requires an active model; run /model set <provider/model> first")
+    if effort is None:
+        current = _profile_effort(profile.options)
+        return CommandResult(
+            payload={
+                "active_model": settings.active_model,
+                "active_profile_id": settings.active_profile_id,
+                "reasoning_effort": current,
+                "active_profile": profile.as_dict(),
+            },
+            shape="kv",
+        )
+    normalized = _normalize_effort(effort)
+    options = dict(profile.options)
+    if normalized == "default":
+        options.pop("reasoning_effort", None)
+    else:
+        options["reasoning_effort"] = normalized
+    updated_profile = model_profile_from_ref(
+        settings.active_model,
+        backend=profile.backend,
+        options=options,
+    )
+    profiles = {**settings.profiles, updated_profile.id: updated_profile}
+    updated = ModelSettings(
+        active_model=settings.active_model,
+        active_profile_id=updated_profile.id,
+        profiles=profiles,
+        aliases=settings.aliases,
+        fallbacks=settings.fallbacks,
+    )
+    store.save(updated)
+    return CommandResult(
+        payload={
+            **updated.as_dict(),
+            "reasoning_effort": normalized,
+            "active_profile": updated_profile.as_dict(),
+        },
+        shape="kv",
+    )
 
 
 def model_probe_result(env: dict[str, str] | None = None) -> CommandResult:
@@ -219,6 +267,18 @@ def parse_model_options(
             raise ValueError("--option key must not be empty")
         options[key] = _coerce_option_value(value.strip())
     return options
+
+
+def _profile_effort(options: dict[str, object]) -> str:
+    effort = options.get("reasoning_effort")
+    return effort if isinstance(effort, str) and effort.strip() else "default"
+
+
+def _normalize_effort(effort: str) -> str:
+    normalized = effort.strip()
+    if normalized in {"default", "low", "medium", "high", "max"}:
+        return normalized
+    raise ValueError("effort must be one of default, low, medium, high, or max")
 
 
 def _coerce_option_value(value: str) -> object:

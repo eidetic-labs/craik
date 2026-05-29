@@ -449,10 +449,10 @@ fn usage_has_subcommands(usage: &str) -> bool {
 fn fallback_choices(name: &str) -> Vec<String> {
     match name {
         "mode" => [
-            "default",
+            "ask",
+            "auto",
             "acceptEdits",
             "plan",
-            "auto",
             "dontAsk",
             "bypassPermissions",
         ]
@@ -460,6 +460,10 @@ fn fallback_choices(name: &str) -> Vec<String> {
         .map(str::to_owned)
         .collect(),
         "theme" => ["dark", "light", "monochrome"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        "effort" => ["default", "low", "medium", "high", "max"]
             .into_iter()
             .map(str::to_owned)
             .collect(),
@@ -688,11 +692,11 @@ mod tests {
     fn slash_completion_uses_selected_candidate_and_drilldown_value() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
-        mode.current_value = Some("default".to_owned());
+        mode.current_value = Some("ask".to_owned());
         let catalog = vec![
             SlashHint::new("receipt", "/receipt latest", "Show receipt.", "Evidence"),
             SlashHint::new("run", "/run <prompt>", "Run audited prompt.", "Run"),
@@ -705,7 +709,7 @@ mod tests {
         );
         assert_eq!(
             slash_completion_at("/mode ", &catalog, 2).as_deref(),
-            Some("/mode plan ")
+            Some("/mode acceptEdits ")
         );
     }
 
@@ -728,11 +732,11 @@ mod tests {
     fn slash_suggestions_surface_choices_and_confirmation_flags() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
-        mode.current_value = Some("default".to_owned());
+        mode.current_value = Some("ask".to_owned());
         let mut policy = SlashHint::new("policy", "/policy reset", "Reset policy.", "Workflow");
         policy.requires_confirmation = true;
         let catalog = vec![mode, policy];
@@ -744,7 +748,7 @@ mod tests {
         );
 
         let choices = slash_suggestions("/mode ", &catalog).join("\n");
-        assert!(choices.contains("/mode default [Run] - Current value (● current)"));
+        assert!(choices.contains("/mode ask [Run] - Current value (● current)"));
         assert!(choices.contains("/mode plan [Run] - Read-only planning mode. (read-only)"));
     }
 
@@ -752,11 +756,11 @@ mod tests {
     fn slash_palette_renders_current_and_confirm_hints_as_row_metadata() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Inspect or set mode.",
             "Run",
         );
-        mode.current_value = Some("default".to_owned());
+        mode.current_value = Some("ask".to_owned());
         let mut clear = SlashHint::new("clear", "/clear", "Clear transcript.", "Workflow");
         clear.requires_confirmation = true;
         let catalog = vec![mode, clear];
@@ -766,8 +770,10 @@ mod tests {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(root.contains("/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]  run  Inspect or set mode."));
-        assert!(root.contains("now: default"));
+        assert!(root.contains(
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]  run  Inspect or set mode."
+        ));
+        assert!(root.contains("now: ask"));
         assert!(root.contains("run  Inspect or set mode."));
 
         let confirm = render_slash_palette_lines("/c", &catalog, 0)
@@ -783,7 +789,7 @@ mod tests {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(drilldown.contains("/mode default  run  Current value  ● current"));
+        assert!(drilldown.contains("/mode ask  run  Current value  ● current"));
         assert!(drilldown.contains("/mode plan  run  Read-only planning mode.  read-only"));
     }
 }

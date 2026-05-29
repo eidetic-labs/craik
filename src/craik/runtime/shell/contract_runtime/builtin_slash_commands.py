@@ -19,11 +19,7 @@ from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.memory.commands import memory_overview_result
-from craik.runtime.model_commands import (
-    model_list_result,
-    model_set_result,
-    model_status_result,
-)
+from craik.runtime.model_commands import model_list_result, model_set_result, model_status_result
 from craik.runtime.providers.commands import provider_list_result
 from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
@@ -32,6 +28,11 @@ from craik.runtime.setup import setup_command_result
 from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
+from craik.runtime.shell.contract_runtime.mode_args import (
+    CLAUDE_PERMISSION_MODE_CHOICES,
+    display_permission_mode,
+    stored_permission_mode,
+)
 from craik.runtime.shell.contract_runtime.model_args import parse_model_set_args
 from craik.runtime.shell.contract_runtime.result_helpers import (
     _named_result,
@@ -254,26 +255,29 @@ def model_command(*args: str, env: dict[str, str] | None = None) -> CommandResul
 def mode_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Inspect or set Claude Code permission mode."""
     values = env if env is not None else os.environ
-    allowed = {"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"}
     if args:
-        mode = args[0]
-        if mode not in allowed:
+        requested_mode = args[0]
+        try:
+            mode = stored_permission_mode(requested_mode)
+        except ValueError:
             text = (
-                "mode must be one of `default`, `acceptEdits`, `plan`, `auto`, "
+                "mode must be one of `ask`, `auto`, `acceptEdits`, `plan`, "
                 "`dontAsk`, or `bypassPermissions`."
             )
             return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
         values[CLAUDE_PERMISSION_MODE_ENV] = mode
     mode = values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+    display_mode = display_permission_mode(mode)
     payload = {
         "claude_permission_mode": mode,
-        "choices": ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"],
+        "display_mode": display_mode,
+        "choices": list(CLAUDE_PERMISSION_MODE_CHOICES),
         "hint": "Shift-Tab cycles this mode inside the TUI.",
     }
     return CommandResult(
         payload=payload,
         shape="kv",
-        text=f"Claude permission mode: `{mode}`." if args else None,
+        text=f"Claude permission mode: `{display_mode}`." if args else None,
         command_name="mode",
     )
 
