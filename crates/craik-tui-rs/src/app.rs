@@ -2566,8 +2566,10 @@ impl PendingApproval {
         let mut lines = vec![
             "Review required".to_owned(),
             format!("Origin: {origin}"),
-            format!("What: {}", self.subject_label()),
             format!("Queue: {position} of {} pending", total.max(1)),
+            format!("Action: {}", self.action_label()),
+            format!("Risk: {}", self.risk_label()),
+            format!("What: {}", self.subject_label()),
             format!(
                 "ID: {}",
                 if self.id.is_empty() {
@@ -2605,10 +2607,37 @@ impl PendingApproval {
             lines.push(String::new());
             lines.push("Preview".to_owned());
             lines.extend(preview.lines().map(|line| format!("  {line}")));
+        } else if let Some(command) = self.command.as_deref() {
+            lines.push(String::new());
+            lines.push("Preview".to_owned());
+            lines.push(format!("  $ {command}"));
         }
         lines.push(String::new());
         lines.push("Actions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer".to_owned());
         lines.join("\n")
+    }
+
+    fn action_label(&self) -> String {
+        match (
+            self.tool.as_deref(),
+            self.target.as_deref(),
+            self.command.as_deref(),
+        ) {
+            (Some(tool), Some(target), _) => format!("{tool} on {target}"),
+            (Some(tool), None, Some(command)) => format!("{tool}: {command}"),
+            (Some(tool), None, None) => tool.to_owned(),
+            (None, Some(target), _) => format!("Access {target}"),
+            (None, None, Some(command)) => format!("Run {command}"),
+            (None, None, None) => self.subject_label().to_owned(),
+        }
+    }
+
+    fn risk_label(&self) -> &str {
+        if self.risk.as_deref().is_some_and(is_high_risk_text) {
+            "high - review target and receipt"
+        } else {
+            self.risk.as_deref().unwrap_or("not specified")
+        }
     }
 
     fn origin_label(&self) -> &str {
@@ -3953,6 +3982,8 @@ mod tests {
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Queue: 2 of 2 pending"));
         assert!(overlay.contains("Origin: craik governance"));
+        assert!(overlay.contains("Action: Edit on crates/craik-tui-rs/src/app.rs"));
+        assert!(overlay.contains("Risk: high - review target and receipt"));
         assert!(overlay.contains("What: crates/craik-tui-rs/src/app.rs"));
         assert!(overlay.contains("Source request"));
         assert!(overlay.contains("Craik context"));
@@ -4028,6 +4059,8 @@ mod tests {
 
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Origin: via Claude Code"));
+        assert!(overlay.contains("Action: Bash on crates/craik-tui-rs"));
+        assert!(overlay.contains("Risk: not specified"));
         assert!(overlay.contains("Tool: Bash"));
         assert!(overlay.contains("Target: crates/craik-tui-rs"));
         assert!(overlay.contains("Command: cargo test"));
@@ -4065,6 +4098,8 @@ mod tests {
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Origin: via Claude Code"));
         assert!(overlay.contains("Command: cargo test"));
+        assert!(overlay.contains("Preview"));
+        assert!(overlay.contains("  $ cargo test"));
     }
 
     #[test]
