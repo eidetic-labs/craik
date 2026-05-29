@@ -1,4 +1,6 @@
 use anyhow::{Context, bail};
+mod model_names;
+use model_names::readable_model_label;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
@@ -291,7 +293,17 @@ impl GatewayAppState {
             .or_else(|| string_at(data, &["payload", "active_profile", "display_name"]))
             .or_else(|| string_at(data, &["display_name"]))
         {
-            self.active_model_display_name = Some(display_name);
+            self.active_model_display_name = Some(readable_model_label(
+                self.active_provider_family.as_deref(),
+                self.active_model.as_deref(),
+                Some(&display_name),
+            ));
+        } else if let Some(model) = self.active_model.as_deref() {
+            self.active_model_display_name = Some(readable_model_label(
+                self.active_provider_family.as_deref(),
+                Some(model),
+                None,
+            ));
         }
         if let Some(effort) = reasoning_effort(data) {
             self.active_reasoning_effort = Some(effort);
@@ -431,12 +443,11 @@ pub fn render_replay_text(summary: &GatewayReplaySummary) -> String {
 }
 
 pub fn render_dashboard_text(state: &GatewayAppState) -> String {
-    let model = state
-        .active_model_display_name
-        .as_ref()
-        .or(state.active_model.as_ref())
-        .map(String::as_str)
-        .unwrap_or("not selected");
+    let model = readable_model_label(
+        state.active_provider_family.as_deref(),
+        state.active_model.as_deref(),
+        state.active_model_display_name.as_deref(),
+    );
     let run_state = state.run_status.as_deref().unwrap_or("idle");
     let phase = state.working_phase.as_deref().unwrap_or("none");
     [

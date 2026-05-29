@@ -18,7 +18,7 @@ from craik.runtime.backend.session import (
     execute_prompt,
     live_provider_enabled,
 )
-from craik.runtime.modeling import ModelSettingsStore
+from craik.runtime.modeling import ModelProfile, ModelSettings, ModelSettingsStore
 from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.store import LocalStore
 
@@ -124,7 +124,7 @@ def test_gateway_model_selection_supports_local_provider_aliases(tmp_path: Path)
     assert active_provider_and_model(env) == ("provider_local_ollama", "llama3.2")
     assert settings.active_profile is not None
     assert settings.active_profile.provider_id == "provider_local_ollama"
-    assert settings.active_profile.display_name == "Ollama llama3.2"
+    assert settings.active_profile.display_name == "Ollama Llama 3.2"
     assert live_provider_enabled(env) is True
     assert live_provider_enabled({**env, "CRAIK_FIXTURE": "1"}) is False
 
@@ -170,7 +170,39 @@ def test_gateway_payload_includes_active_model_profile(tmp_path: Path, monkeypat
     model_event = next(
         event for event in payload["gateway_events"] if event["type"] == "model.selected"
     )
-    assert model_event["data"]["profile"]["display_name"] == "Anthropic Claude claude-opus-4-7"
+    assert model_event["data"]["profile"]["display_name"] == "Claude Opus 4.7"
+
+
+def test_model_profile_names_are_readable_and_repair_legacy_defaults(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    store = ModelSettingsStore.from_env(env)
+
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    settings = store.load()
+
+    assert settings.active_profile is not None
+    assert settings.active_profile.display_name == "Claude Sonnet 4"
+
+    store.save(
+        ModelSettings(
+            active_model="anthropic/claude-opus-4-7",
+            active_profile_id="anthropic-claude-opus-4-7",
+            profiles={
+                "anthropic-claude-opus-4-7": ModelProfile(
+                    id="anthropic-claude-opus-4-7",
+                    provider_id="provider_anthropic",
+                    provider_family="anthropic",
+                    model="claude-opus-4-7",
+                    display_name="Anthropic Claude claude-opus-4-7",
+                )
+            },
+        )
+    )
+
+    repaired = store.load()
+
+    assert repaired.active_profile is not None
+    assert repaired.active_profile.display_name == "Claude Opus 4.7"
 
 
 @pytest.mark.parametrize(

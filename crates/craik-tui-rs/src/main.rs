@@ -3,6 +3,7 @@ mod app;
 mod backend;
 mod gateway_events;
 mod input;
+mod model_names;
 mod render;
 mod theme;
 mod transcript;
