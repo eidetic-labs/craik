@@ -203,6 +203,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(8),
+            Constraint::Length(1),
             Constraint::Length(input_panel_height(app)),
             Constraint::Length(1),
         ])
@@ -210,6 +211,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let transcript_options = TranscriptRenderOptions {
         expand_details: app.expand_transcript_details,
         search_query: active_search_query(app),
+        content_width: Some(transcript_content_width(area.width)),
     };
 
     let slash_palette_lines =
@@ -271,7 +273,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             theme::accent_style(),
         )]));
     }
-    let input_inner = input_block.inner(vertical[1]);
+    let input_inner = input_block.inner(vertical[2]);
     let input_lines = if app.search_active {
         render_search_lines(
             &app.search_query,
@@ -284,7 +286,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
-    frame.render_widget(input, vertical[1]);
+    frame.render_widget(input, vertical[2]);
     if app.search_active {
         frame.set_cursor_position(input_cursor_position(
             &app.search_query,
@@ -313,7 +315,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             details_collapsed: !app.expand_transcript_details,
         },
     ));
-    frame.render_widget(footer, vertical[2]);
+    frame.render_widget(footer, vertical[3]);
 }
 
 fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
@@ -716,11 +718,11 @@ fn render_transcript_panel(
         app.transcript_scroll,
         transcript_height,
     );
-    let transcript = Paragraph::new(render_transcript_lines_window(
-        &app.transcript,
-        options,
-        offset,
-        transcript_height,
+    let transcript_lines =
+        render_transcript_lines_window(&app.transcript, options, offset, transcript_height);
+    let transcript = Paragraph::new(wrap_transcript_lines(
+        transcript_lines,
+        transcript_content_width(area.width),
     ))
     .block(
         Block::default()
@@ -732,14 +734,65 @@ fn render_transcript_panel(
             ))
             .title_style(theme::accent_style())
             .border_style(theme::mute_style())
-            .borders(Borders::LEFT),
+            .borders(Borders::LEFT)
+            .padding(Padding::horizontal(1)),
     )
     .scroll((
         offset.saturating_sub(transcript_render_window_start(offset)),
         0,
-    ))
-    .wrap(Wrap { trim: false });
+    ));
     frame.render_widget(transcript, area);
+}
+
+fn transcript_content_width(area_width: u16) -> usize {
+    usize::from(area_width.saturating_sub(3)).max(1)
+}
+
+fn wrap_transcript_lines(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
+    if width < 12 {
+        return lines;
+    }
+    lines
+        .into_iter()
+        .flat_map(|line| wrap_transcript_line(line, width))
+        .collect()
+}
+
+fn wrap_transcript_line(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let continuation_prefix = "  ";
+    let continuation_width = continuation_prefix.chars().count();
+    let mut output = Vec::new();
+    let mut current = Vec::new();
+    let mut current_width = 0usize;
+
+    for span in line.spans {
+        let style = span.style;
+        let mut remaining = span.content.into_owned();
+        while !remaining.is_empty() {
+            if current_width >= width {
+                output.push(Line::from(current));
+                current = vec![Span::styled(continuation_prefix, theme::dim_style())];
+                current_width = continuation_width;
+            }
+            let available = width.saturating_sub(current_width).max(1);
+            let take = remaining.chars().take(available).collect::<String>();
+            current_width = current_width.saturating_add(take.chars().count());
+            current.push(Span::styled(take.clone(), style));
+            remaining = remaining.chars().skip(take.chars().count()).collect();
+            if !remaining.is_empty() {
+                output.push(Line::from(current));
+                current = vec![Span::styled(continuation_prefix, theme::dim_style())];
+                current_width = continuation_width;
+            }
+        }
+    }
+
+    if current.is_empty() {
+        output.push(Line::default());
+    } else {
+        output.push(Line::from(current));
+    }
+    output
 }
 
 fn transcript_title(
@@ -870,7 +923,7 @@ mod tests {
     use crate::{
         app::ActiveOverlay,
         theme::{ThemeMode, with_mode_for_test},
-        transcript::TranscriptEntry,
+        transcript::{TranscriptEntry, TranscriptKind},
     };
     use craik_tui_rs::parse_gateway_events;
 
@@ -923,7 +976,8 @@ mod tests {
 
     #[test]
     fn fixture_backed_wide_frame_keeps_chat_home_full_width() {
-        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
         let rendered = render_app_frame(&app, 140, 42);
 
         assert!(rendered.contains("Chat"));
@@ -948,6 +1002,53 @@ mod tests {
         assert!(rendered.contains("Ctrl-R runs"));
         assert!(rendered.contains("Continue analysis"));
         assert!(rendered.contains("esc chat"));
+    }
+
+    #[test]
+    fn transcript_rows_have_padding_and_do_not_touch_prompt_area() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
+        app.input = "Continue analysis".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 120, 34);
+        let content_row = rows
+            .iter()
+            .find(|row| row.contains("Reviewed the plan"))
+            .expect("transcript content visible");
+        let input_row = rows
+            .iter()
+            .position(|row| row.contains("Continue analysis"))
+            .expect("input visible");
+
+        assert!(
+            content_row
+                .find("Reviewed")
+                .is_some_and(|column| column >= 2)
+        );
+        assert!(rows[input_row.saturating_sub(1)].trim().is_empty());
+    }
+
+    #[test]
+    fn wrapped_transcript_rows_keep_continuation_gutter() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript.push(TranscriptEntry::new(
+            TranscriptKind::Command,
+            "Bash",
+            "Command: echo \"== crates ==\" && ls -1 crates 2>/dev/null; echo \"== git status ==\" && git status --short; echo \"== head ==\" && git log --oneline -1",
+        ));
+
+        let rows = render_app_frame_rows(&app, 72, 18);
+        let continuation = rows
+            .iter()
+            .find(|row| row.contains("--oneline"))
+            .expect("wrapped command continuation is visible");
+
+        assert!(
+            continuation
+                .find("--oneline")
+                .is_some_and(|column| column >= 3)
+        );
     }
 
     #[test]
@@ -998,7 +1099,8 @@ mod tests {
 
     #[test]
     fn fixture_backed_narrow_frame_prioritizes_transcript_over_activity_panel() {
-        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
         let rendered = render_app_frame(&app, 72, 24);
 
         assert!(rendered.contains("Chat"));

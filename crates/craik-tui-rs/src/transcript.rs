@@ -44,6 +44,7 @@ pub enum TranscriptKind {
 pub struct TranscriptRenderOptions<'a> {
     pub expand_details: bool,
     pub search_query: Option<&'a str>,
+    pub content_width: Option<usize>,
 }
 
 impl TranscriptEntry {
@@ -88,6 +89,7 @@ impl<'a> TranscriptRenderOptions<'a> {
         Self {
             expand_details: true,
             search_query: None,
+            content_width: None,
         }
     }
 }
@@ -153,6 +155,10 @@ fn render_entries(
 ) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     for entry in entries {
+        if entry.kind == TranscriptKind::User && is_generic_user_title(&entry.title) {
+            lines.extend(render_user_entry(entry, options));
+            continue;
+        }
         if should_render_entry_header(entry) {
             let (label, color) = transcript_label_style(&entry.kind);
             lines.push(highlight_search(
@@ -182,6 +188,65 @@ fn render_entries(
         }
     }
     lines
+}
+
+fn render_user_entry(
+    entry: &TranscriptEntry,
+    options: &TranscriptRenderOptions<'_>,
+) -> Vec<Line<'static>> {
+    let width = options.content_width.unwrap_or(72).max(12);
+    let background = theme::surface();
+    let blank = Line::from(Span::styled(
+        " ".repeat(width),
+        Style::default().bg(background),
+    ));
+    let mut lines = vec![blank.clone()];
+    let body_lines = entry_body_lines(entry, options.expand_details);
+    if body_lines.is_empty() {
+        lines.push(centered_user_line("", width, options.search_query));
+    } else {
+        lines.extend(
+            body_lines
+                .iter()
+                .map(|line| centered_user_line(&line.text, width, options.search_query)),
+        );
+    }
+    lines.push(blank);
+    lines.push(Line::default());
+    lines
+}
+
+fn centered_user_line(text: &str, width: usize, search_query: Option<&str>) -> Line<'static> {
+    let text_width = text.chars().count();
+    let clamped = if text_width > width.saturating_sub(2) {
+        compact_display_text(text, width.saturating_sub(2))
+    } else {
+        text.to_owned()
+    };
+    let clamped_width = clamped.chars().count();
+    let left = width.saturating_sub(clamped_width) / 2;
+    let right = width.saturating_sub(left).saturating_sub(clamped_width);
+    highlight_search(
+        vec![
+            Span::styled(" ".repeat(left), Style::default().bg(theme::surface())),
+            Span::styled(
+                clamped,
+                theme::primary_style()
+                    .bg(theme::surface())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ".repeat(right), Style::default().bg(theme::surface())),
+        ],
+        search_query,
+    )
+}
+
+fn compact_display_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_owned();
+    }
+    let keep = max_chars.saturating_sub(3);
+    format!("{}...", text.chars().take(keep).collect::<String>())
 }
 
 pub fn search_match_count(entries: &[TranscriptEntry], query: &str) -> usize {
@@ -215,19 +280,96 @@ fn rendered_single_entry_line_count(
     options: &TranscriptRenderOptions<'_>,
 ) -> usize {
     usize::from(should_render_entry_header(entry))
-        + entry_body_lines(entry, options.expand_details).len().max(1)
+        + if entry.kind == TranscriptKind::User && is_generic_user_title(&entry.title) {
+            entry_body_lines(entry, options.expand_details).len().max(1) + 3
+        } else {
+            entry_body_lines(entry, options.expand_details).len().max(1)
+        }
         + entry_separator_lines(&entry.kind)
 }
 
 fn entry_body_lines(entry: &TranscriptEntry, expand_details: bool) -> Vec<CachedBodyLine> {
-    if expand_details || !is_collapsible(&entry.kind) || entry.cached_body.len() <= 2 {
+    if expand_details || !is_collapsible(&entry.kind) || entry.cached_body.len() <= 1 {
         return entry.cached_body.clone();
+    }
+    if is_evidence_kind(&entry.kind)
+        && let Some(line) = collapsed_evidence_line(entry)
+    {
+        return vec![CachedBodyLine::plain(line)];
+    }
+    if entry.kind == TranscriptKind::Approval
+        && let Some(line) = collapsed_approval_line(entry)
+    {
+        return vec![CachedBodyLine::plain(line)];
     }
     let hidden = entry.cached_body.len().saturating_sub(1);
     vec![
         entry.cached_body[0].clone(),
         CachedBodyLine::plain(format!("... {hidden} detail lines hidden (Ctrl-E expand)")),
     ]
+}
+
+fn collapsed_approval_line(entry: &TranscriptEntry) -> Option<String> {
+    let id = entry.body.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix("ID: ")
+            .or_else(|| line.trim().strip_prefix("Approval: "))
+    });
+    let message = entry
+        .body
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Message: "))
+        .or_else(|| {
+            entry
+                .body
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("Tool: "))
+        })
+        .or_else(|| {
+            entry
+                .body
+                .lines()
+                .find_map(|line| line.trim().strip_prefix("Target: "))
+        });
+    match (id, message) {
+        (Some(id), Some(message)) => Some(format!("ID: {id} · {message}")),
+        (Some(id), None) => Some(format!("ID: {id}")),
+        (None, Some(message)) => Some(message.to_owned()),
+        (None, None) => None,
+    }
+}
+
+fn collapsed_evidence_line(entry: &TranscriptEntry) -> Option<String> {
+    let lines = entry
+        .body
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    match entry.kind {
+        TranscriptKind::Command => lines
+            .iter()
+            .find_map(|line| line.strip_prefix("Command: "))
+            .or_else(|| lines.iter().find_map(|line| line.strip_prefix("Detail: ")))
+            .map(|value| format!("Command: {value}")),
+        TranscriptKind::Tool => lines
+            .iter()
+            .find_map(|line| line.strip_prefix("Target: "))
+            .or_else(|| lines.iter().find_map(|line| line.strip_prefix("Path: ")))
+            .map(|value| format!("Target: {value}"))
+            .or_else(|| {
+                lines
+                    .iter()
+                    .find_map(|line| line.strip_prefix("Detail: "))
+                    .map(str::to_owned)
+            }),
+        TranscriptKind::File => lines
+            .iter()
+            .find_map(|line| line.strip_prefix("Path: "))
+            .map(|value| format!("Path: {value}")),
+        TranscriptKind::Receipt => lines.first().map(|line| (*line).to_owned()),
+        _ => None,
+    }
 }
 
 fn is_collapsible(kind: &TranscriptKind) -> bool {
@@ -242,7 +384,11 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
 }
 
 fn should_render_entry_header(entry: &TranscriptEntry) -> bool {
-    !matches!(entry.kind, TranscriptKind::Assistant) || !is_generic_assistant_title(&entry.title)
+    match entry.kind {
+        TranscriptKind::Assistant => !is_generic_assistant_title(&entry.title),
+        TranscriptKind::User => !is_generic_user_title(&entry.title),
+        _ => true,
+    }
 }
 
 fn is_generic_assistant_title(title: &str) -> bool {
@@ -250,6 +396,10 @@ fn is_generic_assistant_title(title: &str) -> bool {
         title.trim().to_ascii_lowercase().as_str(),
         "assistant" | "model"
     )
+}
+
+fn is_generic_user_title(title: &str) -> bool {
+    matches!(title.trim().to_ascii_lowercase().as_str(), "you" | "user")
 }
 
 fn header_marker(kind: &TranscriptKind) -> &'static str {
@@ -289,6 +439,9 @@ fn label_style(kind: &TranscriptKind, color: Color) -> Style {
 }
 
 fn entry_separator_lines(kind: &TranscriptKind) -> usize {
+    if matches!(kind, TranscriptKind::User) {
+        return 0;
+    }
     if is_evidence_kind(kind) { 0 } else { 1 }
 }
 
@@ -306,7 +459,7 @@ fn is_evidence_kind(kind: &TranscriptKind) -> bool {
 
 fn body_prefix(kind: &TranscriptKind) -> &'static str {
     match kind {
-        TranscriptKind::User => "  ▌ ",
+        TranscriptKind::User => "  ",
         TranscriptKind::Assistant => "",
         TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
         TranscriptKind::System | TranscriptKind::Progress => "  · ",
@@ -317,7 +470,7 @@ fn body_prefix(kind: &TranscriptKind) -> &'static str {
 
 fn body_prefix_style(kind: &TranscriptKind) -> Style {
     match kind {
-        TranscriptKind::User => Style::default().fg(theme::sage()),
+        TranscriptKind::User => Style::default().fg(theme::primary()).bg(theme::surface()),
         TranscriptKind::Assistant => theme::mute_style(),
         TranscriptKind::Approval | TranscriptKind::Error => Style::default()
             .fg(theme::red())
@@ -733,7 +886,10 @@ fn value_spans(kind: &TranscriptKind, text: &str) -> Vec<Span<'static>> {
             text.to_owned(),
             Style::default().fg(theme::red()),
         )),
-        TranscriptKind::Assistant | TranscriptKind::User => {
+        TranscriptKind::User => {
+            return highlight_inline_code(text, theme::primary_style().bg(theme::surface()));
+        }
+        TranscriptKind::Assistant => {
             return highlight_inline_code(text, theme::primary_style());
         }
         TranscriptKind::System | TranscriptKind::Progress | TranscriptKind::Tool => {
@@ -827,7 +983,8 @@ mod tests {
             .join("\n");
 
         assert!(rendered.contains("craik Gateway"));
-        assert!(rendered.contains("you You"));
+        assert!(rendered.contains("hello"));
+        assert!(!rendered.contains("you You"));
         assert!(rendered.contains("tool Read"));
         assert!(rendered.contains("error Gateway"));
     }
@@ -1060,9 +1217,22 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[1].spans[0].content, "  ▌ ");
-        assert_eq!(lines[3].spans[0].content, "Looks good.");
-        assert_eq!(lines[6].spans[0].content, "  · ");
+        assert_eq!(lines.len(), 8);
+        assert_eq!(lines[0].spans[0].content.chars().count(), 72);
+        assert_eq!(lines[0].spans[0].style.bg, Some(crate::theme::surface()));
+        assert!(lines[1].to_string().contains("review this"));
+        assert_eq!(
+            lines[1]
+                .spans
+                .iter()
+                .find(|span| span.content.contains("review this"))
+                .expect("prompt text is styled")
+                .style
+                .bg,
+            Some(crate::theme::surface())
+        );
+        assert_eq!(lines[4].spans[0].content, "Looks good.");
+        assert_eq!(lines[7].spans[0].content, "  · ");
     }
 
     #[test]
@@ -1128,6 +1298,7 @@ mod tests {
             &TranscriptRenderOptions {
                 expand_details: false,
                 search_query: None,
+                content_width: None,
             },
         );
         let rendered = lines
@@ -1136,8 +1307,8 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("Path: src/lib.rs"));
-        assert!(rendered.contains("... 2 detail lines hidden"));
+        assert!(rendered.contains("Target: src/lib.rs"));
+        assert!(!rendered.contains("... 2 detail lines hidden"));
         assert!(!rendered.contains("Summary: opened file"));
     }
 
