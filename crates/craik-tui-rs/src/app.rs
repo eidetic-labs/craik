@@ -489,7 +489,7 @@ impl InteractiveApp {
         let overlay = self.active_overlay?;
         let count = self.overlay_items().len();
         Some(format!(
-            "▌{}  {} item(s)  Esc returns to chat",
+            "▌{}  {}  esc closes",
             overlay.title().to_uppercase(),
             count
         ))

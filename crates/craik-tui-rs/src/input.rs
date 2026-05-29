@@ -84,12 +84,12 @@ pub fn render_slash_palette_lines(input: &str, slash_catalog: &[SlashHint]) -> V
             ),
         ]));
         for suggestion in suggestions {
-            let mut command_spans = vec![Span::styled(" ", theme::mute_style())];
+            let mut command_spans = Vec::new();
             command_spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
             command_spans.extend([
                 Span::styled("  ", theme::mute_style()),
                 Span::styled(
-                    suggestion.category.to_uppercase(),
+                    suggestion.category.to_lowercase(),
                     category_style(&suggestion),
                 ),
                 Span::styled("  ", theme::mute_style()),
@@ -300,7 +300,7 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
             exact_prefix: true,
             score: 0,
             catalog_index: 0,
-            hint: "set".to_owned(),
+            hint: "set ▸".to_owned(),
             query: String::new(),
         })
         .collect()
@@ -339,10 +339,10 @@ fn hint_right_hint(hint: &SlashHint) -> String {
         return format!("now: {value}");
     }
     if !hint.choices.is_empty() || !fallback_choices(&hint.name).is_empty() {
-        return "values".to_owned();
+        return "values ▸".to_owned();
     }
     if !hint.subcommands.is_empty() || usage_has_subcommands(&hint.usage) {
-        return "set".to_owned();
+        return "set ▸".to_owned();
     }
     if !hint.required_args.is_empty() {
         return format!("needs {}", hint.required_args.join(","));
@@ -558,8 +558,8 @@ mod tests {
 
         assert_eq!(lines.len(), 3);
         assert!(rendered.contains("/ commands"));
-        assert!(rendered.contains("/run <prompt>  RUN  Run an audited prompt."));
-        assert!(rendered.contains("/receipt latest  EVIDENCE  Show latest receipt."));
+        assert!(rendered.contains("/run <prompt>  run  Run an audited prompt."));
+        assert!(rendered.contains("/receipt latest  evidence  Show latest receipt."));
         assert!(!rendered.contains("▸"));
     }
 
@@ -670,24 +670,24 @@ mod tests {
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  RUN  Inspect or set mode."));
+        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  run  Inspect or set mode."));
         assert!(root.contains("now: default"));
-        assert!(root.contains("RUN  Inspect or set mode."));
+        assert!(root.contains("run  Inspect or set mode."));
 
         let confirm = render_slash_palette_lines("/c", &catalog)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(confirm.contains("/clear  WORKFLOW  Clear transcript.  ⚠ confirms"));
-        assert!(confirm.contains("WORKFLOW  Clear transcript."));
+        assert!(confirm.contains("/clear  workflow  Clear transcript.  ⚠ confirms"));
+        assert!(confirm.contains("workflow  Clear transcript."));
 
         let drilldown = render_slash_palette_lines("/mode ", &catalog)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(drilldown.contains("/mode default  RUN  Current value  ● current"));
-        assert!(drilldown.contains("/mode plan  RUN  Read-only planning mode.  read-only"));
+        assert!(drilldown.contains("/mode default  run  Current value  ● current"));
+        assert!(drilldown.contains("/mode plan  run  Read-only planning mode.  read-only"));
     }
 }

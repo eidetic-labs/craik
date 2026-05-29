@@ -240,16 +240,16 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
 
 fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
     match kind {
-        TranscriptKind::System => ("CRAIK", theme::mute()),
-        TranscriptKind::User => ("YOU", theme::sage()),
-        TranscriptKind::Assistant => ("MODEL", theme::primary()),
-        TranscriptKind::Progress => ("RUN", theme::amber()),
-        TranscriptKind::Tool => ("TOOL", theme::mute()),
-        TranscriptKind::File => ("FILE", theme::mute()),
-        TranscriptKind::Command => ("CMD", theme::mute()),
-        TranscriptKind::Approval => ("APPROVE", theme::red()),
-        TranscriptKind::Receipt => ("RECEIPT", theme::mute()),
-        TranscriptKind::Error => ("ERROR", theme::red()),
+        TranscriptKind::System => ("craik", theme::mute()),
+        TranscriptKind::User => ("you", theme::sage()),
+        TranscriptKind::Assistant => ("assistant", theme::primary()),
+        TranscriptKind::Progress => ("run", theme::amber()),
+        TranscriptKind::Tool => ("tool", theme::mute()),
+        TranscriptKind::File => ("file", theme::mute()),
+        TranscriptKind::Command => ("cmd", theme::mute()),
+        TranscriptKind::Approval => ("approval", theme::red()),
+        TranscriptKind::Receipt => ("receipt", theme::mute()),
+        TranscriptKind::Error => ("error", theme::red()),
     }
 }
 
@@ -791,10 +791,10 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("CRAIK Gateway"));
-        assert!(rendered.contains("YOU You"));
-        assert!(rendered.contains("TOOL Read"));
-        assert!(rendered.contains("ERROR Gateway"));
+        assert!(rendered.contains("craik Gateway"));
+        assert!(rendered.contains("you You"));
+        assert!(rendered.contains("tool Read"));
+        assert!(rendered.contains("error Gateway"));
     }
 
     #[test]
@@ -1029,12 +1029,12 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[0].spans[1].content, "MODEL ");
+        assert_eq!(lines[0].spans[1].content, "assistant ");
         assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
-        assert_eq!(lines[3].spans[1].content, "RECEIPT ");
+        assert_eq!(lines[3].spans[1].content, "receipt ");
         assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::mute()));
         assert_eq!(lines[4].spans[0].content, "  · ");
-        assert_eq!(lines[5].spans[1].content, "APPROVE ");
+        assert_eq!(lines[5].spans[1].content, "approval ");
         assert_eq!(lines[6].spans[0].content, "  ! ");
         assert_eq!(lines[6].spans[0].style.fg, Some(crate::theme::red()));
     }
@@ -1055,7 +1055,7 @@ mod tests {
 
         assert_eq!(conversation_lines.len(), 3);
         assert_eq!(evidence_lines.len(), 2);
-        assert_eq!(evidence_lines[0].spans[1].content, "TOOL ");
+        assert_eq!(evidence_lines[0].spans[1].content, "tool ");
         assert_eq!(
             evidence_lines[0].spans[1].style.fg,
             Some(crate::theme::mute())
