@@ -886,7 +886,7 @@ mod tests {
         assert!(!rendered.contains("Activity"));
         assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("normalized Gateway"));
-        assert!(rendered.contains("Run completed"));
+        assert!(!rendered.contains("Run completed"));
     }
 
     #[test]
@@ -973,7 +973,7 @@ mod tests {
             assert!(!rendered.contains("Run provenance"));
             assert!(rendered.contains(*provider_id));
             assert!(rendered.contains(*model_fragment));
-            assert!(rendered.contains("Run completed"));
+            assert!(!rendered.contains("Run completed"));
         }
     }
 
