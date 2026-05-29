@@ -149,6 +149,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn run_interactive_app() -> anyhow::Result<()> {
+    initialize_detected_theme();
     enable_raw_mode()?;
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
@@ -158,6 +159,12 @@ fn run_interactive_app() -> anyhow::Result<()> {
     disable_raw_mode()?;
     terminal.show_cursor()?;
     result
+}
+
+fn initialize_detected_theme() {
+    if let Ok(response) = env::var("CRAIK_TUI_OSC11_RESPONSE") {
+        let _ = theme::set_detected_terminal_mode_from_osc11(&response);
+    }
 }
 
 fn run_interactive_loop(

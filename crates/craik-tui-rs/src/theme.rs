@@ -2,6 +2,7 @@ use ratatui::style::{Color, Modifier, Style};
 #[cfg(test)]
 use std::cell::Cell;
 use std::env;
+use std::sync::OnceLock;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeMode {
@@ -28,11 +29,19 @@ pub fn mode() -> ThemeMode {
     if let Some(mode) = test_mode() {
         return mode;
     }
-    let configured = env::var("CRAIK_TUI_THEME")
-        .or_else(|_| env::var("CRAIK_THEME"))
-        .unwrap_or_default()
-        .to_lowercase();
-    mode_from_configured(&configured)
+    mode_from_env_and_detected(|key| env::var(key).ok(), detected_terminal_mode().copied())
+}
+
+pub fn set_detected_terminal_mode(mode: ThemeMode) {
+    let _ = DETECTED_TERMINAL_MODE.set(mode);
+}
+
+pub fn set_detected_terminal_mode_from_osc11(response: &str) -> bool {
+    let Some(mode) = mode_from_osc11_response(response) else {
+        return false;
+    };
+    set_detected_terminal_mode(mode);
+    true
 }
 
 pub fn accent() -> Color {
@@ -133,24 +142,85 @@ fn palette() -> Palette {
         ThemeMode::Monochrome => Palette {
             accent: Color::Gray,
             primary: Color::White,
-            dim: Color::Gray,
+            dim: Color::DarkGray,
             mute: Color::DarkGray,
             sage: Color::White,
             amber: Color::Gray,
             cyan: Color::Gray,
-            red: Color::White,
+            red: Color::Gray,
             surface: Color::Reset,
         },
     }
 }
 
-fn mode_from_configured(configured: &str) -> ThemeMode {
-    match configured {
-        "light" => ThemeMode::Light,
-        "monochrome" | "mono" => ThemeMode::Monochrome,
-        _ => ThemeMode::Dark,
+fn mode_from_env_and_detected(
+    env_value: impl Fn(&str) -> Option<String>,
+    detected: Option<ThemeMode>,
+) -> ThemeMode {
+    if let Some(configured) = env_value("CRAIK_TUI_THEME")
+        .or_else(|| env_value("CRAIK_THEME"))
+        .and_then(|value| mode_from_configured(&value))
+    {
+        return configured;
+    }
+    if env_value("NO_COLOR").as_deref() == Some("1") {
+        return ThemeMode::Monochrome;
+    }
+    detected
+        .or_else(|| env_value("COLORFGBG").and_then(|value| mode_from_colorfgbg(&value)))
+        .unwrap_or(ThemeMode::Dark)
+}
+
+fn mode_from_configured(configured: &str) -> Option<ThemeMode> {
+    match configured.trim().to_lowercase().as_str() {
+        "dark" => Some(ThemeMode::Dark),
+        "light" => Some(ThemeMode::Light),
+        "monochrome" | "mono" => Some(ThemeMode::Monochrome),
+        _ => None,
     }
 }
+
+fn mode_from_colorfgbg(value: &str) -> Option<ThemeMode> {
+    let background = value.rsplit(';').next()?.trim().parse::<u8>().ok()?;
+    Some(if background >= 7 {
+        ThemeMode::Light
+    } else {
+        ThemeMode::Dark
+    })
+}
+
+fn mode_from_osc11_response(response: &str) -> Option<ThemeMode> {
+    let rgb = response
+        .split("rgb:")
+        .nth(1)?
+        .trim_end_matches(['\u{1b}', '\\', '\u{7}', ' ']);
+    let mut channels = rgb.split('/');
+    let red = parse_osc11_channel(channels.next()?)?;
+    let green = parse_osc11_channel(channels.next()?)?;
+    let blue = parse_osc11_channel(channels.next()?)?;
+    let luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+    Some(if luminance >= 0.5 {
+        ThemeMode::Light
+    } else {
+        ThemeMode::Dark
+    })
+}
+
+fn parse_osc11_channel(channel: &str) -> Option<f64> {
+    let trimmed = channel.trim();
+    if trimmed.is_empty() || trimmed.len() > 4 {
+        return None;
+    }
+    let value = u16::from_str_radix(trimmed, 16).ok()?;
+    let max = (1_u32 << (trimmed.len() * 4)) - 1;
+    Some(f64::from(value) / f64::from(max))
+}
+
+fn detected_terminal_mode() -> Option<&'static ThemeMode> {
+    DETECTED_TERMINAL_MODE.get()
+}
+
+static DETECTED_TERMINAL_MODE: OnceLock<ThemeMode> = OnceLock::new();
 
 #[cfg(test)]
 thread_local! {
@@ -174,20 +244,97 @@ pub fn with_mode_for_test<T>(mode: ThemeMode, render: impl FnOnce() -> T) -> T {
 
 #[cfg(test)]
 mod tests {
-    use super::{ThemeMode, mode, mode_from_configured, with_mode_for_test};
+    use super::{
+        ThemeMode, accent, dim, mode, mode_from_colorfgbg, mode_from_configured,
+        mode_from_env_and_detected, mode_from_osc11_response, primary, red, surface,
+        with_mode_for_test,
+    };
+    use ratatui::style::Color;
 
     #[test]
     fn theme_mode_parses_supported_values() {
-        assert_eq!(mode_from_configured(""), ThemeMode::Dark);
-        assert_eq!(mode_from_configured("light"), ThemeMode::Light);
-        assert_eq!(mode_from_configured("monochrome"), ThemeMode::Monochrome);
-        assert_eq!(mode_from_configured("mono"), ThemeMode::Monochrome);
+        assert_eq!(mode_from_configured("dark"), Some(ThemeMode::Dark));
+        assert_eq!(mode_from_configured("light"), Some(ThemeMode::Light));
+        assert_eq!(
+            mode_from_configured("monochrome"),
+            Some(ThemeMode::Monochrome)
+        );
+        assert_eq!(mode_from_configured("mono"), Some(ThemeMode::Monochrome));
+        assert_eq!(mode_from_configured(""), None);
+    }
+
+    #[test]
+    fn theme_mode_resolver_uses_expected_precedence() {
+        assert_eq!(
+            mode_from_env_and_detected(
+                |key| match key {
+                    "CRAIK_TUI_THEME" => Some("light".to_owned()),
+                    "CRAIK_THEME" => Some("dark".to_owned()),
+                    "NO_COLOR" => Some("1".to_owned()),
+                    "COLORFGBG" => Some("15;0".to_owned()),
+                    _ => None,
+                },
+                Some(ThemeMode::Dark),
+            ),
+            ThemeMode::Light
+        );
+        assert_eq!(
+            mode_from_env_and_detected(
+                |key| match key {
+                    "NO_COLOR" => Some("1".to_owned()),
+                    "COLORFGBG" => Some("0;15".to_owned()),
+                    _ => None,
+                },
+                Some(ThemeMode::Light),
+            ),
+            ThemeMode::Monochrome
+        );
+        assert_eq!(
+            mode_from_env_and_detected(|_| None, Some(ThemeMode::Light)),
+            ThemeMode::Light
+        );
+        assert_eq!(
+            mode_from_env_and_detected(|key| (key == "COLORFGBG").then(|| "15;0".to_owned()), None,),
+            ThemeMode::Dark
+        );
+        assert_eq!(mode_from_env_and_detected(|_| None, None), ThemeMode::Dark);
+    }
+
+    #[test]
+    fn theme_mode_uses_colorfgbg_background_hint() {
+        assert_eq!(mode_from_colorfgbg("15;0"), Some(ThemeMode::Dark));
+        assert_eq!(mode_from_colorfgbg("0;15"), Some(ThemeMode::Light));
+        assert_eq!(mode_from_colorfgbg("invalid"), None);
+    }
+
+    #[test]
+    fn theme_mode_parses_osc11_background_response() {
+        assert_eq!(
+            mode_from_osc11_response("\u{1b}]11;rgb:0000/0000/0000\u{1b}\\"),
+            Some(ThemeMode::Dark)
+        );
+        assert_eq!(
+            mode_from_osc11_response("\u{1b}]11;rgb:ffff/ffff/ffff\u{1b}\\"),
+            Some(ThemeMode::Light)
+        );
+        assert_eq!(mode_from_osc11_response("not osc"), None);
     }
 
     #[test]
     fn theme_mode_can_be_overridden_for_frame_tests() {
         with_mode_for_test(ThemeMode::Light, || {
             assert_eq!(mode(), ThemeMode::Light);
+        });
+    }
+
+    #[test]
+    fn monochrome_palette_degrades_to_terminal_neutral_colors() {
+        with_mode_for_test(ThemeMode::Monochrome, || {
+            assert_eq!(surface(), Color::Reset);
+            assert_eq!(primary(), Color::White);
+            assert_eq!(accent(), Color::Gray);
+            assert_eq!(dim(), Color::DarkGray);
+            assert_eq!(red(), Color::Gray);
         });
     }
 }
