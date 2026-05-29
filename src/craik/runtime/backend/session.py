@@ -154,6 +154,7 @@ def execute_prompt(
                 type="model.selected",
                 task_id=task.id,
                 data={
+                    "backend": "provider",
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
                     "model": model,
@@ -168,6 +169,7 @@ def execute_prompt(
                 type="run.working",
                 task_id=task.id,
                 data={
+                    "backend": "provider",
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
                     "model": model,
