@@ -177,8 +177,9 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         metrics.active_overlay.is_some(),
     );
     let model = compact_model_label(model_label(state, "model not selected"));
+    let mode = state.active_permission_mode.as_deref().unwrap_or("default");
     let mut spans = vec![
-        Span::styled(" default ", mode_pill_style("default")),
+        Span::styled(format!(" {mode} "), mode_pill_style(mode)),
         Span::raw("  "),
         Span::styled(model, theme::primary_style()),
     ];
@@ -686,6 +687,19 @@ mod tests {
 
         assert!(!inferred_rendered.contains(" high "));
         assert!(source_rendered.contains(" high "));
+    }
+
+    #[test]
+    fn status_line_uses_source_backed_permission_mode() {
+        let state = GatewayAppState {
+            active_permission_mode: Some("auto".to_owned()),
+            ..GatewayAppState::default()
+        };
+
+        let rendered = status_line(&state, status_metrics()).to_string();
+
+        assert!(rendered.contains(" auto "));
+        assert!(!rendered.contains(" default "));
     }
 
     #[test]

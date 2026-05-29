@@ -19,7 +19,11 @@ from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.diagnostics.commands import doctor_result
 from craik.runtime.i18n import text as localized_text
 from craik.runtime.memory.commands import memory_overview_result
-from craik.runtime.model_commands import model_list_result, model_set_result, model_status_result
+from craik.runtime.model_commands import (
+    model_list_result,
+    model_set_result,
+    model_status_result,
+)
 from craik.runtime.providers.commands import provider_list_result
 from craik.runtime.reviewing.approval_commands import approvals_list_result
 from craik.runtime.sandbox.mcp_discovery import render_mcp_discovery
@@ -28,6 +32,7 @@ from craik.runtime.setup import setup_command_result
 from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
+from craik.runtime.shell.contract_runtime.model_args import parse_model_set_args
 from craik.runtime.shell.contract_runtime.result_helpers import (
     _named_result,
     _subcommand_listing,
@@ -217,11 +222,18 @@ def model_command(*args: str, env: dict[str, str] | None = None) -> CommandResul
         if args == ("set",):
             return _argument_help("model")
         if len(args) >= 2 and args[0] == "set":
-            result = model_set_result(args[1], env=env)
+            selector, display_name, backend, options = parse_model_set_args(args[1:])
+            result = model_set_result(
+                selector,
+                env=env,
+                display_name=display_name,
+                backend=backend,
+                options=options,
+            )
             return CommandResult(
                 payload=result.payload,
                 shape=result.shape,
-                text=result.text or f"Active model set to `{args[1]}`.",
+                text=result.text or f"Active model set to `{selector}`.",
                 command_name="model",
             )
         if args and args[0] == "list":
@@ -242,17 +254,20 @@ def model_command(*args: str, env: dict[str, str] | None = None) -> CommandResul
 def mode_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
     """Inspect or set Claude Code permission mode."""
     values = env if env is not None else os.environ
-    allowed = {"default", "acceptEdits", "plan", "auto"}
+    allowed = {"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"}
     if args:
         mode = args[0]
         if mode not in allowed:
-            text = "mode must be one of `default`, `acceptEdits`, `plan`, or `auto`."
+            text = (
+                "mode must be one of `default`, `acceptEdits`, `plan`, `auto`, "
+                "`dontAsk`, or `bypassPermissions`."
+            )
             return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
         values[CLAUDE_PERMISSION_MODE_ENV] = mode
     mode = values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
     payload = {
         "claude_permission_mode": mode,
-        "choices": ["default", "acceptEdits", "plan", "auto"],
+        "choices": ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"],
         "hint": "Shift-Tab cycles this mode inside the TUI.",
     }
     return CommandResult(
@@ -449,16 +464,12 @@ def session_command(*args: str, env: dict[str, str] | None = None) -> CommandRes
     )
 
 
-
 def _argument_help(command_name: str) -> CommandResult:
     spec = find_slash_command_spec(_active_specs(), command_name)
     text = (
-        argument_help_markdown(spec)
-        if spec is not None
-        else f"{command_name} requires arguments"
+        argument_help_markdown(spec) if spec is not None else f"{command_name} requires arguments"
     )
     return CommandResult(payload=text, shape="markdown", text=text, command_name="help")
-
 
 
 def _registry() -> AutoSlashRegistry:

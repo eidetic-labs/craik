@@ -71,6 +71,20 @@ def test_model_set_persists_active_model(tmp_path: Path) -> None:
     assert json.loads(status.text)["active_model"] == "openai/gpt-4o-mini"
 
 
+def test_model_set_accepts_reasoning_effort_option(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+
+    result = dispatch_slash_command(
+        "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
+        env=env,
+    )
+    status = dispatch_slash_command("/model", env=env)
+
+    assert result.text == "Active model set to `anthropic/claude-opus-4-7`."
+    active_profile = json.loads(status.text)["active_profile"]
+    assert active_profile["options"]["reasoning_effort"] == "high"
+
+
 def test_audited_provider_run_uses_active_live_model(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
@@ -174,12 +188,12 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
 def test_mode_set_persists_claude_permission_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
-    result = dispatch_slash_command("/mode acceptEdits", env=env)
+    result = dispatch_slash_command("/mode auto", env=env)
     status = dispatch_slash_command("/mode", env=env)
 
-    assert result.text == "Claude permission mode: `acceptEdits`."
-    assert json.loads(status.text)["claude_permission_mode"] == "acceptEdits"
-    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "acceptEdits"
+    assert result.text == "Claude permission mode: `auto`."
+    assert json.loads(status.text)["claude_permission_mode"] == "auto"
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "auto"
 
 
 def test_resume_persists_active_session_without_argument_loss(tmp_path: Path) -> None:
@@ -703,9 +717,7 @@ def test_run_claude_code_backend_observes_runtime_approval_event_without_interce
     assert output is not None
     activity = output.observed_output["activity"]
     assert activity["runtime_approvals"]
-    assert output.observed_output["progress_events"][0].startswith(
-        "Claude Code requests approval"
-    )
+    assert output.observed_output["progress_events"][0].startswith("Claude Code requests approval")
     assert output.observed_output["text"] == "approved path continued"
 
 
@@ -800,8 +812,7 @@ def test_craik_prefix_gets_specific_recovery() -> None:
     result = dispatch_slash_command("/craik auth login openai", env={})
 
     assert (
-        result.text
-        == "Drop the `craik` prefix — try `/auth login openai` instead. "
+        result.text == "Drop the `craik` prefix — try `/auth login openai` instead. "
         "`/help` lists all slash commands."
     )
 

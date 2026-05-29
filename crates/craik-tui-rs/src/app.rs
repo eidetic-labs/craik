@@ -4906,7 +4906,7 @@ mod tests {
         let mut app = InteractiveApp::for_test_with_messages([]);
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto]",
+            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
