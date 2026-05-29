@@ -227,15 +227,15 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
 
 fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
     match kind {
-        TranscriptKind::System => ("CRAIK", theme::cyan()),
+        TranscriptKind::System => ("CRAIK", theme::mute()),
         TranscriptKind::User => ("YOU", theme::sage()),
         TranscriptKind::Assistant => ("MODEL", theme::primary()),
         TranscriptKind::Progress => ("RUN", theme::amber()),
-        TranscriptKind::Tool => ("TOOL", theme::accent()),
-        TranscriptKind::File => ("FILE", theme::cyan()),
-        TranscriptKind::Command => ("CMD", theme::accent()),
+        TranscriptKind::Tool => ("TOOL", theme::mute()),
+        TranscriptKind::File => ("FILE", theme::mute()),
+        TranscriptKind::Command => ("CMD", theme::mute()),
         TranscriptKind::Approval => ("APPROVE", theme::red()),
-        TranscriptKind::Receipt => ("RECEIPT", theme::cyan()),
+        TranscriptKind::Receipt => ("RECEIPT", theme::mute()),
         TranscriptKind::Error => ("ERROR", theme::red()),
     }
 }
@@ -244,15 +244,20 @@ fn body_prefix(kind: &TranscriptKind) -> &'static str {
     match kind {
         TranscriptKind::User => "  ▌ ",
         TranscriptKind::Assistant => "    ",
-        _ => "  │ ",
+        TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
+        _ => "  ┆ ",
     }
 }
 
 fn body_prefix_style(kind: &TranscriptKind) -> Style {
     match kind {
         TranscriptKind::User => Style::default().fg(theme::sage()),
-        TranscriptKind::Assistant => theme::mute_style(),
-        _ => Style::default().fg(label_color(kind)),
+        TranscriptKind::Assistant => theme::dim_style(),
+        TranscriptKind::Approval | TranscriptKind::Error => Style::default()
+            .fg(theme::red())
+            .add_modifier(Modifier::BOLD),
+        TranscriptKind::Progress => Style::default().fg(theme::amber()),
+        _ => theme::mute_style(),
     }
 }
 
@@ -268,7 +273,11 @@ fn title_style(kind: &TranscriptKind) -> Style {
         TranscriptKind::Progress => Style::default()
             .fg(theme::amber())
             .add_modifier(Modifier::BOLD),
-        _ => theme::accent_style(),
+        TranscriptKind::System
+        | TranscriptKind::Tool
+        | TranscriptKind::File
+        | TranscriptKind::Command
+        | TranscriptKind::Receipt => theme::dim_style(),
     }
 }
 
@@ -291,17 +300,23 @@ fn render_body_line(
     } else if !cached.spans.is_empty() {
         spans.extend(cached.spans.clone());
     } else if let Some((label, value)) = split_key_value(&cached.text) {
-        spans.push(Span::styled(
-            format!("{label}: "),
-            Style::default()
-                .fg(label_color(kind))
-                .add_modifier(Modifier::BOLD),
-        ));
+        spans.push(Span::styled(format!("{label}: "), key_label_style(kind)));
         spans.extend(value_spans(kind, value));
     } else {
         spans.extend(value_spans(kind, &cached.text));
     }
     highlight_search(spans, search_query)
+}
+
+fn key_label_style(kind: &TranscriptKind) -> Style {
+    let color = match kind {
+        TranscriptKind::User => theme::sage(),
+        TranscriptKind::Assistant => theme::mute(),
+        TranscriptKind::Approval | TranscriptKind::Error => theme::red(),
+        TranscriptKind::Progress => theme::amber(),
+        _ => theme::mute(),
+    };
+    Style::default().fg(color).add_modifier(Modifier::BOLD)
 }
 
 impl CachedBodyLine {
@@ -809,7 +824,7 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines[1].spans[1].content, "Provider: ");
-        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::accent()));
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::mute()));
         assert_eq!(lines[1].spans[2].content, "provider_anthropic");
     }
 
@@ -820,7 +835,7 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines.len(), 3);
-        assert_eq!(lines[1].spans[0].content, "  │ ");
+        assert_eq!(lines[1].spans[0].content, "  ┆ ");
     }
 
     #[test]
@@ -835,7 +850,27 @@ mod tests {
 
         assert_eq!(lines[1].spans[0].content, "  ▌ ");
         assert_eq!(lines[4].spans[0].content, "    ");
-        assert_eq!(lines[7].spans[0].content, "  │ ");
+        assert_eq!(lines[7].spans[0].content, "  ┆ ");
+    }
+
+    #[test]
+    fn transcript_lane_styles_keep_model_primary_and_craik_subdued() {
+        let entries = vec![
+            TranscriptEntry::assistant("Assistant", "Model response"),
+            TranscriptEntry::new(TranscriptKind::Receipt, "Receipt", "ID: receipt_1"),
+            TranscriptEntry::new(TranscriptKind::Approval, "Approval", "Target: src/lib.rs"),
+        ];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[0].spans[1].content, "MODEL ");
+        assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
+        assert_eq!(lines[3].spans[1].content, "RECEIPT ");
+        assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::mute()));
+        assert_eq!(lines[4].spans[0].content, "  ┆ ");
+        assert_eq!(lines[6].spans[1].content, "APPROVE ");
+        assert_eq!(lines[7].spans[0].content, "  ! ");
+        assert_eq!(lines[7].spans[0].style.fg, Some(crate::theme::red()));
     }
 
     #[test]
