@@ -260,8 +260,19 @@ def _slash_catalog_entry(
         "usage": spec.usage,
         "summary": spec.summary,
         "aliases": list(spec.aliases),
+        "mutating": spec.mutating,
         "requires_confirmation": spec.requires_confirmation,
     }
+    if spec.cli_mirror:
+        entry["cli_mirror"] = spec.cli_mirror
+    if spec.confirm_message:
+        entry["confirm_message"] = spec.confirm_message
+    if spec.required_args:
+        entry["required_args"] = list(spec.required_args)
+    if spec.examples:
+        entry["examples"] = list(spec.examples)
+    elif spec.example:
+        entry["examples"] = [spec.example]
     if spec.choices:
         entry["choices"] = {key: list(values) for key, values in spec.choices.items()}
     subcommands = _usage_subcommands(spec.usage)

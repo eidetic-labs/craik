@@ -6,6 +6,7 @@ use ratatui::{
 
 use crate::theme;
 
+#[cfg(test)]
 pub struct ActivityMetrics<'a> {
     pub slash_commands: usize,
     pub queued_inputs: usize,
@@ -35,6 +36,7 @@ struct FooterHint {
     urgent: bool,
 }
 
+#[cfg(test)]
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
     let model = model_label(state, "not selected");
     let run_state = run_state_label(
@@ -154,35 +156,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
     lines.join("\n")
 }
 
-pub fn render_provenance_panel(detail: &str) -> String {
-    let mut lines = Vec::new();
-    let mut section = "";
-    for raw in detail.lines() {
-        if raw.ends_with(':') && !raw.starts_with("- ") {
-            section = raw.trim_end_matches(':');
-            lines.push(raw.to_owned());
-            continue;
-        }
-        if raw.starts_with("- ") {
-            lines.push(format!("  {raw}"));
-            continue;
-        }
-        if let Some((label, value)) = raw.split_once(':') {
-            lines.push(format!("  {label}:{}", compact_panel_value(value)));
-        } else if raw.trim().is_empty() {
-            lines.push(String::new());
-        } else if section.is_empty() {
-            lines.push(raw.to_owned());
-        } else {
-            lines.push(format!("  {raw}"));
-        }
-    }
-    if lines.is_empty() {
-        lines.push("No provenance selected.".to_owned());
-    }
-    lines.join("\n")
-}
-
+#[cfg(test)]
 fn provider_health_label(provider_id: Option<&str>, backend: Option<&str>) -> &'static str {
     match (provider_id, backend) {
         (Some(_), Some(_)) => "ready",
@@ -397,15 +371,6 @@ fn effort_label(state: &GatewayAppState) -> Option<&'static str> {
     }
 }
 
-fn compact_panel_value(value: &str) -> String {
-    let trimmed = value.trim_start();
-    if trimmed.is_empty() {
-        String::new()
-    } else {
-        format!(" {trimmed}")
-    }
-}
-
 fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
     state
         .active_model_display_name
@@ -414,6 +379,7 @@ fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
         .unwrap_or(fallback)
 }
 
+#[cfg(test)]
 fn run_state_label(
     state: &GatewayAppState,
     pending_approvals: usize,
@@ -516,6 +482,7 @@ fn effort_style(effort: &str) -> Style {
     Style::default().fg(color)
 }
 
+#[cfg(test)]
 fn provider_label(provider_id: Option<&str>, provider_family: Option<&str>) -> String {
     match (provider_id, provider_family) {
         (Some(id), Some(family)) if id != family => format!("{family} ({id})"),

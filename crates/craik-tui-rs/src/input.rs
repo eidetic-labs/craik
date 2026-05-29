@@ -11,9 +11,14 @@ pub struct SlashHint {
     pub usage: String,
     pub summary: String,
     pub category: String,
+    pub aliases: Vec<String>,
     pub choices: Vec<String>,
     pub subcommands: Vec<String>,
     pub requires_confirmation: bool,
+    pub confirm_message: Option<String>,
+    pub cli_mirror: Option<String>,
+    pub required_args: Vec<String>,
+    pub examples: Vec<String>,
     pub current_value: Option<String>,
 }
 
@@ -25,9 +30,14 @@ impl SlashHint {
             usage: usage.to_owned(),
             summary: summary.to_owned(),
             category: category.to_owned(),
+            aliases: Vec::new(),
             choices: Vec::new(),
             subcommands: Vec::new(),
             requires_confirmation: false,
+            confirm_message: None,
+            cli_mirror: None,
+            required_args: Vec::new(),
+            examples: Vec::new(),
             current_value: None,
         }
     }
@@ -39,6 +49,7 @@ struct SlashSuggestion {
     category: String,
     exact_prefix: bool,
     score: usize,
+    catalog_index: usize,
     hint: String,
     query: String,
 }
@@ -190,11 +201,17 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
     let query = prefix.to_lowercase();
     let mut suggestions = slash_catalog
         .iter()
+        .enumerate()
         .filter_map(|hint| {
+            let (catalog_index, hint) = hint;
             let name = hint.name.to_lowercase();
             let usage = hint.usage.to_lowercase();
             let summary = hint.summary.to_lowercase();
-            let exact_prefix = name.starts_with(&query);
+            let alias_match = hint
+                .aliases
+                .iter()
+                .any(|alias| alias.to_lowercase().starts_with(&query));
+            let exact_prefix = name.starts_with(&query) || alias_match;
             let fuzzy = fuzzy_subsequence_score(&query, &name)
                 .or_else(|| {
                     (query.chars().count() > 2)
@@ -220,6 +237,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
                     } else {
                         fuzzy.unwrap_or(500)
                     },
+                    catalog_index,
                     hint: hint_right_hint(hint),
                     query: query.clone(),
                 })
@@ -228,15 +246,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
             }
         })
         .collect::<Vec<_>>();
-    suggestions.sort_by_key(|hint| {
-        (
-            !hint.exact_prefix,
-            hint.score,
-            hint.usage.split_whitespace().next().unwrap_or("").len(),
-            hint.category.clone(),
-            hint.usage.clone(),
-        )
-    });
+    suggestions.sort_by_key(|hint| (!hint.exact_prefix, hint.score, hint.catalog_index));
     suggestions
         .into_iter()
         .take(8)
@@ -246,6 +256,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
             category: hint.category,
             exact_prefix: hint.exact_prefix,
             score: hint.score,
+            catalog_index: hint.catalog_index,
             hint: hint.hint,
             query: hint.query,
         })
@@ -276,6 +287,7 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
                     category: hint.category.clone(),
                     exact_prefix: current,
                     score: if current { 0 } else { 1 },
+                    catalog_index: 0,
                     hint: if current {
                         "● current".to_owned()
                     } else if hint.name == "mode" && choice == "plan" {
@@ -296,6 +308,7 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
             category: hint.category.clone(),
             exact_prefix: true,
             score: 0,
+            catalog_index: 0,
             hint: "set ▸".to_owned(),
             query: String::new(),
         })
@@ -328,6 +341,7 @@ fn highlight_usage(usage: &str, query: &str) -> Vec<Span<'static>> {
 
 fn hint_right_hint(hint: &SlashHint) -> String {
     if hint.requires_confirmation {
+        let _has_confirm_message = hint.confirm_message.is_some();
         return "⚠ confirms".to_owned();
     }
     if let Some(value) = &hint.current_value {
@@ -339,6 +353,15 @@ fn hint_right_hint(hint: &SlashHint) -> String {
     if !hint.subcommands.is_empty() || usage_has_subcommands(&hint.usage) {
         return "set ▸".to_owned();
     }
+    if !hint.required_args.is_empty() {
+        return format!("needs {}", hint.required_args.join(","));
+    }
+    if !hint.examples.is_empty() {
+        return "example ▸".to_owned();
+    }
+    if let Some(cli_mirror) = &hint.cli_mirror {
+        return format!("cli: {cli_mirror}");
+    }
     String::new()
 }
 
@@ -349,6 +372,8 @@ fn right_hint_style(hint: &str) -> Style {
             .add_modifier(Modifier::BOLD)
     } else if hint.contains("current") || hint.starts_with("now:") {
         Style::default().fg(theme::sage())
+    } else if hint.starts_with("cli:") || hint.starts_with("needs ") {
+        theme::dim_style()
     } else {
         theme::mute_style()
     }
@@ -494,7 +519,10 @@ mod tests {
             SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
         ];
 
-        assert_eq!(slash_completion("/r", &catalog).as_deref(), Some("/run "));
+        assert_eq!(
+            slash_completion("/r", &catalog).as_deref(),
+            Some("/receipt ")
+        );
     }
 
     #[test]
