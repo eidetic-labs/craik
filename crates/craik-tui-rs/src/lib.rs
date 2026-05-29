@@ -489,7 +489,7 @@ pub fn run_backend_commands(commands: &[GatewayCommand]) -> anyhow::Result<Vec<G
     let issues = validate_gateway_events(&events);
     if !issues.is_empty() {
         bail!(
-            "Gateway backend emitted invalid events: {}",
+            "Gateway backend emitted invalid events. {}",
             format_gateway_contract_issues(&issues)
         );
     }
@@ -720,6 +720,87 @@ pub fn format_gateway_contract_issues(issues: &[GatewayContractIssue]) -> String
         .join("; ")
 }
 
+pub fn format_gateway_contract_diagnostic(
+    event: &GatewayEvent,
+    issues: &[GatewayContractIssue],
+) -> String {
+    let mut lines = vec![format!(
+        "Gateway event contract violation for `{}`.",
+        event.event_type
+    )];
+    if let Some(context) = event_context(event) {
+        lines.push(format!("Context: {context}"));
+    }
+    if !issues.is_empty() {
+        lines.push("Issues:".to_owned());
+        for issue in issues {
+            lines.push(format!("- {}", issue.message));
+        }
+    }
+    lines.push(
+        "Recovery: update the backend emitter or the Gateway event contract, then retry the run."
+            .to_owned(),
+    );
+    lines.join("\n")
+}
+
+pub fn format_gateway_error_event(event: &GatewayEvent) -> Option<String> {
+    if event.event_type != "error" {
+        return None;
+    }
+    let message =
+        string_at(&event.data, &["message"]).unwrap_or_else(|| "unknown Gateway error".to_owned());
+    if string_at(&event.data, &["kind"]).as_deref() != Some("contract_violation") {
+        return Some(message);
+    }
+
+    let mut lines = vec![message];
+    if let Some(context) = event_context(event) {
+        lines.push(format!("Context: {context}"));
+    }
+    if let Some(issues) = event.data.get("issues").and_then(Value::as_array) {
+        let issue_lines = issues
+            .iter()
+            .filter_map(Value::as_str)
+            .filter(|issue| !issue.trim().is_empty())
+            .map(|issue| format!("- {issue}"))
+            .collect::<Vec<_>>();
+        if !issue_lines.is_empty() {
+            lines.push("Issues:".to_owned());
+            lines.extend(issue_lines);
+        }
+    }
+    if let Some(recovery) = string_at(&event.data, &["recovery"]) {
+        lines.push(format!("Recovery: {recovery}"));
+    }
+    Some(lines.join("\n"))
+}
+
+fn event_context(event: &GatewayEvent) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(run_id) = &event.run_id {
+        parts.push(format!("run {run_id}"));
+    }
+    if let Some(task_id) = &event.task_id {
+        parts.push(format!("task {task_id}"));
+    }
+    for (label, path) in [
+        ("backend", &["backend"][..]),
+        ("provider", &["provider_id"][..]),
+        ("family", &["provider_family"][..]),
+        ("model", &["model"][..]),
+    ] {
+        if let Some(value) = string_at(&event.data, path) {
+            parts.push(format!("{label} {value}"));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
+}
+
 pub fn status_command_sequence() -> Vec<GatewayCommand> {
     vec![GatewayCommand::SessionStatus, GatewayCommand::SessionClose]
 }
@@ -787,8 +868,10 @@ pub fn sample_gateway_command_json() -> Value {
 mod tests {
     use super::{
         GatewayCommand, GatewayEvent, app_state_from_events, encode_gateway_command,
-        gateway_event_contract, parse_gateway_events, render_dashboard_text, render_replay_text,
-        sample_gateway_command_json, summarize_gateway_events, validate_gateway_events,
+        format_gateway_contract_diagnostic, format_gateway_error_event, gateway_event_contract,
+        parse_gateway_events, render_dashboard_text, render_replay_text,
+        sample_gateway_command_json, summarize_gateway_events, validate_gateway_event,
+        validate_gateway_events,
     };
     use serde_json::json;
 
@@ -1112,5 +1195,56 @@ mod tests {
         assert_eq!(issues[0].event_index, 0);
         assert_eq!(issues[0].event_type, "run.completed");
         assert_eq!(issues[0].message, "run_id is required");
+    }
+
+    #[test]
+    fn contract_diagnostic_includes_context_and_recovery() {
+        let event = GatewayEvent {
+            event_type: "run.completed".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "status": "completed",
+                "backend": "provider",
+                "provider_id": "provider_anthropic",
+                "model": "claude-sonnet-4"
+            }),
+        };
+        let issues = validate_gateway_event(&event);
+
+        let diagnostic = format_gateway_contract_diagnostic(&event, &issues);
+
+        assert!(diagnostic.contains("Gateway event contract violation for `run.completed`."));
+        assert!(diagnostic.contains("task task_contract"));
+        assert!(diagnostic.contains("backend provider"));
+        assert!(diagnostic.contains("- run_id is required"));
+        assert!(diagnostic.contains("Recovery: update the backend emitter"));
+    }
+
+    #[test]
+    fn contract_error_event_formats_structured_recovery_detail() {
+        let event = GatewayEvent {
+            event_type: "error".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "kind": "contract_violation",
+                "message": "Gateway backend emitted invalid event `run.completed`.",
+                "issues": ["run_id is required"],
+                "backend": "provider",
+                "provider_id": "provider_anthropic",
+                "recovery": "Update the backend emitter before retrying."
+            }),
+        };
+
+        let message = format_gateway_error_event(&event).expect("error message formats");
+
+        assert!(message.contains("Gateway backend emitted invalid event"));
+        assert!(message.contains("run run_contract"));
+        assert!(message.contains("provider provider_anthropic"));
+        assert!(message.contains("- run_id is required"));
+        assert!(message.contains("Recovery: Update the backend emitter before retrying."));
     }
 }

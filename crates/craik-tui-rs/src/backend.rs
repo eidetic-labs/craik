@@ -1,5 +1,8 @@
 use anyhow::Context;
-use craik_tui_rs::{GatewayCommand, GatewayEvent, encode_gateway_command, validate_gateway_event};
+use craik_tui_rs::{
+    GatewayCommand, GatewayEvent, encode_gateway_command, format_gateway_contract_diagnostic,
+    validate_gateway_event,
+};
 use std::{
     io::{self, BufRead, Write},
     process::{Child, ChildStdin, Command, Stdio},
@@ -59,15 +62,9 @@ impl BackendSession {
                             if issues.is_empty() {
                                 let _ = event_sender.send(WorkerMessage::Event(event));
                             } else {
-                                let issue_text = issues
-                                    .into_iter()
-                                    .map(|issue| issue.message)
-                                    .collect::<Vec<_>>()
-                                    .join("; ");
-                                let _ = event_sender.send(WorkerMessage::Error(format!(
-                                    "backend event contract violation for `{}`: {issue_text}",
-                                    event.event_type
-                                )));
+                                let _ = event_sender.send(WorkerMessage::Error(
+                                    format_gateway_contract_diagnostic(&event, &issues),
+                                ));
                             }
                         }
                         Err(error) => {

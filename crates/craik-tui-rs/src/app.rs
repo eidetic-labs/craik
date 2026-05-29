@@ -4,7 +4,7 @@ use crate::{
     input::{SlashHint, slash_completion},
     transcript::{TranscriptEntry, TranscriptKind},
 };
-use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent};
+use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent, format_gateway_error_event};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{collections::VecDeque, env, fs, path::PathBuf};
 
@@ -997,9 +997,16 @@ impl InteractiveApp {
                 self.follow_tail_after_transcript_update();
             }
             "error" => {
-                if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
+                if let Some(message) = format_gateway_error_event(event) {
+                    let title = if event.data.get("kind").and_then(|value| value.as_str())
+                        == Some("contract_violation")
+                    {
+                        "Gateway contract violation"
+                    } else {
+                        "Gateway error"
+                    };
                     self.transcript
-                        .push(TranscriptEntry::error("Gateway error", message));
+                        .push(TranscriptEntry::error(title, &message));
                     self.follow_tail_after_transcript_update();
                 }
             }
@@ -2623,6 +2630,36 @@ mod tests {
                 .iter()
                 .any(|entry| entry.title == "Gateway error")
         );
+    }
+
+    #[test]
+    fn structured_contract_error_event_gets_actionable_title() {
+        let mut app =
+            InteractiveApp::for_test_with_messages([WorkerMessage::Event(GatewayEvent {
+                event_type: "error".to_owned(),
+                created_at: None,
+                run_id: Some("run_contract".to_owned()),
+                task_id: Some("task_contract".to_owned()),
+                data: json!({
+                    "kind": "contract_violation",
+                    "message": "Gateway backend emitted invalid event `run.completed`.",
+                    "issues": ["run_id is required"],
+                    "backend": "provider",
+                    "provider_id": "provider_anthropic",
+                    "recovery": "Update the backend emitter before retrying."
+                }),
+            })]);
+
+        app.drain_worker();
+
+        let entry = app
+            .transcript
+            .iter()
+            .find(|entry| entry.title == "Gateway contract violation")
+            .expect("structured contract error is visible");
+        assert!(entry.body.contains("run run_contract"));
+        assert!(entry.body.contains("- run_id is required"));
+        assert!(entry.body.contains("Recovery: Update the backend emitter"));
     }
 
     #[test]
