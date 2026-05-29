@@ -269,6 +269,16 @@ impl InteractiveApp {
     }
 
     fn dispatch_text(&mut self, text: String) {
+        if !self.backend_connected {
+            self.queued_inputs.push_back(text);
+            self.in_flight = false;
+            self.state.working_phase = None;
+            self.transcript.push(TranscriptEntry::progress(
+                "Queued until reconnect",
+                "Gateway is disconnected. Press Ctrl-B to reconnect; the queued prompt will run after the backend responds.",
+            ));
+            return;
+        }
         let command = if text.starts_with('/') {
             GatewayCommand::SlashSubmit { text }
         } else {
@@ -426,6 +436,14 @@ impl InteractiveApp {
         let mut lines = Vec::new();
         if !self.backend_connected {
             lines.push("Gateway disconnected. Press Ctrl-B to reconnect.".to_owned());
+            if !self.queued_inputs.is_empty() {
+                lines.push(format!(
+                    "Queued for reconnect: {} prompt(s).",
+                    self.queued_inputs.len()
+                ));
+            } else if self.last_submitted_text.is_some() {
+                lines.push("Retry after reconnect: Ctrl-Y resubmits the last prompt.".to_owned());
+            }
         }
         if self
             .state
@@ -1495,7 +1513,7 @@ impl InteractiveApp {
     }
 
     fn dispatch_next_queued(&mut self) {
-        if self.in_flight {
+        if self.in_flight || !self.backend_connected {
             return;
         }
         if let Some(text) = self.queued_inputs.pop_front() {
@@ -1534,6 +1552,14 @@ impl InteractiveApp {
             self.transcript.push(TranscriptEntry::progress(
                 "Retry queued",
                 "The last prompt will run after the active request completes.",
+            ));
+            return;
+        }
+        if !self.backend_connected {
+            self.queued_inputs.push_back(text);
+            self.transcript.push(TranscriptEntry::progress(
+                "Retry queued",
+                "Gateway is disconnected. Press Ctrl-B to reconnect; the retry will run after the backend responds.",
             ));
             return;
         }
@@ -2848,6 +2874,74 @@ mod tests {
                 .iter()
                 .any(|entry| entry.title == "Retry queued")
         );
+    }
+
+    #[test]
+    fn disconnected_prompt_is_queued_for_reconnect() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.backend_connected = false;
+        app.input = "Review recovery UX".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.submit_input();
+
+        assert!(!app.in_flight);
+        assert_eq!(
+            app.queued_inputs,
+            VecDeque::from(["Review recovery UX".to_owned()])
+        );
+        assert_eq!(
+            app.last_submitted_text.as_deref(),
+            Some("Review recovery UX")
+        );
+        assert!(
+            app.prompt_context()
+                .contains("Queued for reconnect: 1 prompt(s).")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Queued until reconnect")
+        );
+    }
+
+    #[test]
+    fn disconnected_retry_is_queued_without_sending() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.backend_connected = false;
+        app.last_submitted_text = Some("Retry recovery UX".to_owned());
+
+        app.retry_last_prompt();
+
+        assert!(!app.in_flight);
+        assert_eq!(
+            app.queued_inputs,
+            VecDeque::from(["Retry recovery UX".to_owned()])
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Retry queued")
+        );
+    }
+
+    #[test]
+    fn queued_prompt_waits_until_backend_reconnects() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.backend_connected = false;
+        app.queued_inputs
+            .push_back("Run after reconnect".to_owned());
+
+        app.dispatch_next_queued();
+        assert_eq!(app.queued_inputs.len(), 1);
+        assert!(!app.in_flight);
+
+        app.backend_connected = true;
+        app.dispatch_next_queued();
+
+        assert!(app.queued_inputs.is_empty());
+        assert!(app.in_flight);
+        assert!(app.transcript.iter().any(|entry| entry.title == "Dequeued"));
     }
 
     #[test]
