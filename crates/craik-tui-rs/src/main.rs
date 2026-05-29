@@ -245,20 +245,31 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     } else if app.active_overlay.is_some() {
         render_active_overlay(frame, app, transcript_area);
     } else if let Some(slash_palette_area) = slash_palette_area {
-        let slash_palette = Paragraph::new(slash_palette_lines).wrap(Wrap { trim: false });
+        let slash_palette = Paragraph::new(slash_palette_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::LEFT)
+                    .border_style(Style::default().fg(theme::accent()))
+                    .style(theme::surface_style())
+                    .padding(Padding::horizontal(1)),
+            )
+            .style(theme::surface_style())
+            .wrap(Wrap { trim: false });
         frame.render_widget(slash_palette, slash_palette_area);
     }
 
     let input_title = input_title(app);
-    let input_block = Block::default()
-        .title(Line::from(vec![Span::styled(
-            input_title,
-            theme::accent_style(),
-        )]))
+    let mut input_block = Block::default()
         .borders(Borders::LEFT)
         .border_style(Style::default().fg(theme::accent()))
         .style(theme::surface_style())
         .padding(Padding::horizontal(1));
+    if !input_title.is_empty() {
+        input_block = input_block.title(Line::from(vec![Span::styled(
+            input_title,
+            theme::accent_style(),
+        )]));
+    }
     let input_inner = input_block.inner(vertical[1]);
     let input_lines = if app.search_active {
         render_search_lines(
@@ -324,11 +335,11 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
         .unwrap_or_else(|| "▌OVERLAY  Esc returns to chat".to_owned());
     let items = app.overlay_items();
     let visible_start = app.overlay_scroll as usize;
-    let visible_capacity = list_area.height.saturating_sub(6) as usize;
+    let visible_capacity = list_area.height.saturating_sub(4) as usize;
     let mut list_lines = vec![
         Line::from(vec![
-            Span::styled("▌ ", theme::accent_style()),
-            Span::styled("Filter ", theme::mute_style()),
+            Span::styled("▌", theme::accent_style()),
+            Span::styled(" filter  ", theme::mute_style()),
             Span::styled(
                 if app.overlay_filter.is_empty() {
                     "type to narrow"
@@ -344,19 +355,16 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
         ]),
         Line::from(vec![
             Span::styled(
-                format!(
-                    "{} item(s)",
-                    if items.len() == 1 {
-                        "1".to_owned()
-                    } else {
-                        items.len().to_string()
-                    }
-                ),
+                if items.len() == 1 {
+                    "1".to_owned()
+                } else {
+                    items.len().to_string()
+                },
                 theme::dim_style(),
             ),
             Span::styled(
                 format!(
-                    "  showing {}-{}",
+                    " shown  {}-{} visible",
                     if items.is_empty() {
                         0
                     } else {
@@ -392,8 +400,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
             Span::styled(item.title.clone(), row_style),
         ]));
         list_lines.push(Line::from(vec![
-            Span::styled("    ", theme::mute_style()),
-            Span::styled("  ", theme::mute_style()),
+            Span::styled("   ", theme::mute_style()),
             Span::styled(item.summary.clone(), overlay_summary_style(selected)),
         ]));
     }
@@ -535,7 +542,7 @@ fn approval_overlay_title(body: &str) -> Line<'static> {
         .find_map(|line| line.strip_prefix("Origin: "))
         .unwrap_or("unknown origin");
     Line::from(vec![
-        Span::styled("▌Approval required", theme::accent_style()),
+        Span::styled("▌Approval", theme::accent_style()),
         Span::styled("  ", theme::mute_style()),
         Span::styled(origin.to_owned(), theme::dim_style()),
         Span::styled("  Esc defer", theme::mute_style()),
@@ -558,18 +565,21 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             )));
             continue;
         }
-        if line == "Review required"
-            || line == "Preview"
-            || line == "Source request"
-            || line == "Craik governance"
-        {
+        if line == "Review required" {
+            rendered.push(Line::from(vec![
+                Span::styled("What", theme::mute_style()),
+                Span::styled("  operator decision required", theme::primary_style()),
+            ]));
+            if has_actions {
+                rendered.push(approval_actions_line());
+            }
+            continue;
+        }
+        if line == "Preview" || line == "Source request" || line == "Craik governance" {
             rendered.push(Line::from(Span::styled(
                 line.to_owned(),
                 theme::accent_style(),
             )));
-            if line == "Review required" && has_actions {
-                rendered.push(approval_actions_line());
-            }
             continue;
         }
         if let Some(diff) = line.strip_prefix("  +") {
@@ -609,8 +619,18 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             continue;
         }
         if let Some((label, value)) = line.split_once(':') {
+            let label_style = match label {
+                "Queue" | "State" => theme::dim_style(),
+                "Risk" | "Warning" => Style::default()
+                    .fg(theme::amber())
+                    .add_modifier(Modifier::BOLD),
+                "Target" | "Command" | "Tool" | "Capability" | "Scope" | "Size" => {
+                    theme::mute_style().add_modifier(Modifier::BOLD)
+                }
+                _ => theme::mute_style(),
+            };
             rendered.push(Line::from(vec![
-                Span::styled(format!("{label}: "), theme::mute_style()),
+                Span::styled(format!("{label}: "), label_style),
                 Span::styled(value.trim_start().to_owned(), theme::primary_style()),
             ]));
             continue;
@@ -643,12 +663,12 @@ fn approval_actions_line() -> Line<'static> {
 
 fn input_panel_height(app: &InteractiveApp) -> u16 {
     if app.search_active {
-        5
-    } else if app.input.trim_start().starts_with('/') {
         4
+    } else if app.input.trim_start().starts_with('/') {
+        3
     } else {
         let content_lines = app.input_line_count().min(8) as u16;
-        (content_lines + 3).clamp(4, 12)
+        (content_lines + 2).clamp(3, 10)
     }
 }
 
@@ -665,7 +685,7 @@ fn render_transcript_panel(
     area: ratatui::layout::Rect,
     options: &TranscriptRenderOptions<'_>,
 ) {
-    let transcript_height = area.height.saturating_sub(2);
+    let transcript_height = area.height.saturating_sub(1);
     let offset = transcript_scroll_offset(
         &app.transcript,
         options,
@@ -748,7 +768,7 @@ fn transcript_title(
     };
     if visible_width < 84 {
         return Line::from(vec![
-            Span::styled("▌Transcript ", theme::accent_style()),
+            Span::styled("▌Chat ", theme::accent_style()),
             Span::styled(
                 format!("{top}-{bottom}/{total}  {tail_mode}  {detail_mode}{search}{jump}"),
                 theme::mute_style(),
@@ -756,7 +776,7 @@ fn transcript_title(
         ]);
     }
     Line::from(vec![
-        Span::styled("▌Transcript ", theme::accent_style()),
+        Span::styled("▌Chat ", theme::accent_style()),
         Span::styled(format!("{focus_mode}  "), theme::primary_style()),
         Span::styled(
             format!(
@@ -865,7 +885,7 @@ mod tests {
         let rows = render_app_frame_rows(&app, 100, 24);
         let rendered = rows.join("\n");
 
-        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Chat"));
         assert!(!rendered.contains("Activity"));
         assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("Review the plan"));
@@ -882,7 +902,7 @@ mod tests {
         let app = app_from_fixture(CLAUDE_CODE_STREAM);
         let rendered = render_app_frame(&app, 140, 42);
 
-        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Chat"));
         assert!(!rendered.contains("Activity"));
         assert!(!rendered.contains("Run provenance"));
         assert!(rendered.contains("normalized Gateway"));
@@ -899,7 +919,7 @@ mod tests {
         let rendered = render_app_frame(&app, 120, 34);
 
         assert!(rendered.contains("EVIDENCE"));
-        assert!(rendered.contains("Filter"));
+        assert!(rendered.contains("filter"));
         assert!(rendered.contains("receipt_run_review_desktop_plan"));
         assert!(rendered.contains("Ctrl-R runs"));
         assert!(rendered.contains("Continue analysis"));
@@ -947,7 +967,7 @@ mod tests {
             .map(|span| span.content.as_ref())
             .collect::<String>();
 
-        assert!(rendered.contains("Approval required"));
+        assert!(rendered.contains("Approval"));
         assert!(rendered.contains("claude-code"));
         assert!(rendered.contains("Esc defer"));
     }
@@ -957,7 +977,7 @@ mod tests {
         let app = app_from_fixture(CLAUDE_CODE_STREAM);
         let rendered = render_app_frame(&app, 72, 24);
 
-        assert!(rendered.contains("Transcript"));
+        assert!(rendered.contains("Chat"));
         assert!(rendered.contains("normalized Gateway"));
         assert!(!rendered.contains("Activity"));
     }
@@ -968,7 +988,7 @@ mod tests {
             let app = app_from_fixture(input);
             let rendered = render_app_frame(&app, 144, 38);
 
-            assert!(rendered.contains("Transcript"));
+            assert!(rendered.contains("Chat"));
             assert!(!rendered.contains("Activity"));
             assert!(!rendered.contains("Run provenance"));
             assert!(rendered.contains(*provider_id));
@@ -986,7 +1006,7 @@ mod tests {
         for mode in [ThemeMode::Dark, ThemeMode::Light, ThemeMode::Monochrome] {
             let rendered = render_app_frame_with_theme(&app, 100, 24, mode);
 
-            assert!(rendered.contains("Transcript"));
+            assert!(rendered.contains("Chat"));
             assert!(rendered.contains("Review the plan"));
             assert!(!rendered.contains("▌Prompt"));
         }
@@ -1084,7 +1104,7 @@ mod tests {
         );
         assert!(rendered.contains("/clear"));
         assert!(rendered.contains("⚠ confirms"));
-        assert!(!rendered.contains("▸"));
+        assert!(rendered.contains("▸"));
     }
 
     #[test]
@@ -1105,8 +1125,8 @@ mod tests {
             .expect("input remains visible below overlay");
 
         assert!(input_row > overlay_row);
-        assert!(rows.iter().any(|row| row.contains("Filter")));
-        assert!(rows.iter().any(|row| row.contains("item(s)")));
+        assert!(rows.iter().any(|row| row.contains("filter")));
+        assert!(rows.iter().any(|row| row.contains("visible")));
         assert!(rows.iter().any(|row| row.contains("Ctrl-R runs")));
         assert!(
             rows.iter()
@@ -1193,7 +1213,7 @@ mod tests {
         let rows = render_app_frame_rows(&app, 120, 50);
         let modal_row = rows
             .iter()
-            .position(|row| row.contains("Approval required"))
+            .position(|row| row.contains("Approval"))
             .expect("approval modal title is visible");
         let input_row = rows
             .iter()
@@ -1248,21 +1268,21 @@ mod tests {
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 4);
+        assert_eq!(input_panel_height(&app), 3);
         app.input = "/r".to_owned();
-        assert_eq!(input_panel_height(&app), 4);
+        assert_eq!(input_panel_height(&app), 3);
         app.search_active = true;
-        assert_eq!(input_panel_height(&app), 5);
+        assert_eq!(input_panel_height(&app), 4);
     }
 
     #[test]
     fn prompt_input_height_grows_with_multiline_content() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 4);
+        assert_eq!(input_panel_height(&app), 3);
         app.input = "one\ntwo\nthree\nfour".to_owned();
 
-        assert_eq!(input_panel_height(&app), 7);
+        assert_eq!(input_panel_height(&app), 6);
         assert_eq!(input_title(&app), "");
         assert!(!input_title(&app).contains("Enter sends"));
     }
