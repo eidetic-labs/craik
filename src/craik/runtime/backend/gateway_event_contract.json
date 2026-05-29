@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "description": "Single source of truth for Gateway events emitted by Python backends and consumed by the Rust/Ratatui TUI.",
+  "event_types": {
+    "prompt.submitted": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.prompt_preview",
+          "message": "data.prompt_preview must be a non-empty string"
+        }
+      ]
+    },
+    "approval.resolved": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.approval_id",
+          "message": "data.approval_id must be a non-empty string"
+        },
+        {
+          "kind": "non_empty_string",
+          "path": "data.decision",
+          "message": "data.decision must be a non-empty string"
+        }
+      ]
+    },
+    "session.ready": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.transport",
+          "message": "data.transport must be a non-empty string"
+        }
+      ]
+    },
+    "session.status": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.state",
+          "message": "data.state must be a non-empty string"
+        }
+      ]
+    },
+    "session.history": {
+      "requirements": [
+        {
+          "kind": "array",
+          "path": "data.receipts",
+          "message": "data.receipts must be an array"
+        }
+      ]
+    },
+    "slash.completed": {
+      "requirements": [
+        {
+          "kind": "one_present",
+          "paths": ["data.text", "data.payload"],
+          "message": "data must include text or payload"
+        }
+      ]
+    },
+    "slash.catalog": {
+      "requirements": [
+        {
+          "kind": "array",
+          "path": "data.commands",
+          "message": "data.commands must be an array"
+        }
+      ]
+    },
+    "model.changed": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.model",
+          "message": "data.model must be a non-empty string"
+        }
+      ]
+    },
+    "run.interrupt.requested": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "run_id",
+          "message": "run_id is required"
+        }
+      ]
+    },
+    "run.started": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "run_id",
+          "message": "run_id is required"
+        }
+      ]
+    },
+    "run.working": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.backend",
+          "message": "data.backend must be a non-empty string"
+        },
+        {
+          "kind": "non_empty_string",
+          "path": "data.phase",
+          "message": "data.phase must be a non-empty string"
+        }
+      ]
+    },
+    "run.progress": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.message",
+          "message": "data.message must be a non-empty string"
+        }
+      ]
+    },
+    "run.event": {
+      "requirements": [
+        {
+          "kind": "one_non_empty_string",
+          "paths": ["data.text", "data.message"],
+          "message": "data must include non-empty text or message"
+        }
+      ]
+    },
+    "tool.used": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.tool",
+          "message": "data.tool must be a non-empty string"
+        },
+        {
+          "kind": "one_non_empty_string",
+          "paths": ["data.target", "data.command", "data.message"],
+          "message": "data must include non-empty target, command, or message"
+        }
+      ]
+    },
+    "file.changed": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.target",
+          "message": "data.target must be a non-empty string"
+        },
+        {
+          "kind": "one_non_empty_string",
+          "paths": ["data.text", "data.message"],
+          "message": "data must include non-empty text or message"
+        }
+      ]
+    },
+    "approval.requested": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.message",
+          "message": "data.message must be a non-empty string"
+        },
+        {
+          "kind": "one_non_empty_string",
+          "paths": ["data.tool", "data.target", "data.reason"],
+          "message": "data must include non-empty tool, target, or reason"
+        }
+      ]
+    },
+    "approval.denied": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.message",
+          "message": "data.message must be a non-empty string"
+        }
+      ]
+    },
+    "model.selected": {
+      "requirements": [
+        {
+          "kind": "one_non_empty_string",
+          "paths": ["data.backend", "data.profile.backend"],
+          "message": "data must include non-empty backend or profile.backend"
+        }
+      ]
+    },
+    "receipt.created": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "run_id",
+          "message": "run_id is required"
+        },
+        {
+          "kind": "non_empty_string",
+          "path": "data.receipt_id",
+          "message": "data.receipt_id must be a non-empty string"
+        }
+      ]
+    },
+    "run.output": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "run_id",
+          "message": "run_id is required"
+        },
+        {
+          "kind": "non_empty_string",
+          "path": "data.summary",
+          "message": "data.summary must be a non-empty string"
+        }
+      ]
+    },
+    "run.completed": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "run_id",
+          "message": "run_id is required"
+        },
+        {
+          "kind": "non_empty_string",
+          "path": "data.status",
+          "message": "data.status must be a non-empty string"
+        }
+      ]
+    },
+    "error": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.message",
+          "message": "data.message must be a non-empty string"
+        }
+      ]
+    }
+  }
+}

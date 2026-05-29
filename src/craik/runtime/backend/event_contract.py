@@ -2,35 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from typing import Any
 
 from craik.runtime.backend.events import BackendEvent
 
-KNOWN_EVENT_TYPES = {
-    "prompt.submitted",
-    "approval.resolved",
-    "session.ready",
-    "session.status",
-    "session.history",
-    "slash.completed",
-    "slash.catalog",
-    "model.changed",
-    "run.interrupt.requested",
-    "run.started",
-    "run.working",
-    "run.progress",
-    "run.event",
-    "tool.used",
-    "file.changed",
-    "approval.requested",
-    "approval.denied",
-    "model.selected",
-    "receipt.created",
-    "run.output",
-    "run.completed",
-    "error",
-}
+CONTRACT_RESOURCE = "gateway_event_contract.json"
 
 
 @dataclass(frozen=True)
@@ -42,6 +22,23 @@ class GatewayEventContractIssue:
     message: str
 
 
+@cache
+def gateway_event_contract() -> dict[str, Any]:
+    """Return the machine-readable Gateway event contract."""
+    contract_text = (
+        resources.files("craik.runtime.backend").joinpath(CONTRACT_RESOURCE).read_text()
+    )
+    contract = json.loads(contract_text)
+    if not isinstance(contract, dict):
+        raise TypeError("Gateway event contract must be a JSON object")
+    return contract
+
+
+def known_event_types() -> set[str]:
+    """Return event names defined by the Gateway event contract."""
+    return set(_event_rules())
+
+
 def validate_gateway_event(
     event: BackendEvent | dict[str, Any],
     *,
@@ -49,11 +46,13 @@ def validate_gateway_event(
 ) -> list[GatewayEventContractIssue]:
     """Return contract issues for one Gateway event payload."""
     payload = event.as_dict() if isinstance(event, BackendEvent) else event
+    event_rules = _event_rules()
     event_type = payload.get("type")
     event_type_text = event_type if isinstance(event_type, str) else "<missing>"
     issues: list[GatewayEventContractIssue] = []
 
-    if event_type_text not in KNOWN_EVENT_TYPES:
+    rule = event_rules.get(event_type_text)
+    if rule is None:
         issues.append(
             GatewayEventContractIssue(
                 event_index,
@@ -74,98 +73,14 @@ def validate_gateway_event(
         )
         return issues
 
-    if event_type_text == "prompt.submitted":
-        _require_string(issues, event_index, event_type_text, data, "prompt_preview")
-    elif event_type_text == "session.ready":
-        _require_string(issues, event_index, event_type_text, data, "transport")
-    elif event_type_text == "session.status":
-        _require_string(issues, event_index, event_type_text, data, "state")
-    elif event_type_text == "session.history":
-        _require_array(issues, event_index, event_type_text, data, "receipts")
-    elif event_type_text == "model.changed":
-        _require_string(issues, event_index, event_type_text, data, "model")
-    elif event_type_text == "model.selected":
-        _require_one_string(
+    for requirement in _requirements_for(rule):
+        _validate_requirement(
             issues,
-            event_index,
-            event_type_text,
-            data,
-            ("backend", "profile.backend"),
-            "backend or profile.backend",
+            event_index=event_index,
+            event_type=event_type_text,
+            payload=payload,
+            requirement=requirement,
         )
-    elif event_type_text == "run.working":
-        _require_string(issues, event_index, event_type_text, data, "backend")
-        _require_string(issues, event_index, event_type_text, data, "phase")
-    elif event_type_text == "run.progress":
-        _require_string(issues, event_index, event_type_text, data, "message")
-    elif event_type_text == "run.started":
-        _require_run_id(issues, event_index, event_type_text, payload)
-    elif event_type_text == "tool.used":
-        _require_string(issues, event_index, event_type_text, data, "tool")
-        _require_one_string(
-            issues,
-            event_index,
-            event_type_text,
-            data,
-            ("target", "command", "message"),
-            "target, command, or message",
-        )
-    elif event_type_text == "file.changed":
-        _require_string(issues, event_index, event_type_text, data, "target")
-        _require_one_string(
-            issues,
-            event_index,
-            event_type_text,
-            data,
-            ("text", "message"),
-            "text or message",
-        )
-    elif event_type_text == "approval.requested":
-        _require_string(issues, event_index, event_type_text, data, "message")
-        _require_one_string(
-            issues,
-            event_index,
-            event_type_text,
-            data,
-            ("tool", "target", "reason"),
-            "tool, target, or reason",
-        )
-    elif event_type_text == "approval.resolved":
-        _require_string(issues, event_index, event_type_text, data, "approval_id")
-        _require_string(issues, event_index, event_type_text, data, "decision")
-    elif event_type_text == "receipt.created":
-        _require_run_id(issues, event_index, event_type_text, payload)
-        _require_string(issues, event_index, event_type_text, data, "receipt_id")
-    elif event_type_text == "run.output":
-        _require_run_id(issues, event_index, event_type_text, payload)
-        _require_string(issues, event_index, event_type_text, data, "summary")
-    elif event_type_text == "run.completed":
-        _require_run_id(issues, event_index, event_type_text, payload)
-        _require_string(issues, event_index, event_type_text, data, "status")
-    elif event_type_text == "run.event":
-        _require_one_string(
-            issues,
-            event_index,
-            event_type_text,
-            data,
-            ("text", "message"),
-            "text or message",
-        )
-    elif event_type_text == "slash.completed":
-        _require_one_present(
-            issues,
-            event_index,
-            event_type_text,
-            data,
-            ("text", "payload"),
-            "text or payload",
-        )
-    elif event_type_text == "slash.catalog":
-        _require_array(issues, event_index, event_type_text, data, "commands")
-    elif event_type_text == "run.interrupt.requested":
-        _require_run_id(issues, event_index, event_type_text, payload)
-    elif event_type_text in {"approval.denied", "error"}:
-        _require_string(issues, event_index, event_type_text, data, "message")
 
     return issues
 
@@ -191,94 +106,80 @@ def format_gateway_event_contract_issues(
     )
 
 
-def _require_run_id(
+def _event_rules() -> dict[str, Any]:
+    event_types = gateway_event_contract().get("event_types")
+    if not isinstance(event_types, dict):
+        raise TypeError("Gateway event contract must define event_types")
+    return event_types
+
+
+def _requirements_for(rule: object) -> list[dict[str, Any]]:
+    if not isinstance(rule, dict):
+        return []
+    requirements = rule.get("requirements", [])
+    if not isinstance(requirements, list):
+        raise TypeError("Gateway event contract requirements must be arrays")
+    return [requirement for requirement in requirements if isinstance(requirement, dict)]
+
+
+def _validate_requirement(
     issues: list[GatewayEventContractIssue],
+    *,
     event_index: int,
     event_type: str,
     payload: dict[str, Any],
+    requirement: dict[str, Any],
 ) -> None:
-    run_id = payload.get("run_id")
-    if not isinstance(run_id, str) or not run_id.strip():
-        issues.append(GatewayEventContractIssue(event_index, event_type, "run_id is required"))
+    kind = requirement.get("kind")
+    message = requirement.get("message")
+    if not isinstance(message, str) or not message:
+        raise TypeError("Gateway event contract requirement missing message")
 
-
-def _require_string(
-    issues: list[GatewayEventContractIssue],
-    event_index: int,
-    event_type: str,
-    data: dict[str, Any],
-    path: str,
-) -> None:
-    value = _value_at(data, path)
-    if not isinstance(value, str) or not value.strip():
-        issues.append(
-            GatewayEventContractIssue(
-                event_index,
-                event_type,
-                f"data.{path} must be a non-empty string",
-            )
+    if kind in {"non_empty_string", "array"}:
+        path = requirement.get("path")
+        if not isinstance(path, str) or not path:
+            raise TypeError("Gateway event contract requirement missing path")
+        value = _value_at(payload, path)
+        failed = (
+            not isinstance(value, str) or not value.strip()
+            if kind == "non_empty_string"
+            else not isinstance(value, list)
         )
-
-
-def _require_array(
-    issues: list[GatewayEventContractIssue],
-    event_index: int,
-    event_type: str,
-    data: dict[str, Any],
-    path: str,
-) -> None:
-    if not isinstance(_value_at(data, path), list):
-        issues.append(
-            GatewayEventContractIssue(
-                event_index,
-                event_type,
-                f"data.{path} must be an array",
-            )
-        )
-
-
-def _require_one_string(
-    issues: list[GatewayEventContractIssue],
-    event_index: int,
-    event_type: str,
-    data: dict[str, Any],
-    paths: tuple[str, ...],
-    label: str,
-) -> None:
-    if any(isinstance(value := _value_at(data, path), str) and value.strip() for path in paths):
+        if failed:
+            issues.append(GatewayEventContractIssue(event_index, event_type, message))
         return
-    issues.append(
-        GatewayEventContractIssue(
-            event_index,
-            event_type,
-            f"data must include non-empty {label}",
-        )
-    )
 
-
-def _require_one_present(
-    issues: list[GatewayEventContractIssue],
-    event_index: int,
-    event_type: str,
-    data: dict[str, Any],
-    keys: tuple[str, ...],
-    label: str,
-) -> None:
-    if any(key in data for key in keys):
+    if kind in {"one_non_empty_string", "one_present"}:
+        paths = requirement.get("paths")
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            raise TypeError("Gateway event contract multi-path requirement missing paths")
+        if kind == "one_non_empty_string":
+            passed = any(
+                isinstance(value := _value_at(payload, path), str) and value.strip()
+                for path in paths
+            )
+        else:
+            passed = any(_path_exists(payload, path) for path in paths)
+        if not passed:
+            issues.append(GatewayEventContractIssue(event_index, event_type, message))
         return
-    issues.append(
-        GatewayEventContractIssue(
-            event_index,
-            event_type,
-            f"data must include {label}",
-        )
-    )
+
+    raise ValueError(f"unsupported Gateway event contract requirement kind: {kind}")
 
 
-def _value_at(data: dict[str, Any], path: str) -> object:
-    value: object = data
+def _value_at(payload: dict[str, Any], path: str) -> object:
+    value: object = payload
     for key in path.split("."):
         if not isinstance(value, dict) or key not in value:
             return None
         value = value[key]
     return value
+
+
+def _path_exists(payload: dict[str, Any], path: str) -> bool:
+    value: object = payload
+    for key in path.split("."):
+        if not isinstance(value, dict) or key not in value:
+            return False
+        value = value[key]
+    return True

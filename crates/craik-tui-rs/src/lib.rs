@@ -5,7 +5,11 @@ use std::{
     collections::BTreeSet,
     io::Write,
     process::{Command, Stdio},
+    sync::OnceLock,
 };
+
+const GATEWAY_EVENT_CONTRACT_JSON: &str =
+    include_str!("../../../src/craik/runtime/backend/gateway_event_contract.json");
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayEvent {
@@ -23,6 +27,11 @@ pub struct GatewayContractIssue {
     pub event_index: usize,
     pub event_type: String,
     pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GatewayEventContract {
+    event_types: serde_json::Map<String, Value>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -343,14 +352,14 @@ fn validate_gateway_event_at(
     event_index: usize,
 ) -> Vec<GatewayContractIssue> {
     let mut issues = Vec::new();
-    if !known_event_type(&event.event_type) {
+    let Some(rule) = gateway_event_contract().event_types.get(&event.event_type) else {
         issues.push(contract_issue(
             event_index,
             event,
             format!("unsupported event type `{}`", event.event_type),
         ));
         return issues;
-    }
+    };
     if !event.data.is_object() {
         issues.push(contract_issue(
             event_index,
@@ -359,91 +368,14 @@ fn validate_gateway_event_at(
         ));
         return issues;
     }
-    match event.event_type.as_str() {
-        "prompt.submitted" => require_string(&mut issues, event_index, event, &["prompt_preview"]),
-        "session.ready" => require_string(&mut issues, event_index, event, &["transport"]),
-        "session.status" => require_string(&mut issues, event_index, event, &["state"]),
-        "session.history" => require_array(&mut issues, event_index, event, &["receipts"]),
-        "model.changed" => require_string(&mut issues, event_index, event, &["model"]),
-        "model.selected" => require_one_string(
-            &mut issues,
-            event_index,
-            event,
-            &[&["backend"], &["profile", "backend"]],
-            "backend or profile.backend",
-        ),
-        "run.working" => {
-            require_string(&mut issues, event_index, event, &["backend"]);
-            require_string(&mut issues, event_index, event, &["phase"]);
-        }
-        "run.progress" => require_string(&mut issues, event_index, event, &["message"]),
-        "run.started" => require_run_id(&mut issues, event_index, event),
-        "tool.used" => {
-            require_string(&mut issues, event_index, event, &["tool"]);
-            require_one_string(
-                &mut issues,
-                event_index,
-                event,
-                &[&["target"], &["command"], &["message"]],
-                "target, command, or message",
-            );
-        }
-        "file.changed" => {
-            require_string(&mut issues, event_index, event, &["target"]);
-            require_one_string(
-                &mut issues,
-                event_index,
-                event,
-                &[&["text"], &["message"]],
-                "text or message",
-            );
-        }
-        "approval.requested" => {
-            require_string(&mut issues, event_index, event, &["message"]);
-            require_one_string(
-                &mut issues,
-                event_index,
-                event,
-                &[&["tool"], &["target"], &["reason"]],
-                "tool, target, or reason",
-            );
-        }
-        "approval.resolved" => {
-            require_string(&mut issues, event_index, event, &["approval_id"]);
-            require_string(&mut issues, event_index, event, &["decision"]);
-        }
-        "receipt.created" => {
-            require_run_id(&mut issues, event_index, event);
-            require_string(&mut issues, event_index, event, &["receipt_id"]);
-        }
-        "run.output" => {
-            require_run_id(&mut issues, event_index, event);
-            require_string(&mut issues, event_index, event, &["summary"]);
-        }
-        "run.completed" => {
-            require_run_id(&mut issues, event_index, event);
-            require_string(&mut issues, event_index, event, &["status"]);
-        }
-        "run.event" => require_one_string(
-            &mut issues,
-            event_index,
-            event,
-            &[&["text"], &["message"]],
-            "text or message",
-        ),
-        "slash.completed" => require_one_present(
-            &mut issues,
-            event_index,
-            event,
-            &["text", "payload"],
-            "text or payload",
-        ),
-        "slash.catalog" => require_array(&mut issues, event_index, event, &["commands"]),
-        "run.interrupt.requested" => require_run_id(&mut issues, event_index, event),
-        "approval.denied" | "error" => {
-            require_string(&mut issues, event_index, event, &["message"]);
-        }
-        _ => {}
+
+    for requirement in rule
+        .get("requirements")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        validate_contract_requirement(&mut issues, event_index, event, requirement);
     }
     issues
 }
@@ -580,32 +512,12 @@ fn push_files(values: &mut Vec<String>, data: &Value) {
     }
 }
 
-fn known_event_type(event_type: &str) -> bool {
-    matches!(
-        event_type,
-        "prompt.submitted"
-            | "approval.resolved"
-            | "session.ready"
-            | "session.status"
-            | "session.history"
-            | "slash.completed"
-            | "slash.catalog"
-            | "model.changed"
-            | "run.interrupt.requested"
-            | "run.started"
-            | "run.working"
-            | "run.progress"
-            | "run.event"
-            | "tool.used"
-            | "file.changed"
-            | "approval.requested"
-            | "approval.denied"
-            | "model.selected"
-            | "receipt.created"
-            | "run.output"
-            | "run.completed"
-            | "error"
-    )
+fn gateway_event_contract() -> &'static GatewayEventContract {
+    static CONTRACT: OnceLock<GatewayEventContract> = OnceLock::new();
+    CONTRACT.get_or_init(|| {
+        serde_json::from_str(GATEWAY_EVENT_CONTRACT_JSON)
+            .expect("embedded Gateway event contract must parse")
+    })
 }
 
 fn contract_issue(
@@ -620,99 +532,91 @@ fn contract_issue(
     }
 }
 
-fn require_run_id(
+fn validate_contract_requirement(
     issues: &mut Vec<GatewayContractIssue>,
     event_index: usize,
     event: &GatewayEvent,
+    requirement: &Value,
 ) {
-    if event.run_id.as_deref().unwrap_or_default().is_empty() {
-        issues.push(contract_issue(event_index, event, "run_id is required"));
-    }
-}
-
-fn require_string(
-    issues: &mut Vec<GatewayContractIssue>,
-    event_index: usize,
-    event: &GatewayEvent,
-    path: &[&str],
-) {
-    if string_at(&event.data, path)
-        .as_deref()
-        .unwrap_or_default()
-        .is_empty()
-    {
-        issues.push(contract_issue(
-            event_index,
-            event,
-            format!("data.{} must be a non-empty string", path.join(".")),
-        ));
-    }
-}
-
-fn require_array(
-    issues: &mut Vec<GatewayContractIssue>,
-    event_index: usize,
-    event: &GatewayEvent,
-    path: &[&str],
-) {
-    let mut value = &event.data;
-    for key in path {
-        let Some(next) = value.get(key) else {
-            issues.push(contract_issue(
-                event_index,
-                event,
-                format!("data.{} must be an array", path.join(".")),
-            ));
-            return;
-        };
-        value = next;
-    }
-    if !value.is_array() {
-        issues.push(contract_issue(
-            event_index,
-            event,
-            format!("data.{} must be an array", path.join(".")),
-        ));
-    }
-}
-
-fn require_one_string(
-    issues: &mut Vec<GatewayContractIssue>,
-    event_index: usize,
-    event: &GatewayEvent,
-    paths: &[&[&str]],
-    label: &str,
-) {
-    if paths.iter().any(|path| {
-        !string_at(&event.data, path)
-            .as_deref()
-            .unwrap_or_default()
-            .is_empty()
-    }) {
+    let Some(kind) = requirement.get("kind").and_then(Value::as_str) else {
         return;
+    };
+    let message = requirement
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("Gateway event contract requirement failed");
+
+    match kind {
+        "non_empty_string" => {
+            let Some(path) = requirement.get("path").and_then(Value::as_str) else {
+                return;
+            };
+            if string_at_event_path(event, path)
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                issues.push(contract_issue(event_index, event, message));
+            }
+        }
+        "array" => {
+            let Some(path) = requirement.get("path").and_then(Value::as_str) else {
+                return;
+            };
+            if !value_at_event_path(event, path).is_some_and(Value::is_array) {
+                issues.push(contract_issue(event_index, event, message));
+            }
+        }
+        "one_non_empty_string" => {
+            let Some(paths) = requirement.get("paths").and_then(Value::as_array) else {
+                return;
+            };
+            let passed = paths.iter().filter_map(Value::as_str).any(|path| {
+                !string_at_event_path(event, path)
+                    .unwrap_or_default()
+                    .trim()
+                    .is_empty()
+            });
+            if !passed {
+                issues.push(contract_issue(event_index, event, message));
+            }
+        }
+        "one_present" => {
+            let Some(paths) = requirement.get("paths").and_then(Value::as_array) else {
+                return;
+            };
+            let passed = paths
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|path| value_at_event_path(event, path).is_some());
+            if !passed {
+                issues.push(contract_issue(event_index, event, message));
+            }
+        }
+        _ => {}
     }
-    issues.push(contract_issue(
-        event_index,
-        event,
-        format!("data must include non-empty {label}"),
-    ));
 }
 
-fn require_one_present(
-    issues: &mut Vec<GatewayContractIssue>,
-    event_index: usize,
-    event: &GatewayEvent,
-    keys: &[&str],
-    label: &str,
-) {
-    if keys.iter().any(|key| event.data.get(key).is_some()) {
-        return;
+fn string_at_event_path<'a>(event: &'a GatewayEvent, path: &str) -> Option<&'a str> {
+    match path {
+        "run_id" => event.run_id.as_deref(),
+        "task_id" => event.task_id.as_deref(),
+        _ => value_at_event_path(event, path).and_then(Value::as_str),
     }
-    issues.push(contract_issue(
-        event_index,
-        event,
-        format!("data must include {label}"),
-    ));
+}
+
+fn value_at_event_path<'a>(event: &'a GatewayEvent, path: &str) -> Option<&'a Value> {
+    let mut parts = path.split('.');
+    match parts.next()? {
+        "data" => {
+            let mut value = &event.data;
+            for key in parts {
+                value = value.get(key)?;
+            }
+            Some(value)
+        }
+        _ => None,
+    }
 }
 
 fn string_at(data: &Value, path: &[&str]) -> Option<String> {
@@ -883,7 +787,7 @@ pub fn sample_gateway_command_json() -> Value {
 mod tests {
     use super::{
         GatewayCommand, GatewayEvent, app_state_from_events, encode_gateway_command,
-        parse_gateway_events, render_dashboard_text, render_replay_text,
+        gateway_event_contract, parse_gateway_events, render_dashboard_text, render_replay_text,
         sample_gateway_command_json, summarize_gateway_events, validate_gateway_events,
     };
     use serde_json::json;
@@ -1140,6 +1044,25 @@ mod tests {
 
             assert_eq!(validate_gateway_events(&events), []);
         }
+    }
+
+    #[test]
+    fn gateway_event_contract_is_embedded_single_source() {
+        let contract = gateway_event_contract();
+        let rule = contract
+            .event_types
+            .get("run.completed")
+            .expect("run.completed event rule exists");
+
+        assert!(contract.event_types.contains_key("model.selected"));
+        assert!(contract.event_types.contains_key("approval.requested"));
+        assert_eq!(
+            rule.get("requirements")
+                .and_then(|value| value.as_array())
+                .expect("requirements are an array")
+                .len(),
+            2
+        );
     }
 
     #[test]
