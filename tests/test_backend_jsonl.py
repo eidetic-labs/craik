@@ -278,6 +278,58 @@ def test_jsonl_gateway_slash_model_and_mode_emit_state_events(tmp_path: Path) ->
     assert events[3]["data"]["claude_permission_mode"] == "auto"
 
 
+def test_jsonl_gateway_slash_effort_emits_model_state_event(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+    stdin = io.StringIO(
+        "\n".join(
+            [
+                json.dumps({"type": "slash.submit", "text": "/effort high"}),
+                "",
+            ]
+        )
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == [
+        "session.ready",
+        "model.changed",
+        "slash.completed",
+    ]
+    assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
+    assert events[1]["data"]["reasoning_effort"] == "high"
+
+
+def test_jsonl_gateway_slash_effort_default_emits_explicit_default(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command(
+        "/model set anthropic/claude-opus-4-7 --reasoning-effort high", env=env
+    )
+    stdin = io.StringIO(
+        "\n".join(
+            [
+                json.dumps({"type": "slash.submit", "text": "/effort default"}),
+                "",
+            ]
+        )
+    )
+    stdout = io.StringIO()
+
+    run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
+    events = _events(stdout.getvalue())
+
+    assert [event["type"] for event in events] == [
+        "session.ready",
+        "model.changed",
+        "slash.completed",
+    ]
+    assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
+    assert events[1]["data"]["reasoning_effort"] == "default"
+
+
 def test_jsonl_gateway_approval_decision_event(tmp_path: Path) -> None:
     env = _env(tmp_path)
     store = LocalStore.from_env(env)
@@ -332,17 +384,18 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     names = set(commands)
     assert "run" in names
     assert "status" in names
+    assert commands["effort"]["choices"] == {"effort": ["default", "low", "medium", "high", "max"]}
     assert commands["mode"]["choices"] == {
         "mode": [
-            "default",
+            "ask",
+            "auto",
             "acceptEdits",
             "plan",
-            "auto",
             "dontAsk",
             "bypassPermissions",
         ]
     }
-    assert commands["mode"]["current_value"] == "default"
+    assert commands["mode"]["current_value"] == "ask"
     assert commands["theme"]["choices"] == {"theme": ["dark", "light", "monochrome"]}
     assert commands["theme"]["current_value"] == "dark"
     assert commands["theme"]["mutating"] is True

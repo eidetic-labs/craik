@@ -177,14 +177,15 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         metrics.active_overlay.is_some(),
     );
     let model = compact_model_label(model_label(state, "model not selected"));
-    let mode = state.active_permission_mode.as_deref().unwrap_or("default");
+    let mode =
+        display_permission_mode(state.active_permission_mode.as_deref().unwrap_or("default"));
     let mut spans = vec![
         Span::styled(format!(" {mode} "), mode_pill_style(mode)),
         Span::raw("  "),
         Span::styled(model, theme::primary_style()),
     ];
     if let Some(effort) = effort_label(state) {
-        spans.push(Span::raw(" "));
+        spans.push(Span::raw("  "));
         spans.push(Span::styled(effort.to_owned(), effort_style(effort)));
     }
     spans.extend([
@@ -389,10 +390,23 @@ fn compact_model_label(value: &str) -> String {
 }
 
 fn effort_label(state: &GatewayAppState) -> Option<&str> {
-    state
+    if let Some(effort) = state
         .active_reasoning_effort
         .as_deref()
         .filter(|effort| !effort.trim().is_empty())
+    {
+        return Some(effort);
+    }
+    let is_claude = state.active_provider_family.as_deref() == Some("anthropic")
+        || state
+            .active_model
+            .as_deref()
+            .is_some_and(|model| model.contains("claude") || model.starts_with("anthropic/"));
+    is_claude.then_some("default")
+}
+
+fn display_permission_mode(mode: &str) -> &str {
+    if mode == "default" { "ask" } else { mode }
 }
 
 fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
@@ -685,8 +699,22 @@ mod tests {
         let inferred_rendered = status_line(&inferred_only, status_metrics()).to_string();
         let source_rendered = status_line(&source_backed, status_metrics()).to_string();
 
-        assert!(!inferred_rendered.contains(" high "));
-        assert!(source_rendered.contains(" high "));
+        assert!(!inferred_rendered.contains("effort:"));
+        assert!(source_rendered.contains("high"));
+    }
+
+    #[test]
+    fn status_line_exposes_default_effort_for_claude_models() {
+        let state = GatewayAppState {
+            active_provider_family: Some("anthropic".to_owned()),
+            active_model: Some("anthropic/claude-opus-4-7".to_owned()),
+            ..GatewayAppState::default()
+        };
+
+        let rendered = status_line(&state, status_metrics()).to_string();
+
+        assert!(!rendered.contains("effort:"));
+        assert!(rendered.contains("default"));
     }
 
     #[test]
@@ -699,6 +727,19 @@ mod tests {
         let rendered = status_line(&state, status_metrics()).to_string();
 
         assert!(rendered.contains(" auto "));
+        assert!(!rendered.contains(" ask "));
+    }
+
+    #[test]
+    fn status_line_displays_default_permission_mode_as_ask() {
+        let state = GatewayAppState {
+            active_permission_mode: Some("default".to_owned()),
+            ..GatewayAppState::default()
+        };
+
+        let rendered = status_line(&state, status_metrics()).to_string();
+
+        assert!(rendered.contains(" ask "));
         assert!(!rendered.contains(" default "));
     }
 

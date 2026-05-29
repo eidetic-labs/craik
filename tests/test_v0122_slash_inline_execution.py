@@ -85,6 +85,33 @@ def test_model_set_accepts_reasoning_effort_option(tmp_path: Path) -> None:
     assert active_profile["options"]["reasoning_effort"] == "high"
 
 
+def test_effort_set_updates_active_model_profile(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+
+    result = dispatch_slash_command("/effort high", env=env)
+    status = dispatch_slash_command("/effort", env=env)
+
+    assert result.text == "Reasoning effort: `high`."
+    assert json.loads(status.text)["reasoning_effort"] == "high"
+
+
+def test_effort_default_removes_active_model_effort(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command(
+        "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
+        env=env,
+    )
+
+    result = dispatch_slash_command("/effort default", env=env)
+    status = dispatch_slash_command("/effort", env=env)
+
+    assert result.text == "Reasoning effort: `default`."
+    payload = json.loads(status.text)
+    assert payload["reasoning_effort"] == "default"
+    assert "reasoning_effort" not in payload["active_profile"]["options"]
+
+
 def test_audited_provider_run_uses_active_live_model(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
@@ -194,6 +221,18 @@ def test_mode_set_persists_claude_permission_mode(tmp_path: Path) -> None:
     assert result.text == "Claude permission mode: `auto`."
     assert json.loads(status.text)["claude_permission_mode"] == "auto"
     assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "auto"
+
+
+def test_mode_ask_alias_persists_default_permission_mode(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+
+    result = dispatch_slash_command("/mode ask", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.text == "Claude permission mode: `ask`."
+    assert json.loads(status.text)["claude_permission_mode"] == "default"
+    assert json.loads(status.text)["display_mode"] == "ask"
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "default"
 
 
 def test_resume_persists_active_session_without_argument_loss(tmp_path: Path) -> None:

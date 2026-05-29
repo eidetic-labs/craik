@@ -2,6 +2,7 @@
 
 from craik.runtime.model_commands.command import (
     model_alias_result,
+    model_effort_result,
     model_fallback_result,
     model_list_result,
     model_probe_result,
@@ -13,6 +14,7 @@ from craik.runtime.model_commands.command import (
 
 __all__ = [
     "model_alias_result",
+    "model_effort_result",
     "model_fallback_result",
     "model_list_result",
     "model_probe_result",

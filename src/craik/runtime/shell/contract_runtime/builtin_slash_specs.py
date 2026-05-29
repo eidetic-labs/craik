@@ -20,6 +20,7 @@ HELP_SPEC_ORDER: tuple[str, ...] = (
     "/logout",
     "/provider",
     "/model",
+    "/effort",
     "/mode",
     "/status",
     "/clear",
@@ -80,6 +81,7 @@ _BUILTIN_CLI_MIRRORS: dict[str, str] = {
     "/mcp": "mcp",
     "/memory": "memory list",
     "/model": "model status",
+    "/effort": "model set <provider/model> --reasoning-effort <effort>",
     "/note": "note",
     "/provider": "provider list",
     "/receipts": "receipts list",
@@ -140,6 +142,7 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         "/auth",
         "/provider",
         "/model",
+        "/effort",
         "/logout",
         "/export",
         "/policy",
@@ -168,18 +171,21 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
     if name == "/model":
         kwargs["args_schema"] = ModelArgs
         kwargs["example"] = "/model set openai/gpt-4o-mini --reasoning-effort high"
+    if name == "/effort":
+        kwargs["choices"] = {"effort": ("default", "low", "medium", "high", "max")}
+        kwargs["example"] = "/effort high"
     if name == "/mode":
         kwargs["choices"] = {
             "mode": (
-                "default",
+                "ask",
+                "auto",
                 "acceptEdits",
                 "plan",
-                "auto",
                 "dontAsk",
                 "bypassPermissions",
             )
         }
-        kwargs["example"] = "/mode acceptEdits"
+        kwargs["example"] = "/mode ask"
     if name == "/provider":
         kwargs["example"] = "/provider login openai"
         kwargs["examples"] = ("/provider login openai", "/provider login local")
@@ -216,7 +222,8 @@ def _builtin_usage(name: str) -> str:
         "/export": "/export transcript",
         "/provider": "/provider [login <provider>]",
         "/model": "/model [set <provider/model>]",
-        "/mode": "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+        "/effort": "/effort [default|low|medium|high|max]",
+        "/mode": "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
         "/policy": "/policy reset",
         "/migrate": "/migrate apply",
         "/sessions": "/sessions",

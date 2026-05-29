@@ -17,6 +17,7 @@ from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlashRegistry:
     """Return ``registry`` extended with shell-only slash commands."""
     from craik.runtime.shell.contract_runtime import builtin_slash_commands as commands
+    from craik.runtime.shell.contract_runtime.effort_command import effort_command
     from craik.runtime.shell.contract_runtime.run_helpers import run_command
 
     builtins = (
@@ -60,6 +61,7 @@ def extend_registry_with_shell_builtins(registry: AutoSlashRegistry) -> AutoSlas
             "table",
         ),
         ("/model", commands.model_command, "Inspect or select the active model.", "kv"),
+        ("/effort", effort_command, "Inspect or set reasoning effort.", "kv"),
         ("/mode", commands.mode_command, "Inspect or set Claude Code mode.", "kv"),
         ("/sessions", commands.sessions_command, "List persistent sessions.", "table"),
         ("/resume", commands.resume_command, "Resume a persistent session.", "kv"),

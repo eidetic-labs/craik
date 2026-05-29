@@ -66,6 +66,15 @@ pub(crate) enum TranscriptJump {
     Error,
 }
 
+const PERMISSION_MODE_CYCLE: &[&str] = &[
+    "ask",
+    "auto",
+    "acceptEdits",
+    "plan",
+    "dontAsk",
+    "bypassPermissions",
+];
+
 impl TranscriptJump {
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -342,6 +351,15 @@ impl InteractiveApp {
         self.send_commands([command]);
     }
 
+    fn cycle_permission_mode(&mut self) {
+        let next_mode = next_permission_mode(self.state.active_permission_mode.as_deref());
+        self.transcript.push(TranscriptEntry::system(
+            "Mode",
+            &format!("Switching mode to `{next_mode}`."),
+        ));
+        self.dispatch_text(format!("/mode {next_mode}"));
+    }
+
     fn send_commands<const N: usize>(&mut self, commands: [GatewayCommand; N]) {
         self.in_flight = true;
         self.state.working_phase = Some("waiting".to_owned());
@@ -387,6 +405,7 @@ impl InteractiveApp {
                     let terminal_event = is_request_terminal_event(&event);
                     self.record_event(&event);
                     self.state.apply_event(&event);
+                    self.refresh_slash_catalog_current_values();
                     if terminal_event {
                         self.in_flight = false;
                         if self.state.working_phase.as_deref() == Some("waiting") {
@@ -983,6 +1002,10 @@ impl InteractiveApp {
                 self.delete_previous_word();
                 LoopAction::Continue
             }
+            KeyCode::BackTab => {
+                self.cycle_permission_mode();
+                LoopAction::Continue
+            }
             KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.slash_palette_active() {
                     self.select_next_slash_suggestion();
@@ -1288,6 +1311,7 @@ impl InteractiveApp {
             }
             "slash.catalog" => {
                 self.slash_catalog = slash_hints_from_event(event);
+                self.refresh_slash_catalog_current_values();
             }
             "prompt.submitted" => {
                 let preview = event
@@ -1859,6 +1883,43 @@ impl InteractiveApp {
 
     fn reset_slash_selection(&mut self) {
         self.slash_selected_index = 0;
+    }
+
+    fn refresh_slash_catalog_current_values(&mut self) {
+        let mode = self
+            .state
+            .active_permission_mode
+            .as_deref()
+            .map(display_permission_mode);
+        let effort = self.active_effort_value();
+        for hint in &mut self.slash_catalog {
+            match hint.name.as_str() {
+                "mode" => {
+                    hint.current_value = mode.map(str::to_owned);
+                }
+                "effort" => {
+                    hint.current_value = effort.clone();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn active_effort_value(&self) -> Option<String> {
+        if let Some(effort) = self
+            .state
+            .active_reasoning_effort
+            .as_deref()
+            .filter(|effort| !effort.trim().is_empty())
+        {
+            return Some(effort.to_owned());
+        }
+        let is_claude =
+            self.state.active_provider_family.as_deref() == Some("anthropic")
+                || self.state.active_model.as_deref().is_some_and(|model| {
+                    model.contains("claude") || model.starts_with("anthropic/")
+                });
+        is_claude.then(|| "default".to_owned())
     }
 
     fn clamp_slash_selection(&mut self) {
@@ -2750,6 +2811,22 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
+}
+
+fn next_permission_mode(current: Option<&str>) -> &'static str {
+    let current = match current {
+        Some("default") | None => "ask",
+        Some(value) => value,
+    };
+    let index = PERMISSION_MODE_CYCLE
+        .iter()
+        .position(|mode| *mode == current)
+        .unwrap_or(0);
+    PERMISSION_MODE_CYCLE[(index + 1) % PERMISSION_MODE_CYCLE.len()]
+}
+
+fn display_permission_mode(mode: &str) -> &str {
+    if mode == "default" { "ask" } else { mode }
 }
 
 fn first_string_data(event: &GatewayEvent, keys: &[&str]) -> Option<String> {
@@ -4906,11 +4983,11 @@ mod tests {
         let mut app = InteractiveApp::for_test_with_messages([]);
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [default|acceptEdits|plan|auto|dontAsk|bypassPermissions]",
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
-        mode.current_value = Some("default".to_owned());
+        mode.current_value = Some("ask".to_owned());
         app.slash_catalog = vec![mode];
         app.input = "/mode ".to_owned();
         app.input_cursor = app.input.len();
@@ -4919,7 +4996,59 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-        assert_eq!(app.input, "/mode plan ");
+        assert_eq!(app.input, "/mode acceptEdits ");
+    }
+
+    #[test]
+    fn slash_catalog_current_values_refresh_after_state_changes() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.slash_catalog = vec![
+            SlashHint::new(
+                "mode",
+                "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+                "Set mode.",
+                "Run",
+            ),
+            SlashHint::new(
+                "effort",
+                "/effort [default|low|medium|high|max]",
+                "Set effort.",
+                "Run",
+            ),
+        ];
+        let event = GatewayEvent {
+            event_type: "model.changed".to_owned(),
+            created_at: None,
+            run_id: None,
+            task_id: None,
+            data: json!({
+                "model": "anthropic/claude-opus-4-7",
+                "provider_family": "anthropic",
+                "reasoning_effort": "high"
+            }),
+        };
+
+        app.state.active_permission_mode = Some("default".to_owned());
+        app.state.apply_event(&event);
+        app.refresh_slash_catalog_current_values();
+
+        assert_eq!(app.slash_catalog[0].current_value.as_deref(), Some("ask"));
+        assert_eq!(app.slash_catalog[1].current_value.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn shift_tab_cycles_permission_mode_through_gateway() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.state.active_permission_mode = Some("default".to_owned());
+
+        app.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT));
+
+        assert!(app.in_flight);
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Mode" && entry.body.contains("`auto`"))
+        );
     }
 
     #[test]

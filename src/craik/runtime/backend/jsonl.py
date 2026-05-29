@@ -299,7 +299,14 @@ def _usage_subcommands(usage: str) -> list[str]:
 def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str | None:
     if command_name == "mode":
         values = os.environ if env is None else env
-        return values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+        return _display_permission_mode(values.get(CLAUDE_PERMISSION_MODE_ENV, "default"))
+    if command_name == "effort":
+        profile = ModelSettingsStore.from_env(env).load().active_profile
+        if profile is None:
+            return None
+        options = profile.options
+        effort = options.get("reasoning_effort") if isinstance(options, dict) else None
+        return effort if isinstance(effort, str) and effort.strip() else "default"
     if command_name == "theme":
         return current_theme(env)
     return None
@@ -326,6 +333,13 @@ def _slash_state_event(
     command = tokens[0] if tokens else ""
     if command == "/mode":
         return BackendEvent(type="session.status", data=_session_status_data(env))
+    if command == "/effort":
+        settings = ModelSettingsStore.from_env(env).load()
+        if settings.active_model is not None:
+            return BackendEvent(
+                type="model.changed",
+                data=_model_changed_data(settings.active_model, payload),
+            )
     if command == "/model" and len(tokens) >= 2 and tokens[1] == "set":
         if isinstance(payload, dict):
             model = _string_or_none(payload.get("active_model"))
@@ -341,6 +355,9 @@ def _model_changed_data(model: str, payload: object) -> dict[str, object]:
         active_profile = _active_profile_payload(payload)
         if active_profile is not None:
             data.update(_profile_status_data(active_profile))
+        effort = _string_or_none(payload.get("reasoning_effort"))
+        if effort is not None:
+            data["reasoning_effort"] = effort
     return data
 
 
@@ -378,6 +395,10 @@ def _profile_status_data(profile: dict[str, object]) -> dict[str, object]:
 def _claude_permission_mode(env: dict[str, str] | None) -> str:
     values = os.environ if env is None else env
     return values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+
+
+def _display_permission_mode(mode: str) -> str:
+    return "ask" if mode == "default" else mode
 
 
 def _required_text(message: dict[str, Any]) -> str:

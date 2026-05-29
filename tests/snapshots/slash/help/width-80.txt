@@ -7,6 +7,7 @@
 - `/logout` - Remove a provider credential profile.
 - `/provider` - Inspect or configure provider credentials.
 - `/model` - Inspect or select the active model.
+- `/effort` - Inspect or set reasoning effort.
 - `/mode` - Inspect or set Claude Code mode.
 - `/status` - Show readiness state.
 - `/clear` - Clear the current transcript.
