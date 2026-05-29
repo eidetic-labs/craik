@@ -4,6 +4,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use crate::model_names::readable_model_id;
 use crate::theme;
 
 pub struct SlashHint {
@@ -48,6 +49,7 @@ impl SlashHint {
 #[derive(Clone)]
 struct SlashSuggestion {
     usage: String,
+    command: String,
     summary: String,
     category: String,
     exact_prefix: bool,
@@ -198,10 +200,10 @@ pub fn slash_completion_at(
     let suggestion = suggestions.get(selected_index.min(suggestions.len().saturating_sub(1)))?;
     let drilldown_input = input.ends_with(' ') || input.split_whitespace().count() > 1;
     if drilldown_input && suggestion.usage.split_whitespace().count() > 1 {
-        return Some(format!("{} ", suggestion.usage));
+        return Some(format!("{} ", suggestion.command));
     }
     let command = suggestion
-        .usage
+        .command
         .split_whitespace()
         .next()
         .filter(|value| value.starts_with('/'))?;
@@ -266,6 +268,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
             {
                 Some(SlashSuggestion {
                     usage: hint.usage.clone(),
+                    command: hint.usage.clone(),
                     summary: hint.summary.clone(),
                     category: hint.category.clone(),
                     exact_prefix,
@@ -289,6 +292,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
         .take(MAX_SLASH_SUGGESTIONS)
         .map(|hint| SlashSuggestion {
             usage: hint.usage,
+            command: hint.command,
             summary: hint.summary,
             category: hint.category,
             exact_prefix: hint.exact_prefix,
@@ -323,6 +327,7 @@ fn command_drilldown_rows(
                 let current = hint.current_value.as_deref() == Some(choice.as_str());
                 SlashSuggestion {
                     usage: format!("/{} {choice}", hint.name),
+                    command: format!("/{} {choice}", hint.name),
                     summary: if current {
                         "Current value"
                     } else if hint.name == "mode" && choice == "plan" {
@@ -351,6 +356,7 @@ fn command_drilldown_rows(
         .iter()
         .map(|subcommand| SlashSuggestion {
             usage: format!("/{} {subcommand}", hint.name),
+            command: format!("/{} {subcommand}", hint.name),
             summary: "Subcommand.".to_owned(),
             category: hint.category.clone(),
             exact_prefix: true,
@@ -373,6 +379,7 @@ fn model_drilldown_rows(
             .iter()
             .map(|subcommand| SlashSuggestion {
                 usage: format!("/{} {subcommand}", hint.name),
+                command: format!("/{} {subcommand}", hint.name),
                 summary: "Subcommand.".to_owned(),
                 category: hint.category.clone(),
                 exact_prefix: false,
@@ -391,6 +398,7 @@ fn model_drilldown_rows(
             .filter(|candidate| candidate.starts_with(subcommand))
             .map(|candidate| SlashSuggestion {
                 usage: format!("/{} {candidate}", hint.name),
+                command: format!("/{} {candidate}", hint.name),
                 summary: "Subcommand.".to_owned(),
                 category: hint.category.clone(),
                 exact_prefix: true,
@@ -413,16 +421,24 @@ fn model_drilldown_rows(
         .enumerate()
         .filter_map(|(catalog_index, choice)| {
             let choice_lower = choice.to_lowercase();
-            let prefix_match = query_lower.is_empty() || choice_lower.starts_with(&query_lower);
+            let readable = readable_model_id(None, choice);
+            let readable_lower = readable.to_lowercase();
+            let prefix_match = query_lower.is_empty()
+                || choice_lower.starts_with(&query_lower)
+                || readable_lower.starts_with(&query_lower);
             let fuzzy = (!query_lower.is_empty())
-                .then(|| fuzzy_subsequence_score(&query_lower, &choice_lower))
+                .then(|| {
+                    fuzzy_subsequence_score(&query_lower, &choice_lower)
+                        .or_else(|| fuzzy_subsequence_score(&query_lower, &readable_lower))
+                })
                 .flatten();
             if !prefix_match && fuzzy.is_none() {
                 return None;
             }
             let current = hint.current_value.as_deref() == Some(choice.as_str());
             Some(SlashSuggestion {
-                usage: format!("/model set {choice}"),
+                usage: format!("/model set {readable}"),
+                command: format!("/model set {choice}"),
                 summary: if current {
                     "Current model"
                 } else {
@@ -438,9 +454,9 @@ fn model_drilldown_rows(
                 },
                 catalog_index,
                 hint: if current {
-                    "● current".to_owned()
+                    format!("current · {choice}")
                 } else {
-                    "model".to_owned()
+                    choice.to_owned()
                 },
                 query: query.to_owned(),
             })
@@ -448,7 +464,11 @@ fn model_drilldown_rows(
         .collect::<Vec<_>>();
     rows.sort_by_key(|row| {
         (
-            !query_lower.is_empty() && !row.usage["/model set ".len()..].starts_with(&query_lower),
+            !query_lower.is_empty()
+                && !row.command["/model set ".len()..].starts_with(&query_lower)
+                && !row.usage["/model set ".len()..]
+                    .to_lowercase()
+                    .starts_with(&query_lower),
             row.score,
             row.catalog_index,
         )
@@ -844,6 +864,37 @@ mod tests {
         assert_eq!(
             slash_completion_at("/model set o", &catalog, 0).as_deref(),
             Some("/model set openai/gpt-5.2 ")
+        );
+    }
+
+    #[test]
+    fn slash_palette_renders_model_choices_with_readable_labels() {
+        let mut model = SlashHint::new(
+            "model",
+            "/model [set <provider/model>]",
+            "Set model.",
+            "Run",
+        );
+        model.current_value = Some("anthropic/claude-sonnet-4-20250514".to_owned());
+        model.model_choices = vec![
+            "anthropic/claude-sonnet-4-20250514".to_owned(),
+            "openai/gpt-5.2".to_owned(),
+        ];
+        model.subcommands = vec!["set".to_owned()];
+        let catalog = vec![model];
+
+        let rendered = render_slash_palette_lines("/model set claude", &catalog, 0)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("/model set Claude Sonnet 4"));
+        assert!(rendered.contains("anthropic/claude-sonnet-4-20250514"));
+        assert!(!rendered.contains("/model set anthropic/claude-sonnet-4-20250514"));
+        assert_eq!(
+            slash_completion_at("/model set claude", &catalog, 0).as_deref(),
+            Some("/model set anthropic/claude-sonnet-4-20250514 ")
         );
     }
 
