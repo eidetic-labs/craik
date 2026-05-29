@@ -57,25 +57,8 @@ struct SlashSuggestion {
 const MAX_SLASH_SUGGESTIONS: usize = 4;
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
-    let mut lines = if input.is_empty() {
-        vec![Line::from(Span::styled(
-            "Type a prompt or /command...",
-            theme::dim_style(),
-        ))]
-    } else {
-        input
-            .split('\n')
-            .map(|line| Line::from(Span::styled(line.to_owned(), theme::primary_style())))
-            .collect::<Vec<_>>()
-    };
-    if !input.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Ready ", Style::default().fg(theme::sage())),
-            Span::styled("Enter sends", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(" / Alt-Enter newline", theme::dim_style()),
-        ]));
-    }
     let suggestions = slash_suggestion_rows(input, slash_catalog);
+    let mut lines = Vec::new();
     if !suggestions.is_empty() {
         let total = slash_catalog.len();
         lines.push(Line::from(vec![
@@ -120,8 +103,41 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                 Span::styled(suggestion.summary, theme::dim_style()),
             ]));
         }
+        lines.push(Line::from(vec![
+            Span::styled("▔ ", theme::accent_style()),
+            Span::styled("prompt", theme::mute_style()),
+        ]));
+    }
+
+    let input_lines = if input.is_empty() {
+        vec![Line::from(Span::styled(
+            "Type a prompt or /command...",
+            theme::dim_style(),
+        ))]
+    } else {
+        input
+            .split('\n')
+            .map(|line| Line::from(Span::styled(line.to_owned(), theme::primary_style())))
+            .collect::<Vec<_>>()
+    };
+    lines.extend(input_lines);
+    if !input.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Ready ", Style::default().fg(theme::sage())),
+            Span::styled("Enter sends", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(" / Alt-Enter newline", theme::dim_style()),
+        ]));
     }
     lines
+}
+
+pub fn input_cursor_row_offset(input: &str, slash_catalog: &[SlashHint]) -> u16 {
+    let suggestion_count = slash_suggestion_rows(input, slash_catalog).len() as u16;
+    if suggestion_count == 0 {
+        0
+    } else {
+        1 + (suggestion_count * 2) + 1
+    }
 }
 
 pub fn render_search_lines(
@@ -429,11 +445,26 @@ pub fn input_cursor_position(input: &str, input_cursor: usize, area: Rect) -> Po
     Position::new(x, y)
 }
 
+pub fn input_cursor_position_with_row_offset(
+    input: &str,
+    input_cursor: usize,
+    area: Rect,
+    row_offset: u16,
+) -> Position {
+    let mut position = input_cursor_position(input, input_cursor, area);
+    position.y = position
+        .y
+        .saturating_add(row_offset)
+        .min(area.y.saturating_add(area.height.saturating_sub(1)));
+    position
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        SlashHint, input_cursor_position, render_input_lines, render_search_lines,
-        slash_completion, slash_suggestions,
+        SlashHint, input_cursor_position, input_cursor_position_with_row_offset,
+        input_cursor_row_offset, render_input_lines, render_search_lines, slash_completion,
+        slash_suggestions,
     };
     use ratatui::layout::Rect;
 
@@ -458,6 +489,28 @@ mod tests {
 
         assert_eq!(position.x, 13);
         assert_eq!(position.y, 21);
+    }
+
+    #[test]
+    fn cursor_position_can_account_for_palette_above_prompt() {
+        let input = "/r";
+        let catalog = vec![
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
+            SlashHint::new(
+                "receipt",
+                "/receipt latest",
+                "Show latest receipt.",
+                "Evidence",
+            ),
+        ];
+        let area = Rect::new(10, 20, 40, 12);
+
+        let offset = input_cursor_row_offset(input, &catalog);
+        let position = input_cursor_position_with_row_offset(input, input.len(), area, offset);
+
+        assert_eq!(offset, 6);
+        assert_eq!(position.x, 12);
+        assert_eq!(position.y, 26);
     }
 
     #[test]
@@ -501,6 +554,21 @@ mod tests {
         assert!(rendered.contains("RUN  Run an audited prompt."));
         assert!(rendered.contains("▸  /receipt latest"));
         assert!(rendered.contains("EVIDENCE  Show latest receipt."));
+
+        let palette_row = lines
+            .iter()
+            .position(|line| line.to_string().contains("/ command palette"))
+            .expect("palette header is visible");
+        let prompt_anchor_row = lines
+            .iter()
+            .position(|line| line.to_string().contains("▔ prompt"))
+            .expect("prompt anchor is visible");
+        let input_row = lines
+            .iter()
+            .position(|line| line.to_string() == "/r")
+            .expect("typed input remains visible");
+        assert!(palette_row < prompt_anchor_row);
+        assert!(prompt_anchor_row < input_row);
     }
 
     #[test]
