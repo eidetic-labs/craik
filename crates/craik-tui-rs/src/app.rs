@@ -2327,7 +2327,7 @@ fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -
 #[cfg(test)]
 mod tests {
     use super::{InteractiveApp, LoopAction, RunRecord, export_file_stem};
-    use crate::backend::WorkerMessage;
+    use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use craik_tui_rs::GatewayEvent;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -2336,9 +2336,9 @@ mod tests {
 
     #[test]
     fn backend_close_unblocks_working_state() {
-        let mut app = InteractiveApp::for_test_with_messages([WorkerMessage::Closed(
-            "Gateway output stream closed.".to_owned(),
-        )]);
+        let close_message = format_backend_closed();
+        let mut app =
+            InteractiveApp::for_test_with_messages([WorkerMessage::Closed(close_message.clone())]);
         app.in_flight = true;
         app.state.working_phase = Some("waiting".to_owned());
 
@@ -2347,10 +2347,7 @@ mod tests {
         assert!(!app.in_flight);
         assert!(!app.backend_connected);
         assert_eq!(app.state.working_phase, None);
-        assert_eq!(
-            app.last_error.as_deref(),
-            Some("Gateway output stream closed.")
-        );
+        assert_eq!(app.last_error.as_deref(), Some(close_message.as_str()));
         assert!(
             app.transcript
                 .iter()

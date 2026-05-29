@@ -4,6 +4,7 @@ use craik_tui_rs::{
     validate_gateway_event,
 };
 use std::{
+    error::Error,
     io::{self, BufRead, Write},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
@@ -12,6 +13,8 @@ use std::{
     },
     thread,
 };
+
+const BACKEND_COMMAND: &str = "uv run craik tui-backend --jsonl";
 
 #[derive(Debug, Clone)]
 pub enum WorkerMessage {
@@ -34,7 +37,7 @@ impl BackendSession {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("failed to start `uv run craik tui-backend --jsonl`")?;
+            .map_err(|error| anyhow::anyhow!("{}", format_backend_start_error(&error)))?;
         let stdin = Arc::new(Mutex::new(
             child
                 .stdin
@@ -68,22 +71,19 @@ impl BackendSession {
                             }
                         }
                         Err(error) => {
-                            let _ = event_sender.send(WorkerMessage::Error(format!(
-                                "failed to parse backend event: {error}: {line}"
-                            )));
+                            let _ = event_sender.send(WorkerMessage::Error(
+                                format_backend_parse_error(&error, &line),
+                            ));
                         }
                     },
                     Err(error) => {
-                        let _ = event_sender.send(WorkerMessage::Error(format!(
-                            "backend read failed: {error}"
-                        )));
+                        let _ = event_sender
+                            .send(WorkerMessage::Error(format_backend_read_error(&error)));
                         break;
                     }
                 }
             }
-            let _ = event_sender.send(WorkerMessage::Closed(
-                "Gateway output stream closed.".to_owned(),
-            ));
+            let _ = event_sender.send(WorkerMessage::Closed(format_backend_closed()));
         });
         thread::spawn(move || {
             let reader = io::BufReader::new(stderr);
@@ -129,6 +129,46 @@ impl BackendSession {
     }
 }
 
+pub fn format_backend_start_error(error: &dyn Error) -> String {
+    [
+        "Gateway backend failed to start.".to_owned(),
+        format!("Command: {BACKEND_COMMAND}"),
+        format!("Cause: {error}"),
+        "Recovery: run `uv run craik tui-backend --jsonl` from this repo to inspect the backend, then press Ctrl-B in the TUI to reconnect.".to_owned(),
+    ]
+    .join("\n")
+}
+
+pub fn format_backend_parse_error(error: &dyn Error, line: &str) -> String {
+    [
+        "Gateway backend emitted non-contract JSON.".to_owned(),
+        format!("Command: {BACKEND_COMMAND}"),
+        format!("Cause: {error}"),
+        format!("Line: {}", line.trim()),
+        "Recovery: inspect the backend stderr/log output and keep stdout reserved for Gateway JSONL events.".to_owned(),
+    ]
+    .join("\n")
+}
+
+pub fn format_backend_read_error(error: &dyn Error) -> String {
+    [
+        "Gateway backend output stream failed.".to_owned(),
+        format!("Command: {BACKEND_COMMAND}"),
+        format!("Cause: {error}"),
+        "Recovery: restart the backend with Ctrl-B; if this repeats, run the backend command directly and inspect stderr.".to_owned(),
+    ]
+    .join("\n")
+}
+
+pub fn format_backend_closed() -> String {
+    [
+        "Gateway backend output stream closed.".to_owned(),
+        format!("Command: {BACKEND_COMMAND}"),
+        "Recovery: press Ctrl-B to restart the Gateway backend. If it closes again, run the command directly to inspect stderr.".to_owned(),
+    ]
+    .join("\n")
+}
+
 impl Drop for BackendSession {
     fn drop(&mut self) {
         let _ = self.close();
@@ -136,5 +176,46 @@ impl Drop for BackendSession {
             let _ = child.kill();
             let _ = child.wait();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        format_backend_closed, format_backend_parse_error, format_backend_read_error,
+        format_backend_start_error,
+    };
+    use std::io;
+
+    #[test]
+    fn backend_start_error_names_command_and_recovery() {
+        let error = io::Error::new(io::ErrorKind::NotFound, "uv not found");
+
+        let diagnostic = format_backend_start_error(&error);
+
+        assert!(diagnostic.contains("Gateway backend failed to start."));
+        assert!(diagnostic.contains("uv run craik tui-backend --jsonl"));
+        assert!(diagnostic.contains("uv not found"));
+        assert!(diagnostic.contains("press Ctrl-B"));
+    }
+
+    #[test]
+    fn backend_parse_error_preserves_bad_line() {
+        let error = serde_json::from_str::<serde_json::Value>("not-json")
+            .expect_err("invalid JSON should fail");
+
+        let diagnostic = format_backend_parse_error(&error, "not-json");
+
+        assert!(diagnostic.contains("non-contract JSON"));
+        assert!(diagnostic.contains("Line: not-json"));
+        assert!(diagnostic.contains("stdout reserved for Gateway JSONL"));
+    }
+
+    #[test]
+    fn backend_read_and_close_errors_are_actionable() {
+        let error = io::Error::other("stream interrupted");
+
+        assert!(format_backend_read_error(&error).contains("Ctrl-B"));
+        assert!(format_backend_closed().contains("run the command directly"));
     }
 }
