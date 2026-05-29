@@ -43,6 +43,7 @@ impl SlashHint {
     }
 }
 
+#[derive(Clone)]
 struct SlashSuggestion {
     usage: String,
     summary: String,
@@ -59,7 +60,7 @@ const MAX_SLASH_SUGGESTIONS: usize = 5;
 pub fn render_input_lines(input: &str, _slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     if input.is_empty() {
         vec![Line::from(Span::styled(
-            "Ask anything or type / for commands",
+            "Message craik or type / for commands",
             theme::dim_style(),
         ))]
     } else {
@@ -70,35 +71,66 @@ pub fn render_input_lines(input: &str, _slash_catalog: &[SlashHint]) -> Vec<Line
     }
 }
 
-pub fn render_slash_palette_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
+pub fn render_slash_palette_lines(
+    input: &str,
+    slash_catalog: &[SlashHint],
+    selected_index: usize,
+) -> Vec<Line<'static>> {
     let suggestions = slash_suggestion_rows(input, slash_catalog);
     let mut lines = Vec::new();
     if !suggestions.is_empty() {
         let total = slash_catalog.len();
+        let selected = selected_index.min(suggestions.len().saturating_sub(1));
         lines.push(Line::from(vec![
             Span::styled("/", theme::accent_style()),
             Span::styled(" commands", theme::primary_style()),
             Span::styled(
-                format!("  {} of {total}", suggestions.len()),
+                format!(
+                    "  {} of {total}  {} selected",
+                    suggestions.len(),
+                    selected + 1
+                ),
                 theme::dim_style(),
             ),
         ]));
-        for suggestion in suggestions {
-            let mut command_spans = Vec::new();
-            command_spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
+        for (index, suggestion) in suggestions.into_iter().enumerate() {
+            let selected = index == selected;
+            let mut command_spans = vec![Span::styled(
+                if selected { "▌ " } else { "  " },
+                if selected {
+                    theme::accent_style()
+                } else {
+                    theme::mute_style()
+                },
+            )];
+            command_spans.extend(highlight_usage(
+                &suggestion.usage,
+                &suggestion.query,
+                selected,
+            ));
             command_spans.extend([
                 Span::styled("  ", theme::mute_style()),
                 Span::styled(
                     suggestion.category.to_lowercase(),
-                    category_style(&suggestion),
+                    category_style(&suggestion, selected),
                 ),
                 Span::styled("  ", theme::mute_style()),
-                Span::styled(suggestion.summary, theme::dim_style()),
+                Span::styled(
+                    suggestion.summary,
+                    if selected {
+                        theme::primary_style()
+                    } else {
+                        theme::dim_style()
+                    },
+                ),
             ]);
             if !suggestion.hint.is_empty() {
                 command_spans.extend([
                     Span::styled("  ", theme::mute_style()),
-                    Span::styled(suggestion.hint.clone(), right_hint_style(&suggestion.hint)),
+                    Span::styled(
+                        suggestion.hint.clone(),
+                        right_hint_style(&suggestion.hint, selected),
+                    ),
                 ]);
             }
             lines.push(Line::from(command_spans));
@@ -151,20 +183,30 @@ fn slash_suggestions(input: &str, slash_catalog: &[SlashHint]) -> Vec<String> {
         .collect()
 }
 
-pub fn slash_completion(input: &str, slash_catalog: &[SlashHint]) -> Option<String> {
+pub fn slash_completion_at(
+    input: &str,
+    slash_catalog: &[SlashHint],
+    selected_index: usize,
+) -> Option<String> {
     let input = input.trim_start();
     if !input.starts_with('/') {
         return None;
     }
-    let suggestion = slash_suggestion_rows(input, slash_catalog)
-        .into_iter()
-        .next()?;
+    let suggestions = slash_suggestion_rows(input, slash_catalog);
+    let suggestion = suggestions.get(selected_index.min(suggestions.len().saturating_sub(1)))?;
+    if input.ends_with(' ') && suggestion.usage.split_whitespace().count() > 1 {
+        return Some(format!("{} ", suggestion.usage));
+    }
     let command = suggestion
         .usage
         .split_whitespace()
         .next()
         .filter(|value| value.starts_with('/'))?;
     Some(format!("{command} "))
+}
+
+pub fn slash_suggestion_count(input: &str, slash_catalog: &[SlashHint]) -> usize {
+    slash_suggestion_rows(input, slash_catalog).len()
 }
 
 fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashSuggestion> {
@@ -306,10 +348,19 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
         .collect()
 }
 
-fn highlight_usage(usage: &str, query: &str) -> Vec<Span<'static>> {
+fn highlight_usage(usage: &str, query: &str, selected: bool) -> Vec<Span<'static>> {
     let query = query.trim_start_matches('/').to_lowercase();
     if query.is_empty() {
-        return vec![Span::styled(usage.to_owned(), theme::accent_style())];
+        return vec![Span::styled(
+            usage.to_owned(),
+            if selected {
+                Style::default()
+                    .fg(theme::primary())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                theme::accent_style()
+            },
+        )];
     }
     let mut spans = Vec::new();
     let mut query_chars = query.chars();
@@ -324,7 +375,14 @@ fn highlight_usage(usage: &str, query: &str) -> Vec<Span<'static>> {
             ));
             next_match = query_chars.next();
         } else {
-            spans.push(Span::styled(ch.to_string(), theme::accent_style()));
+            spans.push(Span::styled(
+                ch.to_string(),
+                if selected {
+                    Style::default().fg(theme::accent())
+                } else {
+                    theme::accent_style()
+                },
+            ));
         }
     }
     spans
@@ -356,7 +414,7 @@ fn hint_right_hint(hint: &SlashHint) -> String {
     String::new()
 }
 
-fn right_hint_style(hint: &str) -> Style {
+fn right_hint_style(hint: &str, selected: bool) -> Style {
     if hint.contains('⚠') || hint.contains("read-only") {
         Style::default()
             .fg(theme::amber())
@@ -365,16 +423,20 @@ fn right_hint_style(hint: &str) -> Style {
         Style::default().fg(theme::sage())
     } else if hint.starts_with("cli:") || hint.starts_with("needs ") {
         theme::dim_style()
+    } else if selected {
+        Style::default().fg(theme::accent())
     } else {
         theme::mute_style()
     }
 }
 
-fn category_style(suggestion: &SlashSuggestion) -> Style {
+fn category_style(suggestion: &SlashSuggestion, selected: bool) -> Style {
     if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
         Style::default()
             .fg(theme::amber())
             .add_modifier(Modifier::BOLD)
+    } else if selected {
+        Style::default().fg(theme::accent())
     } else {
         theme::mute_style()
     }
@@ -448,7 +510,7 @@ mod tests {
     use super::{
         SlashHint, input_cursor_position, input_cursor_position_with_row_offset,
         input_cursor_row_offset, render_input_lines, render_search_lines,
-        render_slash_palette_lines, slash_completion, slash_suggestions,
+        render_slash_palette_lines, slash_completion_at, slash_suggestions,
     };
     use ratatui::layout::Rect;
 
@@ -510,7 +572,7 @@ mod tests {
     fn empty_input_renders_compact_prompt_placeholder() {
         let lines = render_input_lines("", &[]);
 
-        assert_eq!(lines[0].to_string(), "Ask anything or type / for commands");
+        assert_eq!(lines[0].to_string(), "Message craik or type / for commands");
         assert_eq!(lines.len(), 1);
     }
 
@@ -538,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn slash_palette_renders_single_line_commands_without_selection_glyph() {
+    fn slash_palette_renders_single_line_commands_with_selected_focus() {
         let catalog = vec![
             SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
             SlashHint::new(
@@ -549,7 +611,7 @@ mod tests {
             ),
         ];
 
-        let lines = render_slash_palette_lines("/r", &catalog);
+        let lines = render_slash_palette_lines("/r", &catalog, 0);
         let rendered = lines
             .iter()
             .map(|line| line.to_string())
@@ -558,6 +620,8 @@ mod tests {
 
         assert_eq!(lines.len(), 3);
         assert!(rendered.contains("/ commands"));
+        assert!(rendered.contains("1 selected"));
+        assert!(rendered.contains("▌ /run <prompt>"));
         assert!(rendered.contains("/run <prompt>  run  Run an audited prompt."));
         assert!(rendered.contains("/receipt latest  evidence  Show latest receipt."));
         assert!(!rendered.contains("▸"));
@@ -574,7 +638,7 @@ mod tests {
             SlashHint::new("hidden", "/hidden", "Hidden overflow.", "Debug"),
         ];
 
-        let lines = render_slash_palette_lines("/h", &catalog);
+        let lines = render_slash_palette_lines("/h", &catalog, 0);
         let rendered = lines
             .iter()
             .map(|line| line.to_string())
@@ -608,8 +672,33 @@ mod tests {
         ];
 
         assert_eq!(
-            slash_completion("/r", &catalog).as_deref(),
+            slash_completion_at("/r", &catalog, 0).as_deref(),
             Some("/receipt ")
+        );
+    }
+
+    #[test]
+    fn slash_completion_uses_selected_candidate_and_drilldown_value() {
+        let mut mode = SlashHint::new(
+            "mode",
+            "/mode [default|acceptEdits|plan|auto]",
+            "Set mode.",
+            "Run",
+        );
+        mode.current_value = Some("default".to_owned());
+        let catalog = vec![
+            SlashHint::new("receipt", "/receipt latest", "Show receipt.", "Evidence"),
+            SlashHint::new("run", "/run <prompt>", "Run audited prompt.", "Run"),
+            mode,
+        ];
+
+        assert_eq!(
+            slash_completion_at("/r", &catalog, 1).as_deref(),
+            Some("/run ")
+        );
+        assert_eq!(
+            slash_completion_at("/mode ", &catalog, 2).as_deref(),
+            Some("/mode plan ")
         );
     }
 
@@ -665,7 +754,7 @@ mod tests {
         clear.requires_confirmation = true;
         let catalog = vec![mode, clear];
 
-        let root = render_slash_palette_lines("/m", &catalog)
+        let root = render_slash_palette_lines("/m", &catalog, 0)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
@@ -674,7 +763,7 @@ mod tests {
         assert!(root.contains("now: default"));
         assert!(root.contains("run  Inspect or set mode."));
 
-        let confirm = render_slash_palette_lines("/c", &catalog)
+        let confirm = render_slash_palette_lines("/c", &catalog, 0)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
@@ -682,7 +771,7 @@ mod tests {
         assert!(confirm.contains("/clear  workflow  Clear transcript.  ⚠ confirms"));
         assert!(confirm.contains("workflow  Clear transcript."));
 
-        let drilldown = render_slash_palette_lines("/mode ", &catalog)
+        let drilldown = render_slash_palette_lines("/mode ", &catalog, 0)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()

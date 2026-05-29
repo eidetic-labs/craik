@@ -215,7 +215,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         if app.search_active || app.help_visible || app.active_overlay.is_some() {
             Vec::new()
         } else {
-            render_slash_palette_lines(&app.input, &app.slash_catalog)
+            render_slash_palette_lines(&app.input, &app.slash_catalog, app.slash_selected_index)
         };
     let (transcript_area, slash_palette_area) = if slash_palette_lines.is_empty() {
         (vertical[0], None)
@@ -423,9 +423,9 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
     let detail = Paragraph::new(overlay_detail_lines(&app.selected_overlay_detail()))
         .block(
             Block::default()
-                .title(app.overlay_footer_hint().unwrap_or("Esc chat"))
-                .title_style(theme::mute_style())
-                .border_style(theme::mute_style())
+                .title(overlay_detail_title(app))
+                .title_style(theme::accent_style())
+                .border_style(theme::accent_style())
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
@@ -433,6 +433,17 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
     frame.render_widget(Clear, area);
     frame.render_widget(list, list_area);
     frame.render_widget(detail, detail_area);
+}
+
+fn overlay_detail_title(app: &InteractiveApp) -> Line<'static> {
+    Line::from(vec![
+        Span::styled("selected", theme::accent_style()),
+        Span::styled("  ", theme::mute_style()),
+        Span::styled(
+            app.overlay_footer_hint().unwrap_or("Esc chat").to_owned(),
+            theme::mute_style(),
+        ),
+    ])
 }
 
 fn overlay_row_style(selected: bool) -> Style {
