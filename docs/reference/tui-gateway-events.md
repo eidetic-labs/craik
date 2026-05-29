@@ -18,32 +18,32 @@ Each event is a JSON object with:
 - `task_id`: task identifier when available, otherwise `null`.
 - `data`: event-specific JSON object.
 
-Required `data` fields:
+Required fields:
 
 | Event | Required fields |
 | --- | --- |
-| `prompt.submitted` | `prompt_preview` |
-| `session.ready` | `transport` |
-| `session.status` | `state` |
-| `session.history` | `receipts` array |
-| `model.changed` | `model` |
-| `model.selected` | `backend` or `profile.backend` |
-| `run.working` | `backend`, `phase` |
-| `run.progress` | `message` |
-| `run.started` | `run_id` |
-| `tool.used` | `tool`, plus one of `target`, `command`, or `message` |
-| `file.changed` | `target`, plus `text` or `message` |
-| `approval.requested` | `message`, plus one of `tool`, `target`, or `reason` |
-| `approval.resolved` | `approval_id`, `decision` |
-| `receipt.created` | `run_id`, `receipt_id` |
-| `run.output` | `run_id`, `summary` |
-| `run.completed` | `run_id`, `status` |
-| `run.event` | `text` or `message` |
-| `slash.completed` | `text` or `payload` |
-| `slash.catalog` | `commands` array |
-| `run.interrupt.requested` | `run_id` |
-| `approval.denied` | `message` |
-| `error` | `message` |
+| `prompt.submitted` | prompt_preview string |
+| `approval.resolved` | approval_id string; decision string |
+| `session.ready` | transport string |
+| `session.status` | state string |
+| `session.history` | receipts array |
+| `slash.completed` | one of text or payload |
+| `slash.catalog` | commands array |
+| `model.changed` | model string |
+| `run.interrupt.requested` | run_id string |
+| `run.started` | run_id string |
+| `run.working` | backend string; phase string |
+| `run.progress` | message string |
+| `run.event` | one of text or message |
+| `tool.used` | tool string; one of target, command, or message |
+| `file.changed` | target string; one of text or message |
+| `approval.requested` | message string; one of tool, target, or reason |
+| `approval.denied` | message string |
+| `model.selected` | one of backend or profile.backend |
+| `receipt.created` | run_id string; receipt_id string |
+| `run.output` | run_id string; summary string |
+| `run.completed` | run_id string; status string |
+| `error` | message string |
 
 Provider-specific adapters should preserve provider context when available:
 `provider_id`, `provider_family`, `model`, `backend`, and receipt ids. The TUI

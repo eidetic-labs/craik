@@ -1,0 +1,22 @@
+{"created_at":"2026-05-29T00:00:00+00:00","data":{"source":"fixture","prompt_preview":"Cover every gateway event"},"run_id":null,"task_id":"task_contract_coverage","type":"prompt.submitted"}
+{"created_at":"2026-05-29T00:00:01+00:00","data":{"transport":"jsonl.stdio","protocol":"craik.tui.gateway","protocol_version":"1"},"run_id":null,"task_id":null,"type":"session.ready"}
+{"created_at":"2026-05-29T00:00:02+00:00","data":{"state":"ready"},"run_id":null,"task_id":null,"type":"session.status"}
+{"created_at":"2026-05-29T00:00:03+00:00","data":{"receipts":[{"id":"receipt_contract_history","task_id":"task_contract_coverage"}]},"run_id":null,"task_id":null,"type":"session.history"}
+{"created_at":"2026-05-29T00:00:04+00:00","data":{"model":"anthropic/claude-sonnet-4","provider_id":"provider_anthropic","provider_family":"anthropic"},"run_id":null,"task_id":"task_contract_coverage","type":"model.changed"}
+{"created_at":"2026-05-29T00:00:05+00:00","data":{"provider_id":"provider_anthropic","provider_family":"anthropic","model":"claude-sonnet-4","profile":{"display_name":"Anthropic Claude Sonnet 4","backend":"provider"}},"run_id":null,"task_id":"task_contract_coverage","type":"model.selected"}
+{"created_at":"2026-05-29T00:00:06+00:00","data":{"backend":"provider","phase":"thinking","message":"Collecting evidence"},"run_id":null,"task_id":"task_contract_coverage","type":"run.working"}
+{"created_at":"2026-05-29T00:00:07+00:00","data":{"message":"Collecting evidence."},"run_id":null,"task_id":"task_contract_coverage","type":"run.progress"}
+{"created_at":"2026-05-29T00:00:08+00:00","data":{"backend":"provider"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"run.started"}
+{"created_at":"2026-05-29T00:00:09+00:00","data":{"tool":"Read","target":"docs/reference/tui-gateway-events.md","message":"Read event docs"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"tool.used"}
+{"created_at":"2026-05-29T00:00:10+00:00","data":{"target":"docs/reference/tui-gateway-events.md","message":"Updated docs table","text":"contract-driven docs table"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"file.changed"}
+{"created_at":"2026-05-29T00:00:11+00:00","data":{"message":"Approval requested for docs update","tool":"Edit","target":"docs/reference/tui-gateway-events.md","reason":"update generated contract docs"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"approval.requested"}
+{"created_at":"2026-05-29T00:00:12+00:00","data":{"approval_id":"approval_contract_docs","decision":"approved"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"approval.resolved"}
+{"created_at":"2026-05-29T00:00:13+00:00","data":{"message":"Approval denied fixture path"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"approval.denied"}
+{"created_at":"2026-05-29T00:00:14+00:00","data":{"text":"Intermediate model event"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"run.event"}
+{"created_at":"2026-05-29T00:00:15+00:00","data":{"text":"Slash command completed"},"run_id":null,"task_id":"task_contract_coverage","type":"slash.completed"}
+{"created_at":"2026-05-29T00:00:16+00:00","data":{"commands":[{"name":"run","summary":"Run an audited prompt"}]},"run_id":null,"task_id":null,"type":"slash.catalog"}
+{"created_at":"2026-05-29T00:00:17+00:00","data":{"receipt_id":"receipt_contract_coverage"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"receipt.created"}
+{"created_at":"2026-05-29T00:00:18+00:00","data":{"summary":"Contract coverage fixture completed."},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"run.output"}
+{"created_at":"2026-05-29T00:00:19+00:00","data":{"status":"completed","backend":"provider"},"run_id":"run_contract_coverage","task_id":"task_contract_coverage","type":"run.completed"}
+{"created_at":"2026-05-29T00:00:20+00:00","data":{"reason":"operator requested stop"},"run_id":"run_contract_coverage","task_id":null,"type":"run.interrupt.requested"}
+{"created_at":"2026-05-29T00:00:21+00:00","data":{"message":"Recoverable fixture error"},"run_id":null,"task_id":null,"type":"error"}

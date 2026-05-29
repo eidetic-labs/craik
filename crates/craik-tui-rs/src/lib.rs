@@ -793,6 +793,7 @@ mod tests {
     use serde_json::json;
 
     const GATEWAY_FIXTURES: &[&str] = &[
+        include_str!("../../../tests/fixtures/gateway/contract_event_coverage.jsonl"),
         include_str!("../../../tests/fixtures/gateway/prompt_run.jsonl"),
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl"),
         include_str!("../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"),
