@@ -19,7 +19,10 @@ use crossterm::{
     event::{self, Event, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use input::{input_cursor_position, render_input_lines, render_search_lines};
+use input::{
+    input_cursor_position, input_cursor_position_with_row_offset, input_cursor_row_offset,
+    render_input_lines, render_search_lines,
+};
 use ratatui::{
     Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
@@ -274,10 +277,11 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             input_inner,
         ));
     } else {
-        frame.set_cursor_position(input_cursor_position(
+        frame.set_cursor_position(input_cursor_position_with_row_offset(
             &app.input,
             app.input_cursor,
             input_inner,
+            input_cursor_row_offset(&app.input, &app.slash_catalog),
         ));
     }
 
@@ -998,12 +1002,27 @@ mod tests {
         app.input = "/mode ".to_owned();
         app.input_cursor = app.input.len();
 
-        let rendered = render_app_frame(&app, 104, 28);
+        let rows = render_app_frame_rows(&app, 104, 28);
+        let rendered = rows.join("\n");
 
         assert!(rendered.contains("/ command palette"));
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
+        let palette_row = rows
+            .iter()
+            .position(|row| row.contains("/ command palette"))
+            .expect("palette visible");
+        let prompt_anchor_row = rows
+            .iter()
+            .position(|row| row.contains("▔ prompt"))
+            .expect("prompt anchor visible");
+        let typed_input_row = rows
+            .iter()
+            .rposition(|row| row.contains("/mode "))
+            .expect("typed input visible");
+        assert!(palette_row < prompt_anchor_row);
+        assert!(prompt_anchor_row < typed_input_row);
     }
 
     #[test]
