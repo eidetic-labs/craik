@@ -307,15 +307,19 @@ fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
 fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
     let body = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
         .split(area);
     let list_area = body[0];
     let detail_area = body[1];
     let title = app
         .overlay_title()
         .unwrap_or_else(|| "▌OVERLAY  Esc returns to chat".to_owned());
+    let items = app.overlay_items();
+    let visible_start = app.overlay_scroll as usize;
+    let visible_capacity = list_area.height.saturating_sub(6) as usize;
     let mut list_lines = vec![
         Line::from(vec![
+            Span::styled("▌ ", theme::accent_style()),
             Span::styled("Filter ", theme::mute_style()),
             Span::styled(
                 if app.overlay_filter.is_empty() {
@@ -330,22 +334,44 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 },
             ),
         ]),
+        Line::from(vec![
+            Span::styled(
+                format!(
+                    "{} item(s)",
+                    if items.len() == 1 {
+                        "1".to_owned()
+                    } else {
+                        items.len().to_string()
+                    }
+                ),
+                theme::dim_style(),
+            ),
+            Span::styled(
+                format!(
+                    "  showing {}-{}",
+                    if items.is_empty() {
+                        0
+                    } else {
+                        visible_start + 1
+                    },
+                    visible_start
+                        .saturating_add(visible_capacity)
+                        .min(items.len())
+                ),
+                theme::mute_style(),
+            ),
+        ]),
         Line::from(""),
     ];
-    let items = app.overlay_items();
     for (index, item) in items
         .iter()
         .enumerate()
         .skip(app.overlay_scroll as usize)
-        .take(list_area.height.saturating_sub(5) as usize)
+        .take(visible_capacity)
     {
         let selected = index == app.overlay_selected_index;
         let marker = if selected { "▌ " } else { "  " };
-        let row_style = if selected {
-            theme::selected_style()
-        } else {
-            theme::primary_style()
-        };
+        let row_style = overlay_row_style(selected);
         list_lines.push(Line::from(vec![
             Span::styled(
                 marker,
@@ -356,8 +382,11 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 },
             ),
             Span::styled(item.title.clone(), row_style),
+        ]));
+        list_lines.push(Line::from(vec![
+            Span::styled("    ", theme::mute_style()),
             Span::styled("  ", theme::mute_style()),
-            Span::styled(item.summary.clone(), theme::dim_style()),
+            Span::styled(item.summary.clone(), overlay_summary_style(selected)),
         ]));
     }
     if items.is_empty() {
@@ -376,7 +405,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .padding(Padding::horizontal(1)),
         )
         .wrap(Wrap { trim: false });
-    let detail = Paragraph::new(app.selected_overlay_detail())
+    let detail = Paragraph::new(overlay_detail_lines(&app.selected_overlay_detail()))
         .block(
             Block::default()
                 .title(app.overlay_footer_hint().unwrap_or("Esc chat"))
@@ -389,6 +418,61 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
     frame.render_widget(Clear, area);
     frame.render_widget(list, list_area);
     frame.render_widget(detail, detail_area);
+}
+
+fn overlay_row_style(selected: bool) -> Style {
+    if selected {
+        theme::selected_style()
+    } else {
+        theme::primary_style()
+    }
+}
+
+fn overlay_summary_style(selected: bool) -> Style {
+    if selected {
+        Style::default().fg(theme::primary())
+    } else {
+        theme::dim_style()
+    }
+}
+
+fn overlay_detail_lines(detail: &str) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    for raw in detail.lines() {
+        if raw.trim().is_empty() {
+            lines.push(Line::default());
+            continue;
+        }
+        if raw.starts_with("- ") {
+            lines.push(Line::from(vec![
+                Span::styled("  - ", theme::mute_style()),
+                Span::styled(raw.trim_start_matches("- ").to_owned(), theme::dim_style()),
+            ]));
+            continue;
+        }
+        if let Some((label, value)) = raw.split_once(':') {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{label}: "), theme::mute_style()),
+                Span::styled(value.trim_start().to_owned(), theme::primary_style()),
+            ]));
+            continue;
+        }
+        if lines.is_empty() {
+            lines.push(Line::from(Span::styled(
+                raw.to_owned(),
+                theme::accent_style(),
+            )));
+        } else {
+            lines.push(Line::from(Span::styled(raw.to_owned(), theme::dim_style())));
+        }
+    }
+    if lines.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No detail available.",
+            theme::dim_style(),
+        )));
+    }
+    lines
 }
 
 fn render_approval_overlay(
@@ -709,7 +793,7 @@ fn usage() -> String {
 mod tests {
     use super::{
         InteractiveApp, Terminal, TestBackend, approval_overlay_lines, approval_overlay_title,
-        draw_interactive_frame, input_panel_height, input_title,
+        draw_interactive_frame, input_panel_height, input_title, overlay_detail_lines,
     };
     use crate::{
         app::ActiveOverlay,
@@ -976,11 +1060,59 @@ mod tests {
 
         assert!(prompt_row > overlay_row);
         assert!(rows.iter().any(|row| row.contains("Filter")));
+        assert!(rows.iter().any(|row| row.contains("item(s)")));
         assert!(rows.iter().any(|row| row.contains("Ctrl-R runs")));
         assert!(
             rows.iter()
                 .any(|row| row.contains("receipt_run_review_desktop_plan"))
         );
+    }
+
+    #[test]
+    fn visual_frame_regression_preserves_memory_overlay_hierarchy() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = Some(ActiveOverlay::Memory);
+
+        let rows = render_app_frame_rows(&app, 120, 34);
+
+        assert!(rows.iter().any(|row| row.contains("▌MEMORY")));
+        assert!(rows.iter().any(|row| row.contains("Provider")));
+        assert!(rows.iter().any(|row| row.contains("Model")));
+        assert!(rows.iter().any(|row| row.contains("Last prompt")));
+        assert!(rows.iter().any(|row| row.contains("type to narrow")));
+        assert!(rows.iter().any(|row| row.contains("Ctrl-E evidence")));
+    }
+
+    #[test]
+    fn visual_frame_regression_preserves_runs_overlay_detail() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = Some(ActiveOverlay::Runs);
+
+        let rows = render_app_frame_rows(&app, 128, 36);
+
+        assert!(rows.iter().any(|row| row.contains("▌RUNS")));
+        assert!(rows.iter().any(|row| row.contains("receipt(s)")));
+        assert!(rows.iter().any(|row| row.contains("tool(s)")));
+        assert!(rows.iter().any(|row| row.contains("Run:")));
+        assert!(rows.iter().any(|row| row.contains("Status:")));
+        assert!(rows.iter().any(|row| row.contains("Ctrl-L filter")));
+    }
+
+    #[test]
+    fn overlay_detail_lines_style_headings_labels_and_lists() {
+        let lines = overlay_detail_lines("Run\nStatus: completed\n\n- receipt_1");
+        let rendered = lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("Run"));
+        assert!(rendered.contains("Status: completed"));
+        assert!(rendered.contains("- receipt_1"));
+        assert_eq!(lines[0].spans[0].style.fg, Some(crate::theme::accent()));
+        assert_eq!(lines[1].spans[0].style.fg, Some(crate::theme::mute()));
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::primary()));
     }
 
     #[test]
