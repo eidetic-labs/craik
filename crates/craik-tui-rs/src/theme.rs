@@ -91,6 +91,13 @@ pub fn surface_style() -> Style {
     Style::default().bg(surface()).fg(primary())
 }
 
+pub fn selected_style() -> Style {
+    Style::default()
+        .bg(surface())
+        .fg(accent())
+        .add_modifier(Modifier::BOLD)
+}
+
 pub fn mode_label() -> &'static str {
     match mode() {
         ThemeMode::Dark => "dark",
