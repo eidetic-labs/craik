@@ -31,6 +31,7 @@ pub fn slash_hints_from_event(event: &GatewayEvent) -> Vec<SlashHint> {
                     .unwrap_or_else(|| slash_category(name)),
                 aliases: string_array_from_object(object, "aliases"),
                 choices: choices_from_object(object),
+                model_choices: string_array_from_object(object, "model_choices"),
                 subcommands: explicit_or_usage_subcommands(object),
                 requires_confirmation: object
                     .get("requires_confirmation")
@@ -219,6 +220,7 @@ mod tests {
             data: json!({
                 "commands": [
                     {"name": "run", "usage": "/run <prompt>", "summary": "Run an audited prompt.", "category": "Run", "cli_mirror": "run prompt"},
+                    {"name": "model", "usage": "/model [set <provider/model>]", "summary": "Set model.", "model_choices": ["anthropic/claude-sonnet-4-20250514"]},
                     {"name": "theme", "usage": "/theme [dark|light|monochrome]", "summary": "Set theme.", "choices": {"theme": ["dark", "light", "monochrome"]}, "current_value": "dark", "mutating": true, "aliases": ["style"], "examples": ["/theme light"]},
                     {"name": "logout", "usage": "/logout [profile]", "summary": "Log out.", "requires_confirmation": true, "confirm_message": "This command changes local Craik state."},
                     {"name": "status", "usage": "/status", "summary": "Show Gateway status."}
@@ -228,22 +230,26 @@ mod tests {
 
         let hints = slash_hints_from_event(&event);
 
-        assert_eq!(hints.len(), 4);
+        assert_eq!(hints.len(), 5);
         assert_eq!(hints[0].name, "run");
         assert_eq!(hints[0].usage, "/run <prompt>");
         assert_eq!(hints[0].category, "Run");
-        assert_eq!(hints[1].choices, ["dark", "light", "monochrome"]);
-        assert_eq!(hints[1].current_value.as_deref(), Some("dark"));
-        assert_eq!(hints[1].aliases, ["style"]);
-        assert_eq!(hints[1].examples, ["/theme light"]);
-        assert!(hints[2].requires_confirmation);
         assert_eq!(
-            hints[2].confirm_message.as_deref(),
+            hints[1].model_choices,
+            ["anthropic/claude-sonnet-4-20250514"]
+        );
+        assert_eq!(hints[2].choices, ["dark", "light", "monochrome"]);
+        assert_eq!(hints[2].current_value.as_deref(), Some("dark"));
+        assert_eq!(hints[2].aliases, ["style"]);
+        assert_eq!(hints[2].examples, ["/theme light"]);
+        assert!(hints[3].requires_confirmation);
+        assert_eq!(
+            hints[3].confirm_message.as_deref(),
             Some("This command changes local Craik state.")
         );
         assert_eq!(hints[0].cli_mirror.as_deref(), Some("run prompt"));
-        assert_eq!(hints[3].summary, "Show Gateway status.");
-        assert_eq!(hints[3].category, "Session");
+        assert_eq!(hints[4].summary, "Show Gateway status.");
+        assert_eq!(hints[4].category, "Session");
     }
 
     #[test]

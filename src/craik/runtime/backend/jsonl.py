@@ -13,6 +13,7 @@ from craik.runtime.backend.event_contract import (
     validate_gateway_event,
 )
 from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.gateway.slash_catalog import slash_catalog_entry
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
 from craik.runtime.modeling import ModelSettingsStore
@@ -22,9 +23,7 @@ from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
 )
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_slash_specs
 from craik.runtime.shell.readiness import resolve_readiness
-from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 from craik.runtime.shell.slash_commands import dispatch_slash_command
-from craik.runtime.shell.textual_widgets.theme_settings import current_theme
 from craik.runtime.store import LocalStore
 
 
@@ -181,7 +180,7 @@ def run_jsonl_gateway(
                         type="slash.catalog",
                         data={
                             "commands": [
-                                _slash_catalog_entry(spec, env) for spec in get_tui_slash_specs()
+                                slash_catalog_entry(spec, env) for spec in get_tui_slash_specs()
                             ],
                         },
                     )
@@ -249,67 +248,6 @@ def _contract_violation_message(
         "Gateway backend emitted invalid event "
         f"`{event_type}`: {format_gateway_event_contract_issues(issues)}"
     )
-
-
-def _slash_catalog_entry(
-    spec: SlashCommandSpec,
-    env: dict[str, str] | None,
-) -> dict[str, object]:
-    entry: dict[str, object] = {
-        "name": spec.command_name,
-        "usage": spec.usage,
-        "summary": spec.summary,
-        "aliases": list(spec.aliases),
-        "mutating": spec.mutating,
-        "requires_confirmation": spec.requires_confirmation,
-    }
-    if spec.cli_mirror:
-        entry["cli_mirror"] = spec.cli_mirror
-    if spec.confirm_message:
-        entry["confirm_message"] = spec.confirm_message
-    if spec.required_args:
-        entry["required_args"] = list(spec.required_args)
-    if spec.examples:
-        entry["examples"] = list(spec.examples)
-    elif spec.example:
-        entry["examples"] = [spec.example]
-    if spec.choices:
-        entry["choices"] = {key: list(values) for key, values in spec.choices.items()}
-    subcommands = _usage_subcommands(spec.usage)
-    if subcommands:
-        entry["subcommands"] = subcommands
-    current_value = _current_catalog_value(spec.command_name, env)
-    if current_value is not None:
-        entry["current_value"] = current_value
-    return entry
-
-
-def _usage_subcommands(usage: str) -> list[str]:
-    if "[" not in usage or "]" not in usage:
-        return []
-    inner = usage.split("[", 1)[1].split("]", 1)[0]
-    return [
-        token
-        for token in inner.replace("|", " ").split()
-        if not token.startswith("<")
-        and all(character.isalpha() or character == "-" for character in token)
-    ]
-
-
-def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str | None:
-    if command_name == "mode":
-        values = os.environ if env is None else env
-        return _display_permission_mode(values.get(CLAUDE_PERMISSION_MODE_ENV, "default"))
-    if command_name == "effort":
-        profile = ModelSettingsStore.from_env(env).load().active_profile
-        if profile is None:
-            return None
-        options = profile.options
-        effort = options.get("reasoning_effort") if isinstance(options, dict) else None
-        return effort if isinstance(effort, str) and effort.strip() else "default"
-    if command_name == "theme":
-        return current_theme(env)
-    return None
 
 
 def _session_status_data(env: dict[str, str] | None) -> dict[str, object]:
@@ -395,10 +333,6 @@ def _profile_status_data(profile: dict[str, object]) -> dict[str, object]:
 def _claude_permission_mode(env: dict[str, str] | None) -> str:
     values = os.environ if env is None else env
     return values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
-
-
-def _display_permission_mode(mode: str) -> str:
-    return "ask" if mode == "default" else mode
 
 
 def _required_text(message: dict[str, Any]) -> str:

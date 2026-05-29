@@ -403,6 +403,8 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert commands["clear"]["requires_confirmation"] is True
     assert commands["clear"]["confirm_message"].startswith("This discards")
     assert "set" in commands["model"]["subcommands"]
+    assert "anthropic/claude-sonnet-4-20250514" in commands["model"]["model_choices"]
+    assert "openai/gpt-5.2" in commands["model"]["model_choices"]
     assert commands["model"]["examples"] == [
         "/model set openai/gpt-4o-mini --reasoning-effort high"
     ]

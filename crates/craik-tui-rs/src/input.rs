@@ -13,6 +13,7 @@ pub struct SlashHint {
     pub category: String,
     pub aliases: Vec<String>,
     pub choices: Vec<String>,
+    pub model_choices: Vec<String>,
     pub subcommands: Vec<String>,
     pub requires_confirmation: bool,
     pub confirm_message: Option<String>,
@@ -32,6 +33,7 @@ impl SlashHint {
             category: category.to_owned(),
             aliases: Vec::new(),
             choices: Vec::new(),
+            model_choices: Vec::new(),
             subcommands: Vec::new(),
             requires_confirmation: false,
             confirm_message: None,
@@ -194,7 +196,8 @@ pub fn slash_completion_at(
     }
     let suggestions = slash_suggestion_rows(input, slash_catalog);
     let suggestion = suggestions.get(selected_index.min(suggestions.len().saturating_sub(1)))?;
-    if input.ends_with(' ') && suggestion.usage.split_whitespace().count() > 1 {
+    let drilldown_input = input.ends_with(' ') || input.split_whitespace().count() > 1;
+    if drilldown_input && suggestion.usage.split_whitespace().count() > 1 {
         return Some(format!("{} ", suggestion.usage));
     }
     let command = suggestion
@@ -214,11 +217,12 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
     if !input.starts_with('/') {
         return Vec::new();
     }
+    let ends_with_space = input.ends_with(' ');
     let trimmed = input.trim_start_matches('/');
-    let mut tokens = trimmed.split_whitespace();
-    let prefix = tokens.next().unwrap_or("");
+    let words = trimmed.split_whitespace().collect::<Vec<_>>();
+    let prefix = words.first().copied().unwrap_or("");
     let selected_command = input
-        .ends_with(' ')
+        .starts_with('/')
         .then(|| {
             slash_catalog
                 .iter()
@@ -226,7 +230,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
         })
         .flatten();
     if let Some(command) = selected_command {
-        let drilldown = command_drilldown_rows(command);
+        let drilldown = command_drilldown_rows(command, &words, ends_with_space);
         if !drilldown.is_empty() {
             return drilldown;
         }
@@ -296,7 +300,17 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
         .collect()
 }
 
-fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
+fn command_drilldown_rows(
+    hint: &SlashHint,
+    words: &[&str],
+    ends_with_space: bool,
+) -> Vec<SlashSuggestion> {
+    if hint.name == "model" {
+        return model_drilldown_rows(hint, words, ends_with_space);
+    }
+    if words.len() > 1 || !ends_with_space {
+        return Vec::new();
+    }
     let choices = if hint.choices.is_empty() {
         fallback_choices(&hint.name)
     } else {
@@ -346,6 +360,100 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
             query: String::new(),
         })
         .collect()
+}
+
+fn model_drilldown_rows(
+    hint: &SlashHint,
+    words: &[&str],
+    ends_with_space: bool,
+) -> Vec<SlashSuggestion> {
+    if words.len() <= 1 {
+        return hint
+            .subcommands
+            .iter()
+            .map(|subcommand| SlashSuggestion {
+                usage: format!("/{} {subcommand}", hint.name),
+                summary: "Subcommand.".to_owned(),
+                category: hint.category.clone(),
+                exact_prefix: false,
+                score: 1,
+                catalog_index: 0,
+                hint: "set ▸".to_owned(),
+                query: String::new(),
+            })
+            .collect();
+    }
+    let subcommand = words[1];
+    if subcommand != "set" {
+        return hint
+            .subcommands
+            .iter()
+            .filter(|candidate| candidate.starts_with(subcommand))
+            .map(|candidate| SlashSuggestion {
+                usage: format!("/{} {candidate}", hint.name),
+                summary: "Subcommand.".to_owned(),
+                category: hint.category.clone(),
+                exact_prefix: true,
+                score: 0,
+                catalog_index: 0,
+                hint: "set ▸".to_owned(),
+                query: subcommand.to_owned(),
+            })
+            .collect();
+    }
+    let query = if ends_with_space {
+        ""
+    } else {
+        words.get(2).copied().unwrap_or("")
+    };
+    let query_lower = query.to_lowercase();
+    let mut rows = hint
+        .model_choices
+        .iter()
+        .enumerate()
+        .filter_map(|(catalog_index, choice)| {
+            let choice_lower = choice.to_lowercase();
+            let prefix_match = query_lower.is_empty() || choice_lower.starts_with(&query_lower);
+            let fuzzy = (!query_lower.is_empty())
+                .then(|| fuzzy_subsequence_score(&query_lower, &choice_lower))
+                .flatten();
+            if !prefix_match && fuzzy.is_none() {
+                return None;
+            }
+            let current = hint.current_value.as_deref() == Some(choice.as_str());
+            Some(SlashSuggestion {
+                usage: format!("/model set {choice}"),
+                summary: if current {
+                    "Current model"
+                } else {
+                    "Available model."
+                }
+                .to_owned(),
+                category: hint.category.clone(),
+                exact_prefix: current,
+                score: if prefix_match {
+                    0
+                } else {
+                    fuzzy.unwrap_or(500)
+                },
+                catalog_index,
+                hint: if current {
+                    "● current".to_owned()
+                } else {
+                    "model".to_owned()
+                },
+                query: query.to_owned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| {
+        (
+            !query_lower.is_empty() && !row.usage["/model set ".len()..].starts_with(&query_lower),
+            row.score,
+            row.catalog_index,
+        )
+    });
+    rows.into_iter().take(MAX_SLASH_SUGGESTIONS).collect()
 }
 
 fn highlight_usage(usage: &str, query: &str, selected: bool) -> Vec<Span<'static>> {
@@ -710,6 +818,32 @@ mod tests {
         assert_eq!(
             slash_completion_at("/mode ", &catalog, 2).as_deref(),
             Some("/mode acceptEdits ")
+        );
+    }
+
+    #[test]
+    fn slash_completion_surfaces_model_set_choices() {
+        let mut model = SlashHint::new(
+            "model",
+            "/model [set <provider/model>]",
+            "Set model.",
+            "Run",
+        );
+        model.current_value = Some("anthropic/claude-opus-4-7".to_owned());
+        model.model_choices = vec![
+            "anthropic/claude-opus-4-7".to_owned(),
+            "openai/gpt-5.2".to_owned(),
+        ];
+        model.subcommands = vec!["set".to_owned()];
+        let catalog = vec![model];
+
+        assert_eq!(
+            slash_completion_at("/model ", &catalog, 0).as_deref(),
+            Some("/model set ")
+        );
+        assert_eq!(
+            slash_completion_at("/model set o", &catalog, 0).as_deref(),
+            Some("/model set openai/gpt-5.2 ")
         );
     }
 

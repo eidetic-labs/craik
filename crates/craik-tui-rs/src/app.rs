@@ -1031,6 +1031,9 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Enter => {
+                if self.accept_slash_selection_for_submit() {
+                    return LoopAction::Continue;
+                }
                 self.submit_input();
                 LoopAction::Continue
             }
@@ -1756,6 +1759,27 @@ impl InteractiveApp {
         }
     }
 
+    fn accept_slash_selection_for_submit(&mut self) -> bool {
+        if self.input_cursor != self.input.len() || !self.slash_palette_active() {
+            return false;
+        }
+        let Some(completion) =
+            slash_completion_at(&self.input, &self.slash_catalog, self.slash_selected_index)
+        else {
+            return false;
+        };
+        if completion == self.input {
+            return false;
+        }
+        self.input = completion;
+        self.input_cursor = self.input.len();
+        self.clamp_slash_selection();
+        if selected_slash_completion_is_executable(&self.input) {
+            self.submit_input();
+        }
+        true
+    }
+
     pub(crate) fn backspace(&mut self) {
         if self.input_cursor == 0 {
             return;
@@ -1892,8 +1916,17 @@ impl InteractiveApp {
             .as_deref()
             .map(display_permission_mode);
         let effort = self.active_effort_value();
+        let model = self.state.active_model.clone();
         for hint in &mut self.slash_catalog {
             match hint.name.as_str() {
+                "model" => {
+                    hint.current_value = model.clone();
+                    if let Some(model) = &model
+                        && !hint.model_choices.iter().any(|choice| choice == model)
+                    {
+                        hint.model_choices.insert(0, model.clone());
+                    }
+                }
                 "mode" => {
                     hint.current_value = mode.map(str::to_owned);
                 }
@@ -2823,6 +2856,19 @@ fn next_permission_mode(current: Option<&str>) -> &'static str {
         .position(|mode| *mode == current)
         .unwrap_or(0);
     PERMISSION_MODE_CYCLE[(index + 1) % PERMISSION_MODE_CYCLE.len()]
+}
+
+fn selected_slash_completion_is_executable(input: &str) -> bool {
+    let words = input.split_whitespace().collect::<Vec<_>>();
+    match words.as_slice() {
+        ["/model", "set", selector, ..] => selector.contains('/'),
+        ["/mode", _] | ["/effort", _] | ["/theme", _] => true,
+        [command] => !matches!(
+            *command,
+            "/model" | "/run" | "/policy" | "/migrate" | "/agent" | "/session"
+        ),
+        _ => false,
+    }
 }
 
 fn display_permission_mode(mode: &str) -> &str {
@@ -5000,9 +5046,64 @@ mod tests {
     }
 
     #[test]
+    fn enter_submits_selected_executable_slash_completion() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let mut model = SlashHint::new(
+            "model",
+            "/model [set <provider/model>]",
+            "Set model.",
+            "Run",
+        );
+        model.model_choices = vec![
+            "anthropic/claude-opus-4-7".to_owned(),
+            "openai/gpt-5.2".to_owned(),
+        ];
+        model.subcommands = vec!["set".to_owned()];
+        app.slash_catalog = vec![model];
+        app.input = "/model set o".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(
+            app.last_submitted_text.as_deref(),
+            Some("/model set openai/gpt-5.2")
+        );
+        assert!(app.input.is_empty());
+        assert!(app.in_flight);
+    }
+
+    #[test]
+    fn enter_completes_non_executable_slash_selection_without_submitting() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let mut model = SlashHint::new(
+            "model",
+            "/model [set <provider/model>]",
+            "Set model.",
+            "Run",
+        );
+        model.subcommands = vec!["set".to_owned()];
+        app.slash_catalog = vec![model];
+        app.input = "/model ".to_owned();
+        app.input_cursor = app.input.len();
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(app.input, "/model set ");
+        assert!(app.last_submitted_text.is_none());
+        assert!(!app.in_flight);
+    }
+
+    #[test]
     fn slash_catalog_current_values_refresh_after_state_changes() {
         let mut app = InteractiveApp::for_test_with_messages([]);
         app.slash_catalog = vec![
+            SlashHint::new(
+                "model",
+                "/model [set <provider/model>]",
+                "Set model.",
+                "Run",
+            ),
             SlashHint::new(
                 "mode",
                 "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
@@ -5032,8 +5133,12 @@ mod tests {
         app.state.apply_event(&event);
         app.refresh_slash_catalog_current_values();
 
-        assert_eq!(app.slash_catalog[0].current_value.as_deref(), Some("ask"));
-        assert_eq!(app.slash_catalog[1].current_value.as_deref(), Some("high"));
+        assert_eq!(
+            app.slash_catalog[0].current_value.as_deref(),
+            Some("anthropic/claude-opus-4-7")
+        );
+        assert_eq!(app.slash_catalog[1].current_value.as_deref(), Some("ask"));
+        assert_eq!(app.slash_catalog[2].current_value.as_deref(), Some("high"));
     }
 
     #[test]

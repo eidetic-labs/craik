@@ -181,15 +181,15 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         display_permission_mode(state.active_permission_mode.as_deref().unwrap_or("default"));
     let mut spans = vec![
         Span::styled(format!(" {mode} "), mode_pill_style(mode)),
-        Span::raw("  "),
+        Span::raw(" "),
         Span::styled(model, theme::primary_style()),
     ];
     if let Some(effort) = effort_label(state) {
-        spans.push(Span::raw("  "));
+        spans.push(Span::styled(" · ", theme::mute_style()));
         spans.push(Span::styled(effort.to_owned(), effort_style(effort)));
     }
     spans.extend([
-        Span::raw("  "),
+        Span::styled(" · ", theme::mute_style()),
         Span::styled(status_glyph(request_state), status_style(request_state)),
         Span::raw(" "),
         Span::styled(request_state, status_style(request_state)),
