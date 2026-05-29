@@ -344,6 +344,105 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
 }
 
 fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
+    if app.active_overlay == Some(app::ActiveOverlay::Approvals) {
+        render_approval_overlay(frame, app, area);
+        return;
+    }
+    render_browse_overlay(frame, app, area);
+}
+
+fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(area);
+    let list_area = body[0];
+    let detail_area = body[1];
+    let title = app
+        .overlay_title()
+        .unwrap_or_else(|| "▌OVERLAY  Esc returns to chat".to_owned());
+    let mut list_lines = vec![
+        Line::from(vec![
+            Span::styled("Filter ", theme::mute_style()),
+            Span::styled(
+                if app.overlay_filter.is_empty() {
+                    "type to narrow"
+                } else {
+                    app.overlay_filter.as_str()
+                },
+                if app.overlay_filter.is_empty() {
+                    theme::dim_style()
+                } else {
+                    theme::accent_style()
+                },
+            ),
+        ]),
+        Line::from(""),
+    ];
+    let items = app.overlay_items();
+    for (index, item) in items
+        .iter()
+        .enumerate()
+        .skip(app.overlay_scroll as usize)
+        .take(list_area.height.saturating_sub(5) as usize)
+    {
+        let selected = index == app.overlay_selected_index;
+        let marker = if selected { "▌ " } else { "  " };
+        let row_style = if selected {
+            theme::selected_style()
+        } else {
+            theme::primary_style()
+        };
+        list_lines.push(Line::from(vec![
+            Span::styled(
+                marker,
+                if selected {
+                    theme::accent_style()
+                } else {
+                    theme::mute_style()
+                },
+            ),
+            Span::styled(item.title.clone(), row_style),
+            Span::styled("  ", theme::mute_style()),
+            Span::styled(item.summary.clone(), theme::dim_style()),
+        ]));
+    }
+    if items.is_empty() {
+        list_lines.push(Line::from(Span::styled(
+            "No matching items.",
+            theme::dim_style(),
+        )));
+    }
+    let list = Paragraph::new(list_lines)
+        .block(
+            Block::default()
+                .title(title)
+                .title_style(theme::accent_style())
+                .border_style(theme::accent_style())
+                .borders(Borders::LEFT)
+                .padding(Padding::horizontal(1)),
+        )
+        .wrap(Wrap { trim: false });
+    let detail = Paragraph::new(app.selected_overlay_detail())
+        .block(
+            Block::default()
+                .title(app.overlay_footer_hint().unwrap_or("Esc chat"))
+                .title_style(theme::mute_style())
+                .border_style(theme::mute_style())
+                .borders(Borders::LEFT)
+                .padding(Padding::horizontal(1)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(Clear, area);
+    frame.render_widget(list, list_area);
+    frame.render_widget(detail, detail_area);
+}
+
+fn render_approval_overlay(
+    frame: &mut Frame<'_>,
+    app: &InteractiveApp,
+    area: ratatui::layout::Rect,
+) {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -363,7 +462,7 @@ fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
     let overlay_area = horizontal[1];
     let title = app
         .overlay_title()
-        .unwrap_or_else(|| "Overlay  Esc returns to chat".to_owned());
+        .unwrap_or_else(|| "▌APPROVALS  Esc returns to chat".to_owned());
     let body = app.overlay_text().unwrap_or_default();
     let overlay = Paragraph::new(body)
         .block(
@@ -642,8 +741,10 @@ mod tests {
 
         let rendered = render_app_frame(&app, 120, 34);
 
-        assert!(rendered.contains("Evidence  Esc returns to chat"));
-        assert!(rendered.contains("Recent receipts"));
+        assert!(rendered.contains("EVIDENCE"));
+        assert!(rendered.contains("Filter"));
+        assert!(rendered.contains("receipt_run_review_desktop_plan"));
+        assert!(rendered.contains("Ctrl-R runs"));
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Continue analysis"));
         assert!(rendered.contains("overlay evidence"));

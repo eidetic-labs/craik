@@ -31,6 +31,13 @@ pub(crate) enum ActiveOverlay {
     Approvals,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OverlayItem {
+    pub(crate) title: String,
+    pub(crate) summary: String,
+    pub(crate) detail: String,
+}
+
 impl ActiveOverlay {
     pub(crate) fn title(self) -> &'static str {
         match self {
@@ -38,6 +45,15 @@ impl ActiveOverlay {
             Self::Evidence => "Evidence",
             Self::Runs => "Runs",
             Self::Approvals => "Approvals",
+        }
+    }
+
+    pub(crate) fn footer_hint(self) -> &'static str {
+        match self {
+            Self::Memory => "Type filter  Up/Down select  Ctrl-E evidence  Esc chat",
+            Self::Evidence => "Type filter  Up/Down select  Ctrl-R runs  Esc chat",
+            Self::Runs => "Type filter  Up/Down select  Ctrl-L filter  Ctrl-O export  Esc chat",
+            Self::Approvals => "Ctrl-N/P select  Ctrl-A approve  Ctrl-X deny  Esc defer",
         }
     }
 }
@@ -144,6 +160,9 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
     pub(crate) active_overlay: Option<ActiveOverlay>,
+    pub(crate) overlay_filter: String,
+    pub(crate) overlay_selected_index: usize,
+    pub(crate) overlay_scroll: u16,
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
     pub(crate) search_match_index: Option<usize>,
@@ -185,6 +204,9 @@ impl InteractiveApp {
             expand_transcript_details: true,
             help_visible: false,
             active_overlay: None,
+            overlay_filter: String::new(),
+            overlay_selected_index: 0,
+            overlay_scroll: 0,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -238,6 +260,9 @@ impl InteractiveApp {
             expand_transcript_details: true,
             help_visible: false,
             active_overlay: None,
+            overlay_filter: String::new(),
+            overlay_selected_index: 0,
+            overlay_scroll: 0,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -456,104 +481,253 @@ impl InteractiveApp {
 
     pub(crate) fn overlay_title(&self) -> Option<String> {
         let overlay = self.active_overlay?;
-        Some(format!("{}  Esc returns to chat", overlay.title()))
+        let count = self.overlay_items().len();
+        Some(format!(
+            "▌{}  {} item(s)  Esc returns to chat",
+            overlay.title().to_uppercase(),
+            count
+        ))
+    }
+
+    pub(crate) fn overlay_footer_hint(&self) -> Option<&'static str> {
+        self.active_overlay.map(ActiveOverlay::footer_hint)
+    }
+
+    pub(crate) fn overlay_items(&self) -> Vec<OverlayItem> {
+        let Some(overlay) = self.active_overlay else {
+            return Vec::new();
+        };
+        let items = match overlay {
+            ActiveOverlay::Memory => self.memory_overlay_items(),
+            ActiveOverlay::Evidence => self.evidence_overlay_items(),
+            ActiveOverlay::Runs => self.runs_overlay_items(),
+            ActiveOverlay::Approvals => self.approvals_overlay_items(),
+        };
+        filter_overlay_items(items, &self.overlay_filter)
+    }
+
+    pub(crate) fn selected_overlay_detail(&self) -> String {
+        let items = self.overlay_items();
+        if items.is_empty() {
+            if self.overlay_filter.trim().is_empty() {
+                return "No items available yet.".to_owned();
+            }
+            return format!("No items match `{}`.", self.overlay_filter.trim());
+        }
+        items
+            .get(self.overlay_selected_index.min(items.len() - 1))
+            .map(|item| item.detail.clone())
+            .unwrap_or_else(|| "No item selected.".to_owned())
     }
 
     pub(crate) fn overlay_text(&self) -> Option<String> {
         let overlay = self.active_overlay?;
-        Some(match overlay {
-            ActiveOverlay::Memory => self.memory_overlay_text(),
-            ActiveOverlay::Evidence => self.evidence_overlay_text(),
-            ActiveOverlay::Runs => self.runs_overlay_text(),
-            ActiveOverlay::Approvals => self.approvals_overlay_text(),
-        })
+        let mut lines = vec![
+            format!("{} review", overlay.title()),
+            format!(
+                "  Filter: {}",
+                if self.overlay_filter.is_empty() {
+                    "none"
+                } else {
+                    self.overlay_filter.as_str()
+                }
+            ),
+            String::new(),
+        ];
+        let items = self.overlay_items();
+        for (index, item) in items
+            .iter()
+            .enumerate()
+            .skip(self.overlay_scroll as usize)
+            .take(10)
+        {
+            let marker = if index == self.overlay_selected_index {
+                "▌"
+            } else {
+                " "
+            };
+            lines.push(format!("{marker} {} — {}", item.title, item.summary));
+        }
+        lines.push(String::new());
+        lines.push(self.selected_overlay_detail());
+        Some(lines.join("\n"))
     }
 
-    fn memory_overlay_text(&self) -> String {
-        let mut lines = vec![
-            "Session memory context".to_owned(),
-            format!(
-                "  Provider: {}",
-                self.state
+    fn memory_overlay_items(&self) -> Vec<OverlayItem> {
+        vec![
+            OverlayItem {
+                title: "Provider".to_owned(),
+                summary: self
+                    .state
                     .active_provider_family
                     .as_deref()
                     .or(self.state.active_provider_id.as_deref())
                     .unwrap_or("not selected")
-            ),
-            format!(
-                "  Model: {}",
-                self.state
+                    .to_owned(),
+                detail: format!(
+                    "Provider\nFamily: {}\nID: {}",
+                    self.state
+                        .active_provider_family
+                        .as_deref()
+                        .unwrap_or("not selected"),
+                    self.state
+                        .active_provider_id
+                        .as_deref()
+                        .unwrap_or("not selected")
+                ),
+            },
+            OverlayItem {
+                title: "Model".to_owned(),
+                summary: self
+                    .state
                     .active_model_display_name
                     .as_deref()
                     .or(self.state.active_model.as_deref())
                     .unwrap_or("not selected")
+                    .to_owned(),
+                detail: format!(
+                    "Model\nDisplay: {}\nRaw: {}",
+                    self.state
+                        .active_model_display_name
+                        .as_deref()
+                        .unwrap_or("not selected"),
+                    self.state.active_model.as_deref().unwrap_or("not selected")
+                ),
+            },
+            OverlayItem {
+                title: "Last prompt".to_owned(),
+                summary: self
+                    .last_prompt_preview
+                    .as_deref()
+                    .unwrap_or("none submitted")
+                    .to_owned(),
+                detail: format!(
+                    "Last prompt\n{}",
+                    self.last_prompt_preview
+                        .as_deref()
+                        .unwrap_or("No prompt submitted in this session.")
+                ),
+            },
+            OverlayItem {
+                title: "Receipts".to_owned(),
+                summary: format!("{} available", self.state.receipt_ids.len()),
+                detail: format!("Receipts\n{}", join_recent(&self.state.receipt_ids)),
+            },
+            OverlayItem {
+                title: "Runs".to_owned(),
+                summary: format!("{} available", self.run_records.len()),
+                detail: format!(
+                    "Runs\n{}",
+                    self.run_records
+                        .iter()
+                        .rev()
+                        .take(8)
+                        .map(|run| run.run_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
+            },
+        ]
+    }
+
+    fn evidence_overlay_items(&self) -> Vec<OverlayItem> {
+        let mut items = Vec::new();
+        items.extend(
+            self.state
+                .receipt_ids
+                .iter()
+                .rev()
+                .map(|receipt| OverlayItem {
+                    title: receipt.clone(),
+                    summary: "receipt".to_owned(),
+                    detail: format!("Receipt\nID: {receipt}"),
+                }),
+        );
+        items.extend(self.state.file_paths.iter().rev().map(|path| OverlayItem {
+            title: path.clone(),
+            summary: "file".to_owned(),
+            detail: format!("File\nPath: {path}"),
+        }));
+        items.extend(self.state.commands.iter().rev().map(|command| OverlayItem {
+            title: command.clone(),
+            summary: "command".to_owned(),
+            detail: format!("Command\n{command}"),
+        }));
+        items.extend(self.state.tool_events.iter().rev().map(|tool| OverlayItem {
+            title: tool.label.clone(),
+            summary: tool.kind.clone(),
+            detail: format!(
+                "Tool\nKind: {}\nLabel: {}\n{}",
+                tool.kind,
+                tool.label,
+                tool.detail.as_deref().unwrap_or("No detail available.")
             ),
-            format!("  Receipts available: {}", self.state.receipt_ids.len()),
-            format!("  Runs available: {}", self.run_records.len()),
-        ];
-        if let Some(prompt) = self.last_prompt_preview.as_deref() {
-            lines.push(format!("  Last prompt: {prompt}"));
+        }));
+        if items.is_empty() {
+            items.push(OverlayItem {
+                title: "No evidence yet".to_owned(),
+                summary: "run a prompt to collect receipts".to_owned(),
+                detail: "Evidence will show receipts, files, commands, and tool events from Gateway runs.".to_owned(),
+            });
         }
-        lines.extend([
-            String::new(),
-            "Navigation".to_owned(),
-            "  Ctrl-E evidence  Ctrl-R runs  Ctrl-A approvals  Esc chat".to_owned(),
-        ]);
-        lines.join("\n")
+        items
     }
 
-    fn evidence_overlay_text(&self) -> String {
-        let mut lines = vec![
-            "Evidence".to_owned(),
-            format!("  Receipts: {}", self.state.receipt_ids.len()),
-            format!("  Tools: {}", self.state.tool_events.len()),
-            format!("  Files: {}", self.state.file_paths.len()),
-            format!("  Commands: {}", self.state.commands.len()),
-            format!("  Approvals seen: {}", self.state.approval_requests.len()),
-        ];
-        append_recent(&mut lines, "Recent receipts", &self.state.receipt_ids);
-        append_recent(&mut lines, "Recent files", &self.state.file_paths);
-        append_recent(&mut lines, "Recent commands", &self.state.commands);
-        lines.extend([
-            String::new(),
-            "Navigation".to_owned(),
-            "  Ctrl-R runs  Ctrl-M memory  Ctrl-A approvals  Esc chat".to_owned(),
-        ]);
-        lines.join("\n")
+    fn runs_overlay_items(&self) -> Vec<OverlayItem> {
+        let mut items = self
+            .filtered_run_indexes()
+            .into_iter()
+            .filter_map(|index| self.run_records.get(index).map(|run| (index, run)))
+            .map(|(index, run)| OverlayItem {
+                title: run.run_id.clone(),
+                summary: format!(
+                    "{} · {} receipt(s) · {} tool(s)",
+                    run.status.as_deref().unwrap_or("active"),
+                    run.receipts.len(),
+                    run.tools.len()
+                ),
+                detail: format!("{}\n\nIndex: {index}", run.detail_text()),
+            })
+            .collect::<Vec<_>>();
+        if items.is_empty() {
+            items.push(OverlayItem {
+                title: "No runs".to_owned(),
+                summary: format!("filter={}", self.run_filter.label()),
+                detail: self.selected_run_provenance(),
+            });
+        }
+        items
     }
 
-    fn runs_overlay_text(&self) -> String {
-        let mut lines = vec![
-            "Runs".to_owned(),
-            format!("  Filter: {}", self.run_filter.label()),
-            format!("  Total: {}", self.run_records.len()),
-            format!("  Visible: {}", self.filtered_run_indexes().len()),
-            "  Controls: Ctrl-J/K select  Ctrl-L filter  Ctrl-O export".to_owned(),
-            String::new(),
-        ];
-        if let Some(summary) = self.selected_run_summary() {
-            lines.push(format!("Selected: {summary}"));
+    fn approvals_overlay_items(&self) -> Vec<OverlayItem> {
+        let mut items = self
+            .pending_approvals
+            .iter()
+            .enumerate()
+            .map(|(index, approval)| OverlayItem {
+                title: if approval.id.is_empty() {
+                    format!("approval {}", index + 1)
+                } else {
+                    approval.id.clone()
+                },
+                summary: approval
+                    .target
+                    .as_deref()
+                    .or(approval.command.as_deref())
+                    .or(approval.tool.as_deref())
+                    .unwrap_or("review required")
+                    .to_owned(),
+                detail: approval.preview_text(self.state.receipt_ids.last().map(String::as_str)),
+            })
+            .collect::<Vec<_>>();
+        if items.is_empty() {
+            items.push(OverlayItem {
+                title: "No pending approvals".to_owned(),
+                summary: "queue empty".to_owned(),
+                detail: "Approvals requested by the Gateway will appear here with their real target, command, reason, and risk context.".to_owned(),
+            });
         }
-        lines.push(self.selected_run_provenance());
-        lines.join("\n")
-    }
-
-    fn approvals_overlay_text(&self) -> String {
-        let mut lines = vec![
-            "Approval review".to_owned(),
-            format!("  Pending: {}", self.pending_approvals.len()),
-            "  Controls: Ctrl-N/P select  Ctrl-A approve  Ctrl-X deny".to_owned(),
-            String::new(),
-        ];
-        if let Some(summary) = self.selected_approval_summary() {
-            lines.push(format!("Selected: {summary}"));
-        }
-        if let Some(preview) = self.selected_approval_preview() {
-            lines.push(preview);
-        } else {
-            lines.push("No pending approvals.".to_owned());
-        }
-        lines.join("\n")
+        items
     }
 
     pub(crate) fn prompt_context(&self) -> String {
@@ -604,6 +778,25 @@ impl InteractiveApp {
         self.pending_approvals.get(index)
     }
 
+    fn open_overlay(&mut self, overlay: ActiveOverlay) {
+        self.active_overlay = Some(overlay);
+        self.overlay_filter.clear();
+        self.overlay_selected_index = match overlay {
+            ActiveOverlay::Runs => self
+                .selected_run_index
+                .and_then(|selected| {
+                    self.filtered_run_indexes()
+                        .iter()
+                        .position(|index| *index == selected)
+                })
+                .unwrap_or_default(),
+            ActiveOverlay::Approvals => self.selected_approval_index.unwrap_or_default(),
+            _ => 0,
+        };
+        self.overlay_scroll = 0;
+        self.sync_overlay_selection();
+    }
+
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
         if self.help_visible {
             return self.handle_help_key(key);
@@ -649,11 +842,11 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Approvals);
+                self.open_overlay(ActiveOverlay::Approvals);
                 LoopAction::Continue
             }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Approvals);
+                self.open_overlay(ActiveOverlay::Approvals);
                 LoopAction::Continue
             }
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -701,15 +894,15 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Runs);
+                self.open_overlay(ActiveOverlay::Runs);
                 LoopAction::Continue
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Evidence);
+                self.open_overlay(ActiveOverlay::Evidence);
                 LoopAction::Continue
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Memory);
+                self.open_overlay(ActiveOverlay::Memory);
                 LoopAction::Continue
             }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -818,21 +1011,22 @@ impl InteractiveApp {
         match key.code {
             KeyCode::Esc => {
                 self.active_overlay = None;
+                self.overlay_filter.clear();
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Memory);
+                self.open_overlay(ActiveOverlay::Memory);
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Evidence);
+                self.open_overlay(ActiveOverlay::Evidence);
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.active_overlay = Some(ActiveOverlay::Runs);
+                self.open_overlay(ActiveOverlay::Runs);
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.active_overlay == Some(ActiveOverlay::Approvals) {
                     self.approve_selected();
                 } else {
-                    self.active_overlay = Some(ActiveOverlay::Approvals);
+                    self.open_overlay(ActiveOverlay::Approvals);
                 }
             }
             KeyCode::Char('x')
@@ -854,10 +1048,10 @@ impl InteractiveApp {
                 self.select_previous_approval();
             }
             KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.select_next_run();
+                self.select_next_overlay_item();
             }
             KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.select_previous_run();
+                self.select_previous_overlay_item();
             }
             KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.cycle_run_filter();
@@ -866,10 +1060,29 @@ impl InteractiveApp {
                 self.export_selected_run();
             }
             KeyCode::PageUp => {
-                self.scroll_transcript_up();
+                self.overlay_scroll = self.overlay_scroll.saturating_sub(6);
             }
             KeyCode::PageDown => {
-                self.scroll_transcript_down();
+                self.overlay_scroll = self.overlay_scroll.saturating_add(6);
+                self.clamp_overlay_scroll();
+            }
+            KeyCode::Up => {
+                self.select_previous_overlay_item();
+            }
+            KeyCode::Down => {
+                self.select_next_overlay_item();
+            }
+            KeyCode::Backspace => {
+                self.overlay_filter.pop();
+                self.overlay_selected_index = 0;
+                self.overlay_scroll = 0;
+                self.sync_overlay_selection();
+            }
+            KeyCode::Char(ch) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.overlay_filter.push(ch);
+                self.overlay_selected_index = 0;
+                self.overlay_scroll = 0;
+                self.sync_overlay_selection();
             }
             _ => {}
         }
@@ -1869,6 +2082,74 @@ impl InteractiveApp {
         self.selected_approval_index = Some(previous);
     }
 
+    fn select_next_overlay_item(&mut self) {
+        let items = self.overlay_items();
+        if items.is_empty() {
+            self.overlay_selected_index = 0;
+            return;
+        }
+        self.overlay_selected_index = (self.overlay_selected_index + 1) % items.len();
+        self.sync_overlay_selection();
+    }
+
+    fn select_previous_overlay_item(&mut self) {
+        let items = self.overlay_items();
+        if items.is_empty() {
+            self.overlay_selected_index = 0;
+            return;
+        }
+        self.overlay_selected_index = if self.overlay_selected_index == 0 {
+            items.len() - 1
+        } else {
+            self.overlay_selected_index - 1
+        };
+        self.sync_overlay_selection();
+    }
+
+    fn sync_overlay_selection(&mut self) {
+        let items = self.overlay_items();
+        if items.is_empty() {
+            self.overlay_selected_index = 0;
+            self.overlay_scroll = 0;
+            return;
+        }
+        self.overlay_selected_index = self.overlay_selected_index.min(items.len() - 1);
+        self.clamp_overlay_scroll();
+        match self.active_overlay {
+            Some(ActiveOverlay::Runs) => {
+                let title = &items[self.overlay_selected_index].title;
+                self.selected_run_index =
+                    self.run_records.iter().position(|run| run.run_id == *title);
+                self.auto_select_latest_run = false;
+            }
+            Some(ActiveOverlay::Approvals) => {
+                let title = &items[self.overlay_selected_index].title;
+                self.selected_approval_index = self
+                    .pending_approvals
+                    .iter()
+                    .position(|approval| approval.id == *title);
+            }
+            _ => {}
+        }
+    }
+
+    fn clamp_overlay_scroll(&mut self) {
+        let len = self.overlay_items().len() as u16;
+        if len == 0 {
+            self.overlay_scroll = 0;
+            return;
+        }
+        self.overlay_scroll = self.overlay_scroll.min(len.saturating_sub(1));
+        if (self.overlay_selected_index as u16) < self.overlay_scroll {
+            self.overlay_scroll = self.overlay_selected_index as u16;
+        }
+        let visible_window = 10_u16;
+        if (self.overlay_selected_index as u16) >= self.overlay_scroll + visible_window {
+            self.overlay_scroll = (self.overlay_selected_index as u16)
+                .saturating_sub(visible_window.saturating_sub(1));
+        }
+    }
+
     pub(crate) fn select_next_run(&mut self) {
         let visible = self.filtered_run_indexes();
         if visible.is_empty() {
@@ -2257,19 +2538,32 @@ fn push_optional_bullet(lines: &mut Vec<String>, label: &str, value: Option<&str
     }
 }
 
-fn append_recent(lines: &mut Vec<String>, title: &str, values: &[String]) {
-    if values.is_empty() {
-        return;
+fn filter_overlay_items(items: Vec<OverlayItem>, query: &str) -> Vec<OverlayItem> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return items;
     }
-    lines.push(String::new());
-    lines.push(title.to_owned());
-    lines.extend(
-        values
-            .iter()
-            .rev()
-            .take(5)
-            .map(|value| format!("  {value}")),
-    );
+    items
+        .into_iter()
+        .filter(|item| {
+            item.title.to_lowercase().contains(&query)
+                || item.summary.to_lowercase().contains(&query)
+                || item.detail.to_lowercase().contains(&query)
+        })
+        .collect()
+}
+
+fn join_recent(values: &[String]) -> String {
+    if values.is_empty() {
+        return "None".to_owned();
+    }
+    values
+        .iter()
+        .rev()
+        .take(8)
+        .map(|value| format!("- {value}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn push_markdown_section(lines: &mut Vec<String>, title: &str, values: &[String]) {
@@ -2566,7 +2860,7 @@ mod tests {
     use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
-    use craik_tui_rs::GatewayEvent;
+    use craik_tui_rs::{ActivityItem, GatewayEvent};
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
     use std::collections::VecDeque;
@@ -3588,7 +3882,7 @@ mod tests {
         assert!(
             app.overlay_text()
                 .expect("memory overlay")
-                .contains("Session memory")
+                .contains("Memory review")
         );
 
         app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
@@ -3649,6 +3943,57 @@ mod tests {
                 .iter()
                 .any(|entry| entry.title == "Approving")
         );
+    }
+
+    #[test]
+    fn overlay_filter_narrows_evidence_and_selected_detail() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.state.receipt_ids = vec!["receipt_1".to_owned()];
+        app.state.file_paths = vec!["src/main.rs".to_owned()];
+        app.state.commands = vec!["cargo test".to_owned()];
+        app.state.tool_events = vec![ActivityItem {
+            kind: "tool".to_owned(),
+            label: "Bash".to_owned(),
+            detail: Some("Command completed.".to_owned()),
+        }];
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Evidence));
+        assert!(app.overlay_items().len() >= 4);
+
+        for ch in "cargo".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE));
+        }
+
+        let items = app.overlay_items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, "cargo test");
+        assert!(app.selected_overlay_detail().contains("Command"));
+    }
+
+    #[test]
+    fn runs_overlay_selection_updates_selected_run() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.run_records = vec![
+            RunRecord {
+                run_id: "run_one".to_owned(),
+                status: Some("completed".to_owned()),
+                ..RunRecord::default()
+            },
+            RunRecord {
+                run_id: "run_two".to_owned(),
+                status: Some("running".to_owned()),
+                ..RunRecord::default()
+            },
+        ];
+        app.selected_run_index = Some(0);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Runs));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+
+        assert_eq!(app.selected_run_index, Some(1));
+        assert!(app.selected_overlay_detail().contains("run_two"));
     }
 
     #[test]
