@@ -201,13 +201,7 @@ impl InteractiveApp {
             state: GatewayAppState::default(),
             input: String::new(),
             input_cursor: 0,
-            transcript: vec![
-                TranscriptEntry::system("Craik Ratatui client", "Gateway session connected."),
-                TranscriptEntry::system(
-                    "Input",
-                    "Type a prompt or slash command. Alt-Enter inserts a newline. Ctrl-C exits.",
-                ),
-            ],
+            transcript: Vec::new(),
             transcript_scroll: 0,
             transcript_focused: false,
             expand_transcript_details: true,
@@ -1224,20 +1218,25 @@ impl InteractiveApp {
     pub(crate) fn record_event(&mut self, event: &GatewayEvent) {
         self.record_run_event(event);
         match event.event_type.as_str() {
-            "session.ready" => {
+            "session.ready"
+                if event
+                    .data
+                    .get("state")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|state| state != "ready") =>
+            {
                 self.transcript.push(TranscriptEntry::system(
                     "Gateway",
                     &summarize_session_ready_event(event),
                 ));
             }
+            "session.ready" => {}
             "session.status" => {
                 let state = event
                     .data
                     .get("state")
                     .and_then(|value| value.as_str())
                     .unwrap_or("unknown");
-                self.transcript
-                    .push(TranscriptEntry::system("Readiness", state));
                 if state != "ready" {
                     self.transcript.push(TranscriptEntry::system(
                         "Run blocked",
@@ -1246,17 +1245,7 @@ impl InteractiveApp {
                 }
             }
             "session.history" => {
-                let receipts = event
-                    .data
-                    .get("receipts")
-                    .and_then(|value| value.as_array())
-                    .map(Vec::len)
-                    .unwrap_or_default();
                 self.record_history_event(event);
-                self.transcript.push(TranscriptEntry::system(
-                    "Session history",
-                    &format!("Loaded {receipts} persisted receipt records."),
-                ));
             }
             "slash.catalog" => {
                 self.slash_catalog = slash_hints_from_event(event);
@@ -1268,26 +1257,13 @@ impl InteractiveApp {
                     .and_then(|value| value.as_str())
                     .unwrap_or("prompt submitted");
                 self.last_prompt_preview = Some(preview.to_owned());
-                self.transcript
-                    .push(TranscriptEntry::progress("Submitted", preview));
             }
-            "model.selected" | "model.changed" => {
-                self.transcript.push(TranscriptEntry::system(
-                    "Model selected",
-                    &summarize_model_event(event),
-                ));
-            }
-            "run.started" => {
-                let run_id = event.run_id.as_deref().unwrap_or("run");
-                self.transcript.push(TranscriptEntry::progress(
-                    &format!("Run {run_id} started"),
-                    &summarize_run_event(event, run_id),
-                ));
-            }
+            "model.selected" | "model.changed" => {}
+            "run.started" => {}
             "run.progress" => {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str())
                     && !should_hide_transcript_event(event)
-                    && !is_tool_progress_message(message)
+                    && should_show_progress_message(event, message)
                 {
                     self.transcript
                         .push(TranscriptEntry::progress("Progress", message));
@@ -1318,16 +1294,7 @@ impl InteractiveApp {
                 }
             }
             "run.working" => {
-                let phase = event
-                    .data
-                    .get("phase")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("working");
-                self.transcript.push(TranscriptEntry::progress(
-                    "Run state",
-                    &summarize_working_event(event, phase),
-                ));
-                self.follow_tail_after_transcript_update();
+                // Routine working phases are reflected in footer/run detail, not the chat lane.
             }
             "file.changed" => {
                 let target = event
@@ -1455,13 +1422,18 @@ impl InteractiveApp {
                     if should_hide_transcript_event(event) {
                         return;
                     }
-                    let kind = match event.data.get("kind").and_then(|value| value.as_str()) {
+                    let event_kind = event.data.get("kind").and_then(|value| value.as_str());
+                    let kind = match event_kind {
                         Some("tool_result") => TranscriptKind::Tool,
                         _ => TranscriptKind::Assistant,
                     };
+                    let title = match event_kind {
+                        Some("tool_result") => "Tool result",
+                        _ => "Assistant",
+                    };
                     if !recent_transcript_body_matches(&self.transcript, text) {
                         self.transcript
-                            .push(TranscriptEntry::new(kind, "Event", text));
+                            .push(TranscriptEntry::new(kind, title, text));
                         self.follow_tail_after_transcript_update();
                     }
                 }
@@ -1473,10 +1445,12 @@ impl InteractiveApp {
                     .get("status")
                     .and_then(|value| value.as_str())
                     .unwrap_or("completed");
-                self.transcript.push(TranscriptEntry::progress(
-                    "Run completed",
-                    &summarize_run_event(event, status),
-                ));
+                if status != "completed" {
+                    self.transcript.push(TranscriptEntry::progress(
+                        "Run completed",
+                        &summarize_run_event(event, status),
+                    ));
+                }
                 if status == "completed" && self.state.outputs.is_empty() {
                     self.transcript.push(TranscriptEntry::system(
                         "No model output",
@@ -2556,34 +2530,6 @@ impl RunRecord {
     }
 }
 
-fn summarize_model_event(event: &GatewayEvent) -> String {
-    let mut lines = Vec::new();
-    push_optional_data_line(&mut lines, event, "Display", "display_name");
-    push_optional_data_line(&mut lines, event, "Model", "model");
-    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
-    push_optional_data_line(&mut lines, event, "Family", "provider_family");
-    push_optional_data_line(&mut lines, event, "Backend", "backend");
-    if let Some(live_enabled) = event
-        .data
-        .get("live_enabled")
-        .and_then(|value| value.as_bool())
-    {
-        lines.push(format!("Live: {live_enabled}"));
-    }
-    if let Some(profile) = event
-        .data
-        .get("profile")
-        .and_then(|value| value.as_object())
-        && let Some(profile_name) = profile.get("name").and_then(|value| value.as_str())
-    {
-        lines.push(format!("Profile: {profile_name}"));
-    }
-    if lines.is_empty() {
-        lines.push("Model: selected".to_owned());
-    }
-    lines.join("\n")
-}
-
 fn summarize_session_ready_event(event: &GatewayEvent) -> String {
     let mut lines = vec!["Session ready.".to_owned()];
     push_optional_data_line(&mut lines, event, "Transport", "transport");
@@ -2638,15 +2584,6 @@ fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     if lines.is_empty() {
         lines.push(format!("Detail: {fallback}"));
     }
-    lines.join("\n")
-}
-
-fn summarize_working_event(event: &GatewayEvent, phase: &str) -> String {
-    let mut lines = vec![format!("Phase: {phase}")];
-    push_optional_data_line(&mut lines, event, "Backend", "backend");
-    push_optional_data_line(&mut lines, event, "Provider", "provider_id");
-    push_optional_data_line(&mut lines, event, "Model", "model");
-    push_optional_data_line(&mut lines, event, "Detail", "message");
     lines.join("\n")
 }
 
@@ -2865,9 +2802,30 @@ fn should_hide_transcript_event(event: &GatewayEvent) -> bool {
     )
 }
 
-fn is_tool_progress_message(message: &str) -> bool {
+fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
+    if event
+        .data
+        .get("transcript_visibility")
+        .and_then(|value| value.as_str())
+        == Some("visible")
+    {
+        return true;
+    }
+    if event
+        .data
+        .get("level")
+        .and_then(|value| value.as_str())
+        .is_some_and(|level| matches!(level, "warning" | "error"))
+    {
+        return true;
+    }
     let normalized = normalize_transcript_text(message);
-    normalized.contains(" is using ")
+    let lower = normalized.to_ascii_lowercase();
+    lower.contains("warning")
+        || lower.contains("error")
+        || lower.contains("failed")
+        || lower.contains("blocked")
+        || lower.contains("denied")
 }
 
 fn recent_transcript_body_matches(entries: &[TranscriptEntry], body: &str) -> bool {
@@ -3507,17 +3465,22 @@ mod tests {
         assert!(
             app.transcript
                 .iter()
-                .any(|entry| entry.title == "Run state" && entry.body.contains("thinking"))
-        );
-        assert!(
-            app.transcript
-                .iter()
                 .any(|entry| entry.title == "Approval approved")
         );
         assert!(
             app.transcript
                 .iter()
-                .any(|entry| entry.title == "Run completed")
+                .all(|entry| entry.title != "Run completed")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "Run state")
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "Submitted")
         );
         assert!(
             app.transcript
@@ -4123,7 +4086,7 @@ mod tests {
         assert!(
             app.transcript
                 .iter()
-                .any(|entry| entry.title == "Run state" && entry.body.contains("thinking"))
+                .all(|entry| entry.title != "Run state")
         );
     }
 
@@ -4376,7 +4339,7 @@ mod tests {
     }
 
     #[test]
-    fn model_and_receipt_events_surface_provider_context() {
+    fn model_events_update_state_and_receipts_surface_provider_context() {
         let model = GatewayEvent {
             event_type: "model.selected".to_owned(),
             created_at: None,
@@ -4403,22 +4366,20 @@ mod tests {
         };
         let mut app = InteractiveApp::for_test_with_messages([]);
 
+        app.state.apply_event(&model);
         app.record_event(&model);
         app.record_event(&receipt);
 
-        let model_entry = app
-            .transcript
-            .iter()
-            .find(|entry| entry.title == "Model selected")
-            .expect("model transcript entry");
-        assert!(
-            model_entry
-                .body
-                .contains("Display: Anthropic Claude Opus 4.7")
+        assert_eq!(app.state.active_model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(
+            app.state.active_provider_id.as_deref(),
+            Some("provider_anthropic")
         );
-        assert!(model_entry.body.contains("Provider: provider_anthropic"));
-        assert!(model_entry.body.contains("Family: anthropic"));
-        assert!(model_entry.body.contains("Live: true"));
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "Model selected")
+        );
 
         let receipt_entry = app.transcript.last().expect("receipt transcript entry");
         assert_eq!(receipt_entry.title, "Receipt created");
@@ -4433,7 +4394,7 @@ mod tests {
     }
 
     #[test]
-    fn session_ready_surfaces_protocol_context() {
+    fn session_ready_updates_state_without_crowding_transcript() {
         let ready = GatewayEvent {
             event_type: "session.ready".to_owned(),
             created_at: None,
@@ -4449,11 +4410,7 @@ mod tests {
 
         app.record_event(&ready);
 
-        let entry = app.transcript.last().expect("ready transcript entry");
-        assert_eq!(entry.title, "Gateway");
-        assert!(entry.body.contains("Transport: jsonl.stdio"));
-        assert!(entry.body.contains("Protocol: craik.tui.gateway"));
-        assert!(entry.body.contains("Version: 1"));
+        assert!(app.transcript.is_empty());
     }
 
     #[test]
