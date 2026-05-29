@@ -456,22 +456,27 @@ fn render_approval_overlay(
     let horizontal = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(7),
-            Constraint::Percentage(86),
-            Constraint::Percentage(7),
+            Constraint::Percentage(12),
+            Constraint::Percentage(76),
+            Constraint::Percentage(12),
         ])
         .split(vertical[1]);
     let overlay_area = horizontal[1];
-    let title = app
-        .overlay_title()
-        .unwrap_or_else(|| "▌APPROVALS  Esc returns to chat".to_owned());
     let body = app.overlay_text().unwrap_or_default();
+    let title = approval_overlay_title(&body);
+    let border_style = if body.contains("Warning:") {
+        Style::default()
+            .fg(theme::amber())
+            .add_modifier(Modifier::BOLD)
+    } else {
+        theme::accent_style()
+    };
     let overlay = Paragraph::new(approval_overlay_lines(&body))
         .block(
             Block::default()
                 .title(title)
-                .title_style(theme::accent_style())
-                .border_style(theme::accent_style())
+                .title_style(border_style)
+                .border_style(border_style)
                 .borders(Borders::ALL)
                 .padding(Padding::horizontal(1)),
         )
@@ -479,6 +484,19 @@ fn render_approval_overlay(
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, overlay_area);
     frame.render_widget(overlay, overlay_area);
+}
+
+fn approval_overlay_title(body: &str) -> Line<'static> {
+    let origin = body
+        .lines()
+        .find_map(|line| line.strip_prefix("Origin: "))
+        .unwrap_or("unknown origin");
+    Line::from(vec![
+        Span::styled("▌Approval required", theme::accent_style()),
+        Span::styled("  ", theme::mute_style()),
+        Span::styled(origin.to_owned(), theme::dim_style()),
+        Span::styled("  Esc defer", theme::mute_style()),
+    ])
 }
 
 fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
@@ -514,6 +532,18 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             }
             if line == "Review required" || line == "Preview" {
                 return Line::from(Span::styled(line.to_owned(), theme::accent_style()));
+            }
+            if let Some(diff) = line.strip_prefix("  +") {
+                return Line::from(vec![
+                    Span::styled("  +", Style::default().fg(theme::sage())),
+                    Span::styled(diff.to_owned(), Style::default().fg(theme::sage())),
+                ]);
+            }
+            if let Some(diff) = line.strip_prefix("  -") {
+                return Line::from(vec![
+                    Span::styled("  -", Style::default().fg(theme::red())),
+                    Span::styled(diff.to_owned(), Style::default().fg(theme::red())),
+                ]);
             }
             if let Some((label, value)) = line.split_once(':') {
                 return Line::from(vec![
@@ -711,8 +741,8 @@ fn usage() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        InteractiveApp, Terminal, TestBackend, approval_overlay_lines, draw_interactive_frame,
-        input_panel_height, input_title,
+        InteractiveApp, Terminal, TestBackend, approval_overlay_lines, approval_overlay_title,
+        draw_interactive_frame, input_panel_height, input_title,
     };
     use crate::{
         app::ActiveOverlay,
@@ -811,7 +841,7 @@ mod tests {
     #[test]
     fn approval_overlay_lines_preserve_decision_labels() {
         let lines = approval_overlay_lines(
-            "Review required\nQueue: 1 of 2 pending\nWarning: risky\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
+            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
         );
         let rendered = lines
             .iter()
@@ -820,9 +850,26 @@ mod tests {
             .collect::<String>();
 
         assert!(rendered.contains("Queue: 1 of 2 pending"));
+        assert!(rendered.contains("  - old"));
+        assert!(rendered.contains("  + new"));
         assert!(rendered.contains("[Ctrl-A] approve"));
         assert!(rendered.contains("[Ctrl-X] deny"));
         assert!(rendered.contains("[Esc] defer"));
+    }
+
+    #[test]
+    fn approval_overlay_title_surfaces_origin() {
+        let title =
+            approval_overlay_title("Review required\nOrigin: claude-code\nQueue: 1 of 1 pending");
+        let rendered = title
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert!(rendered.contains("Approval required"));
+        assert!(rendered.contains("claude-code"));
+        assert!(rendered.contains("Esc defer"));
     }
 
     #[test]
