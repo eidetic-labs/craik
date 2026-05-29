@@ -5,6 +5,7 @@ from craik.runtime.modeling.settings import (
     ModelSettings,
     ModelSettingsStore,
     model_profile_from_ref,
+    readable_model_name,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "ModelSettings",
     "ModelSettingsStore",
     "model_profile_from_ref",
+    "readable_model_name",
 ]

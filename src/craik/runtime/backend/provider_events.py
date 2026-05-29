@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from craik.runtime.backend.events import BackendEvent
-from craik.runtime.modeling import ModelProfile
+from craik.runtime.modeling import ModelProfile, readable_model_name
 from craik.runtime.providers.model_providers import default_model_provider_registry
 from craik.runtime.providers.provider_runner import ProviderBackedRunResult
 
@@ -33,7 +33,10 @@ def model_display_name(
         return profile.display_name
     provider = default_model_provider_registry().get(provider_id)
     provider_name = provider.name if provider is not None else provider_id
-    return f"{provider_name} {model}" if model else provider_name
+    if model:
+        family = provider.provider if provider is not None else provider_id
+        return readable_model_name(family, model)
+    return provider_name
 
 
 def provider_tool_call_events(

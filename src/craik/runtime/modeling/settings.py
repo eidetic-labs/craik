@@ -148,14 +148,15 @@ def _profiles_from_payload(value: object) -> dict[str, ModelProfile]:
         if provider_id is None or provider_family is None or model is None or display_name is None:
             continue
         options = raw_profile.get("options", {})
+        options = options if isinstance(options, dict) else {}
         profiles[key] = ModelProfile(
             id=_string_or_none(raw_profile.get("id")) or key,
             provider_id=provider_id,
             provider_family=provider_family,
             model=model,
-            display_name=display_name,
+            display_name=_repair_display_name(provider_family, model, display_name, options),
             backend=_string_or_none(raw_profile.get("backend")) or "provider",
-            options=options if isinstance(options, dict) else {},
+            options=options,
         )
     return profiles
 
@@ -209,6 +210,115 @@ def _profile_id(provider_family: str, model: str, options: dict[str, object]) ->
 
 
 def _display_name(provider_family: str, model: str, options: dict[str, object]) -> str:
+    effort = options.get("reasoning_effort")
+    effort_label = f" {str(effort).title()}" if isinstance(effort, str) and effort else ""
+    return f"{readable_model_name(provider_family, model)}{effort_label}"
+
+
+def readable_model_name(provider_family: str, model: str) -> str:
+    """Return a human-oriented model label while preserving the raw id elsewhere."""
+    normalized_family = provider_family.replace("_", "-").lower()
+    if normalized_family == "anthropic":
+        return _readable_anthropic_model(model)
+    if normalized_family == "openai":
+        return _readable_openai_model(model)
+    if normalized_family == "gemini":
+        return _readable_gemini_model(model)
+    provider_label = {
+        "ollama": "Ollama",
+        "lm-studio": "LM Studio",
+        "vllm": "vLLM",
+        "local": "Local",
+        "chat-completions": "Local",
+        "chat_completions": "Local",
+    }.get(normalized_family, provider_family.replace("_", " ").replace("-", " ").title())
+    readable_model = _title_model_tokens(model)
+    return f"{provider_label} {readable_model}" if readable_model else provider_label
+
+
+def _readable_anthropic_model(model: str) -> str:
+    model_id = _strip_provider_prefix(model)
+    tokens = _drop_date_suffix(model_id.split("-"))
+    if tokens and tokens[0] == "claude":
+        tokens = tokens[1:]
+    if not tokens:
+        return "Claude"
+    family = tokens[0].title()
+    version = _version_from_tokens(tokens[1:])
+    return f"Claude {family} {version}".strip()
+
+
+def _readable_openai_model(model: str) -> str:
+    model_id = _strip_provider_prefix(model)
+    if model_id.startswith("gpt-"):
+        return f"GPT-{model_id.removeprefix('gpt-').upper()}"
+    return _title_model_tokens(model_id)
+
+
+def _readable_gemini_model(model: str) -> str:
+    model_id = _strip_provider_prefix(model)
+    tokens = model_id.split("-")
+    if tokens and tokens[0] == "gemini":
+        tokens = tokens[1:]
+    suffix = _title_model_tokens("-".join(tokens))
+    return f"Gemini {suffix}".strip()
+
+
+def _title_model_tokens(model: str) -> str:
+    return " ".join(_readable_token(token) for token in model.replace(":", "-").split("-") if token)
+
+
+def _readable_token(token: str) -> str:
+    lower = token.lower()
+    if lower.startswith("gpt"):
+        return token.upper()
+    if lower.startswith("llama") and len(lower) > len("llama"):
+        return f"Llama {token[len('llama') :]}"
+    if lower in {"pro", "mini", "preview", "turbo", "instruct"}:
+        return lower.title()
+    return token.upper() if token.isupper() else token.title()
+
+
+def _version_from_tokens(tokens: list[str]) -> str:
+    version_parts: list[str] = []
+    labels: list[str] = []
+    for token in tokens:
+        if token.isdigit() or _is_decimal(token):
+            version_parts.append(token)
+        else:
+            labels.append(_readable_token(token))
+    version = ".".join(version_parts)
+    label = " ".join(labels)
+    return " ".join(part for part in [version, label] if part)
+
+
+def _drop_date_suffix(tokens: list[str]) -> list[str]:
+    if tokens and len(tokens[-1]) == 8 and tokens[-1].isdigit():
+        return tokens[:-1]
+    return tokens
+
+
+def _strip_provider_prefix(model: str) -> str:
+    return model.split("/", 1)[1] if "/" in model else model
+
+
+def _is_decimal(value: str) -> bool:
+    return bool(value) and all(part.isdigit() for part in value.split("."))
+
+
+def _repair_display_name(
+    provider_family: str,
+    model: str,
+    display_name: str,
+    options: dict[str, object],
+) -> str:
+    legacy_name = _legacy_display_name(provider_family, model, options)
+    if display_name == legacy_name:
+        return _display_name(provider_family, model, options)
+    return display_name
+
+
+def _legacy_display_name(provider_family: str, model: str, options: dict[str, object]) -> str:
     provider_label = {
         "anthropic": "Anthropic Claude",
         "openai": "OpenAI",

@@ -4,6 +4,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
+use crate::model_names::readable_model_label;
 use crate::theme;
 
 #[cfg(test)]
@@ -176,7 +177,7 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         metrics.queued_inputs,
         metrics.active_overlay.is_some(),
     );
-    let model = compact_model_label(model_label(state, "model not selected"));
+    let model = compact_model_label(&model_label(state, "model not selected"));
     let mode =
         display_permission_mode(state.active_permission_mode.as_deref().unwrap_or("default"));
     let mut spans = vec![
@@ -409,12 +410,15 @@ fn display_permission_mode(mode: &str) -> &str {
     if mode == "default" { "ask" } else { mode }
 }
 
-fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
-    state
-        .active_model_display_name
-        .as_deref()
-        .or(state.active_model.as_deref())
-        .unwrap_or(fallback)
+fn model_label(state: &GatewayAppState, fallback: &str) -> String {
+    if state.active_model.is_none() && state.active_model_display_name.is_none() {
+        return fallback.to_owned();
+    }
+    readable_model_label(
+        state.active_provider_family.as_deref(),
+        state.active_model.as_deref(),
+        state.active_model_display_name.as_deref(),
+    )
 }
 
 #[cfg(test)]
@@ -614,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn status_line_uses_raw_model_when_display_name_missing() {
+    fn status_line_humanizes_model_when_display_name_missing() {
         let state = GatewayAppState {
             active_model: Some("anthropic/claude-sonnet".to_owned()),
             ..GatewayAppState::default()
@@ -629,7 +633,7 @@ mod tests {
         )
         .to_string();
 
-        assert!(rendered.contains("claude-sonnet"));
+        assert!(rendered.contains("Claude Sonnet"));
         assert!(rendered.contains("working"));
     }
 
