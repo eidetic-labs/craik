@@ -240,6 +240,9 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
                     '{"type":"approval_request","tool_name":"Edit",'
                     '"target":"README.md","reason":"write docs"}\n'
                 ),
+                '{"type":"user","message":{"content":"ignored lifecycle echo"}}\n',
+                '{"type":"rate_limit_event","message":"rate limit metadata"}\n',
+                '{"type":"system","subtype":"thinking_tokens"}\n',
                 '{"type":"result","result":"from typed stream"}\n',
             ]
         )
@@ -288,6 +291,20 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
         event for event in emitted if event.type == "run.event" and event.data["kind"] == "result"
     )
     assert result_event.data["transcript_visibility"] == "hidden"
+    hidden_events = [
+        event
+        for event in emitted
+        if event.type == "run.event" and event.data.get("transcript_visibility") == "hidden"
+    ]
+    assert {event.data["kind"] for event in hidden_events} >= {"event", "system", "result"}
+    visible_progress = [
+        str(event.data["message"])
+        for event in emitted
+        if event.type == "run.progress"
+    ]
+    assert not any("Claude Code event:" in message for message in visible_progress)
+    assert not any("Claude Code system event:" in message for message in visible_progress)
+    assert not any("Claude Code is using" in message for message in visible_progress)
 
 
 def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None:

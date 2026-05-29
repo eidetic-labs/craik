@@ -71,11 +71,11 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
         if subtype:
             return (
                 [
-                    {
-                        "kind": "system",
-                        "message": f"Claude Code system event: {subtype}.",
-                        "subtype": subtype,
-                    }
+                    hidden_status_event(
+                        kind="system",
+                        message=f"Claude Code system event: {subtype}.",
+                        subtype=subtype,
+                    )
                 ],
                 None,
             )

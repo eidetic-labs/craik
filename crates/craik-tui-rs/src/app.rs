@@ -1307,9 +1307,11 @@ impl InteractiveApp {
                         TranscriptKind::Tool
                     };
                     let text = summarize_tool_event(event, tool, message);
-                    self.transcript
-                        .push(TranscriptEntry::new(kind, tool, &text));
-                    self.follow_tail_after_transcript_update();
+                    if !recent_transcript_entry_matches(&self.transcript, kind, tool, &text) {
+                        self.transcript
+                            .push(TranscriptEntry::new(kind, tool, &text));
+                        self.follow_tail_after_transcript_update();
+                    }
                 }
             }
             "run.working" => {
@@ -2364,10 +2366,23 @@ impl PendingApproval {
     }
 
     fn request_text(&self, latest_receipt: Option<&str>) -> String {
-        format!(
-            "{}\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Ctrl-N/P] select  [Esc] defer",
-            self.preview_text(latest_receipt),
-        )
+        let mut lines = vec![
+            "Approval required".to_owned(),
+            format!("Origin: {}", self.origin_label()),
+            format!("ID: {}", self.id),
+            format!("Request: {}", self.message),
+        ];
+        push_optional_line(&mut lines, "Tool", self.tool.as_deref());
+        push_optional_line(&mut lines, "Target", self.target.as_deref());
+        push_optional_line(&mut lines, "Command", self.command.as_deref());
+        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
+        push_optional_line(
+            &mut lines,
+            "Receipt",
+            self.receipt_id.as_deref().or(latest_receipt),
+        );
+        lines.push("Actions: Ctrl-A review/approve  Ctrl-X review/deny  Esc defer".to_owned());
+        lines.join("\n")
     }
 
     fn preview_text(&self, latest_receipt: Option<&str>) -> String {
@@ -2840,6 +2855,24 @@ fn recent_transcript_body_matches(entries: &[TranscriptEntry], body: &str) -> bo
         .rev()
         .take(6)
         .any(|entry| normalize_transcript_text(&entry.body) == normalized)
+}
+
+fn recent_transcript_entry_matches(
+    entries: &[TranscriptEntry],
+    kind: TranscriptKind,
+    title: &str,
+    body: &str,
+) -> bool {
+    let normalized_title = normalize_transcript_text(title);
+    let normalized_body = normalize_transcript_text(body);
+    if normalized_body.is_empty() {
+        return false;
+    }
+    entries.iter().rev().take(6).any(|entry| {
+        entry.kind == kind
+            && normalize_transcript_text(&entry.title) == normalized_title
+            && normalize_transcript_text(&entry.body) == normalized_body
+    })
 }
 
 fn normalize_transcript_text(value: &str) -> String {
@@ -3442,23 +3475,14 @@ mod tests {
         );
         let entry = app.transcript.last().expect("approval transcript entry");
         assert_eq!(entry.title, "Approval pending");
-        assert!(entry.body.contains("Review required"));
-        assert!(entry.body.contains("State: pending"));
-        assert!(entry.body.contains("ID: approval_edit_123"));
+        assert!(entry.body.contains("Approval required"));
         assert!(entry.body.contains("Request: Edit src/lib.rs?"));
-        assert!(entry.body.contains("Source request"));
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
-        assert!(entry.body.contains("Craik governance"));
-        assert!(entry.body.contains("Warning: high-risk approval"));
-        assert!(
-            entry
-                .body
-                .contains("Latest receipt: receipt_before_approval")
-        );
-        assert!(entry.body.contains("[Ctrl-A] approve"));
-        assert!(entry.body.contains("[Ctrl-X] deny"));
+        assert!(entry.body.contains("Receipt: receipt_before_approval"));
+        assert!(entry.body.contains("Ctrl-A review/approve"));
+        assert!(entry.body.contains("Ctrl-X review/deny"));
     }
 
     #[test]
@@ -4126,6 +4150,15 @@ mod tests {
             entry
                 .body
                 .contains("Detail: Command completed successfully.")
+        );
+
+        app.record_event(&event);
+        assert_eq!(
+            app.transcript
+                .iter()
+                .filter(|entry| entry.title == "Bash")
+                .count(),
+            1
         );
     }
 

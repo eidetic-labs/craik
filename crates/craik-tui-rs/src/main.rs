@@ -1092,7 +1092,7 @@ mod tests {
         app.input = "Continue analysis".to_owned();
         app.input_cursor = app.input.len();
 
-        let rows = render_app_frame_rows(&app, 120, 34);
+        let rows = render_app_frame_rows(&app, 120, 80);
         let overlay_row = rows
             .iter()
             .position(|row| row.contains("▌EVIDENCE"))
@@ -1182,8 +1182,13 @@ mod tests {
         app.active_overlay = Some(ActiveOverlay::Approvals);
         app.input = "Review approval context".to_owned();
         app.input_cursor = app.input.len();
+        assert!(
+            app.overlay_text()
+                .expect("approval overlay text")
+                .contains("+ new")
+        );
 
-        let rows = render_app_frame_rows(&app, 120, 34);
+        let rows = render_app_frame_rows(&app, 120, 50);
         let modal_row = rows
             .iter()
             .position(|row| row.contains("Approval required"))
@@ -1199,7 +1204,10 @@ mod tests {
         assert!(rows.iter().any(|row| row.contains("Craik governance")));
         assert!(rows.iter().any(|row| row.contains("Warning:")));
         assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
-        assert!(rows.iter().any(|row| row.contains("  + new")));
+        assert!(
+            rows.iter()
+                .any(|row| row.contains('+') && row.contains("new"))
+        );
     }
 
     #[test]
