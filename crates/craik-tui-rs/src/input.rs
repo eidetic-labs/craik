@@ -66,8 +66,9 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     if !suggestions.is_empty() {
         let total = slash_catalog.len();
         lines.push(Line::from(vec![
-            Span::styled("▌ /", theme::accent_style()),
-            Span::styled(" commands", theme::primary_style()),
+            Span::styled("▌ ", theme::accent_style()),
+            Span::styled("/", theme::accent_style()),
+            Span::styled(" command palette", theme::primary_style()),
             Span::styled(
                 format!(
                     "  {} of {total}  Tab completes / Enter runs / Esc closes",
@@ -78,17 +79,27 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
         ]));
         lines.extend(suggestions.into_iter().map(|suggestion| {
             let prefix = if suggestion.exact_prefix { "▸" } else { " " };
+            let category_style =
+                if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
+                    Style::default()
+                        .fg(theme::amber())
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    theme::mute_style()
+                };
             let mut spans = vec![
+                Span::styled("  ", theme::mute_style()),
                 Span::styled(prefix, Style::default().fg(theme::sage())),
-                Span::raw(" "),
+                Span::raw("  "),
             ];
             spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
             spans.extend([
                 Span::styled(
-                    format!("  {}", suggestion.category),
-                    Style::default().fg(theme::amber()),
+                    format!("  {}", suggestion.category.to_lowercase()),
+                    category_style,
                 ),
-                Span::styled(format!("  {}", suggestion.summary), theme::dim_style()),
+                Span::styled("  - ", theme::mute_style()),
+                Span::styled(suggestion.summary, theme::dim_style()),
                 Span::styled(
                     format!("  {}", suggestion.hint),
                     right_hint_style(&suggestion.hint),
@@ -458,9 +469,9 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("/ commands"));
-        assert!(rendered.contains("▸ /run <prompt>  Run  Run an audited prompt."));
-        assert!(rendered.contains("▸ /receipt latest  Evidence  Show latest receipt."));
+        assert!(rendered.contains("/ command palette"));
+        assert!(rendered.contains("▸  /run <prompt>  run  - Run an audited prompt."));
+        assert!(rendered.contains("▸  /receipt latest  evidence  - Show latest receipt."));
     }
 
     #[test]
