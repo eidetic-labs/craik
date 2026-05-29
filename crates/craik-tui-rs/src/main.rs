@@ -20,8 +20,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use input::{
-    input_cursor_position, input_cursor_position_with_row_offset, input_cursor_row_offset,
-    render_input_lines, render_search_lines,
+    input_cursor_position, render_input_lines, render_search_lines, render_slash_palette_lines,
 };
 use ratatui::{
     Frame, Terminal,
@@ -212,7 +211,24 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         search_query: active_search_query(app),
     };
 
-    render_transcript_panel(frame, app, vertical[0], &transcript_options);
+    let slash_palette_lines =
+        if app.search_active || app.help_visible || app.active_overlay.is_some() {
+            Vec::new()
+        } else {
+            render_slash_palette_lines(&app.input, &app.slash_catalog)
+        };
+    let (transcript_area, slash_palette_area) = if slash_palette_lines.is_empty() {
+        (vertical[0], None)
+    } else {
+        let palette_height = slash_palette_lines.len().min(6) as u16;
+        let body = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(8), Constraint::Length(palette_height)])
+            .split(vertical[0]);
+        (body[0], Some(body[1]))
+    };
+
+    render_transcript_panel(frame, app, transcript_area, &transcript_options);
 
     if app.help_visible {
         let help = Paragraph::new(app.help_text())
@@ -225,9 +241,12 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
                     .padding(Padding::horizontal(1)),
             )
             .wrap(Wrap { trim: false });
-        frame.render_widget(help, vertical[0]);
+        frame.render_widget(help, transcript_area);
     } else if app.active_overlay.is_some() {
-        render_active_overlay(frame, app, vertical[0]);
+        render_active_overlay(frame, app, transcript_area);
+    } else if let Some(slash_palette_area) = slash_palette_area {
+        let slash_palette = Paragraph::new(slash_palette_lines).wrap(Wrap { trim: false });
+        frame.render_widget(slash_palette, slash_palette_area);
     }
 
     let input_title = input_title(app);
@@ -261,11 +280,10 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             input_inner,
         ));
     } else {
-        frame.set_cursor_position(input_cursor_position_with_row_offset(
+        frame.set_cursor_position(input_cursor_position(
             &app.input,
             app.input_cursor,
             input_inner,
-            input_cursor_row_offset(&app.input, &app.slash_catalog),
         ));
     }
 
@@ -603,10 +621,10 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
     if app.search_active {
         5
     } else if app.input.trim_start().starts_with('/') {
-        9
+        4
     } else {
         let content_lines = app.input_line_count().min(8) as u16;
-        (content_lines + 5).clamp(8, 14)
+        (content_lines + 3).clamp(4, 12)
     }
 }
 
@@ -979,6 +997,7 @@ mod tests {
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
+        assert!(!rendered.contains("▸"));
         let palette_row = rows
             .iter()
             .position(|row| row.contains("/ commands"))
@@ -1016,7 +1035,7 @@ mod tests {
 
         let rendered = render_app_frame(&app, 104, 28);
 
-        assert!(rendered.contains("3 of 4"));
+        assert!(rendered.contains("4 of 4"));
         assert!(
             rendered.find("/help").expect("help visible")
                 < rendered.find("/setup").expect("setup visible")
@@ -1027,7 +1046,9 @@ mod tests {
                     .find("/auth [login|logout|status]")
                     .expect("auth visible")
         );
-        assert!(!rendered.contains("/clear"));
+        assert!(rendered.contains("/clear"));
+        assert!(rendered.contains("⚠ confirms"));
+        assert!(!rendered.contains("▸"));
     }
 
     #[test]
@@ -1182,9 +1203,9 @@ mod tests {
     fn slash_input_gets_extra_panel_height_for_suggestions() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 8);
+        assert_eq!(input_panel_height(&app), 4);
         app.input = "/r".to_owned();
-        assert_eq!(input_panel_height(&app), 9);
+        assert_eq!(input_panel_height(&app), 4);
         app.search_active = true;
         assert_eq!(input_panel_height(&app), 5);
     }
@@ -1193,10 +1214,10 @@ mod tests {
     fn prompt_input_height_grows_with_multiline_content() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
-        assert_eq!(input_panel_height(&app), 8);
+        assert_eq!(input_panel_height(&app), 4);
         app.input = "one\ntwo\nthree\nfour".to_owned();
 
-        assert_eq!(input_panel_height(&app), 9);
+        assert_eq!(input_panel_height(&app), 7);
         assert_eq!(input_title(&app), "");
         assert!(!input_title(&app).contains("Enter sends"));
     }

@@ -54,9 +54,23 @@ struct SlashSuggestion {
     query: String,
 }
 
-const MAX_SLASH_SUGGESTIONS: usize = 3;
+const MAX_SLASH_SUGGESTIONS: usize = 5;
 
-pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
+pub fn render_input_lines(input: &str, _slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
+    if input.is_empty() {
+        vec![Line::from(Span::styled(
+            "Ask anything or type / for commands",
+            theme::dim_style(),
+        ))]
+    } else {
+        input
+            .split('\n')
+            .map(|line| Line::from(Span::styled(line.to_owned(), theme::primary_style())))
+            .collect::<Vec<_>>()
+    }
+}
+
+pub fn render_slash_palette_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
     let suggestions = slash_suggestion_rows(input, slash_catalog);
     let mut lines = Vec::new();
     if !suggestions.is_empty() {
@@ -70,21 +84,17 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
             ),
         ]));
         for suggestion in suggestions {
-            let prefix = if suggestion.exact_prefix { "▸" } else { " " };
-            let category_style =
-                if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
-                    Style::default()
-                        .fg(theme::amber())
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    theme::mute_style()
-                };
-            let mut command_spans = vec![
-                Span::styled(" ", theme::mute_style()),
-                Span::styled(prefix, Style::default().fg(theme::sage())),
-                Span::raw("  "),
-            ];
+            let mut command_spans = vec![Span::styled(" ", theme::mute_style())];
             command_spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
+            command_spans.extend([
+                Span::styled("  ", theme::mute_style()),
+                Span::styled(
+                    suggestion.category.to_uppercase(),
+                    category_style(&suggestion),
+                ),
+                Span::styled("  ", theme::mute_style()),
+                Span::styled(suggestion.summary, theme::dim_style()),
+            ]);
             if !suggestion.hint.is_empty() {
                 command_spans.extend([
                     Span::styled("  ", theme::mute_style()),
@@ -92,34 +102,15 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                 ]);
             }
             lines.push(Line::from(command_spans));
-            lines.push(Line::from(vec![
-                Span::styled("    ", theme::mute_style()),
-                Span::styled(suggestion.category.to_uppercase(), category_style),
-                Span::styled("  ", theme::mute_style()),
-                Span::styled(suggestion.summary, theme::dim_style()),
-            ]));
         }
     }
-
-    let input_lines = if input.is_empty() {
-        vec![Line::from("")]
-    } else {
-        input
-            .split('\n')
-            .map(|line| Line::from(Span::styled(line.to_owned(), theme::primary_style())))
-            .collect::<Vec<_>>()
-    };
-    lines.extend(input_lines);
     lines
 }
 
+#[cfg(test)]
 pub fn input_cursor_row_offset(input: &str, slash_catalog: &[SlashHint]) -> u16 {
-    let suggestion_count = slash_suggestion_rows(input, slash_catalog).len() as u16;
-    if suggestion_count == 0 {
-        0
-    } else {
-        1 + (suggestion_count * 2)
-    }
+    let _ = (input, slash_catalog);
+    0
 }
 
 pub fn render_search_lines(
@@ -309,7 +300,7 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
             exact_prefix: true,
             score: 0,
             catalog_index: 0,
-            hint: "set ▸".to_owned(),
+            hint: "set".to_owned(),
             query: String::new(),
         })
         .collect()
@@ -348,16 +339,16 @@ fn hint_right_hint(hint: &SlashHint) -> String {
         return format!("now: {value}");
     }
     if !hint.choices.is_empty() || !fallback_choices(&hint.name).is_empty() {
-        return "values ▸".to_owned();
+        return "values".to_owned();
     }
     if !hint.subcommands.is_empty() || usage_has_subcommands(&hint.usage) {
-        return "set ▸".to_owned();
+        return "set".to_owned();
     }
     if !hint.required_args.is_empty() {
         return format!("needs {}", hint.required_args.join(","));
     }
     if !hint.examples.is_empty() {
-        return "example ▸".to_owned();
+        return "example".to_owned();
     }
     if let Some(cli_mirror) = &hint.cli_mirror {
         return format!("cli: {cli_mirror}");
@@ -374,6 +365,16 @@ fn right_hint_style(hint: &str) -> Style {
         Style::default().fg(theme::sage())
     } else if hint.starts_with("cli:") || hint.starts_with("needs ") {
         theme::dim_style()
+    } else {
+        theme::mute_style()
+    }
+}
+
+fn category_style(suggestion: &SlashSuggestion) -> Style {
+    if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
+        Style::default()
+            .fg(theme::amber())
+            .add_modifier(Modifier::BOLD)
     } else {
         theme::mute_style()
     }
@@ -427,6 +428,7 @@ pub fn input_cursor_position(input: &str, input_cursor: usize, area: Rect) -> Po
     Position::new(x, y)
 }
 
+#[cfg(test)]
 pub fn input_cursor_position_with_row_offset(
     input: &str,
     input_cursor: usize,
@@ -445,8 +447,8 @@ pub fn input_cursor_position_with_row_offset(
 mod tests {
     use super::{
         SlashHint, input_cursor_position, input_cursor_position_with_row_offset,
-        input_cursor_row_offset, render_input_lines, render_search_lines, slash_completion,
-        slash_suggestions,
+        input_cursor_row_offset, render_input_lines, render_search_lines,
+        render_slash_palette_lines, slash_completion, slash_suggestions,
     };
     use ratatui::layout::Rect;
 
@@ -490,9 +492,9 @@ mod tests {
         let offset = input_cursor_row_offset(input, &catalog);
         let position = input_cursor_position_with_row_offset(input, input.len(), area, offset);
 
-        assert_eq!(offset, 5);
+        assert_eq!(offset, 0);
         assert_eq!(position.x, 12);
-        assert_eq!(position.y, 25);
+        assert_eq!(position.y, 20);
     }
 
     #[test]
@@ -505,14 +507,15 @@ mod tests {
     }
 
     #[test]
-    fn empty_input_renders_without_instructional_prompt_copy() {
+    fn empty_input_renders_compact_prompt_placeholder() {
         let lines = render_input_lines("", &[]);
 
-        assert_eq!(lines[0].to_string(), "");
+        assert_eq!(lines[0].to_string(), "Ask anything or type / for commands");
+        assert_eq!(lines.len(), 1);
     }
 
     #[test]
-    fn input_rendering_stacks_slash_suggestions_for_scanning() {
+    fn input_rendering_keeps_slash_text_in_prompt_surface() {
         let catalog = vec![
             SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
             SlashHint::new(
@@ -530,23 +533,34 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("/ commands"));
-        assert!(rendered.contains("▸  /run <prompt>"));
-        assert!(rendered.contains("RUN  Run an audited prompt."));
-        assert!(rendered.contains("▸  /receipt latest"));
-        assert!(rendered.contains("EVIDENCE  Show latest receipt."));
+        assert_eq!(rendered, "/r");
+        assert!(!rendered.contains("/ commands"));
+    }
 
-        let palette_row = lines
+    #[test]
+    fn slash_palette_renders_single_line_commands_without_selection_glyph() {
+        let catalog = vec![
+            SlashHint::new("run", "/run <prompt>", "Run an audited prompt.", "Run"),
+            SlashHint::new(
+                "receipt",
+                "/receipt latest",
+                "Show latest receipt.",
+                "Evidence",
+            ),
+        ];
+
+        let lines = render_slash_palette_lines("/r", &catalog);
+        let rendered = lines
             .iter()
-            .position(|line| line.to_string().contains("/ commands"))
-            .expect("palette header is visible");
-        let input_row = lines
-            .iter()
-            .position(|line| line.to_string() == "/r")
-            .expect("typed input remains visible");
-        assert!(palette_row < input_row);
-        assert!(!rendered.contains("Enter sends"));
-        assert!(!rendered.contains("Alt-Enter"));
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(lines.len(), 3);
+        assert!(rendered.contains("/ commands"));
+        assert!(rendered.contains("/run <prompt>  RUN  Run an audited prompt."));
+        assert!(rendered.contains("/receipt latest  EVIDENCE  Show latest receipt."));
+        assert!(!rendered.contains("▸"));
     }
 
     #[test]
@@ -557,20 +571,20 @@ mod tests {
             SlashHint::new("handoff", "/handoff", "Create handoff.", "Workflow"),
             SlashHint::new("health", "/health", "Show health.", "Session"),
             SlashHint::new("headers", "/headers", "Show headers.", "Debug"),
+            SlashHint::new("hidden", "/hidden", "Hidden overflow.", "Debug"),
         ];
 
-        let lines = render_input_lines("/h", &catalog);
+        let lines = render_slash_palette_lines("/h", &catalog);
         let rendered = lines
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("3 of 5"));
+        assert!(rendered.contains("5 of 6"));
         assert!(rendered.contains("/help"));
-        assert!(rendered.contains("/handoff"));
-        assert!(!rendered.contains("/health"));
-        assert!(!rendered.contains("/headers"));
+        assert!(rendered.contains("/headers"));
+        assert!(!rendered.contains("/hidden"));
     }
 
     #[test]
@@ -651,28 +665,29 @@ mod tests {
         clear.requires_confirmation = true;
         let catalog = vec![mode, clear];
 
-        let root = render_input_lines("/m", &catalog)
+        let root = render_slash_palette_lines("/m", &catalog)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  now: default"));
+        assert!(root.contains("/mode [default|acceptEdits|plan|auto]  RUN  Inspect or set mode."));
+        assert!(root.contains("now: default"));
         assert!(root.contains("RUN  Inspect or set mode."));
 
-        let confirm = render_input_lines("/c", &catalog)
+        let confirm = render_slash_palette_lines("/c", &catalog)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(confirm.contains("/clear  ⚠ confirms"));
+        assert!(confirm.contains("/clear  WORKFLOW  Clear transcript.  ⚠ confirms"));
         assert!(confirm.contains("WORKFLOW  Clear transcript."));
 
-        let drilldown = render_input_lines("/mode ", &catalog)
+        let drilldown = render_slash_palette_lines("/mode ", &catalog)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(drilldown.contains("/mode default  ● current"));
-        assert!(drilldown.contains("/mode plan  read-only"));
+        assert!(drilldown.contains("/mode default  RUN  Current value  ● current"));
+        assert!(drilldown.contains("/mode plan  RUN  Read-only planning mode.  read-only"));
     }
 }
