@@ -26,7 +26,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Padding, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
 };
 use render::{
     ActivityMetrics, StatusLineMetrics, render_activity_panel, render_provenance_panel, status_line,
@@ -270,6 +270,8 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             )
             .wrap(Wrap { trim: false });
         frame.render_widget(help, vertical[0]);
+    } else if app.active_overlay.is_some() {
+        render_active_overlay(frame, app, vertical[0]);
     }
 
     let input_title = input_title(app);
@@ -333,12 +335,49 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             pending_approval: app.latest_pending_approval(),
             backend_connected: app.backend_connected,
             queued_inputs: app.queued_inputs.len(),
-            transcript_focused: app.transcript_focused,
+            active_overlay: app.active_overlay.map(|overlay| overlay.title()),
             search_active: app.search_active,
             details_collapsed: !app.expand_transcript_details,
         },
     ));
     frame.render_widget(footer, vertical[2]);
+}
+
+fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(6),
+            Constraint::Percentage(88),
+            Constraint::Percentage(6),
+        ])
+        .split(area);
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(7),
+            Constraint::Percentage(86),
+            Constraint::Percentage(7),
+        ])
+        .split(vertical[1]);
+    let overlay_area = horizontal[1];
+    let title = app
+        .overlay_title()
+        .unwrap_or_else(|| "Overlay  Esc returns to chat".to_owned());
+    let body = app.overlay_text().unwrap_or_default();
+    let overlay = Paragraph::new(body)
+        .block(
+            Block::default()
+                .title(title)
+                .title_style(theme::accent_style())
+                .border_style(theme::accent_style())
+                .borders(Borders::ALL)
+                .padding(Padding::horizontal(1)),
+        )
+        .style(theme::surface_style())
+        .wrap(Wrap { trim: false });
+    frame.render_widget(Clear, overlay_area);
+    frame.render_widget(overlay, overlay_area);
 }
 
 fn input_panel_height(app: &InteractiveApp) -> u16 {
@@ -519,6 +558,7 @@ mod tests {
         input_title,
     };
     use crate::{
+        app::ActiveOverlay,
         theme::{ThemeMode, with_mode_for_test},
         transcript::TranscriptEntry,
     };
@@ -591,6 +631,22 @@ mod tests {
         assert!(rendered.contains("Approvals seen"));
         assert!(rendered.contains("normalized Gateway"));
         assert!(rendered.contains("Run completed"));
+    }
+
+    #[test]
+    fn active_overlay_renders_over_main_body_without_hiding_prompt() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = Some(ActiveOverlay::Evidence);
+        app.input = "Continue analysis".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rendered = render_app_frame(&app, 120, 34);
+
+        assert!(rendered.contains("Evidence  Esc returns to chat"));
+        assert!(rendered.contains("Recent receipts"));
+        assert!(rendered.contains("Prompt"));
+        assert!(rendered.contains("Continue analysis"));
+        assert!(rendered.contains("overlay evidence"));
     }
 
     #[test]
