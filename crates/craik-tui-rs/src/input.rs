@@ -66,10 +66,7 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
             Span::styled("/", theme::accent_style()),
             Span::styled(" command palette", theme::primary_style()),
             Span::styled(
-                format!(
-                    "  {} of {total}  Tab completes / Enter runs / Esc closes",
-                    suggestions.len()
-                ),
+                format!("  {} of {total}", suggestions.len()),
                 theme::dim_style(),
             ),
         ]));
@@ -103,10 +100,6 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                 Span::styled(suggestion.summary, theme::dim_style()),
             ]));
         }
-        lines.push(Line::from(vec![
-            Span::styled("▔ ", theme::accent_style()),
-            Span::styled("prompt", theme::mute_style()),
-        ]));
     }
 
     let input_lines = if input.is_empty() {
@@ -121,13 +114,6 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
             .collect::<Vec<_>>()
     };
     lines.extend(input_lines);
-    if !input.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("Ready ", Style::default().fg(theme::sage())),
-            Span::styled("Enter sends", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(" / Alt-Enter newline", theme::dim_style()),
-        ]));
-    }
     lines
 }
 
@@ -136,7 +122,7 @@ pub fn input_cursor_row_offset(input: &str, slash_catalog: &[SlashHint]) -> u16 
     if suggestion_count == 0 {
         0
     } else {
-        1 + (suggestion_count * 2) + 1
+        1 + (suggestion_count * 2)
     }
 }
 
@@ -508,9 +494,9 @@ mod tests {
         let offset = input_cursor_row_offset(input, &catalog);
         let position = input_cursor_position_with_row_offset(input, input.len(), area, offset);
 
-        assert_eq!(offset, 6);
+        assert_eq!(offset, 5);
         assert_eq!(position.x, 12);
-        assert_eq!(position.y, 26);
+        assert_eq!(position.y, 25);
     }
 
     #[test]
@@ -519,7 +505,7 @@ mod tests {
 
         assert_eq!(lines[0].to_string(), "hello");
         assert_eq!(lines[1].to_string(), "");
-        assert!(lines[2].to_string().contains("Enter sends"));
+        assert_eq!(lines.len(), 2);
     }
 
     #[test]
@@ -559,16 +545,13 @@ mod tests {
             .iter()
             .position(|line| line.to_string().contains("/ command palette"))
             .expect("palette header is visible");
-        let prompt_anchor_row = lines
-            .iter()
-            .position(|line| line.to_string().contains("▔ prompt"))
-            .expect("prompt anchor is visible");
         let input_row = lines
             .iter()
             .position(|line| line.to_string() == "/r")
             .expect("typed input remains visible");
-        assert!(palette_row < prompt_anchor_row);
-        assert!(prompt_anchor_row < input_row);
+        assert!(palette_row < input_row);
+        assert!(!rendered.contains("Enter sends"));
+        assert!(!rendered.contains("Alt-Enter"));
     }
 
     #[test]
