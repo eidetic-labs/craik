@@ -2411,47 +2411,51 @@ impl PendingApproval {
     fn from_event(event: &GatewayEvent) -> Self {
         let message =
             string_data(event, "message").unwrap_or_else(|| "Approval requested.".to_owned());
-        let tool = string_data(event, "tool");
-        let target = string_data(event, "target");
-        let reason = string_data(event, "reason");
+        let tool = first_string_data(event, &["tool", "tool_name", "name"]);
+        let target = first_string_data(event, &["target", "path", "file"]);
+        let reason = first_string_data(event, &["reason", "description"]);
         Self {
             id: string_data(event, "approval_id").unwrap_or_else(|| {
                 fallback_approval_id(tool.as_deref(), target.as_deref(), &message)
             }),
             message,
-            origin: first_string_data(event, &["origin", "source", "backend", "provider_id"]),
+            origin: first_string_data(
+                event,
+                &["origin", "source", "backend", "provider_id", "provider"],
+            ),
             tool,
             target,
             capability: string_data(event, "capability"),
             resource: string_data(event, "resource"),
             scope: first_scalar_data(event, &["scope", "operation_scope"]),
             size: first_scalar_data(event, &["size", "diff_size", "bytes"]),
-            receipt_id: string_data(event, "receipt_id"),
+            receipt_id: first_string_data(event, &["receipt_id", "receipt"]),
             expires_at: string_data(event, "expires_at"),
             reason,
             risk: string_data(event, "risk").or_else(|| string_data(event, "risk_text")),
-            command: string_data(event, "command"),
-            preview: first_string_data(event, &["preview", "diff", "text"]),
+            command: first_string_data(event, &["command", "shell_command", "bash_command"]),
+            preview: first_string_data(
+                event,
+                &["preview", "diff", "patch", "command_preview", "text"],
+            ),
         }
     }
 
     fn request_text(&self, latest_receipt: Option<&str>) -> String {
         let mut lines = vec![
             format!("Review required: {}", self.subject_label()),
-            "State: waiting for operator decision".to_owned(),
-            format!("Approval: {}", self.id_label()),
             format!("Origin: {}", self.origin_label()),
+            format!("Approval: {}", self.id_label()),
         ];
-        push_optional_line(&mut lines, "Request", Some(self.message.as_str()));
         push_optional_line(&mut lines, "Tool", self.tool.as_deref());
         push_optional_line(&mut lines, "Target", self.target.as_deref());
         push_optional_line(&mut lines, "Command", self.command.as_deref());
-        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         push_optional_line(
             &mut lines,
             "Receipt",
             self.receipt_id.as_deref().or(latest_receipt),
         );
+        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         if self.risk.as_deref().is_some_and(is_high_risk_text) {
             lines.push("Risk: high - review before deciding".to_owned());
         }
@@ -2468,8 +2472,8 @@ impl PendingApproval {
         let mut lines = vec![
             "Review required".to_owned(),
             format!("Origin: {origin}"),
+            format!("What: {}", self.subject_label()),
             format!("Queue: {position} of {} pending", total.max(1)),
-            "State: pending".to_owned(),
             format!(
                 "ID: {}",
                 if self.id.is_empty() {
@@ -2488,7 +2492,7 @@ impl PendingApproval {
         push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         if self.has_governance_context() {
             lines.push(String::new());
-            lines.push("Craik governance".to_owned());
+            lines.push("Craik context".to_owned());
         }
         push_optional_line(&mut lines, "Capability", self.capability.as_deref());
         push_optional_line(&mut lines, "Resource", self.resource.as_deref());
@@ -2515,8 +2519,8 @@ impl PendingApproval {
 
     fn origin_label(&self) -> &str {
         match self.origin.as_deref() {
-            Some("claude-code") => "via Claude Code",
-            Some("craik governance") => "craik governance",
+            Some("claude-code" | "claude_code" | "claude code") => "via Claude Code",
+            Some("craik" | "craik governance" | "gateway") => "craik governance",
             Some(origin) => origin,
             None => "craik governance",
         }
@@ -3767,9 +3771,7 @@ mod tests {
         let entry = app.transcript.last().expect("approval transcript entry");
         assert_eq!(entry.title, "Approval pending");
         assert!(entry.body.contains("Review required: src/lib.rs"));
-        assert!(entry.body.contains("State: waiting for operator decision"));
         assert!(entry.body.contains("Approval: approval_edit_123"));
-        assert!(entry.body.contains("Request: Edit src/lib.rs?"));
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
@@ -3828,8 +3830,9 @@ mod tests {
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Queue: 2 of 2 pending"));
         assert!(overlay.contains("Origin: craik governance"));
+        assert!(overlay.contains("What: crates/craik-tui-rs/src/app.rs"));
         assert!(overlay.contains("Source request"));
-        assert!(overlay.contains("Craik governance"));
+        assert!(overlay.contains("Craik context"));
         assert!(overlay.contains("Capability: file-write"));
         assert!(overlay.contains("Resource: crates/craik-tui-rs/src/app.rs"));
         assert!(overlay.contains("Scope: workspace"));
@@ -3867,13 +3870,47 @@ mod tests {
 
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Origin: via Claude Code"));
+        assert!(overlay.contains("What: README.md"));
         assert!(overlay.contains("Source request"));
         assert!(overlay.contains("Tool: Edit"));
         assert!(overlay.contains("Target: README.md"));
         assert!(overlay.contains("Reason: write docs"));
-        assert!(!overlay.contains("Craik governance"));
+        assert!(!overlay.contains("Craik context"));
         assert!(!overlay.contains("Capability:"));
         assert!(!overlay.contains("Scope:"));
+    }
+
+    #[test]
+    fn approval_payload_aliases_preserve_source_fields() {
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "message": "Claude Code requests approval for `Bash`: run tests",
+                "source": "claude_code",
+                "tool_name": "Bash",
+                "path": "crates/craik-tui-rs",
+                "shell_command": "cargo test",
+                "description": "run tests",
+                "receipt": "receipt_alias",
+                "patch": "+ ok"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&approval);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        let overlay = app.overlay_text().expect("approval overlay");
+        assert!(overlay.contains("Origin: via Claude Code"));
+        assert!(overlay.contains("Tool: Bash"));
+        assert!(overlay.contains("Target: crates/craik-tui-rs"));
+        assert!(overlay.contains("Command: cargo test"));
+        assert!(overlay.contains("Reason: run tests"));
+        assert!(overlay.contains("Receipt: receipt_alias"));
+        assert!(overlay.contains("  + ok"));
     }
 
     #[test]
