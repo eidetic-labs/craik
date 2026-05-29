@@ -579,8 +579,8 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
         }
         if line == "Review required" {
             rendered.push(Line::from(vec![
-                Span::styled("What", theme::mute_style()),
-                Span::styled("  operator decision required", theme::primary_style()),
+                Span::styled("Decision", theme::mute_style()),
+                Span::styled("  operator approval required", theme::primary_style()),
             ]));
             if has_actions {
                 rendered.push(approval_actions_line());
@@ -630,15 +630,27 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             ]));
             continue;
         }
+        if let Some(command) = line.strip_prefix("  $ ") {
+            rendered.push(Line::from(vec![
+                Span::styled(
+                    "  $ ",
+                    Style::default()
+                        .fg(theme::amber())
+                        .bg(theme::surface())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(command.to_owned(), theme::primary_style()),
+            ]));
+            continue;
+        }
         if let Some((label, value)) = line.split_once(':') {
             let label_style = match label {
                 "Queue" => theme::dim_style(),
                 "Risk" | "Warning" => Style::default()
                     .fg(theme::amber())
                     .add_modifier(Modifier::BOLD),
-                "What" | "Target" | "Command" | "Tool" | "Capability" | "Scope" | "Size" => {
-                    theme::mute_style().add_modifier(Modifier::BOLD)
-                }
+                "Action" | "What" | "Target" | "Command" | "Tool" | "Capability" | "Scope"
+                | "Size" => theme::mute_style().add_modifier(Modifier::BOLD),
                 _ => theme::mute_style(),
             };
             rendered.push(Line::from(vec![
