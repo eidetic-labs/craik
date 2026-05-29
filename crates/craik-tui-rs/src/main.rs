@@ -464,7 +464,7 @@ fn render_approval_overlay(
         .overlay_title()
         .unwrap_or_else(|| "▌APPROVALS  Esc returns to chat".to_owned());
     let body = app.overlay_text().unwrap_or_default();
-    let overlay = Paragraph::new(body)
+    let overlay = Paragraph::new(approval_overlay_lines(&body))
         .block(
             Block::default()
                 .title(title)
@@ -477,6 +477,51 @@ fn render_approval_overlay(
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, overlay_area);
     frame.render_widget(overlay, overlay_area);
+}
+
+fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
+    body.lines()
+        .map(|line| {
+            if line.starts_with("Actions:") {
+                return Line::from(vec![
+                    Span::styled("Actions: ", theme::mute_style()),
+                    Span::styled(
+                        "[Ctrl-A] approve",
+                        Style::default()
+                            .fg(theme::sage())
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        "[Ctrl-X] deny",
+                        Style::default()
+                            .fg(theme::red())
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled("[Esc] defer", theme::dim_style()),
+                ]);
+            }
+            if line.starts_with("Warning:") {
+                return Line::from(Span::styled(
+                    line.to_owned(),
+                    Style::default()
+                        .fg(theme::amber())
+                        .add_modifier(Modifier::BOLD),
+                ));
+            }
+            if line == "Review required" || line == "Preview" {
+                return Line::from(Span::styled(line.to_owned(), theme::accent_style()));
+            }
+            if let Some((label, value)) = line.split_once(':') {
+                return Line::from(vec![
+                    Span::styled(format!("{label}: "), theme::mute_style()),
+                    Span::styled(value.trim_start().to_owned(), theme::primary_style()),
+                ]);
+            }
+            Line::from(line.to_owned())
+        })
+        .collect()
 }
 
 fn input_panel_height(app: &InteractiveApp) -> u16 {
@@ -653,8 +698,8 @@ fn usage() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        InteractiveApp, Terminal, TestBackend, draw_interactive_frame, input_panel_height,
-        input_title,
+        InteractiveApp, Terminal, TestBackend, approval_overlay_lines, draw_interactive_frame,
+        input_panel_height, input_title,
     };
     use crate::{
         app::ActiveOverlay,
@@ -748,6 +793,23 @@ mod tests {
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Continue analysis"));
         assert!(rendered.contains("esc chat"));
+    }
+
+    #[test]
+    fn approval_overlay_lines_preserve_decision_labels() {
+        let lines = approval_overlay_lines(
+            "Review required\nQueue: 1 of 2 pending\nWarning: risky\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
+        );
+        let rendered = lines
+            .iter()
+            .flat_map(|line| line.spans.iter())
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert!(rendered.contains("Queue: 1 of 2 pending"));
+        assert!(rendered.contains("[Ctrl-A] approve"));
+        assert!(rendered.contains("[Ctrl-X] deny"));
+        assert!(rendered.contains("[Esc] defer"));
     }
 
     #[test]

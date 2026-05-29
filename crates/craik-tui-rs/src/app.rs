@@ -125,11 +125,19 @@ impl RunFilter {
 struct PendingApproval {
     id: String,
     message: String,
+    origin: Option<String>,
     tool: Option<String>,
     target: Option<String>,
+    capability: Option<String>,
+    resource: Option<String>,
+    scope: Option<String>,
+    size: Option<String>,
+    receipt_id: Option<String>,
+    expires_at: Option<String>,
     reason: Option<String>,
     risk: Option<String>,
     command: Option<String>,
+    preview: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -438,9 +446,7 @@ impl InteractiveApp {
     }
 
     pub(crate) fn selected_approval_preview(&self) -> Option<String> {
-        self.selected_pending_approval().map(|approval| {
-            approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
-        })
+        self.selected_approval_detail_text()
     }
 
     pub(crate) fn selected_run_summary(&self) -> Option<String> {
@@ -700,6 +706,7 @@ impl InteractiveApp {
     }
 
     fn approvals_overlay_items(&self) -> Vec<OverlayItem> {
+        let total = self.pending_approvals.len();
         let mut items = self
             .pending_approvals
             .iter()
@@ -713,11 +720,17 @@ impl InteractiveApp {
                 summary: approval
                     .target
                     .as_deref()
+                    .or(approval.resource.as_deref())
                     .or(approval.command.as_deref())
                     .or(approval.tool.as_deref())
+                    .or(approval.capability.as_deref())
                     .unwrap_or("review required")
                     .to_owned(),
-                detail: approval.preview_text(self.state.receipt_ids.last().map(String::as_str)),
+                detail: approval.modal_text(
+                    index + 1,
+                    total,
+                    self.state.receipt_ids.last().map(String::as_str),
+                ),
             })
             .collect::<Vec<_>>();
         if items.is_empty() {
@@ -776,6 +789,16 @@ impl InteractiveApp {
     fn selected_pending_approval(&self) -> Option<&PendingApproval> {
         let index = self.selected_approval_index?;
         self.pending_approvals.get(index)
+    }
+
+    fn selected_approval_detail_text(&self) -> Option<String> {
+        let index = self.selected_approval_index?;
+        let approval = self.pending_approvals.get(index)?;
+        Some(approval.modal_text(
+            index + 1,
+            self.pending_approvals.len(),
+            self.state.receipt_ids.last().map(String::as_str),
+        ))
     }
 
     fn open_overlay(&mut self, overlay: ActiveOverlay) {
@@ -2016,7 +2039,9 @@ impl InteractiveApp {
             &format!(
                 "ID: {}\n{}",
                 approval.id,
-                approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+                self.selected_approval_detail_text().unwrap_or_else(
+                    || approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+                )
             ),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
@@ -2041,7 +2066,9 @@ impl InteractiveApp {
             &format!(
                 "ID: {}\n{}",
                 approval.id,
-                approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+                self.selected_approval_detail_text().unwrap_or_else(
+                    || approval.preview_text(self.state.receipt_ids.last().map(String::as_str))
+                )
             ),
         ));
         self.send_commands([GatewayCommand::ApprovalDecide {
@@ -2276,24 +2303,38 @@ impl PendingApproval {
             id: string_data(event, "approval_id").unwrap_or_default(),
             message: string_data(event, "message")
                 .unwrap_or_else(|| "Approval requested.".to_owned()),
+            origin: first_string_data(event, &["origin", "source", "backend", "provider_id"]),
             tool: string_data(event, "tool"),
             target: string_data(event, "target"),
+            capability: string_data(event, "capability"),
+            resource: string_data(event, "resource"),
+            scope: first_scalar_data(event, &["scope", "operation_scope"]),
+            size: first_scalar_data(event, &["size", "diff_size", "bytes"]),
+            receipt_id: string_data(event, "receipt_id"),
+            expires_at: string_data(event, "expires_at"),
             reason: string_data(event, "reason"),
             risk: string_data(event, "risk").or_else(|| string_data(event, "risk_text")),
             command: string_data(event, "command"),
+            preview: first_string_data(event, &["preview", "diff", "text"]),
         }
     }
 
     fn request_text(&self, latest_receipt: Option<&str>) -> String {
         format!(
-            "{}\nActions: Ctrl-A approve / Ctrl-X deny / Ctrl-N Ctrl-P select",
-            self.preview_text(latest_receipt)
+            "{}\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Ctrl-N/P] select  [Esc] defer",
+            self.preview_text(latest_receipt),
         )
     }
 
     fn preview_text(&self, latest_receipt: Option<&str>) -> String {
+        self.modal_text(1, 1, latest_receipt)
+    }
+
+    fn modal_text(&self, position: usize, total: usize, latest_receipt: Option<&str>) -> String {
         let mut lines = vec![
             "Review required".to_owned(),
+            format!("Origin: {}", self.origin_label()),
+            format!("Queue: {position} of {} pending", total.max(1)),
             "State: pending".to_owned(),
             format!(
                 "ID: {}",
@@ -2307,17 +2348,33 @@ impl PendingApproval {
         ];
         push_optional_line(&mut lines, "Tool", self.tool.as_deref());
         push_optional_line(&mut lines, "Target", self.target.as_deref());
+        push_optional_line(&mut lines, "Capability", self.capability.as_deref());
+        push_optional_line(&mut lines, "Resource", self.resource.as_deref());
+        push_optional_line(&mut lines, "Scope", self.scope.as_deref());
+        push_optional_line(&mut lines, "Size", self.size.as_deref());
         push_optional_line(&mut lines, "Command", self.command.as_deref());
         push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         push_optional_line(&mut lines, "Risk", self.risk.as_deref());
+        push_optional_line(&mut lines, "Receipt", self.receipt_id.as_deref());
+        push_optional_line(&mut lines, "Expires", self.expires_at.as_deref());
         if self.risk.as_deref().is_some_and(is_high_risk_text) {
             lines.push(
-                "Confirmation: high-risk approval; review target and receipt before deciding"
-                    .to_owned(),
+                "Warning: high-risk approval; review target and receipt before deciding".to_owned(),
             );
         }
         push_optional_line(&mut lines, "Latest receipt", latest_receipt);
+        if let Some(preview) = self.preview.as_deref() {
+            lines.push(String::new());
+            lines.push("Preview".to_owned());
+            lines.extend(preview.lines().map(|line| format!("  {line}")));
+        }
+        lines.push(String::new());
+        lines.push("Actions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer".to_owned());
         lines.join("\n")
+    }
+
+    fn origin_label(&self) -> &str {
+        self.origin.as_deref().unwrap_or("craik governance")
     }
 }
 
@@ -2524,6 +2581,25 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
         .and_then(|value| value.as_str())
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
+}
+
+fn first_string_data(event: &GatewayEvent, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| string_data(event, key))
+}
+
+fn scalar_data(event: &GatewayEvent, key: &str) -> Option<String> {
+    let value = event.data.get(key)?;
+    if let Some(text) = value.as_str() {
+        return (!text.trim().is_empty()).then(|| text.to_owned());
+    }
+    if value.is_number() || value.is_boolean() {
+        return Some(value.to_string());
+    }
+    None
+}
+
+fn first_scalar_data(event: &GatewayEvent, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| scalar_data(event, key))
 }
 
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
@@ -3244,13 +3320,77 @@ mod tests {
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
-        assert!(entry.body.contains("Confirmation: high-risk approval"));
+        assert!(entry.body.contains("Warning: high-risk approval"));
         assert!(
             entry
                 .body
                 .contains("Latest receipt: receipt_before_approval")
         );
-        assert!(entry.body.contains("Ctrl-A approve / Ctrl-X deny"));
+        assert!(entry.body.contains("[Ctrl-A] approve"));
+        assert!(entry.body.contains("[Ctrl-X] deny"));
+    }
+
+    #[test]
+    fn approval_overlay_surfaces_real_payload_fields_and_queue_position() {
+        let first = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Run cargo test?",
+                "backend": "claude-code",
+                "tool": "Bash",
+                "command": "cargo test",
+                "capability": "command",
+                "scope": "workspace",
+                "risk": "executes command"
+            }),
+        };
+        let second = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_edit_2",
+                "message": "Edit app.rs?",
+                "origin": "craik governance",
+                "tool": "Edit",
+                "target": "crates/craik-tui-rs/src/app.rs",
+                "resource": "crates/craik-tui-rs/src/app.rs",
+                "capability": "file-write",
+                "scope": "workspace",
+                "size": 128,
+                "receipt_id": "receipt_approval_2",
+                "expires_at": "2026-05-29T12:00:00Z",
+                "reason": "apply approval modal polish",
+                "risk": "writes source files",
+                "preview": "- old\n+ new"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.state.receipt_ids.push("receipt_latest".to_owned());
+
+        app.record_event(&first);
+        app.record_event(&second);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        let overlay = app.overlay_text().expect("approval overlay");
+        assert!(overlay.contains("Queue: 2 of 2 pending"));
+        assert!(overlay.contains("Origin: craik governance"));
+        assert!(overlay.contains("Capability: file-write"));
+        assert!(overlay.contains("Resource: crates/craik-tui-rs/src/app.rs"));
+        assert!(overlay.contains("Scope: workspace"));
+        assert!(overlay.contains("Size: 128"));
+        assert!(overlay.contains("Receipt: receipt_approval_2"));
+        assert!(overlay.contains("Expires: 2026-05-29T12:00:00Z"));
+        assert!(overlay.contains("Latest receipt: receipt_latest"));
+        assert!(overlay.contains("Preview"));
+        assert!(overlay.contains("  - old"));
+        assert!(overlay.contains("  + new"));
+        assert!(overlay.contains("Actions: [Ctrl-A] approve"));
     }
 
     #[test]
