@@ -99,6 +99,7 @@ pub fn render_slash_palette_lines(
         ]));
         for (index, suggestion) in suggestions.into_iter().enumerate() {
             let selected = index == selected;
+            let right_hint = row_right_hint(&suggestion, selected);
             let mut command_spans = vec![Span::styled(
                 if selected { "▌ " } else { "  " },
                 if selected {
@@ -107,17 +108,19 @@ pub fn render_slash_palette_lines(
                     theme::mute_style()
                 },
             )];
+            command_spans.extend([
+                Span::styled(
+                    category_label(&suggestion.category),
+                    category_style(&suggestion, selected),
+                ),
+                Span::styled("  ", theme::mute_style()),
+            ]);
             command_spans.extend(highlight_usage(
                 &suggestion.usage,
                 &suggestion.query,
                 selected,
             ));
             command_spans.extend([
-                Span::styled("  ", theme::mute_style()),
-                Span::styled(
-                    suggestion.category.to_lowercase(),
-                    category_style(&suggestion, selected),
-                ),
                 Span::styled("  ", theme::mute_style()),
                 Span::styled(
                     suggestion.summary,
@@ -128,13 +131,10 @@ pub fn render_slash_palette_lines(
                     },
                 ),
             ]);
-            if !suggestion.hint.is_empty() {
+            if !right_hint.is_empty() {
                 command_spans.extend([
                     Span::styled("  ", theme::mute_style()),
-                    Span::styled(
-                        suggestion.hint.clone(),
-                        right_hint_style(&suggestion.hint, selected),
-                    ),
+                    Span::styled(right_hint.clone(), right_hint_style(&right_hint, selected)),
                 ]);
             }
             lines.push(Line::from(command_spans));
@@ -558,6 +558,27 @@ fn right_hint_style(hint: &str, selected: bool) -> Style {
     }
 }
 
+fn row_right_hint(suggestion: &SlashSuggestion, selected: bool) -> String {
+    if selected {
+        if suggestion.hint.is_empty() {
+            "Enter".to_owned()
+        } else {
+            format!("{} · Enter", suggestion.hint)
+        }
+    } else {
+        suggestion.hint.clone()
+    }
+}
+
+fn category_label(category: &str) -> String {
+    category
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .take(3)
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
 fn category_style(suggestion: &SlashSuggestion, selected: bool) -> Style {
     if suggestion.hint.contains('⚠') || suggestion.hint.contains("read-only") {
         Style::default()
@@ -760,9 +781,9 @@ mod tests {
         assert_eq!(lines.len(), 3);
         assert!(rendered.contains("/ commands"));
         assert!(rendered.contains("1 selected"));
-        assert!(rendered.contains("▌ /run <prompt>"));
-        assert!(rendered.contains("/run <prompt>  run  Run an audited prompt."));
-        assert!(rendered.contains("/receipt latest  evidence  Show latest receipt."));
+        assert!(rendered.contains("▌ RUN  /run <prompt>"));
+        assert!(rendered.contains("/run <prompt>  Run an audited prompt.  Enter"));
+        assert!(rendered.contains("EVI  /receipt latest  Show latest receipt."));
         assert!(!rendered.contains("▸"));
     }
 
@@ -938,6 +959,34 @@ mod tests {
     }
 
     #[test]
+    fn slash_palette_metadata_stays_compact_and_actionable() {
+        let mut mode = SlashHint::new(
+            "mode",
+            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "Set mode.",
+            "Run",
+        );
+        mode.current_value = Some("ask".to_owned());
+        let mut migrate = SlashHint::new("migrate", "/migrate run", "Run migration.", "Workflow");
+        migrate.requires_confirmation = true;
+        let catalog = vec![mode, migrate];
+
+        let selected_mode = render_slash_palette_lines("/mode ", &catalog, 0)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let selected_risk = render_slash_palette_lines("/mig", &catalog, 0)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(selected_mode.contains("RUN  /mode ask  Current value  ● current · Enter"));
+        assert!(selected_risk.contains("WOR  /migrate run  Run migration.  ⚠ confirms · Enter"));
+    }
+
+    #[test]
     fn slash_palette_renders_current_and_confirm_hints_as_row_metadata() {
         let mut mode = SlashHint::new(
             "mode",
@@ -956,25 +1005,24 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(root.contains(
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]  run  Inspect or set mode."
+            "RUN  /mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]  Inspect or set mode."
         ));
-        assert!(root.contains("now: ask"));
-        assert!(root.contains("run  Inspect or set mode."));
+        assert!(root.contains("now: ask · Enter"));
+        assert!(root.contains("RUN  /mode"));
 
         let confirm = render_slash_palette_lines("/c", &catalog, 0)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(confirm.contains("/clear  workflow  Clear transcript.  ⚠ confirms"));
-        assert!(confirm.contains("workflow  Clear transcript."));
+        assert!(confirm.contains("WOR  /clear  Clear transcript.  ⚠ confirms · Enter"));
 
         let drilldown = render_slash_palette_lines("/mode ", &catalog, 0)
             .iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(drilldown.contains("/mode ask  run  Current value  ● current"));
-        assert!(drilldown.contains("/mode plan  run  Read-only planning mode.  read-only"));
+        assert!(drilldown.contains("RUN  /mode ask  Current value  ● current · Enter"));
+        assert!(drilldown.contains("RUN  /mode plan  Read-only planning mode.  read-only"));
     }
 }
