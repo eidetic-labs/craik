@@ -168,6 +168,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
     pub(crate) active_overlay: Option<ActiveOverlay>,
+    approval_overlay_reviewed: bool,
     pub(crate) overlay_filter: String,
     pub(crate) overlay_selected_index: usize,
     pub(crate) overlay_scroll: u16,
@@ -212,6 +213,7 @@ impl InteractiveApp {
             expand_transcript_details: true,
             help_visible: false,
             active_overlay: None,
+            approval_overlay_reviewed: false,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -268,6 +270,7 @@ impl InteractiveApp {
             expand_transcript_details: true,
             help_visible: false,
             active_overlay: None,
+            approval_overlay_reviewed: false,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -807,6 +810,7 @@ impl InteractiveApp {
 
     fn open_overlay(&mut self, overlay: ActiveOverlay) {
         self.active_overlay = Some(overlay);
+        self.approval_overlay_reviewed = overlay == ActiveOverlay::Approvals;
         self.overlay_filter.clear();
         self.overlay_selected_index = match overlay {
             ActiveOverlay::Runs => self
@@ -822,6 +826,18 @@ impl InteractiveApp {
         };
         self.overlay_scroll = 0;
         self.sync_overlay_selection();
+    }
+
+    fn surface_pending_approval_overlay(&mut self) {
+        self.open_overlay(ActiveOverlay::Approvals);
+        self.approval_overlay_reviewed = false;
+    }
+
+    fn close_unreviewed_approval_overlay(&mut self) {
+        if self.active_overlay == Some(ActiveOverlay::Approvals) && !self.approval_overlay_reviewed
+        {
+            self.active_overlay = None;
+        }
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) -> LoopAction {
@@ -873,7 +889,7 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.open_overlay(ActiveOverlay::Approvals);
+                self.surface_pending_approval_overlay();
                 LoopAction::Continue
             }
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1038,6 +1054,7 @@ impl InteractiveApp {
         match key.code {
             KeyCode::Esc => {
                 self.active_overlay = None;
+                self.approval_overlay_reviewed = false;
                 self.overlay_filter.clear();
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1051,7 +1068,11 @@ impl InteractiveApp {
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.active_overlay == Some(ActiveOverlay::Approvals) {
-                    self.approve_selected();
+                    if self.approval_overlay_reviewed {
+                        self.approve_selected();
+                    } else {
+                        self.approval_overlay_reviewed = true;
+                    }
                 } else {
                     self.open_overlay(ActiveOverlay::Approvals);
                 }
@@ -1060,7 +1081,11 @@ impl InteractiveApp {
                 if key.modifiers.contains(KeyModifiers::CONTROL)
                     && self.active_overlay == Some(ActiveOverlay::Approvals) =>
             {
-                self.deny_selected();
+                if self.approval_overlay_reviewed {
+                    self.deny_selected();
+                } else {
+                    self.approval_overlay_reviewed = true;
+                }
             }
             KeyCode::Char('n')
                 if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -1260,7 +1285,10 @@ impl InteractiveApp {
                 ));
             }
             "run.progress" => {
-                if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
+                if let Some(message) = event.data.get("message").and_then(|value| value.as_str())
+                    && !should_hide_transcript_event(event)
+                    && !is_tool_progress_message(message)
+                {
                     self.transcript
                         .push(TranscriptEntry::progress("Progress", message));
                     self.follow_tail_after_transcript_update();
@@ -1317,16 +1345,16 @@ impl InteractiveApp {
             }
             "approval.requested" => {
                 let approval = PendingApproval::from_event(event);
-                if !approval.id.is_empty()
-                    && !self
-                        .pending_approvals
-                        .iter()
-                        .any(|candidate| candidate.id == approval.id)
+                if !self
+                    .pending_approvals
+                    .iter()
+                    .any(|candidate| candidate.id == approval.id)
                 {
                     self.pending_approvals.push(approval.clone());
                     self.selected_approval_index =
                         Some(self.pending_approvals.len().saturating_sub(1));
                 }
+                self.surface_pending_approval_overlay();
                 self.transcript.push(TranscriptEntry::new(
                     TranscriptKind::Approval,
                     "Approval pending",
@@ -1403,7 +1431,10 @@ impl InteractiveApp {
                 }
             }
             "run.output" => {
-                if let Some(summary) = event.data.get("summary").and_then(|value| value.as_str()) {
+                self.close_unreviewed_approval_overlay();
+                if let Some(summary) = event.data.get("summary").and_then(|value| value.as_str())
+                    && !recent_transcript_body_matches(&self.transcript, summary)
+                {
                     self.transcript
                         .push(TranscriptEntry::assistant("Assistant", summary));
                     self.follow_tail_after_transcript_update();
@@ -1416,16 +1447,22 @@ impl InteractiveApp {
                     .or_else(|| event.data.get("message"))
                     .and_then(|value| value.as_str())
                 {
+                    if should_hide_transcript_event(event) {
+                        return;
+                    }
                     let kind = match event.data.get("kind").and_then(|value| value.as_str()) {
                         Some("tool_result") => TranscriptKind::Tool,
                         _ => TranscriptKind::Assistant,
                     };
-                    self.transcript
-                        .push(TranscriptEntry::new(kind, "Event", text));
-                    self.follow_tail_after_transcript_update();
+                    if !recent_transcript_body_matches(&self.transcript, text) {
+                        self.transcript
+                            .push(TranscriptEntry::new(kind, "Event", text));
+                        self.follow_tail_after_transcript_update();
+                    }
                 }
             }
             "run.completed" => {
+                self.close_unreviewed_approval_overlay();
                 let status = event
                     .data
                     .get("status")
@@ -2300,20 +2337,26 @@ impl InteractiveApp {
 
 impl PendingApproval {
     fn from_event(event: &GatewayEvent) -> Self {
+        let message =
+            string_data(event, "message").unwrap_or_else(|| "Approval requested.".to_owned());
+        let tool = string_data(event, "tool");
+        let target = string_data(event, "target");
+        let reason = string_data(event, "reason");
         Self {
-            id: string_data(event, "approval_id").unwrap_or_default(),
-            message: string_data(event, "message")
-                .unwrap_or_else(|| "Approval requested.".to_owned()),
+            id: string_data(event, "approval_id").unwrap_or_else(|| {
+                fallback_approval_id(tool.as_deref(), target.as_deref(), &message)
+            }),
+            message,
             origin: first_string_data(event, &["origin", "source", "backend", "provider_id"]),
-            tool: string_data(event, "tool"),
-            target: string_data(event, "target"),
+            tool,
+            target,
             capability: string_data(event, "capability"),
             resource: string_data(event, "resource"),
             scope: first_scalar_data(event, &["scope", "operation_scope"]),
             size: first_scalar_data(event, &["size", "diff_size", "bytes"]),
             receipt_id: string_data(event, "receipt_id"),
             expires_at: string_data(event, "expires_at"),
-            reason: string_data(event, "reason"),
+            reason,
             risk: string_data(event, "risk").or_else(|| string_data(event, "risk_text")),
             command: string_data(event, "command"),
             preview: first_string_data(event, &["preview", "diff", "text"]),
@@ -2739,6 +2782,68 @@ fn compact_text(value: &str, max_chars: usize) -> String {
     }
     let keep = max_chars.saturating_sub(3);
     format!("{}...", value.chars().take(keep).collect::<String>())
+}
+
+fn fallback_approval_id(tool: Option<&str>, target: Option<&str>, message: &str) -> String {
+    let mut seed = String::new();
+    for value in [tool, target, Some(message)].into_iter().flatten() {
+        if !seed.is_empty() {
+            seed.push('_');
+        }
+        seed.push_str(value);
+    }
+    let sanitized = seed
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let suffix = sanitized
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .take(8)
+        .collect::<Vec<_>>()
+        .join("_");
+    if suffix.is_empty() {
+        "approval_runtime_request".to_owned()
+    } else {
+        format!("approval_{suffix}")
+    }
+}
+
+fn should_hide_transcript_event(event: &GatewayEvent) -> bool {
+    matches!(
+        event
+            .data
+            .get("transcript_visibility")
+            .and_then(|value| value.as_str()),
+        Some("hidden" | "approval" | "state")
+    )
+}
+
+fn is_tool_progress_message(message: &str) -> bool {
+    let normalized = normalize_transcript_text(message);
+    normalized.contains(" is using ")
+}
+
+fn recent_transcript_body_matches(entries: &[TranscriptEntry], body: &str) -> bool {
+    let normalized = normalize_transcript_text(body);
+    if normalized.is_empty() {
+        return false;
+    }
+    entries
+        .iter()
+        .rev()
+        .take(6)
+        .any(|entry| normalize_transcript_text(&entry.body) == normalized)
+}
+
+fn normalize_transcript_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn collect_event_provenance(event: &GatewayEvent, run: &mut RunRecord) {
@@ -3320,6 +3425,7 @@ mod tests {
 
         assert_eq!(app.pending_approval_count(), 1);
         assert_eq!(app.latest_pending_approval(), Some("approval_edit_123"));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
         assert_eq!(
             app.selected_approval_summary().as_deref(),
             Some("1/1 pending - approval_edit_123 -> src/lib.rs")
@@ -3451,6 +3557,136 @@ mod tests {
         assert!(!overlay.contains("Craik governance"));
         assert!(!overlay.contains("Capability:"));
         assert!(!overlay.contains("Scope:"));
+    }
+
+    #[test]
+    fn claude_code_approval_without_id_still_surfaces_as_pending() {
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "message": "Claude Code requests approval for `Bash`: run tests",
+                "backend": "claude-code",
+                "kind": "approval_request",
+                "tool": "Bash",
+                "command": "cargo test",
+                "reason": "run tests"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&approval);
+
+        assert_eq!(app.pending_approval_count(), 1);
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert_eq!(
+            app.latest_pending_approval(),
+            Some("approval_bash_claude_code_requests_approval_for_bash_run")
+        );
+        let overlay = app.overlay_text().expect("approval overlay");
+        assert!(overlay.contains("Origin: via Claude Code"));
+        assert!(overlay.contains("Command: cargo test"));
+    }
+
+    #[test]
+    fn noisy_claude_code_status_events_do_not_crowd_transcript() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let events = [
+            GatewayEvent {
+                event_type: "run.event".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"backend": "claude-code", "kind": "event", "message": "Claude Code event: user.", "transcript_visibility": "hidden"}),
+            },
+            GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"message": "Claude Code event: user.", "transcript_visibility": "hidden"}),
+            },
+            GatewayEvent {
+                event_type: "run.event".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"backend": "claude-code", "kind": "assistant_text", "text": "I can see the repo."}),
+            },
+            GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"message": "Claude Code is using `Read` on `README.md`."}),
+            },
+            GatewayEvent {
+                event_type: "tool.used".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({
+                    "backend": "claude-code",
+                    "kind": "tool_use",
+                    "message": "Claude Code is using `Read` on `README.md`.",
+                    "tool": "Read",
+                    "target": "README.md"
+                }),
+            },
+            GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"message": "Claude Code is still running; waiting for stream output.", "transcript_visibility": "hidden"}),
+            },
+            GatewayEvent {
+                event_type: "run.event".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"backend": "claude-code", "kind": "result", "message": "Claude Code returned a final result.", "text": "Final answer.", "transcript_visibility": "hidden"}),
+            },
+            GatewayEvent {
+                event_type: "run.output".to_owned(),
+                created_at: None,
+                run_id: Some("run_1".to_owned()),
+                task_id: None,
+                data: json!({"summary": "Final answer."}),
+            },
+        ];
+
+        for event in events {
+            app.record_event(&event);
+        }
+
+        let transcript_text = app
+            .transcript
+            .iter()
+            .map(|entry| format!("{} {}", entry.title, entry.body))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!transcript_text.contains("Claude Code event: user."));
+        assert!(!transcript_text.contains("still running; waiting for stream output"));
+        assert!(!transcript_text.contains("Claude Code returned a final result."));
+        assert_eq!(
+            app.transcript
+                .iter()
+                .filter(|entry| entry.body.contains("I can see the repo."))
+                .count(),
+            1
+        );
+        assert_eq!(
+            app.transcript
+                .iter()
+                .filter(|entry| entry.body.contains("Final answer."))
+                .count(),
+            1
+        );
+        assert!(transcript_text.contains("Tool: Read"));
+        assert!(transcript_text.contains("Target: README.md"));
     }
 
     #[test]

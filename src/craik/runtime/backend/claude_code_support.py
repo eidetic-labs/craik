@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 from pathlib import Path
 
@@ -25,17 +26,31 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
                 return (
                     [
                         *denial_events,
-                        {"kind": "result", "message": "Claude Code returned a final result."},
+                        _hidden_status_event(
+                            kind="result",
+                            message="Claude Code returned a final result.",
+                        ),
                     ],
                     text,
                 )
             return denial_events, None
         if text:
-            return ([{"kind": "result", "message": "Claude Code returned a final result."}], text)
+            return (
+                [
+                    _hidden_status_event(
+                        kind="result",
+                        message="Claude Code returned a final result.",
+                    )
+                ],
+                text,
+            )
         if event.get("is_error"):
             detail = _safe_cli_detail(json.dumps(event, sort_keys=True))
             return ([{"kind": "error", "message": detail}], None)
-        return ([{"kind": "result", "message": "Claude Code completed."}], None)
+        return (
+            [_hidden_status_event(kind="result", message="Claude Code completed.")],
+            None,
+        )
     if event_type == "assistant":
         events = _assistant_progress_events(event)
         final_text = "\n".join(
@@ -61,8 +76,24 @@ def _claude_stream_line_events(line: str) -> tuple[list[dict[str, object]], str 
             )
         return [], None
     if event_type:
-        return ([{"kind": "event", "message": f"Claude Code event: {event_type}."}], None)
+        return (
+            [
+                _hidden_status_event(
+                    kind="event",
+                    message=f"Claude Code event: {event_type}.",
+                )
+            ],
+            None,
+        )
     return [], None
+
+
+def _hidden_status_event(*, kind: str, message: str) -> dict[str, object]:
+    return {
+        "kind": kind,
+        "message": message,
+        "transcript_visibility": "hidden",
+    }
 
 
 def _claude_result_text(event: dict[str, object]) -> str:
@@ -334,6 +365,7 @@ def _permission_denial_events(event: dict[str, object]) -> list[dict[str, object
                 {
                     "kind": "permission_denial",
                     "message": _safe_cli_detail(message),
+                    "transcript_visibility": "approval",
                     "tool": str(name) if name else None,
                     "reason": str(reason) if reason else None,
                 }
@@ -343,6 +375,7 @@ def _permission_denial_events(event: dict[str, object]) -> list[dict[str, object
                 {
                     "kind": "permission_denial",
                     "message": f"Claude Code permission denied: {_safe_cli_detail(str(denial))}",
+                    "transcript_visibility": "approval",
                     "reason": str(denial),
                 }
             )
@@ -388,12 +421,18 @@ def _approval_request_event(event: dict[str, object]) -> dict[str, object]:
     reason = str(raw_reason or "Claude Code requested runtime approval.")
     return {
         "kind": "approval_request",
+        "approval_id": _approval_request_id(tool=tool, target=target, reason=reason),
         "message": f"Claude Code requests approval for `{tool}` on `{target}`: {reason}",
         "tool": tool,
         "target": target,
         "reason": reason,
         "raw": event,
     }
+
+
+def _approval_request_id(*, tool: str, target: str, reason: str) -> str:
+    digest = hashlib.sha256(f"{tool}\0{target}\0{reason}".encode()).hexdigest()[:12]
+    return f"approval_claude_code_{digest}"
 
 
 def _looks_like_diff(text: str) -> bool:
