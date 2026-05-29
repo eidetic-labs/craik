@@ -262,10 +262,10 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         let help = Paragraph::new(app.help_text())
             .block(
                 Block::default()
-                    .title("Help  Esc closes")
+                    .title("▌HELP  Esc closes")
                     .title_style(theme::accent_style())
                     .border_style(theme::mute_style())
-                    .borders(Borders::ALL)
+                    .borders(Borders::LEFT)
                     .padding(Padding::horizontal(1)),
             )
             .wrap(Wrap { trim: false });
@@ -422,6 +422,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
+        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     let detail = Paragraph::new(app.selected_overlay_detail())
         .block(
@@ -432,6 +433,7 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
+        .style(theme::surface_style())
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, area);
     frame.render_widget(list, list_area);
@@ -454,22 +456,27 @@ fn render_approval_overlay(
     let horizontal = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(7),
-            Constraint::Percentage(86),
-            Constraint::Percentage(7),
+            Constraint::Percentage(12),
+            Constraint::Percentage(76),
+            Constraint::Percentage(12),
         ])
         .split(vertical[1]);
     let overlay_area = horizontal[1];
-    let title = app
-        .overlay_title()
-        .unwrap_or_else(|| "▌APPROVALS  Esc returns to chat".to_owned());
     let body = app.overlay_text().unwrap_or_default();
+    let title = approval_overlay_title(&body);
+    let border_style = if body.contains("Warning:") {
+        Style::default()
+            .fg(theme::amber())
+            .add_modifier(Modifier::BOLD)
+    } else {
+        theme::accent_style()
+    };
     let overlay = Paragraph::new(approval_overlay_lines(&body))
         .block(
             Block::default()
                 .title(title)
-                .title_style(theme::accent_style())
-                .border_style(theme::accent_style())
+                .title_style(border_style)
+                .border_style(border_style)
                 .borders(Borders::ALL)
                 .padding(Padding::horizontal(1)),
         )
@@ -477,6 +484,19 @@ fn render_approval_overlay(
         .wrap(Wrap { trim: false });
     frame.render_widget(Clear, overlay_area);
     frame.render_widget(overlay, overlay_area);
+}
+
+fn approval_overlay_title(body: &str) -> Line<'static> {
+    let origin = body
+        .lines()
+        .find_map(|line| line.strip_prefix("Origin: "))
+        .unwrap_or("unknown origin");
+    Line::from(vec![
+        Span::styled("▌Approval required", theme::accent_style()),
+        Span::styled("  ", theme::mute_style()),
+        Span::styled(origin.to_owned(), theme::dim_style()),
+        Span::styled("  Esc defer", theme::mute_style()),
+    ])
 }
 
 fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
@@ -513,6 +533,18 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             if line == "Review required" || line == "Preview" {
                 return Line::from(Span::styled(line.to_owned(), theme::accent_style()));
             }
+            if let Some(diff) = line.strip_prefix("  +") {
+                return Line::from(vec![
+                    Span::styled("  +", Style::default().fg(theme::sage())),
+                    Span::styled(diff.to_owned(), Style::default().fg(theme::sage())),
+                ]);
+            }
+            if let Some(diff) = line.strip_prefix("  -") {
+                return Line::from(vec![
+                    Span::styled("  -", Style::default().fg(theme::red())),
+                    Span::styled(diff.to_owned(), Style::default().fg(theme::red())),
+                ]);
+            }
             if let Some((label, value)) = line.split_once(':') {
                 return Line::from(vec![
                     Span::styled(format!("{label}: "), theme::mute_style()),
@@ -538,11 +570,11 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
 
 fn input_title(app: &InteractiveApp) -> String {
     if app.search_active {
-        return "Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
+        return "▌Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
     }
     let (line, col) = app.input_cursor_line_col();
     format!(
-        "Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
+        "▌Prompt  {} line(s), {} char(s), cursor {line}:{col}  Enter sends / Ctrl-Y retry / Ctrl-C stop / Alt-Enter newline",
         app.input_line_count(),
         app.input_char_count()
     )
@@ -636,13 +668,24 @@ fn transcript_title(
         String::new()
     };
     if visible_width < 84 {
-        return Line::from(format!(
-            "Transcript | {top}-{bottom}/{total} | {tail_mode} | {detail_mode}{search}{jump}"
-        ));
+        return Line::from(vec![
+            Span::styled("▌Transcript ", theme::accent_style()),
+            Span::styled(
+                format!("{top}-{bottom}/{total}  {tail_mode}  {detail_mode}{search}{jump}"),
+                theme::mute_style(),
+            ),
+        ]);
     }
-    Line::from(format!(
-        "Transcript {focus_mode} | Lines {top}-{bottom}/{total} | Tail {tail_mode} | Details {detail_mode}{search}{jump}"
-    ))
+    Line::from(vec![
+        Span::styled("▌Transcript ", theme::accent_style()),
+        Span::styled(format!("{focus_mode}  "), theme::primary_style()),
+        Span::styled(
+            format!(
+                "lines {top}-{bottom}/{total}  tail {tail_mode}  details {detail_mode}{search}{jump}"
+            ),
+            theme::mute_style(),
+        ),
+    ])
 }
 
 fn active_search_query(app: &InteractiveApp) -> Option<&str> {
@@ -698,8 +741,8 @@ fn usage() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        InteractiveApp, Terminal, TestBackend, approval_overlay_lines, draw_interactive_frame,
-        input_panel_height, input_title,
+        InteractiveApp, Terminal, TestBackend, approval_overlay_lines, approval_overlay_title,
+        draw_interactive_frame, input_panel_height, input_title,
     };
     use crate::{
         app::ActiveOverlay,
@@ -798,7 +841,7 @@ mod tests {
     #[test]
     fn approval_overlay_lines_preserve_decision_labels() {
         let lines = approval_overlay_lines(
-            "Review required\nQueue: 1 of 2 pending\nWarning: risky\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
+            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
         );
         let rendered = lines
             .iter()
@@ -807,9 +850,26 @@ mod tests {
             .collect::<String>();
 
         assert!(rendered.contains("Queue: 1 of 2 pending"));
+        assert!(rendered.contains("  - old"));
+        assert!(rendered.contains("  + new"));
         assert!(rendered.contains("[Ctrl-A] approve"));
         assert!(rendered.contains("[Ctrl-X] deny"));
         assert!(rendered.contains("[Esc] defer"));
+    }
+
+    #[test]
+    fn approval_overlay_title_surfaces_origin() {
+        let title =
+            approval_overlay_title("Review required\nOrigin: claude-code\nQueue: 1 of 1 pending");
+        let rendered = title
+            .spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect::<String>();
+
+        assert!(rendered.contains("Approval required"));
+        assert!(rendered.contains("claude-code"));
+        assert!(rendered.contains("Esc defer"));
     }
 
     #[test]
