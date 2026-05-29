@@ -40,6 +40,7 @@ struct SlashSuggestion {
     exact_prefix: bool,
     score: usize,
     hint: String,
+    query: String,
 }
 
 pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<'static>> {
@@ -65,7 +66,8 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
     if !suggestions.is_empty() {
         let total = slash_catalog.len();
         lines.push(Line::from(vec![
-            Span::styled("▌ Slash commands", theme::accent_style()),
+            Span::styled("▌ /", theme::accent_style()),
+            Span::styled(" commands", theme::primary_style()),
             Span::styled(
                 format!(
                     "  {} of {total}  Tab completes / Enter runs / Esc closes",
@@ -76,12 +78,14 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
         ]));
         lines.extend(suggestions.into_iter().map(|suggestion| {
             let prefix = if suggestion.exact_prefix { "▸" } else { " " };
-            Line::from(vec![
+            let mut spans = vec![
                 Span::styled(prefix, Style::default().fg(theme::sage())),
                 Span::raw(" "),
-                Span::styled(suggestion.usage.to_owned(), theme::accent_style()),
+            ];
+            spans.extend(highlight_usage(&suggestion.usage, &suggestion.query));
+            spans.extend([
                 Span::styled(
-                    format!(" [{}]", suggestion.category),
+                    format!("  {}", suggestion.category),
                     Style::default().fg(theme::amber()),
                 ),
                 Span::styled(format!("  {}", suggestion.summary), theme::dim_style()),
@@ -89,7 +93,8 @@ pub fn render_input_lines(input: &str, slash_catalog: &[SlashHint]) -> Vec<Line<
                     format!("  {}", suggestion.hint),
                     right_hint_style(&suggestion.hint),
                 ),
-            ])
+            ]);
+            Line::from(spans)
         }));
     }
     lines
@@ -205,6 +210,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
                         fuzzy.unwrap_or(500)
                     },
                     hint: hint_right_hint(hint),
+                    query: query.clone(),
                 })
             } else {
                 None
@@ -230,6 +236,7 @@ fn slash_suggestion_rows(input: &str, slash_catalog: &[SlashHint]) -> Vec<SlashS
             exact_prefix: hint.exact_prefix,
             score: hint.score,
             hint: hint.hint,
+            query: hint.query,
         })
         .collect()
 }
@@ -265,6 +272,7 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
                     } else {
                         "value".to_owned()
                     },
+                    query: String::new(),
                 }
             })
             .collect();
@@ -278,8 +286,33 @@ fn command_drilldown_rows(hint: &SlashHint) -> Vec<SlashSuggestion> {
             exact_prefix: true,
             score: 0,
             hint: "set ▸".to_owned(),
+            query: String::new(),
         })
         .collect()
+}
+
+fn highlight_usage(usage: &str, query: &str) -> Vec<Span<'static>> {
+    let query = query.trim_start_matches('/').to_lowercase();
+    if query.is_empty() {
+        return vec![Span::styled(usage.to_owned(), theme::accent_style())];
+    }
+    let mut spans = Vec::new();
+    let mut query_chars = query.chars();
+    let mut next_match = query_chars.next();
+    for ch in usage.chars() {
+        if next_match.is_some_and(|needle| ch.to_ascii_lowercase() == needle) {
+            spans.push(Span::styled(
+                ch.to_string(),
+                Style::default()
+                    .fg(theme::primary())
+                    .add_modifier(Modifier::BOLD),
+            ));
+            next_match = query_chars.next();
+        } else {
+            spans.push(Span::styled(ch.to_string(), theme::accent_style()));
+        }
+    }
+    spans
 }
 
 fn hint_right_hint(hint: &SlashHint) -> String {
@@ -425,9 +458,9 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains("Slash commands"));
-        assert!(rendered.contains("▸ /run <prompt> [Run]  Run an audited prompt."));
-        assert!(rendered.contains("▸ /receipt latest [Evidence]  Show latest receipt."));
+        assert!(rendered.contains("/ commands"));
+        assert!(rendered.contains("▸ /run <prompt>  Run  Run an audited prompt."));
+        assert!(rendered.contains("▸ /receipt latest  Evidence  Show latest receipt."));
     }
 
     #[test]

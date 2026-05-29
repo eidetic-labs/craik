@@ -29,6 +29,12 @@ pub struct StatusLineMetrics<'a> {
     pub details_collapsed: bool,
 }
 
+struct FooterHint {
+    key: &'static str,
+    label: String,
+    urgent: bool,
+}
+
 pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'_>) -> String {
     let model = model_label(state, "not selected");
     let run_state = run_state_label(
@@ -197,9 +203,6 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
     );
     let model = compact_model_label(model_label(state, "model not selected"));
     let effort = effort_label(state).unwrap_or("default");
-    let approval_label = metrics
-        .pending_approval
-        .map(|approval_id| compact_label(approval_id, 18));
     let mut spans = vec![
         Span::styled(" default ", mode_pill_style("default")),
         Span::raw("  "),
@@ -212,85 +215,149 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         Span::styled(status_glyph(request_state), status_style(request_state)),
         Span::raw(" "),
         Span::styled(request_state, status_style(request_state)),
-        Span::raw("    "),
-        Span::styled("/", theme::accent_style()),
-        Span::styled(" commands", theme::dim_style()),
     ];
-    if let Some(overlay) = metrics.active_overlay {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled("overlay ", theme::accent_style()),
-            Span::styled(overlay.to_lowercase(), theme::dim_style()),
-        ]);
-    } else if let Some(approval_id) = approval_label {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled(
-                "⌃a",
-                Style::default()
-                    .fg(theme::amber())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!(" approvals {approval_id}"),
-                Style::default().fg(theme::amber()),
-            ),
-        ]);
-    } else if !metrics.backend_connected {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled("⌃b", Style::default().fg(theme::red())),
-            Span::styled(" reconnect", Style::default().fg(theme::red())),
-        ]);
-    } else if metrics.queued_inputs > 0 {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled("queued ", theme::accent_style()),
-            Span::styled(metrics.queued_inputs.to_string(), theme::dim_style()),
-        ]);
-    } else if !state.receipt_ids.is_empty() {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled("⌃e", theme::accent_style()),
-            Span::styled(" evidence", theme::dim_style()),
-        ]);
-    } else {
-        spans.extend([
-            Span::raw("   "),
-            Span::styled("⌃m", theme::accent_style()),
-            Span::styled(" memory", theme::dim_style()),
-        ]);
+    for hint in footer_hints(state, &metrics) {
+        spans.push(Span::raw("   "));
+        let key_style = if hint.urgent {
+            Style::default()
+                .fg(theme::amber())
+                .add_modifier(Modifier::BOLD)
+        } else {
+            theme::accent_style()
+        };
+        let label_style = if hint.urgent {
+            Style::default().fg(theme::amber())
+        } else {
+            theme::dim_style()
+        };
+        spans.push(Span::styled(hint.key, key_style));
+        spans.push(Span::styled(format!(" {}", hint.label), label_style));
     }
-    spans.extend([
-        Span::raw("   "),
-        Span::styled("⌃r", theme::accent_style()),
-        Span::styled(" runs", theme::dim_style()),
-        Span::raw("   "),
-        Span::styled("⌃m", theme::accent_style()),
-        Span::styled(" memory", theme::dim_style()),
-        Span::raw("   "),
-        Span::styled("?", theme::accent_style()),
-        Span::styled(
-            if metrics.search_active {
-                " search active"
-            } else if metrics.details_collapsed {
-                " details collapsed"
-            } else {
-                " help"
-            },
-            theme::dim_style(),
-        ),
-        Span::raw("   "),
-        Span::styled(
-            if metrics.in_flight {
-                "⌃c stop"
-            } else {
-                "⌃c exit"
-            },
-            Style::default().fg(theme::red()),
-        ),
-    ]);
     Line::from(spans)
+}
+
+fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec<FooterHint> {
+    let mut hints = vec![FooterHint {
+        key: "/",
+        label: "commands".to_owned(),
+        urgent: false,
+    }];
+    let mut middle = Vec::new();
+    if let Some(overlay) = metrics.active_overlay {
+        middle.push(FooterHint {
+            key: "esc",
+            label: "chat".to_owned(),
+            urgent: false,
+        });
+        middle.push(FooterHint {
+            key: match overlay {
+                "Memory" => "⌃e",
+                "Evidence" => "⌃r",
+                "Runs" => "⌃e",
+                "Approvals" => "⌃a",
+                _ => "⌃m",
+            },
+            label: match overlay {
+                "Memory" => "evidence",
+                "Evidence" => "runs",
+                "Runs" => "evidence",
+                "Approvals" => "approve",
+                _ => "memory",
+            }
+            .to_owned(),
+            urgent: overlay == "Approvals",
+        });
+    } else if !metrics.backend_connected {
+        middle.push(FooterHint {
+            key: "⌃b",
+            label: "reconnect".to_owned(),
+            urgent: true,
+        });
+        middle.push(FooterHint {
+            key: "⌃m",
+            label: "memory".to_owned(),
+            urgent: false,
+        });
+    } else if let Some(approval_id) = metrics.pending_approval {
+        middle.push(FooterHint {
+            key: "⌃a",
+            label: format!("approvals {}", compact_label(approval_id, 14)),
+            urgent: true,
+        });
+        middle.push(FooterHint {
+            key: "⌃e",
+            label: "evidence".to_owned(),
+            urgent: false,
+        });
+    } else if metrics.queued_inputs > 0 {
+        middle.push(FooterHint {
+            key: "⌃b",
+            label: format!("queued {}", metrics.queued_inputs),
+            urgent: false,
+        });
+        middle.push(FooterHint {
+            key: "⌃r",
+            label: "runs".to_owned(),
+            urgent: false,
+        });
+    } else {
+        if !state.receipt_ids.is_empty() {
+            middle.push(FooterHint {
+                key: "⌃e",
+                label: "evidence".to_owned(),
+                urgent: false,
+            });
+        }
+        if !state.run_ids.is_empty() {
+            middle.push(FooterHint {
+                key: "⌃r",
+                label: "runs".to_owned(),
+                urgent: false,
+            });
+        }
+        middle.push(FooterHint {
+            key: "⌃m",
+            label: "memory".to_owned(),
+            urgent: false,
+        });
+    }
+    for hint in middle.into_iter().take(2) {
+        if !hints.iter().any(|existing| existing.key == hint.key) {
+            hints.push(hint);
+        }
+    }
+    for fallback in [
+        FooterHint {
+            key: "⌃r",
+            label: "runs".to_owned(),
+            urgent: false,
+        },
+        FooterHint {
+            key: "⌃m",
+            label: "memory".to_owned(),
+            urgent: false,
+        },
+    ] {
+        if hints.len() >= 3 {
+            break;
+        }
+        if !hints.iter().any(|existing| existing.key == fallback.key) {
+            hints.push(fallback);
+        }
+    }
+    hints.push(FooterHint {
+        key: "?",
+        label: if metrics.search_active {
+            "search active"
+        } else if metrics.details_collapsed {
+            "details collapsed"
+        } else {
+            "help"
+        }
+        .to_owned(),
+        urgent: false,
+    });
+    hints
 }
 
 fn compact_label(value: &str, max_chars: usize) -> String {
@@ -625,9 +692,9 @@ mod tests {
         )
         .to_string();
 
-        assert!(rendered.contains("approvals approval_run_ed..."));
+        assert!(rendered.contains("approvals"));
         assert!(rendered.contains("⌃a"));
-        assert!(rendered.contains("⌃c stop"));
+        assert!(rendered.contains("? help"));
     }
 
     #[test]
@@ -682,7 +749,7 @@ mod tests {
         .to_string();
 
         assert!(rendered.contains("overlay"));
-        assert!(rendered.contains("evidence"));
-        assert!(rendered.contains("⌃m memory"));
+        assert!(rendered.contains("esc chat"));
+        assert!(rendered.contains("⌃r runs"));
     }
 }
