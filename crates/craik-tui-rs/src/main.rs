@@ -520,6 +520,30 @@ mod tests {
 
     const CLAUDE_CODE_STREAM: &str =
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
+    const PROVIDER_FIXTURES: &[(&str, &str, &str)] = &[
+        (
+            include_str!(
+                "../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"
+            ),
+            "provider_anthropic_messages",
+            "Anthropic Claude Sonnet 4",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
+            "provider_openai_responses",
+            "OpenAI GPT-5.4",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
+            "provider_gemini",
+            "Google Gemini 2.5 Pro",
+        ),
+        (
+            include_str!("../../../tests/fixtures/gateway/provider_local_ollama_stream.jsonl"),
+            "provider_local_ollama",
+            "Local Ollama Llama 3.1 8B",
+        ),
+    ];
 
     #[test]
     fn interactive_frame_renders_core_regions() {
@@ -572,6 +596,22 @@ mod tests {
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("receipt_run_review_desktop_plan"));
         assert!(!rendered.contains("Activity"));
+    }
+
+    #[test]
+    fn provider_fixtures_render_provider_neutral_tui_frames() {
+        for (input, provider_id, display_name) in PROVIDER_FIXTURES {
+            let app = app_from_fixture(input);
+            let rendered = render_app_frame(&app, 144, 38);
+
+            assert!(rendered.contains("Transcript"));
+            assert!(rendered.contains("Activity"));
+            assert!(rendered.contains("Run provenance"));
+            assert!(rendered.contains(*provider_id));
+            assert!(rendered.contains(*display_name));
+            assert!(rendered.contains("Run completed"));
+            assert!(rendered.contains("Receipts: 1"));
+        }
     }
 
     #[test]
