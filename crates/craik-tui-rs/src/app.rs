@@ -2334,9 +2334,10 @@ impl PendingApproval {
     }
 
     fn modal_text(&self, position: usize, total: usize, latest_receipt: Option<&str>) -> String {
+        let origin = self.origin_label();
         let mut lines = vec![
             "Review required".to_owned(),
-            format!("Origin: {}", self.origin_label()),
+            format!("Origin: {origin}"),
             format!("Queue: {position} of {} pending", total.max(1)),
             "State: pending".to_owned(),
             format!(
@@ -2349,14 +2350,20 @@ impl PendingApproval {
             ),
             format!("Request: {}", self.message),
         ];
+        lines.push(String::new());
+        lines.push("Source request".to_owned());
         push_optional_line(&mut lines, "Tool", self.tool.as_deref());
         push_optional_line(&mut lines, "Target", self.target.as_deref());
+        push_optional_line(&mut lines, "Command", self.command.as_deref());
+        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
+        if self.has_governance_context() {
+            lines.push(String::new());
+            lines.push("Craik governance".to_owned());
+        }
         push_optional_line(&mut lines, "Capability", self.capability.as_deref());
         push_optional_line(&mut lines, "Resource", self.resource.as_deref());
         push_optional_line(&mut lines, "Scope", self.scope.as_deref());
         push_optional_line(&mut lines, "Size", self.size.as_deref());
-        push_optional_line(&mut lines, "Command", self.command.as_deref());
-        push_optional_line(&mut lines, "Reason", self.reason.as_deref());
         push_optional_line(&mut lines, "Risk", self.risk.as_deref());
         push_optional_line(&mut lines, "Receipt", self.receipt_id.as_deref());
         push_optional_line(&mut lines, "Expires", self.expires_at.as_deref());
@@ -2377,7 +2384,22 @@ impl PendingApproval {
     }
 
     fn origin_label(&self) -> &str {
-        self.origin.as_deref().unwrap_or("craik governance")
+        match self.origin.as_deref() {
+            Some("claude-code") => "via Claude Code",
+            Some("craik governance") => "craik governance",
+            Some(origin) => origin,
+            None => "craik governance",
+        }
+    }
+
+    fn has_governance_context(&self) -> bool {
+        self.capability.is_some()
+            || self.resource.is_some()
+            || self.scope.is_some()
+            || self.size.is_some()
+            || self.risk.is_some()
+            || self.receipt_id.is_some()
+            || self.expires_at.is_some()
     }
 }
 
@@ -3320,9 +3342,11 @@ mod tests {
         assert!(entry.body.contains("State: pending"));
         assert!(entry.body.contains("ID: approval_edit_123"));
         assert!(entry.body.contains("Request: Edit src/lib.rs?"));
+        assert!(entry.body.contains("Source request"));
         assert!(entry.body.contains("Tool: Edit"));
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
+        assert!(entry.body.contains("Craik governance"));
         assert!(entry.body.contains("Warning: high-risk approval"));
         assert!(
             entry
@@ -3383,6 +3407,8 @@ mod tests {
         let overlay = app.overlay_text().expect("approval overlay");
         assert!(overlay.contains("Queue: 2 of 2 pending"));
         assert!(overlay.contains("Origin: craik governance"));
+        assert!(overlay.contains("Source request"));
+        assert!(overlay.contains("Craik governance"));
         assert!(overlay.contains("Capability: file-write"));
         assert!(overlay.contains("Resource: crates/craik-tui-rs/src/app.rs"));
         assert!(overlay.contains("Scope: workspace"));
@@ -3394,6 +3420,39 @@ mod tests {
         assert!(overlay.contains("  - old"));
         assert!(overlay.contains("  + new"));
         assert!(overlay.contains("Actions: [Ctrl-A] approve"));
+    }
+
+    #[test]
+    fn claude_code_approval_modal_uses_only_source_fields_without_governance_section() {
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_edit_claude",
+                "message": "Claude Code requests approval for `Edit` on `README.md`: write docs",
+                "backend": "claude-code",
+                "kind": "approval_request",
+                "tool": "Edit",
+                "target": "README.md",
+                "reason": "write docs"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&approval);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        let overlay = app.overlay_text().expect("approval overlay");
+        assert!(overlay.contains("Origin: via Claude Code"));
+        assert!(overlay.contains("Source request"));
+        assert!(overlay.contains("Tool: Edit"));
+        assert!(overlay.contains("Target: README.md"));
+        assert!(overlay.contains("Reason: write docs"));
+        assert!(!overlay.contains("Craik governance"));
+        assert!(!overlay.contains("Capability:"));
+        assert!(!overlay.contains("Scope:"));
     }
 
     #[test]
