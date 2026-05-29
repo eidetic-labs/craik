@@ -550,7 +550,11 @@ fn approval_overlay_lines(body: &str) -> Vec<Line<'static>> {
             )));
             continue;
         }
-        if line == "Review required" || line == "Preview" {
+        if line == "Review required"
+            || line == "Preview"
+            || line == "Source request"
+            || line == "Craik governance"
+        {
             rendered.push(Line::from(Span::styled(
                 line.to_owned(),
                 theme::accent_style(),
@@ -1150,7 +1154,9 @@ mod tests {
             .expect("prompt remains visible below modal");
 
         assert!(prompt_row > modal_row);
-        assert!(rows.iter().any(|row| row.contains("claude-code")));
+        assert!(rows.iter().any(|row| row.contains("via Claude Code")));
+        assert!(rows.iter().any(|row| row.contains("Source request")));
+        assert!(rows.iter().any(|row| row.contains("Craik governance")));
         assert!(rows.iter().any(|row| row.contains("Warning:")));
         assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
         assert!(rows.iter().any(|row| row.contains("  + new")));
