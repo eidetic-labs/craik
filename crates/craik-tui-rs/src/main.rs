@@ -958,7 +958,7 @@ mod tests {
         let rendered = render_app_frame(&app, 72, 24);
 
         assert!(rendered.contains("Transcript"));
-        assert!(rendered.contains("receipt_run_review_desktop_plan"));
+        assert!(rendered.contains("normalized Gateway"));
         assert!(!rendered.contains("Activity"));
     }
 
