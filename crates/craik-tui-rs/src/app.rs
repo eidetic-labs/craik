@@ -3088,13 +3088,18 @@ fn fallback_approval_id(tool: Option<&str>, target: Option<&str>, message: &str)
 }
 
 fn should_hide_transcript_event(event: &GatewayEvent) -> bool {
-    matches!(
+    if matches!(
         event
             .data
             .get("transcript_visibility")
             .and_then(|value| value.as_str()),
         Some("hidden" | "approval" | "state")
-    )
+    ) {
+        return true;
+    }
+    first_string_data(event, &["text", "message"])
+        .as_deref()
+        .is_some_and(|message| is_low_value_lifecycle_message(event, message))
 }
 
 fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
@@ -3121,6 +3126,48 @@ fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
         || lower.contains("failed")
         || lower.contains("blocked")
         || lower.contains("denied")
+}
+
+fn is_low_value_lifecycle_message(event: &GatewayEvent, message: &str) -> bool {
+    if event
+        .data
+        .get("transcript_visibility")
+        .and_then(|value| value.as_str())
+        == Some("visible")
+    {
+        return false;
+    }
+    if message_has_attention(message) {
+        return false;
+    }
+    let normalized = normalize_transcript_text(message);
+    let lower = normalized.to_ascii_lowercase();
+    if lower.starts_with("claude code event:")
+        || lower.starts_with("claude code system event:")
+        || lower == "claude code is still running; waiting for stream output."
+        || lower == "claude code returned a final result."
+        || lower.contains("thinking_tokens")
+        || lower.contains("rate_limit_event")
+    {
+        return true;
+    }
+    let kind = event
+        .data
+        .get("kind")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(kind.as_str(), "event" | "system" | "status" | "heartbeat")
+}
+
+fn message_has_attention(message: &str) -> bool {
+    let lower = normalize_transcript_text(message).to_ascii_lowercase();
+    lower.contains("warning")
+        || lower.contains("error")
+        || lower.contains("failed")
+        || lower.contains("blocked")
+        || lower.contains("denied")
+        || lower.contains("approval")
 }
 
 fn recent_transcript_body_matches(entries: &[TranscriptEntry], body: &str) -> bool {
@@ -4155,6 +4202,27 @@ mod tests {
                 data: json!({"message": "Claude Code is still running; waiting for stream output.", "transcript_visibility": "hidden"}),
             },
             GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"message": "Claude Code is still running; waiting for stream output."}),
+            },
+            GatewayEvent {
+                event_type: "run.event".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"backend": "claude-code", "kind": "system", "message": "Claude Code system event: thinking_tokens."}),
+            },
+            GatewayEvent {
+                event_type: "run.event".to_owned(),
+                created_at: None,
+                run_id: None,
+                task_id: None,
+                data: json!({"backend": "claude-code", "kind": "event", "message": "Claude Code event: rate_limit_event."}),
+            },
+            GatewayEvent {
                 event_type: "run.event".to_owned(),
                 created_at: None,
                 run_id: None,
@@ -4183,6 +4251,8 @@ mod tests {
         assert!(!transcript_text.contains("Claude Code event: user."));
         assert!(!transcript_text.contains("still running; waiting for stream output"));
         assert!(!transcript_text.contains("Claude Code returned a final result."));
+        assert!(!transcript_text.contains("thinking_tokens"));
+        assert!(!transcript_text.contains("rate_limit_event"));
         assert_eq!(
             app.transcript
                 .iter()
