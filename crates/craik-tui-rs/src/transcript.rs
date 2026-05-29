@@ -153,15 +153,17 @@ fn render_entries(
 ) -> Vec<Line<'static>> {
     let mut lines = Vec::new();
     for entry in entries {
-        let (label, color) = transcript_label_style(&entry.kind);
-        lines.push(highlight_search(
-            vec![
-                Span::styled("▌ ", Style::default().fg(color)),
-                Span::styled(format!("{label} "), label_style(&entry.kind, color)),
-                Span::styled(entry.title.clone(), title_style(&entry.kind)),
-            ],
-            options.search_query,
-        ));
+        if should_render_entry_header(entry) {
+            let (label, color) = transcript_label_style(&entry.kind);
+            lines.push(highlight_search(
+                vec![
+                    Span::styled(header_marker(&entry.kind), Style::default().fg(color)),
+                    Span::styled(format!("{label} "), label_style(&entry.kind, color)),
+                    Span::styled(entry.title.clone(), title_style(&entry.kind)),
+                ],
+                options.search_query,
+            ));
+        }
         let entry_lines = entry_body_lines(entry, options.expand_details);
         let mut body_lines = entry_lines.iter().peekable();
         if body_lines.peek().is_none() {
@@ -212,7 +214,8 @@ fn rendered_single_entry_line_count(
     entry: &TranscriptEntry,
     options: &TranscriptRenderOptions<'_>,
 ) -> usize {
-    1 + entry_body_lines(entry, options.expand_details).len().max(1)
+    usize::from(should_render_entry_header(entry))
+        + entry_body_lines(entry, options.expand_details).len().max(1)
         + entry_separator_lines(&entry.kind)
 }
 
@@ -236,6 +239,29 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
             | TranscriptKind::Approval
             | TranscriptKind::Receipt
     )
+}
+
+fn should_render_entry_header(entry: &TranscriptEntry) -> bool {
+    !matches!(entry.kind, TranscriptKind::Assistant) || !is_generic_assistant_title(&entry.title)
+}
+
+fn is_generic_assistant_title(title: &str) -> bool {
+    matches!(
+        title.trim().to_ascii_lowercase().as_str(),
+        "assistant" | "model"
+    )
+}
+
+fn header_marker(kind: &TranscriptKind) -> &'static str {
+    match kind {
+        TranscriptKind::Tool
+        | TranscriptKind::File
+        | TranscriptKind::Command
+        | TranscriptKind::Progress
+        | TranscriptKind::Receipt
+        | TranscriptKind::System => "· ",
+        _ => "▌ ",
+    }
 }
 
 fn transcript_label_style(kind: &TranscriptKind) -> (&'static str, Color) {
@@ -281,7 +307,7 @@ fn is_evidence_kind(kind: &TranscriptKind) -> bool {
 fn body_prefix(kind: &TranscriptKind) -> &'static str {
     match kind {
         TranscriptKind::User => "  ▌ ",
-        TranscriptKind::Assistant => "    ",
+        TranscriptKind::Assistant => "",
         TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
         TranscriptKind::System | TranscriptKind::Progress => "  · ",
         TranscriptKind::Receipt => "  ⌁ ",
@@ -327,18 +353,16 @@ fn render_body_line(
     search_query: Option<&str>,
 ) -> Line<'static> {
     let Some(cached) = cached else {
-        let spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
+        let spans = body_prefix_spans(kind);
         return highlight_search(spans, search_query);
     };
     if let Some(diff) = diff_line_spans(kind, cached) {
-        let mut spans = vec![Span::styled(
-            body_prefix(kind),
-            body_prefix_style(kind).bg(diff.background),
-        )];
+        let mut spans =
+            body_prefix_spans_with_style(kind, body_prefix_style(kind).bg(diff.background));
         spans.extend(diff.spans);
         return highlight_search(spans, search_query);
     }
-    let mut spans = vec![Span::styled(body_prefix(kind), body_prefix_style(kind))];
+    let mut spans = body_prefix_spans(kind);
     if let Some(markdown) = markdown_line_spans(&cached.text) {
         spans.extend(markdown);
     } else if let Some(bullet) = cached.text.strip_prefix("- ") {
@@ -353,6 +377,19 @@ fn render_body_line(
         spans.extend(value_spans(kind, &cached.text));
     }
     highlight_search(spans, search_query)
+}
+
+fn body_prefix_spans(kind: &TranscriptKind) -> Vec<Span<'static>> {
+    body_prefix_spans_with_style(kind, body_prefix_style(kind))
+}
+
+fn body_prefix_spans_with_style(kind: &TranscriptKind, style: Style) -> Vec<Span<'static>> {
+    let prefix = body_prefix(kind);
+    if prefix.is_empty() {
+        Vec::new()
+    } else {
+        vec![Span::styled(prefix, style)]
+    }
 }
 
 fn key_label_style(kind: &TranscriptKind) -> Style {
@@ -804,11 +841,11 @@ mod tests {
 
         assert_eq!(
             transcript_scroll_offset(&entries, &TranscriptRenderOptions::expanded(), 0, 2),
-            5
+            4
         );
         assert_eq!(
             transcript_scroll_offset(&entries, &TranscriptRenderOptions::expanded(), 2, 2),
-            3
+            2
         );
     }
 
@@ -820,11 +857,22 @@ mod tests {
         )];
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
-        let body = &lines[1];
+        let body = &lines[0];
 
-        assert_eq!(body.spans[1].content, "Run ");
-        assert_eq!(body.spans[2].content, "cargo test");
-        assert_eq!(body.spans[2].style.fg, Some(crate::theme::amber()));
+        assert_eq!(body.spans[0].content, "Run ");
+        assert_eq!(body.spans[1].content, "cargo test");
+        assert_eq!(body.spans[1].style.fg, Some(crate::theme::amber()));
+    }
+
+    #[test]
+    fn custom_assistant_titles_still_render_header_context() {
+        let entries = vec![TranscriptEntry::assistant("Review Summary", "Looks good.")];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+
+        assert_eq!(lines[0].spans[1].content, "assistant ");
+        assert_eq!(lines[0].spans[2].content, "Review Summary");
+        assert_eq!(lines[1].spans[0].content, "Looks good.");
     }
 
     #[test]
@@ -836,15 +884,15 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[2].spans[1].content, "fn");
-        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::accent()));
-        let let_span = lines[3]
+        assert_eq!(lines[1].spans[0].content, "fn");
+        assert_eq!(lines[1].spans[0].style.fg, Some(crate::theme::accent()));
+        let let_span = lines[2]
             .spans
             .iter()
             .find(|span| span.content.as_ref() == "let")
             .expect("let keyword is highlighted");
         assert_eq!(let_span.style.fg, Some(crate::theme::accent()));
-        let number_span = lines[3]
+        let number_span = lines[2]
             .spans
             .iter()
             .find(|span| span.content.as_ref() == "42")
@@ -860,12 +908,12 @@ mod tests {
         )];
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
-        let class_span = lines[2]
+        let class_span = lines[1]
             .spans
             .iter()
             .find(|span| span.content.as_ref() == "class")
             .expect("python class keyword is tokenized");
-        let true_span = lines[4]
+        let true_span = lines[3]
             .spans
             .iter()
             .find(|span| span.content.as_ref() == "True")
@@ -884,13 +932,13 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[1].spans[2].content, "# ");
-        assert_eq!(lines[1].spans[3].content, "Plan");
-        assert_eq!(lines[1].spans[3].style.fg, Some(crate::theme::primary()));
-        assert_eq!(lines[2].spans[2].content, "> ");
-        assert_eq!(lines[2].spans[3].style.fg, Some(crate::theme::dim()));
-        assert_eq!(lines[3].spans[2].content, "1.");
-        assert_eq!(lines[3].spans[2].style.fg, Some(crate::theme::accent()));
+        assert_eq!(lines[0].spans[1].content, "# ");
+        assert_eq!(lines[0].spans[2].content, "Plan");
+        assert_eq!(lines[0].spans[2].style.fg, Some(crate::theme::primary()));
+        assert_eq!(lines[1].spans[1].content, "> ");
+        assert_eq!(lines[1].spans[2].style.fg, Some(crate::theme::dim()));
+        assert_eq!(lines[2].spans[1].content, "1.");
+        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::accent()));
     }
 
     #[test]
@@ -952,9 +1000,9 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[1].spans[1].to_string(), "* ");
-        assert_eq!(lines[1].spans[1].style.bg, None);
-        assert_eq!(lines[2].spans[1].style.bg, None);
+        assert_eq!(lines[0].spans[0].to_string(), "* ");
+        assert_eq!(lines[0].spans[0].style.bg, None);
+        assert_eq!(lines[1].spans[0].style.bg, None);
     }
 
     #[test]
@@ -967,14 +1015,14 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(
-            lines[2].spans[1].style.bg,
+            lines[1].spans[0].style.bg,
             Some(crate::theme::red_surface())
         );
         assert_eq!(
-            lines[3].spans[1].style.bg,
+            lines[2].spans[0].style.bg,
             Some(crate::theme::sage_surface())
         );
-        assert_eq!(lines[4].spans[1].style.bg, None);
+        assert_eq!(lines[3].spans[0].style.bg, None);
     }
 
     #[test]
@@ -1013,8 +1061,8 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
         assert_eq!(lines[1].spans[0].content, "  ▌ ");
-        assert_eq!(lines[4].spans[0].content, "    ");
-        assert_eq!(lines[7].spans[0].content, "  · ");
+        assert_eq!(lines[3].spans[0].content, "Looks good.");
+        assert_eq!(lines[6].spans[0].content, "  · ");
     }
 
     #[test]
@@ -1027,14 +1075,14 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[0].spans[1].content, "assistant ");
-        assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
-        assert_eq!(lines[3].spans[1].content, "evidence ");
-        assert_eq!(lines[3].spans[1].style.fg, Some(crate::theme::mute()));
-        assert_eq!(lines[4].spans[0].content, "  ⌁ ");
-        assert_eq!(lines[5].spans[1].content, "approval ");
-        assert_eq!(lines[6].spans[0].content, "  ! ");
-        assert_eq!(lines[6].spans[0].style.fg, Some(crate::theme::red()));
+        assert_eq!(lines[0].spans[0].content, "Model response");
+        assert_eq!(lines[0].spans[0].style.fg, Some(crate::theme::primary()));
+        assert_eq!(lines[2].spans[1].content, "evidence ");
+        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::mute()));
+        assert_eq!(lines[3].spans[0].content, "  ⌁ ");
+        assert_eq!(lines[4].spans[1].content, "approval ");
+        assert_eq!(lines[5].spans[0].content, "  ! ");
+        assert_eq!(lines[5].spans[0].style.fg, Some(crate::theme::red()));
     }
 
     #[test]
@@ -1051,7 +1099,7 @@ mod tests {
         let evidence_lines =
             render_transcript_lines(&evidence, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(conversation_lines.len(), 3);
+        assert_eq!(conversation_lines.len(), 2);
         assert_eq!(evidence_lines.len(), 2);
         assert_eq!(evidence_lines[0].spans[1].content, "tool ");
         assert_eq!(
