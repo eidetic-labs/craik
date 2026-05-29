@@ -177,18 +177,21 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         metrics.active_overlay.is_some(),
     );
     let model = compact_model_label(model_label(state, "model not selected"));
-    let effort = effort_label(state).unwrap_or("default");
     let mut spans = vec![
         Span::styled(" default ", mode_pill_style("default")),
         Span::raw("  "),
         Span::styled(model, theme::primary_style()),
-        Span::raw(" "),
-        Span::styled(effort, effort_style(effort)),
+    ];
+    if let Some(effort) = effort_label(state) {
+        spans.push(Span::raw(" "));
+        spans.push(Span::styled(effort.to_owned(), effort_style(effort)));
+    }
+    spans.extend([
         Span::raw("  "),
         Span::styled(status_glyph(request_state), status_style(request_state)),
         Span::raw(" "),
         Span::styled(request_state, status_style(request_state)),
-    ];
+    ]);
     for hint in footer_hints(state, &metrics) {
         spans.push(Span::raw("   "));
         let key_style = if hint.urgent {
@@ -384,22 +387,11 @@ fn compact_model_label(value: &str) -> String {
     compact_label(value, 28)
 }
 
-fn effort_label(state: &GatewayAppState) -> Option<&'static str> {
-    let value = state
-        .active_model_display_name
+fn effort_label(state: &GatewayAppState) -> Option<&str> {
+    state
+        .active_reasoning_effort
         .as_deref()
-        .or(state.active_model.as_deref())
-        .unwrap_or_default()
-        .to_lowercase();
-    if value.contains("max") {
-        Some("max")
-    } else if value.contains("high") {
-        Some("high")
-    } else if value.contains("low") {
-        Some("low")
-    } else {
-        None
-    }
+        .filter(|effort| !effort.trim().is_empty())
 }
 
 fn model_label<'a>(state: &'a GatewayAppState, fallback: &'a str) -> &'a str {
@@ -675,6 +667,25 @@ mod tests {
 
         assert!(rendered.contains("Opus 4.7 Extended"));
         assert!(!rendered.contains("Thinking Preview"));
+    }
+
+    #[test]
+    fn status_line_uses_only_source_backed_reasoning_effort() {
+        let inferred_only = GatewayAppState {
+            active_model_display_name: Some("Anthropic Claude Opus 4.7 High".to_owned()),
+            ..GatewayAppState::default()
+        };
+        let source_backed = GatewayAppState {
+            active_model_display_name: Some("Anthropic Claude Opus 4.7".to_owned()),
+            active_reasoning_effort: Some("high".to_owned()),
+            ..GatewayAppState::default()
+        };
+
+        let inferred_rendered = status_line(&inferred_only, status_metrics()).to_string();
+        let source_rendered = status_line(&source_backed, status_metrics()).to_string();
+
+        assert!(!inferred_rendered.contains(" high "));
+        assert!(source_rendered.contains(" high "));
     }
 
     #[test]
