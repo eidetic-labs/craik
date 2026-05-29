@@ -5,12 +5,21 @@ from __future__ import annotations
 import hashlib
 
 
-def hidden_status_event(*, kind: str, message: str) -> dict[str, object]:
+def hidden_status_event(
+    *, kind: str, message: str, **extra: object
+) -> dict[str, object]:
     return {
         "kind": kind,
         "message": message,
         "transcript_visibility": "hidden",
+        **extra,
     }
+
+
+def should_stream_progress(event: dict[str, object]) -> bool:
+    if event.get("transcript_visibility") in {"hidden", "approval", "state"}:
+        return False
+    return event.get("kind") in {"output", "error"}
 
 
 def is_approval_request_event(event: dict[str, object]) -> bool:

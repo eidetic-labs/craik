@@ -25,6 +25,10 @@ from craik.runtime.backend.claude_code_attestations import (
     _claude_model_arg,
     _put_claude_code_tool_attestations,
 )
+from craik.runtime.backend.claude_code_events import (
+    hidden_status_event,
+    should_stream_progress,
+)
 from craik.runtime.backend.claude_code_grants import (
     _put_claude_code_approval_receipt,
     _put_claude_code_grants,
@@ -402,8 +406,13 @@ def _execute_claude_code_prompt(
                         break
                     now = time.monotonic()
                     if now - last_heartbeat >= 10:
-                        _emit_claude_code_progress(
-                            "Claude Code is still running; waiting for stream output."
+                        _emit_claude_code_event(
+                            hidden_status_event(
+                                kind="heartbeat",
+                                message=(
+                                    "Claude Code is still running; waiting for stream output."
+                                ),
+                            )
                         )
                         last_heartbeat = now
                     continue
@@ -421,7 +430,8 @@ def _execute_claude_code_prompt(
                     if not event_text:
                         continue
                     progress_events.append(event_text)
-                    _emit_claude_code_progress(event_text)
+                    if should_stream_progress(event):
+                        _emit_claude_code_progress(event_text)
                 if final_text:
                     output_parts.append(final_text)
         try:
