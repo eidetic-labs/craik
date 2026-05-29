@@ -24,6 +24,25 @@ pub(crate) enum RunFilter {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ActiveOverlay {
+    Memory,
+    Evidence,
+    Runs,
+    Approvals,
+}
+
+impl ActiveOverlay {
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            Self::Memory => "Memory",
+            Self::Evidence => "Evidence",
+            Self::Runs => "Runs",
+            Self::Approvals => "Approvals",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TranscriptJump {
     Tool,
     Approval,
@@ -124,6 +143,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) transcript_focused: bool,
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
+    pub(crate) active_overlay: Option<ActiveOverlay>,
     pub(crate) search_active: bool,
     pub(crate) search_query: String,
     pub(crate) search_match_index: Option<usize>,
@@ -164,6 +184,7 @@ impl InteractiveApp {
             transcript_focused: false,
             expand_transcript_details: true,
             help_visible: false,
+            active_overlay: None,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -216,6 +237,7 @@ impl InteractiveApp {
             transcript_focused: false,
             expand_transcript_details: true,
             help_visible: false,
+            active_overlay: None,
             search_active: false,
             search_query: String::new(),
             search_match_index: None,
@@ -432,6 +454,108 @@ impl InteractiveApp {
         }
     }
 
+    pub(crate) fn overlay_title(&self) -> Option<String> {
+        let overlay = self.active_overlay?;
+        Some(format!("{}  Esc returns to chat", overlay.title()))
+    }
+
+    pub(crate) fn overlay_text(&self) -> Option<String> {
+        let overlay = self.active_overlay?;
+        Some(match overlay {
+            ActiveOverlay::Memory => self.memory_overlay_text(),
+            ActiveOverlay::Evidence => self.evidence_overlay_text(),
+            ActiveOverlay::Runs => self.runs_overlay_text(),
+            ActiveOverlay::Approvals => self.approvals_overlay_text(),
+        })
+    }
+
+    fn memory_overlay_text(&self) -> String {
+        let mut lines = vec![
+            "Session memory context".to_owned(),
+            format!(
+                "  Provider: {}",
+                self.state
+                    .active_provider_family
+                    .as_deref()
+                    .or(self.state.active_provider_id.as_deref())
+                    .unwrap_or("not selected")
+            ),
+            format!(
+                "  Model: {}",
+                self.state
+                    .active_model_display_name
+                    .as_deref()
+                    .or(self.state.active_model.as_deref())
+                    .unwrap_or("not selected")
+            ),
+            format!("  Receipts available: {}", self.state.receipt_ids.len()),
+            format!("  Runs available: {}", self.run_records.len()),
+        ];
+        if let Some(prompt) = self.last_prompt_preview.as_deref() {
+            lines.push(format!("  Last prompt: {prompt}"));
+        }
+        lines.extend([
+            String::new(),
+            "Navigation".to_owned(),
+            "  Ctrl-E evidence  Ctrl-R runs  Ctrl-A approvals  Esc chat".to_owned(),
+        ]);
+        lines.join("\n")
+    }
+
+    fn evidence_overlay_text(&self) -> String {
+        let mut lines = vec![
+            "Evidence".to_owned(),
+            format!("  Receipts: {}", self.state.receipt_ids.len()),
+            format!("  Tools: {}", self.state.tool_events.len()),
+            format!("  Files: {}", self.state.file_paths.len()),
+            format!("  Commands: {}", self.state.commands.len()),
+            format!("  Approvals seen: {}", self.state.approval_requests.len()),
+        ];
+        append_recent(&mut lines, "Recent receipts", &self.state.receipt_ids);
+        append_recent(&mut lines, "Recent files", &self.state.file_paths);
+        append_recent(&mut lines, "Recent commands", &self.state.commands);
+        lines.extend([
+            String::new(),
+            "Navigation".to_owned(),
+            "  Ctrl-R runs  Ctrl-M memory  Ctrl-A approvals  Esc chat".to_owned(),
+        ]);
+        lines.join("\n")
+    }
+
+    fn runs_overlay_text(&self) -> String {
+        let mut lines = vec![
+            "Runs".to_owned(),
+            format!("  Filter: {}", self.run_filter.label()),
+            format!("  Total: {}", self.run_records.len()),
+            format!("  Visible: {}", self.filtered_run_indexes().len()),
+            "  Controls: Ctrl-J/K select  Ctrl-L filter  Ctrl-O export".to_owned(),
+            String::new(),
+        ];
+        if let Some(summary) = self.selected_run_summary() {
+            lines.push(format!("Selected: {summary}"));
+        }
+        lines.push(self.selected_run_provenance());
+        lines.join("\n")
+    }
+
+    fn approvals_overlay_text(&self) -> String {
+        let mut lines = vec![
+            "Approval review".to_owned(),
+            format!("  Pending: {}", self.pending_approvals.len()),
+            "  Controls: Ctrl-N/P select  Ctrl-A approve  Ctrl-X deny".to_owned(),
+            String::new(),
+        ];
+        if let Some(summary) = self.selected_approval_summary() {
+            lines.push(format!("Selected: {summary}"));
+        }
+        if let Some(preview) = self.selected_approval_preview() {
+            lines.push(preview);
+        } else {
+            lines.push("No pending approvals.".to_owned());
+        }
+        lines.join("\n")
+    }
+
     pub(crate) fn prompt_context(&self) -> String {
         let mut lines = Vec::new();
         if !self.backend_connected {
@@ -487,6 +611,9 @@ impl InteractiveApp {
         if self.search_active {
             return self.handle_search_key(key);
         }
+        if self.active_overlay.is_some() {
+            return self.handle_overlay_key(key);
+        }
         match key.code {
             KeyCode::Char('?') => {
                 self.help_visible = true;
@@ -522,11 +649,11 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.approve_selected();
+                self.active_overlay = Some(ActiveOverlay::Approvals);
                 LoopAction::Continue
             }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.deny_selected();
+                self.active_overlay = Some(ActiveOverlay::Approvals);
                 LoopAction::Continue
             }
             KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -574,12 +701,15 @@ impl InteractiveApp {
                 LoopAction::Continue
             }
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.transcript_focused = !self.transcript_focused;
+                self.active_overlay = Some(ActiveOverlay::Runs);
                 LoopAction::Continue
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.expand_transcript_details = !self.expand_transcript_details;
-                self.transcript_scroll = 0;
+                self.active_overlay = Some(ActiveOverlay::Evidence);
+                LoopAction::Continue
+            }
+            KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.active_overlay = Some(ActiveOverlay::Memory);
                 LoopAction::Continue
             }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -684,6 +814,68 @@ impl InteractiveApp {
         }
     }
 
+    fn handle_overlay_key(&mut self, key: KeyEvent) -> LoopAction {
+        match key.code {
+            KeyCode::Esc => {
+                self.active_overlay = None;
+            }
+            KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.active_overlay = Some(ActiveOverlay::Memory);
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.active_overlay = Some(ActiveOverlay::Evidence);
+            }
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.active_overlay = Some(ActiveOverlay::Runs);
+            }
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.active_overlay == Some(ActiveOverlay::Approvals) {
+                    self.approve_selected();
+                } else {
+                    self.active_overlay = Some(ActiveOverlay::Approvals);
+                }
+            }
+            KeyCode::Char('x')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                self.deny_selected();
+            }
+            KeyCode::Char('n')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                self.select_next_approval();
+            }
+            KeyCode::Char('p')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                self.select_previous_approval();
+            }
+            KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_next_run();
+            }
+            KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.select_previous_run();
+            }
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.cycle_run_filter();
+            }
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.export_selected_run();
+            }
+            KeyCode::PageUp => {
+                self.scroll_transcript_up();
+            }
+            KeyCode::PageDown => {
+                self.scroll_transcript_down();
+            }
+            _ => {}
+        }
+        LoopAction::Continue
+    }
+
     fn handle_help_key(&mut self, key: KeyEvent) -> LoopAction {
         match key.code {
             KeyCode::Esc | KeyCode::Enter | KeyCode::Char('?') => {
@@ -707,13 +899,17 @@ impl InteractiveApp {
             "  Ctrl-J / Ctrl-K select next or previous run".to_owned(),
             "  Ctrl-L cycle run filters: all, active, approval, failed, completed".to_owned(),
             "  Ctrl-C stop active run; Ctrl-B reconnect Gateway backend".to_owned(),
+            "Overlays".to_owned(),
+            "  Ctrl-M memory; Ctrl-E evidence; Ctrl-R runs; Ctrl-A approvals".to_owned(),
+            "  Esc returns from an overlay to chat".to_owned(),
             "Transcript".to_owned(),
             "  Ctrl-F search; Ctrl-N / Ctrl-P navigate search results".to_owned(),
             "  Ctrl-T/G/H/Z jump to tool, approval, receipt, or error".to_owned(),
             "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
-            "  Ctrl-R focus transcript; Ctrl-E expand or collapse detail".to_owned(),
+            "  PageUp / PageDown scroll transcript".to_owned(),
             "Approvals".to_owned(),
-            "  Ctrl-A approve selected request; Ctrl-X deny selected request".to_owned(),
+            "  Ctrl-A opens approval review; Ctrl-A approves from that overlay; Ctrl-X denies"
+                .to_owned(),
             "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
                 .to_owned(),
             "Help".to_owned(),
@@ -2061,6 +2257,21 @@ fn push_optional_bullet(lines: &mut Vec<String>, label: &str, value: Option<&str
     }
 }
 
+fn append_recent(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    if values.is_empty() {
+        return;
+    }
+    lines.push(String::new());
+    lines.push(title.to_owned());
+    lines.extend(
+        values
+            .iter()
+            .rev()
+            .take(5)
+            .map(|value| format!("  {value}")),
+    );
+}
+
 fn push_markdown_section(lines: &mut Vec<String>, title: &str, values: &[String]) {
     lines.push(format!("## {title}"));
     if values.is_empty() {
@@ -2352,7 +2563,7 @@ fn transcript_entry_index_for_scroll(entries: &[TranscriptEntry], scroll: u16) -
 
 #[cfg(test)]
 mod tests {
-    use super::{InteractiveApp, LoopAction, RunRecord, export_file_stem};
+    use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use craik_tui_rs::GatewayEvent;
@@ -3369,6 +3580,78 @@ mod tests {
     }
 
     #[test]
+    fn overlay_keys_open_and_escape_returns_to_chat() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Memory));
+        assert!(
+            app.overlay_text()
+                .expect("memory overlay")
+                .contains("Session memory")
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Evidence));
+        assert!(
+            app.overlay_text()
+                .expect("evidence overlay")
+                .contains("Evidence")
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Runs));
+        assert!(app.overlay_text().expect("runs overlay").contains("Runs"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.active_overlay, None);
+    }
+
+    #[test]
+    fn approval_overlay_requires_review_before_approval_key_decides() {
+        let event = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_edit_1",
+                "message": "Edit src/lib.rs?",
+                "tool": "Edit",
+                "target": "src/lib.rs"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&event);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert!(!app.transcript.iter().any(|entry| entry.title == "Denying"));
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.active_overlay, None);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving")
+        );
+        assert!(
+            app.overlay_text()
+                .expect("approval overlay")
+                .contains("approval_edit_1")
+        );
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving")
+        );
+    }
+
+    #[test]
     fn tab_completes_visible_slash_command() {
         let mut app = InteractiveApp::for_test_with_messages([]);
         app.slash_catalog = vec![SlashHint::new(
@@ -3507,12 +3790,12 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_r_toggles_transcript_focus() {
+    fn ctrl_r_opens_runs_overlay() {
         let mut app = InteractiveApp::for_test_with_messages([]);
 
         app.handle_key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
 
-        assert!(app.transcript_focused);
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Runs));
     }
 
     #[test]

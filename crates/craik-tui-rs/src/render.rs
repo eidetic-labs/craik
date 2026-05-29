@@ -24,7 +24,7 @@ pub struct StatusLineMetrics<'a> {
     pub pending_approval: Option<&'a str>,
     pub backend_connected: bool,
     pub queued_inputs: usize,
-    pub transcript_focused: bool,
+    pub active_overlay: Option<&'a str>,
     pub search_active: bool,
     pub details_collapsed: bool,
 }
@@ -193,6 +193,7 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         metrics.pending_approval.is_some(),
         metrics.backend_connected,
         metrics.queued_inputs,
+        metrics.active_overlay.is_some(),
     );
     let model = compact_model_label(model_label(state, "model not selected"));
     let effort = effort_label(state).unwrap_or("default");
@@ -215,7 +216,13 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
         Span::styled("/", theme::accent_style()),
         Span::styled(" commands", theme::dim_style()),
     ];
-    if let Some(approval_id) = approval_label {
+    if let Some(overlay) = metrics.active_overlay {
+        spans.extend([
+            Span::raw("   "),
+            Span::styled("overlay ", theme::accent_style()),
+            Span::styled(overlay.to_lowercase(), theme::dim_style()),
+        ]);
+    } else if let Some(approval_id) = approval_label {
         spans.extend([
             Span::raw("   "),
             Span::styled(
@@ -257,14 +264,10 @@ pub fn status_line(state: &GatewayAppState, metrics: StatusLineMetrics<'_>) -> L
     spans.extend([
         Span::raw("   "),
         Span::styled("⌃r", theme::accent_style()),
-        Span::styled(
-            if metrics.transcript_focused {
-                " split"
-            } else {
-                " runs"
-            },
-            theme::dim_style(),
-        ),
+        Span::styled(" runs", theme::dim_style()),
+        Span::raw("   "),
+        Span::styled("⌃m", theme::accent_style()),
+        Span::styled(" memory", theme::dim_style()),
         Span::raw("   "),
         Span::styled("?", theme::accent_style()),
         Span::styled(
@@ -378,9 +381,12 @@ fn footer_state_label(
     has_pending_approval: bool,
     backend_connected: bool,
     queued_inputs: usize,
+    has_active_overlay: bool,
 ) -> &'static str {
     if !backend_connected {
         "disconnected"
+    } else if has_active_overlay {
+        "overlay"
     } else if has_pending_approval {
         "waiting for approval"
     } else if queued_inputs > 0 {
@@ -399,6 +405,7 @@ fn footer_state_label(
 fn status_color(state: &str) -> Color {
     match state {
         "disconnected" => theme::red(),
+        "overlay" => theme::accent(),
         "waiting for approval" => theme::amber(),
         "thinking" | "working" => theme::amber(),
         "completed" | "ready" => theme::sage(),
@@ -462,7 +469,7 @@ mod tests {
             pending_approval: None,
             backend_connected: true,
             queued_inputs: 0,
-            transcript_focused: false,
+            active_overlay: None,
             search_active: false,
             details_collapsed: false,
         }
@@ -649,7 +656,6 @@ mod tests {
         let rendered = status_line(
             &state,
             StatusLineMetrics {
-                transcript_focused: true,
                 search_active: true,
                 details_collapsed: true,
                 ..status_metrics()
@@ -658,7 +664,25 @@ mod tests {
         .to_string();
 
         assert!(rendered.contains("search active"));
-        assert!(rendered.contains("⌃r split"));
+        assert!(rendered.contains("⌃r runs"));
         assert!(rendered.contains("?"));
+    }
+
+    #[test]
+    fn status_line_surfaces_active_overlay() {
+        let state = GatewayAppState::default();
+
+        let rendered = status_line(
+            &state,
+            StatusLineMetrics {
+                active_overlay: Some("Evidence"),
+                ..status_metrics()
+            },
+        )
+        .to_string();
+
+        assert!(rendered.contains("overlay"));
+        assert!(rendered.contains("evidence"));
+        assert!(rendered.contains("⌃m memory"));
     }
 }
