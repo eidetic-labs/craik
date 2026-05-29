@@ -747,7 +747,7 @@ mod tests {
         assert!(rendered.contains("Ctrl-R runs"));
         assert!(rendered.contains("Prompt"));
         assert!(rendered.contains("Continue analysis"));
-        assert!(rendered.contains("overlay evidence"));
+        assert!(rendered.contains("esc chat"));
     }
 
     #[test]
@@ -832,7 +832,7 @@ mod tests {
 
         let rendered = render_app_frame(&app, 104, 28);
 
-        assert!(rendered.contains("Slash commands"));
+        assert!(rendered.contains("/ commands"));
         assert!(rendered.contains("/mode default"));
         assert!(rendered.contains("current"));
         assert!(rendered.contains("read-only"));
