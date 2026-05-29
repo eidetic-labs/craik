@@ -283,6 +283,11 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     assert approval_event.data["tool"] == "Edit"
     assert approval_event.data["target"] == "README.md"
     assert approval_event.data["reason"] == "write docs"
+    assert str(approval_event.data["approval_id"]).startswith("approval_claude_code_")
+    result_event = next(
+        event for event in emitted if event.type == "run.event" and event.data["kind"] == "result"
+    )
+    assert result_event.data["transcript_visibility"] == "hidden"
 
 
 def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None:

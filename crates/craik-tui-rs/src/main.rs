@@ -1224,6 +1224,7 @@ mod tests {
             )
             .expect("approval fixture parses"),
         );
+        app.active_overlay = None;
 
         let rendered = render_app_frame(&app, 120, 34);
 
