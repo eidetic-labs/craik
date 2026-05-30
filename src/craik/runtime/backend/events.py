@@ -29,6 +29,7 @@ BackendEventType = Literal[
     "receipt.created",
     "run.output",
     "run.completed",
+    "assistant_text",
     "error",
 ]
 
@@ -165,9 +166,8 @@ class ToolData(_ToolDataOptional):
 
 
 class AssistantTextData(TypedDict):
-    """Payload for an assistant-text event (emitted as `run.event`)."""
+    """Payload for a first-class `assistant_text` event."""
 
-    kind: Literal["assistant_text"]
     text: str
 
 
@@ -280,10 +280,10 @@ def assistant_text_event(
     run_id: str | None = None,
     task_id: str | None = None,
 ) -> BackendEvent:
-    """Build an assistant-text event (emitted as a `run.event` for now)."""
-    data: AssistantTextData = {"kind": "assistant_text", "text": text}
+    """Build a first-class `assistant_text` event carrying model text."""
+    data: AssistantTextData = {"text": text}
     return _make(
-        "run.event",
+        "assistant_text",
         source=source,
         data=dict(data),
         run_id=run_id,
@@ -394,3 +394,48 @@ def error_event(
         run_id=run_id,
         task_id=task_id,
     )
+
+
+# --- Streaming coalescing ---------------------------------------------------
+# Backends that stream assistant text emit CUMULATIVE snapshots: each chunk is
+# the full text-so-far, typically a prefix-extension of the prior one. The
+# Coalescer collapses those snapshots per run into a single superseding text,
+# so consumers see one `assistant_text` event instead of N partial fragments.
+
+
+class Coalescer:
+    """Collapse cumulative assistant-text snapshots per run; latest supersedes."""
+
+    def __init__(self) -> None:
+        # run_id -> latest full-text snapshot. None keys group run-less streams.
+        self._latest: dict[str | None, str] = {}
+
+    def update(self, run_id: str | None, snapshot: str) -> None:
+        """Record the latest cumulative snapshot for a run (supersede, never append)."""
+        self._latest[run_id] = snapshot
+
+    def assistant_text(self, run_id: str | None) -> str | None:
+        """Return the current coalesced text for a run, or None if absent."""
+        return self._latest.get(run_id)
+
+    def flush(
+        self,
+        run_id: str | None,
+        *,
+        source: EventSource,
+        task_id: str | None = None,
+    ) -> BackendEvent | None:
+        """Consume a run's coalesced text as one `assistant_text` event.
+
+        Returns None when the run accumulated no text. The run's state is
+        cleared regardless, so a subsequent flush without new snapshots is None.
+        """
+        text = self._latest.pop(run_id, None)
+        if not text:
+            return None
+        return assistant_text_event(
+            text=text,
+            source=source,
+            run_id=run_id,
+            task_id=task_id,
+        )

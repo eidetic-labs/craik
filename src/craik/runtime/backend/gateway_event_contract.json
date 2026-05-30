@@ -231,6 +231,15 @@
         }
       ]
     },
+    "assistant_text": {
+      "requirements": [
+        {
+          "kind": "non_empty_string",
+          "path": "data.text",
+          "message": "data.text must be a non-empty string"
+        }
+      ]
+    },
     "error": {
       "requirements": [
         {

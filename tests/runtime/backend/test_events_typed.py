@@ -59,9 +59,9 @@ def test_tool_event_shape():
 def test_assistant_text_event_shape():
     ev = assistant_text_event(text="hello world", source="anthropic-cli", run_id="run1")
     d = ev.as_dict()
-    assert d["type"] == "run.event"
+    assert d["type"] == "assistant_text"
     assert d["source"] == "anthropic-cli"
-    assert d["data"] == {"kind": "assistant_text", "text": "hello world"}
+    assert d["data"] == {"text": "hello world"}
 
 
 def test_approval_requested_event_shape():
