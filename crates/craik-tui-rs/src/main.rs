@@ -469,7 +469,6 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
         .overlay_title()
         .unwrap_or_else(|| "▌OVERLAY  Esc returns to chat".to_owned());
     let items = app.overlay_items();
-    let visible_start = app.overlay_scroll as usize;
     let visible_capacity = list_area.height.saturating_sub(4) as usize;
     let mut list_lines = vec![
         Line::from(vec![
@@ -488,30 +487,14 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
                 },
             ),
         ]),
-        Line::from(vec![
-            Span::styled(
-                if items.len() == 1 {
-                    "1".to_owned()
-                } else {
-                    items.len().to_string()
-                },
-                theme::dim_style(),
+        Line::from(Span::styled(
+            format!(
+                "{} {}",
+                items.len(),
+                if items.len() == 1 { "item" } else { "items" }
             ),
-            Span::styled(
-                format!(
-                    " shown  {}-{} visible",
-                    if items.is_empty() {
-                        0
-                    } else {
-                        visible_start + 1
-                    },
-                    visible_start
-                        .saturating_add(visible_capacity)
-                        .min(items.len())
-                ),
-                theme::mute_style(),
-            ),
-        ]),
+            theme::dim_style(),
+        )),
         Line::from(""),
     ];
     for (index, item) in items
@@ -559,8 +542,8 @@ fn render_browse_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: rata
         .block(
             Block::default()
                 .title(overlay_detail_title(app))
-                .title_style(theme::accent_style())
-                .border_style(theme::accent_style())
+                .title_style(theme::mute_style())
+                .border_style(theme::mute_style())
                 .borders(Borders::LEFT)
                 .padding(Padding::horizontal(1)),
         )
@@ -679,7 +662,7 @@ fn render_approval_overlay(
         )
         .style(theme::surface_style())
         .wrap(Wrap { trim: false });
-    frame.render_widget(Clear, overlay_area);
+    frame.render_widget(Clear, area);
     frame.render_widget(overlay, overlay_area);
 }
 
@@ -1584,7 +1567,7 @@ mod tests {
 
         assert!(input_row > overlay_row);
         assert!(rows.iter().any(|row| row.contains("filter")));
-        assert!(rows.iter().any(|row| row.contains("visible")));
+        assert!(rows.iter().any(|row| row.contains("items")));
         assert!(rows.iter().any(|row| row.contains("Ctrl-R runs")));
         assert!(
             rows.iter()
