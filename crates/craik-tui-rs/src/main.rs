@@ -169,8 +169,25 @@ fn run_interactive_app() -> anyhow::Result<()> {
 }
 
 fn initialize_detected_theme() {
-    if let Ok(response) = env::var("CRAIK_TUI_OSC11_RESPONSE") {
-        let _ = theme::set_detected_terminal_mode_from_osc11(&response);
+    // An explicit OSC 11 response (tests / CI / terminal wrappers) wins.
+    if let Ok(response) = env::var("CRAIK_TUI_OSC11_RESPONSE")
+        && theme::set_detected_terminal_mode_from_osc11(&response)
+    {
+        return;
+    }
+    detect_terminal_background();
+}
+
+fn detect_terminal_background() {
+    use terminal_colorsaurus::{QueryOptions, ThemeMode as TerminalThemeMode, theme_mode};
+    // Queries the terminal's background (OSC 11) with a bounded timeout and a
+    // safe fallback: on a non-TTY, a non-responding terminal, or any error this
+    // returns Err and we leave detection to COLORFGBG / the dark default.
+    if let Ok(mode) = theme_mode(QueryOptions::default()) {
+        theme::set_detected_terminal_mode(match mode {
+            TerminalThemeMode::Dark => theme::ThemeMode::Dark,
+            TerminalThemeMode::Light => theme::ThemeMode::Light,
+        });
     }
 }
 
