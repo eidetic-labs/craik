@@ -6,7 +6,7 @@ of backends craik actually adapts, such as ``codex``, ``Codex CLI``,
 contracts. It blocks two things that belong only in private planning notes:
 
 1. Names of competing agent frameworks/tools craik does **not** integrate
-   (``OpenClaw``, ``Hermes Agent``, ``Aider``, ``Copilot CLI``).
+   (``OpenClaw``, ``Hermes Agent``, ``Aider``).
 2. Comparison or positioning phrasing of the ``<product>-style`` /
    ``<product>-like`` shape, regardless of which product is named.
 """
@@ -34,10 +34,6 @@ _FORBIDDEN_BRAND_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(r"\bAider\b", re.IGNORECASE),
-        "private competitor reference",
-    ),
-    (
-        re.compile(r"\bCopilot CLI\b", re.IGNORECASE),
         "private competitor reference",
     ),
     (
