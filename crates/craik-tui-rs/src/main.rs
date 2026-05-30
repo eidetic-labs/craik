@@ -24,12 +24,12 @@ use input::{
     input_cursor_position, render_input_lines, render_search_lines, render_slash_palette_lines,
 };
 use ratatui::{
-    Frame, Terminal,
-    backend::{CrosstermBackend, TestBackend},
+    Frame, Terminal, TerminalOptions, Viewport,
+    backend::{Backend, CrosstermBackend, TestBackend},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
 };
 use render::{StatusLineMetrics, status_line};
 use std::{
@@ -37,10 +37,11 @@ use std::{
     io::{self, IsTerminal},
     time::Duration,
 };
-use transcript::{
-    TranscriptRenderOptions, render_transcript_lines_window, search_match_count,
-    transcript_line_count, transcript_scroll_offset,
-};
+use transcript::{TranscriptRenderOptions, render_transcript_lines, search_match_count};
+#[cfg(test)]
+use transcript::{render_transcript_lines_window, transcript_line_count, transcript_scroll_offset};
+
+const NATIVE_LIVE_VIEWPORT_HEIGHT: u16 = 14;
 
 fn main() -> anyhow::Result<()> {
     let args = env::args().skip(1).collect::<Vec<_>>();
@@ -154,8 +155,12 @@ fn run_interactive_app() -> anyhow::Result<()> {
     enable_raw_mode()?;
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    terminal.clear()?;
+    let mut terminal = Terminal::with_options(
+        backend,
+        TerminalOptions {
+            viewport: Viewport::Inline(NATIVE_LIVE_VIEWPORT_HEIGHT),
+        },
+    )?;
     let result = run_interactive_loop(&mut terminal);
     disable_raw_mode()?;
     terminal.show_cursor()?;
@@ -172,9 +177,11 @@ fn run_interactive_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
 ) -> anyhow::Result<()> {
     let mut app = InteractiveApp::new()?;
+    let mut native_transcript = NativeTranscriptState::default();
     loop {
         app.drain_worker();
-        terminal.draw(|frame| draw_interactive_frame(frame, &app))?;
+        flush_native_transcript(terminal, &mut native_transcript, &app)?;
+        terminal.draw(|frame| draw_native_live_frame(frame, &app))?;
 
         if event::poll(Duration::from_millis(80))? {
             match event::read()? {
@@ -197,6 +204,116 @@ fn run_interactive_loop(
     Ok(())
 }
 
+#[derive(Default)]
+struct NativeTranscriptState {
+    flushed_entries: usize,
+}
+
+fn flush_native_transcript<B: Backend>(
+    terminal: &mut Terminal<B>,
+    state: &mut NativeTranscriptState,
+    app: &InteractiveApp,
+) -> Result<(), B::Error> {
+    if state.flushed_entries > app.transcript.len() {
+        state.flushed_entries = 0;
+    }
+    if state.flushed_entries == app.transcript.len() {
+        return Ok(());
+    }
+
+    let size = terminal.size()?;
+    let options = TranscriptRenderOptions {
+        expand_details: app.expand_transcript_details,
+        search_query: None,
+        content_width: Some(transcript_content_width(size.width)),
+    };
+    let lines = render_transcript_lines(&app.transcript[state.flushed_entries..], &options);
+    let lines = wrap_transcript_lines(lines, transcript_content_width(size.width));
+    if lines.is_empty() {
+        state.flushed_entries = app.transcript.len();
+        return Ok(());
+    }
+
+    let height = u16::try_from(lines.len()).unwrap_or(u16::MAX);
+    terminal.insert_before(height, |buffer| {
+        Paragraph::new(lines).render(buffer.area, buffer);
+    })?;
+    state.flushed_entries = app.transcript.len();
+    Ok(())
+}
+
+fn draw_native_live_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
+    let area = frame.area();
+    if app.help_visible {
+        let help = Paragraph::new(app.help_text())
+            .block(
+                Block::default()
+                    .title("▌HELP  Esc closes")
+                    .title_style(theme::accent_style())
+                    .border_style(theme::mute_style())
+                    .borders(Borders::LEFT)
+                    .padding(Padding::horizontal(1)),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(help, area);
+        return;
+    }
+    if app.active_overlay.is_some() {
+        render_active_overlay(frame, app, area);
+        return;
+    }
+
+    let slash_palette_lines = if app.search_active {
+        Vec::new()
+    } else {
+        render_slash_palette_lines(&app.input, &app.slash_catalog, app.slash_selected_index)
+    };
+    let palette_height = slash_palette_lines.len().min(6) as u16;
+    let input_height = input_panel_height(app);
+    let footer_height = 1;
+    let activity_lines = model_activity_line(app)
+        .map(|line| wrap_transcript_line(line, transcript_content_width(area.width)))
+        .unwrap_or_default();
+    let activity_height = u16::try_from(activity_lines.len()).unwrap_or(u16::MAX);
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(activity_height),
+            Constraint::Length(palette_height),
+            Constraint::Length(input_height),
+            Constraint::Length(footer_height),
+        ])
+        .split(area);
+
+    if !activity_lines.is_empty() {
+        frame.render_widget(
+            Paragraph::new(activity_lines)
+                .style(theme::surface_style())
+                .wrap(Wrap { trim: false }),
+            vertical[1],
+        );
+    }
+
+    if !slash_palette_lines.is_empty() {
+        let slash_palette = Paragraph::new(slash_palette_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::LEFT)
+                    .border_style(Style::default().fg(theme::accent()))
+                    .style(theme::surface_style())
+                    .padding(Padding::horizontal(1)),
+            )
+            .style(theme::surface_style())
+            .wrap(Wrap { trim: false });
+        frame.render_widget(slash_palette, vertical[2]);
+    }
+
+    render_input_panel(frame, app, vertical[3]);
+    render_footer(frame, app, vertical[4]);
+}
+
+#[cfg(test)]
 fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let area = frame.area();
     let vertical = Layout::default()
@@ -261,6 +378,11 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         frame.render_widget(slash_palette, slash_palette_area);
     }
 
+    render_input_panel(frame, app, vertical[2]);
+    render_footer(frame, app, vertical[3]);
+}
+
+fn render_input_panel(frame: &mut Frame<'_>, app: &InteractiveApp, area: Rect) {
     let input_title = input_title(app);
     let mut input_block = Block::default()
         .borders(Borders::LEFT)
@@ -273,7 +395,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             theme::accent_style(),
         )]));
     }
-    let input_inner = input_block.inner(vertical[2]);
+    let input_inner = input_block.inner(area);
     let input_lines = if app.search_active {
         render_search_lines(
             &app.search_query,
@@ -288,7 +410,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
-    frame.render_widget(input, vertical[2]);
+    frame.render_widget(input, area);
     let cursor_area = Rect {
         y: input_inner.y.saturating_add(input_row_offset),
         height: input_inner.height.saturating_sub(input_row_offset),
@@ -307,7 +429,9 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             cursor_area,
         ));
     }
+}
 
+fn render_footer(frame: &mut Frame<'_>, app: &InteractiveApp, area: Rect) {
     let footer = Paragraph::new(status_line(
         &app.state,
         StatusLineMetrics {
@@ -322,7 +446,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             details_collapsed: !app.expand_transcript_details,
         },
     ));
-    frame.render_widget(footer, vertical[3]);
+    frame.render_widget(footer, area);
 }
 
 fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
@@ -726,6 +850,7 @@ fn input_title(app: &InteractiveApp) -> String {
     String::new()
 }
 
+#[cfg(test)]
 fn render_transcript_panel(
     frame: &mut Frame<'_>,
     app: &InteractiveApp,
@@ -777,6 +902,7 @@ fn render_transcript_panel(
     frame.render_widget(transcript, area);
 }
 
+#[cfg(test)]
 fn visible_wrapped_transcript_lines(
     lines: Vec<Line<'static>>,
     width: usize,
@@ -908,6 +1034,7 @@ fn wrap_transcript_line(line: Line<'static>, width: usize) -> Vec<Line<'static>>
     output
 }
 
+#[cfg(test)]
 fn transcript_title(
     app: &InteractiveApp,
     options: &TranscriptRenderOptions<'_>,
@@ -977,6 +1104,7 @@ fn transcript_title(
     ])
 }
 
+#[cfg(test)]
 fn active_search_query(app: &InteractiveApp) -> Option<&str> {
     let query = app.search_query.trim();
     (!query.is_empty()).then_some(query)
@@ -1031,8 +1159,9 @@ fn usage() -> String {
 mod tests {
     use super::{
         InteractiveApp, Terminal, TestBackend, approval_overlay_lines, approval_overlay_title,
-        centered_input_row_offset, draw_interactive_frame, input_panel_height, input_title,
-        overlay_detail_lines, vertically_center_input_lines, visible_wrapped_transcript_lines,
+        centered_input_row_offset, draw_interactive_frame, draw_native_live_frame,
+        flush_native_transcript, input_panel_height, input_title, overlay_detail_lines,
+        vertically_center_input_lines, visible_wrapped_transcript_lines,
     };
     use crate::{
         app::ActiveOverlay,
@@ -1040,7 +1169,7 @@ mod tests {
         transcript::{TranscriptEntry, TranscriptKind},
     };
     use craik_tui_rs::parse_gateway_events;
-    use ratatui::text::Line;
+    use ratatui::{TerminalOptions, Viewport, text::Line};
 
     const CLAUDE_CODE_STREAM: &str =
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
@@ -1638,6 +1767,41 @@ mod tests {
         assert!(!source.contains(&["Disable", "MouseCapture"].concat()));
     }
 
+    #[test]
+    fn native_transcript_flushes_to_terminal_scrollback() {
+        let backend = TestBackend::new(48, 5);
+        let mut terminal = Terminal::with_options(
+            backend,
+            TerminalOptions {
+                viewport: Viewport::Inline(2),
+            },
+        )
+        .expect("inline terminal is created");
+        let mut state = super::NativeTranscriptState::default();
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        for index in 0..5 {
+            app.transcript.push(TranscriptEntry::assistant(
+                "Assistant",
+                &format!("scrollback line {index}"),
+            ));
+        }
+        app.input = "next prompt".to_owned();
+        app.input_cursor = app.input.len();
+
+        flush_native_transcript(&mut terminal, &mut state, &app)
+            .expect("native transcript flushes");
+        terminal
+            .draw(|frame| draw_native_live_frame(frame, &app))
+            .expect("live viewport renders");
+        let scrollback = buffer_rows(terminal.backend().scrollback()).join("\n");
+        let viewport = buffer_rows(terminal.backend().buffer()).join("\n");
+
+        assert_eq!(state.flushed_entries, app.transcript.len());
+        assert!(scrollback.contains("scrollback line 0"));
+        assert!(scrollback.contains("scrollback line 3"));
+        assert!(viewport.contains("next prompt"));
+    }
+
     fn app_from_fixture(input: &str) -> InteractiveApp {
         let events = parse_gateway_events(input).expect("fixture parses");
         let mut app = InteractiveApp::for_test_with_messages([]);
@@ -1658,7 +1822,10 @@ mod tests {
         terminal
             .draw(|frame| draw_interactive_frame(frame, app))
             .expect("interactive frame renders");
-        let buffer = terminal.backend().buffer();
+        buffer_rows(terminal.backend().buffer())
+    }
+
+    fn buffer_rows(buffer: &ratatui::buffer::Buffer) -> Vec<String> {
         let width = buffer.area.width as usize;
         buffer
             .content()

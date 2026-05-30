@@ -174,6 +174,7 @@ pub(crate) struct InteractiveApp {
     pub(crate) input_cursor: usize,
     pub(crate) transcript: Vec<TranscriptEntry>,
     pub(crate) transcript_scroll: u16,
+    #[cfg(test)]
     pub(crate) transcript_focused: bool,
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
@@ -214,6 +215,7 @@ impl InteractiveApp {
             input_cursor: 0,
             transcript: Vec::new(),
             transcript_scroll: 0,
+            #[cfg(test)]
             transcript_focused: false,
             expand_transcript_details: false,
             help_visible: false,
@@ -272,6 +274,7 @@ impl InteractiveApp {
             input_cursor: 0,
             transcript: Vec::new(),
             transcript_scroll: 0,
+            #[cfg(test)]
             transcript_focused: false,
             expand_transcript_details: false,
             help_visible: false,
@@ -2119,6 +2122,7 @@ impl InteractiveApp {
             .collect()
     }
 
+    #[cfg(test)]
     pub(crate) fn transcript_jump_summary(&self) -> Option<String> {
         let jump = self.transcript_jump?;
         let total = self
