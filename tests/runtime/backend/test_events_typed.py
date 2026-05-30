@@ -128,3 +128,17 @@ def test_source_default_on_dataclass_is_gateway():
 
     ev = BackendEvent(type="session.ready")
     assert ev.as_dict()["source"] == "gateway"
+
+
+def test_event_type_literal_matches_contract():
+    """The BackendEventType vocabulary and the contract must not drift apart.
+
+    Adapters add event types over time; this locks the Literal and the
+    machine-readable contract to exactly the same set in both directions.
+    """
+    from typing import get_args
+
+    from craik.runtime.backend.event_contract import known_event_types
+    from craik.runtime.backend.events import BackendEventType
+
+    assert set(get_args(BackendEventType)) == known_event_types()
