@@ -11,6 +11,7 @@ use syntect::{
 
 use crate::theme;
 
+#[cfg(test)]
 const TRANSCRIPT_RENDER_BUFFER_LINES: usize = 1_000;
 
 pub struct TranscriptEntry {
@@ -94,6 +95,7 @@ impl<'a> TranscriptRenderOptions<'a> {
     }
 }
 
+#[cfg(test)]
 pub fn transcript_scroll_offset(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
@@ -106,6 +108,7 @@ pub fn transcript_scroll_offset(
         .saturating_sub(transcript_scroll)
 }
 
+#[cfg(test)]
 pub fn transcript_line_count(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
@@ -113,7 +116,6 @@ pub fn transcript_line_count(
     rendered_entry_line_count(entries, options).min(u16::MAX as usize) as u16
 }
 
-#[cfg(test)]
 pub fn render_transcript_lines(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
@@ -122,6 +124,7 @@ pub fn render_transcript_lines(
     render_entries(&entries, options)
 }
 
+#[cfg(test)]
 pub fn render_transcript_lines_window(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
@@ -145,6 +148,7 @@ pub fn render_transcript_lines_window(
     render_entries(&visible_entries, options)
 }
 
+#[cfg(test)]
 pub fn transcript_render_window_start(scroll_offset: u16) -> u16 {
     scroll_offset.saturating_sub(TRANSCRIPT_RENDER_BUFFER_LINES.min(usize::from(u16::MAX)) as u16)
 }
@@ -265,6 +269,7 @@ pub fn search_match_count(entries: &[TranscriptEntry], query: &str) -> usize {
         .sum()
 }
 
+#[cfg(test)]
 fn rendered_entry_line_count(
     entries: &[TranscriptEntry],
     options: &TranscriptRenderOptions<'_>,
@@ -275,6 +280,7 @@ fn rendered_entry_line_count(
         .sum()
 }
 
+#[cfg(test)]
 fn rendered_single_entry_line_count(
     entry: &TranscriptEntry,
     options: &TranscriptRenderOptions<'_>,
