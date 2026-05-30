@@ -874,7 +874,6 @@ impl InteractiveApp {
 
     fn surface_pending_approval_overlay(&mut self) {
         self.open_overlay(ActiveOverlay::Approvals);
-        self.approval_overlay_reviewed = false;
     }
 
     fn close_unreviewed_approval_overlay(&mut self) {
@@ -1141,11 +1140,7 @@ impl InteractiveApp {
             }
             KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.active_overlay == Some(ActiveOverlay::Approvals) {
-                    if self.approval_overlay_reviewed {
-                        self.approve_selected();
-                    } else {
-                        self.approval_overlay_reviewed = true;
-                    }
+                    self.approve_selected();
                 } else {
                     self.open_overlay(ActiveOverlay::Approvals);
                 }
@@ -1154,10 +1149,16 @@ impl InteractiveApp {
                 if key.modifiers.contains(KeyModifiers::CONTROL)
                     && self.active_overlay == Some(ActiveOverlay::Approvals) =>
             {
-                if self.approval_overlay_reviewed {
-                    self.deny_selected();
+                self.deny_selected();
+            }
+            KeyCode::Char(action @ ('a' | 'd'))
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                if action == 'a' {
+                    self.approve_selected();
                 } else {
-                    self.approval_overlay_reviewed = true;
+                    self.deny_selected();
                 }
             }
             KeyCode::Char('n')
@@ -5463,47 +5464,44 @@ mod tests {
     }
 
     #[test]
-    fn approval_overlay_requires_review_before_approval_key_decides() {
-        let event = GatewayEvent {
+    fn approval_overlay_decides_on_single_keypress() {
+        let make_event = |approval_id: &str| GatewayEvent {
             event_type: "approval.requested".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
             data: json!({
-                "approval_id": "approval_edit_1",
+                "approval_id": approval_id,
                 "message": "Edit src/lib.rs?",
                 "tool": "Edit",
                 "target": "src/lib.rs"
             }),
         };
+
+        // A pending approval auto-surfaces and is immediately actionable — no review gate.
         let mut app = InteractiveApp::for_test_with_messages([]);
-        app.record_event(&event);
-
-        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.record_event(&make_event("approval_edit_1"));
         assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
-        assert!(!app.transcript.iter().any(|entry| entry.title == "Denying"));
-        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        assert_eq!(app.active_overlay, None);
-
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
-        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
-        assert!(
-            !app.transcript
-                .iter()
-                .any(|entry| entry.title == "Approving")
-        );
         assert!(
             app.overlay_text()
                 .expect("approval overlay")
                 .contains("approval_edit_1")
         );
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        // A single plain `a` approves the selected request.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             app.transcript
                 .iter()
                 .any(|entry| entry.title == "Approving")
         );
+
+        // A single plain `d` denies the selected request.
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&make_event("approval_edit_2"));
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        assert!(app.transcript.iter().any(|entry| entry.title == "Denying"));
     }
 
     #[test]

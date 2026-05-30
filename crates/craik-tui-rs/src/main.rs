@@ -29,7 +29,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget, Wrap},
 };
 use render::{StatusLineMetrics, status_line};
 use std::{
@@ -140,7 +140,8 @@ fn main() -> anyhow::Result<()> {
                 Block::default()
                     .title("Craik Gateway")
                     .border_style(theme::mute_style())
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             ),
             frame.area(),
         );
@@ -673,6 +674,7 @@ fn render_approval_overlay(
                 .title_style(border_style)
                 .border_style(border_style)
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .padding(Padding::horizontal(1)),
         )
         .style(theme::surface_style())

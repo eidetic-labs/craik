@@ -231,21 +231,13 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
         if overlay == "Approvals" {
             if metrics.pending_approval.is_some() {
                 middle.push(FooterHint {
-                    key: "⌃a",
-                    label: if metrics.approval_reviewed {
-                        "approve reviewed".to_owned()
-                    } else {
-                        "review selected".to_owned()
-                    },
+                    key: "a",
+                    label: "approve".to_owned(),
                     urgent: true,
                 });
                 middle.push(FooterHint {
-                    key: "⌃x",
-                    label: if metrics.approval_reviewed {
-                        "deny reviewed".to_owned()
-                    } else {
-                        "review before deny".to_owned()
-                    },
+                    key: "d",
+                    label: "deny".to_owned(),
                     urgent: metrics.approval_reviewed,
                 });
             } else {
@@ -768,21 +760,8 @@ mod tests {
     }
 
     #[test]
-    fn status_line_distinguishes_approval_review_from_decision() {
+    fn status_line_shows_single_press_approval_actions() {
         let state = GatewayAppState::default();
-
-        let review = status_line(
-            &state,
-            StatusLineMetrics {
-                active_overlay: Some("Approvals"),
-                pending_approval: Some("approval_123"),
-                approval_reviewed: false,
-                ..status_metrics()
-            },
-        )
-        .to_string();
-        assert!(review.contains("⌃a review selected"));
-        assert!(review.contains("review before deny"));
 
         let decide = status_line(
             &state,
@@ -794,8 +773,20 @@ mod tests {
             },
         )
         .to_string();
-        assert!(decide.contains("⌃a approve reviewed"));
-        assert!(decide.contains("⌃x deny reviewed"));
+        assert!(decide.contains("a approve"));
+        assert!(decide.contains("d deny"));
+
+        // No pending approval: the footer advertises the empty queue, not an action.
+        let empty = status_line(
+            &state,
+            StatusLineMetrics {
+                active_overlay: Some("Approvals"),
+                pending_approval: None,
+                ..status_metrics()
+            },
+        )
+        .to_string();
+        assert!(empty.contains("none pending"));
     }
 
     #[test]

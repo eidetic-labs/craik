@@ -381,7 +381,9 @@ fn collapsed_evidence_line(entry: &TranscriptEntry) -> Option<String> {
 fn is_collapsible(kind: &TranscriptKind) -> bool {
     matches!(
         kind,
-        TranscriptKind::Tool
+        TranscriptKind::System
+            | TranscriptKind::Progress
+            | TranscriptKind::Tool
             | TranscriptKind::Command
             | TranscriptKind::File
             | TranscriptKind::Approval
