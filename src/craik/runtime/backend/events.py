@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
@@ -78,6 +79,60 @@ class BackendEvent:
             "task_id": self.task_id,
             "data": self.data,
         }
+
+
+# --- Contract validation ----------------------------------------------------
+# `validate_event` is the raising, emission-time guard. The actual checking
+# lives in `event_contract.py` (the single source of truth over the
+# machine-readable `gateway_event_contract.json`); this is a thin adapter over
+# it. Builders invoke it only when CRAIK_VALIDATE_EVENTS is set, so production
+# stays fast while CI catches contract drift.
+
+
+class EventContractError(ValueError):
+    """Raised when an event violates the Gateway event contract."""
+
+
+def validate_event(ev: BackendEvent) -> None:
+    """Raise EventContractError if ev violates the gateway event contract.
+
+    Delegates to the single source of truth in event_contract.py. Imported
+    lazily because event_contract imports BackendEvent from this module.
+    """
+    from craik.runtime.backend.event_contract import (
+        format_gateway_event_contract_issues,
+        validate_gateway_event,
+    )
+
+    issues = validate_gateway_event(ev)
+    if issues:
+        raise EventContractError(format_gateway_event_contract_issues(issues))
+
+
+def _validation_enabled() -> bool:
+    """Whether emission-time contract validation is enabled (env-gated)."""
+    return os.environ.get("CRAIK_VALIDATE_EVENTS") == "1"
+
+
+def _make(
+    event_type: BackendEventType,
+    *,
+    source: EventSource,
+    data: dict[str, Any],
+    run_id: str | None,
+    task_id: str | None,
+) -> BackendEvent:
+    """Construct a BackendEvent, validating it when the env-gate is enabled."""
+    ev = BackendEvent(
+        type=event_type,
+        data=data,
+        source=source,
+        run_id=run_id,
+        task_id=task_id,
+    )
+    if _validation_enabled():
+        validate_event(ev)
+    return ev
 
 
 # --- Typed payloads ---------------------------------------------------------
@@ -182,10 +237,10 @@ def receipt_event(
         "decision": decision,
         "decided_by": decided_by,
     }
-    return BackendEvent(
-        type="receipt.created",
-        data=dict(data),
+    return _make(
+        "receipt.created",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -209,10 +264,10 @@ def tool_event(
         data["command"] = command
     if message is not None:
         data["message"] = message
-    return BackendEvent(
-        type="tool.used",
-        data=dict(data),
+    return _make(
+        "tool.used",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -227,10 +282,10 @@ def assistant_text_event(
 ) -> BackendEvent:
     """Build an assistant-text event (emitted as a `run.event` for now)."""
     data: AssistantTextData = {"kind": "assistant_text", "text": text}
-    return BackendEvent(
-        type="run.event",
-        data=dict(data),
+    return _make(
+        "run.event",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -254,10 +309,10 @@ def approval_requested_event(
         data["target"] = target
     if reason is not None:
         data["reason"] = reason
-    return BackendEvent(
-        type="approval.requested",
-        data=dict(data),
+    return _make(
+        "approval.requested",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -279,10 +334,10 @@ def approval_resolved_event(
         data["decided_by"] = decided_by
     if mode is not None:
         data["mode"] = mode
-    return BackendEvent(
-        type="approval.resolved",
-        data=dict(data),
+    return _make(
+        "approval.resolved",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -296,10 +351,10 @@ def run_started_event(
 ) -> BackendEvent:
     """Build a `run.started` event (run_id carried on the envelope)."""
     data: RunStartedData = {}
-    return BackendEvent(
-        type="run.started",
-        data=dict(data),
+    return _make(
+        "run.started",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -314,10 +369,10 @@ def run_completed_event(
 ) -> BackendEvent:
     """Build a `run.completed` event."""
     data: RunCompletedData = {"status": status}
-    return BackendEvent(
-        type="run.completed",
-        data=dict(data),
+    return _make(
+        "run.completed",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
@@ -332,10 +387,10 @@ def error_event(
 ) -> BackendEvent:
     """Build an `error` event."""
     data: ErrorData = {"message": message}
-    return BackendEvent(
-        type="error",
-        data=dict(data),
+    return _make(
+        "error",
         source=source,
+        data=dict(data),
         run_id=run_id,
         task_id=task_id,
     )
