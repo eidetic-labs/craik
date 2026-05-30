@@ -59,7 +59,7 @@ def test_brand_hygiene_guard_accepts_clean_tree(tmp_path: Path) -> None:
 
 def test_brand_hygiene_guard_reports_forbidden_reference(tmp_path: Path) -> None:
     _write_clean_tree(tmp_path)
-    forbidden = "Codex" + " CLI"
+    forbidden = "Open" + "Claw"
     (tmp_path / "src" / "craik" / "runtime.py").write_text(
         textwrap.dedent(
             f'''
@@ -72,7 +72,21 @@ def test_brand_hygiene_guard_reports_forbidden_reference(tmp_path: Path) -> None
 
     assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == [
         "src/craik/runtime.py:3: forbidden brand reference "
-        f"{forbidden!r} (private comparison reference)"
+        f"{forbidden!r} (private competitor reference)"
+    ]
+
+
+def test_brand_hygiene_guard_reports_comparison_shape(tmp_path: Path) -> None:
+    _write_clean_tree(tmp_path)
+    forbidden = "Codex" + "-style"
+    (tmp_path / "docs" / "guide.md").write_text(
+        f"Craik offers a {forbidden} approval surface.\n",
+        encoding="utf-8",
+    )
+
+    assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == [
+        "docs/guide.md:1: forbidden brand reference "
+        f"{forbidden!r} (comparison-shape phrasing)"
     ]
 
 
@@ -87,9 +101,25 @@ def test_brand_hygiene_guard_allows_runtime_contract_reference(tmp_path: Path) -
     assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == []
 
 
+def test_brand_hygiene_guard_allows_integration_vendor_products(
+    tmp_path: Path,
+) -> None:
+    """Official names of backends craik adapts are integration identifiers."""
+    _write_clean_tree(tmp_path)
+    codex_cli = "Codex" + " CLI"
+    chatgpt = "Chat" + "GPT"
+    (tmp_path / "docs" / "guide.md").write_text(
+        f"The {codex_cli} runs the loop; {chatgpt}-subscription auth is "
+        "a gray-zone path craik does not rely on.\n",
+        encoding="utf-8",
+    )
+
+    assert brand_hygiene.codebase_brand_hygiene_failures(tmp_path) == []
+
+
 def test_brand_hygiene_guard_allows_documented_exception(tmp_path: Path) -> None:
     _write_clean_tree(tmp_path)
-    forbidden = "Chat" + "GPT"
+    forbidden = "Aid" + "er"
     (tmp_path / "docs" / "guide.md").write_text(
         f"Allowed historical note mentions {forbidden} here.\n",
         encoding="utf-8",

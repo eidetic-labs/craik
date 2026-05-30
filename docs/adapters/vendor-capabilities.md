@@ -26,7 +26,7 @@ Two integration surfaces per vendor:
 | **Hook decision protocol** | JSON `hookSpecificOutput.permissionDecision: allow/deny` **or** exit code 2 | `permissionDecision: "deny"` **or** exit code 2 | JSON `decision: "deny"/"block"` + `reason` **or** exit code 2 |
 | **Hook headless-firing (smoke 2026-05-30)** | **✓ fires + allow + deny** | **✗ did NOT fire** for the shell tool under `codex exec` | **✓ fires + allow + deny** |
 | **CLI live-gate verdict** | **✓ live-gates** | **✗ observe-only** | **✓ live-gates** |
-| **CLI auth (automation)** | subscription/OAuth via `claude setup-token`, **or** API key | API key (consumer-subscription headless = unsupported/gray-zone) | API key (AI Studio) **or** Vertex SA (consumer OAuth interactive-only) |
+| **CLI auth (automation)** | subscription/OAuth via `claude setup-token`, **or** API key | API key (ChatGPT-subscription headless = unsupported/gray-zone) | API key (AI Studio) **or** Vertex SA (consumer OAuth interactive-only) |
 | **API surface** | Messages API (`tool_use`) | Responses API + Chat Completions (`function` tools) | `generateContent` (`functionCall`) |
 | **API caller-executes custom tools** | yes | yes (custom function tools only) | yes |
 | **API auth** | API key (+ Bedrock / Vertex) | API key (+ Azure) | AI Studio key / Vertex (google-auth / ADC) |
@@ -69,7 +69,7 @@ Two integration surfaces per vendor:
   **Root cause (OpenAI's own documentation):** Codex's PreToolUse *"doesn't intercept all shell calls yet, only the simple ones"*; the `unified_exec` shell path's interception is *"incomplete"*; the hook is *"a guardrail rather than a complete enforcement boundary."*
 
   **Consequence:** `OpenAICLI` is **observe-only** — it cannot reliably live-gate shell tool calls. **Live governance over OpenAI MUST go through the `OpenAIAPI` surface** (caller-executed function tools = complete enforcement boundary). Re-smoke on CLI upgrades; this may improve as `unified_exec` interception matures.
-- **CLI auth (automation):** API key. consumer-subscription headless use is unsupported / a gray-zone path and is not an automation surface craik relies on.
+- **CLI auth (automation):** API key. ChatGPT-subscription headless use is unsupported / a gray-zone path and is not an automation surface craik relies on.
 
 ### API — `OpenAIAPI`
 

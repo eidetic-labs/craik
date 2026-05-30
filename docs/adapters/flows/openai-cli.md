@@ -18,7 +18,7 @@ codex exec --json
 ```
 
 - **Prompt:** supplied to `codex exec`.
-- **Injected instructions:** craik's instructions are injected through Codex's configuration surface before the turn; the `codex` CLI runs the loop.
+- **Injected instructions:** craik's instructions are injected through Codex's configuration surface before the turn; the Codex CLI runs the loop.
 - **Hook config:** a `PreToolUse` / `PermissionRequest` hook can be registered in `.codex/hooks.json` or `config.toml` — but it does **not** fire for the shell tool at the pinned version (§3), so it is not a relied-upon control point.
 
 ## 2. Event mapping
@@ -28,7 +28,7 @@ Codex's `stream-json` vocabulary is `thread` / `turn` / `item.*`. The `CLIAdapte
 - Every emitted event carries the envelope `source = "openai-cli"`.
 - Assistant text and tool/item events map to typed text/tool events (the `run.event` catch-all is split into proper typed events).
 - **`receipt.created`** carries:
-  - `execution = "delegated-observed"` — the `codex` CLI executed the side effect; craik **observed** and recorded the reported result. Note: because the hook does not fire, craik did **not** authorize the call pre-execution — these receipts attest observation only, not an enforced authorization decision.
+  - `execution = "delegated-observed"` — the Codex CLI executed the side effect; craik **observed** and recorded the reported result. Note: because the hook does not fire, craik did **not** authorize the call pre-execution — these receipts attest observation only, not an enforced authorization decision.
   - `mode`, `decision`, `decided_by` — recorded as observed; on this surface craik cannot enforce a `deny`, so the audit record reflects observe-only governance.
 
 `vendor`/`surface` derive from `source`.
@@ -43,7 +43,7 @@ Codex's `stream-json` vocabulary is `thread` / `turn` / `item.*`. The `CLIAdapte
 
 ## 4. Auth acquisition
 
-- **Mode:** **API key.** consumer-subscription headless use is unsupported / a gray-zone path and is **not** an automation surface craik relies on — there is no sanctioned headless subscription token for Codex.
+- **Mode:** **API key.** ChatGPT-subscription headless use is unsupported / a gray-zone path and is **not** an automation surface craik relies on — there is no sanctioned headless subscription token for Codex.
 - **Acquisition responsibility:** API key supplied to the CLI. Do **not** promise subscription auth for this surface (§4.5 consequence 3).
 
 ## 5. Failure / interrupt
