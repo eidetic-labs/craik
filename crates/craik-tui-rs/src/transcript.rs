@@ -159,6 +159,11 @@ fn render_entries(
             lines.extend(render_user_entry(entry, options));
             continue;
         }
+        if matches!(entry.kind, TranscriptKind::Assistant)
+            && lines.last().is_some_and(|line| !line.spans.is_empty())
+        {
+            lines.push(Line::default());
+        }
         if should_render_entry_header(entry) {
             let (label, color) = transcript_label_style(&entry.kind);
             lines.push(highlight_search(
@@ -200,15 +205,15 @@ fn render_user_entry(
         " ".repeat(width),
         Style::default().bg(background),
     ));
-    let mut lines = vec![blank.clone()];
+    let mut lines = vec![Line::default(), blank.clone()];
     let body_lines = entry_body_lines(entry, options.expand_details);
     if body_lines.is_empty() {
-        lines.push(centered_user_line("", width, options.search_query));
+        lines.push(user_surface_line("", width, options.search_query));
     } else {
         lines.extend(
             body_lines
                 .iter()
-                .map(|line| centered_user_line(&line.text, width, options.search_query)),
+                .map(|line| user_surface_line(&line.text, width, options.search_query)),
         );
     }
     lines.push(blank);
@@ -216,25 +221,20 @@ fn render_user_entry(
     lines
 }
 
-fn centered_user_line(text: &str, width: usize, search_query: Option<&str>) -> Line<'static> {
-    let text_width = text.chars().count();
-    let clamped = if text_width > width.saturating_sub(2) {
-        compact_display_text(text, width.saturating_sub(2))
+fn user_surface_line(text: &str, width: usize, search_query: Option<&str>) -> Line<'static> {
+    let available = width.saturating_sub(4);
+    let clamped = if text.chars().count() > available {
+        compact_display_text(text, available)
     } else {
         text.to_owned()
     };
     let clamped_width = clamped.chars().count();
-    let left = width.saturating_sub(clamped_width) / 2;
+    let left = 2.min(width);
     let right = width.saturating_sub(left).saturating_sub(clamped_width);
     highlight_search(
         vec![
             Span::styled(" ".repeat(left), Style::default().bg(theme::surface())),
-            Span::styled(
-                clamped,
-                theme::primary_style()
-                    .bg(theme::surface())
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(clamped, theme::primary_style().bg(theme::surface())),
             Span::styled(" ".repeat(right), Style::default().bg(theme::surface())),
         ],
         search_query,
@@ -460,7 +460,7 @@ fn is_evidence_kind(kind: &TranscriptKind) -> bool {
 fn body_prefix(kind: &TranscriptKind) -> &'static str {
     match kind {
         TranscriptKind::User => "  ",
-        TranscriptKind::Assistant => "",
+        TranscriptKind::Assistant => "  ",
         TranscriptKind::Approval | TranscriptKind::Error => "  ! ",
         TranscriptKind::System | TranscriptKind::Progress => "  · ",
         TranscriptKind::Receipt => "  ⌁ ",
@@ -518,9 +518,27 @@ fn render_body_line(
     let mut spans = body_prefix_spans(kind);
     if let Some(markdown) = markdown_line_spans(&cached.text) {
         spans.extend(markdown);
-    } else if let Some(bullet) = cached.text.strip_prefix("- ") {
+    } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System)
+        && let Some(section) = plaintext_section_heading_spans(&cached.text)
+    {
+        spans.extend(section);
+    } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System)
+        && let Some(lead) = leading_bold_label_spans(&cached.text, kind)
+    {
+        spans.extend(lead);
+    } else if let Some(bullet) = cached
+        .text
+        .strip_prefix("- ")
+        .or_else(|| cached.text.strip_prefix("* "))
+    {
         spans.push(Span::styled("* ", Style::default().fg(label_color(kind))));
-        spans.extend(value_spans(kind, bullet));
+        if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System)
+            && let Some(lead) = leading_bold_label_spans(bullet, kind)
+        {
+            spans.extend(lead);
+        } else {
+            spans.extend(value_spans(kind, bullet));
+        }
     } else if !cached.spans.is_empty() {
         spans.extend(cached.spans.clone());
     } else if let Some((label, value)) = split_key_value(&cached.text) {
@@ -619,6 +637,9 @@ fn parse_cached_body(kind: TranscriptKind, body: &str) -> Vec<CachedBodyLine> {
                 CachedBodyLine::styled(raw.to_owned(), spans)
             });
         } else if matches!(kind, TranscriptKind::Assistant | TranscriptKind::System) {
+            if should_pad_before_markdown_line(raw, &lines) {
+                lines.push(CachedBodyLine::plain(String::new()));
+            }
             lines.push(CachedBodyLine::styled(
                 raw.to_owned(),
                 highlight_typed_facts(raw),
@@ -742,7 +763,9 @@ struct DiffLine {
 
 fn diff_line_spans(kind: &TranscriptKind, cached: &CachedBodyLine) -> Option<DiffLine> {
     let text = cached.text.as_str();
-    if text.starts_with("+++") || text.starts_with("---") {
+    if (matches!(kind, TranscriptKind::File) || cached.diff_context)
+        && (text.starts_with("+++") || text.starts_with("---"))
+    {
         return Some(DiffLine {
             background: Color::Reset,
             spans: vec![Span::styled(
@@ -785,24 +808,27 @@ fn diff_line_spans(kind: &TranscriptKind, cached: &CachedBodyLine) -> Option<Dif
 fn markdown_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
     let trimmed = text.trim_start();
     let indent = &text[..text.len().saturating_sub(trimmed.len())];
+    if is_thematic_break(trimmed) {
+        return Some(vec![
+            Span::styled(indent.to_owned(), theme::mute_style()),
+            Span::styled("─".repeat(28), theme::mute_style()),
+        ]);
+    }
     if let Some(heading) = trimmed.strip_prefix("### ") {
         return Some(vec![
             Span::styled(indent.to_owned(), theme::mute_style()),
-            Span::styled("### ", theme::mute_style().add_modifier(Modifier::BOLD)),
             Span::styled(heading.to_owned(), theme::accent_style()),
         ]);
     }
     if let Some(heading) = trimmed.strip_prefix("## ") {
         return Some(vec![
             Span::styled(indent.to_owned(), theme::mute_style()),
-            Span::styled("## ", theme::mute_style().add_modifier(Modifier::BOLD)),
             Span::styled(heading.to_owned(), theme::accent_style()),
         ]);
     }
     if let Some(heading) = trimmed.strip_prefix("# ") {
         return Some(vec![
             Span::styled(indent.to_owned(), theme::mute_style()),
-            Span::styled("# ", theme::mute_style().add_modifier(Modifier::BOLD)),
             Span::styled(
                 heading.to_owned(),
                 theme::primary_style().add_modifier(Modifier::BOLD),
@@ -825,6 +851,33 @@ fn markdown_line_spans(text: &str) -> Option<Vec<Span<'static>>> {
     ])
 }
 
+fn should_pad_before_markdown_line(raw: &str, lines: &[CachedBodyLine]) -> bool {
+    if lines.is_empty() || last_cached_line_is_blank(lines) {
+        return false;
+    }
+    let trimmed = raw.trim_start();
+    is_markdown_heading(raw)
+        || is_thematic_break(trimmed)
+        || plaintext_section_heading_spans(raw).is_some()
+        || leading_bold_label_spans(raw, &TranscriptKind::Assistant).is_some()
+        || ordered_list_marker(trimmed).is_some()
+        || trimmed.starts_with("- ")
+        || trimmed.starts_with("* ")
+}
+
+fn is_markdown_heading(text: &str) -> bool {
+    let trimmed = text.trim_start();
+    trimmed.starts_with("# ") || trimmed.starts_with("## ") || trimmed.starts_with("### ")
+}
+
+fn is_thematic_break(trimmed: &str) -> bool {
+    matches!(trimmed, "---" | "----" | "***" | "___")
+}
+
+fn last_cached_line_is_blank(lines: &[CachedBodyLine]) -> bool {
+    lines.last().is_some_and(|line| line.text.trim().is_empty())
+}
+
 fn ordered_list_marker(text: &str) -> Option<(&str, &str)> {
     let (marker, value) = text.split_once(' ')?;
     let number = marker.strip_suffix('.')?;
@@ -832,9 +885,89 @@ fn ordered_list_marker(text: &str) -> Option<(&str, &str)> {
         .then_some((marker, value))
 }
 
+fn plaintext_section_heading_spans(text: &str) -> Option<Vec<Span<'static>>> {
+    let trimmed = text.trim();
+    if trimmed.is_empty()
+        || trimmed.len() > 56
+        || trimmed.contains("**")
+        || trimmed.contains('`')
+        || trimmed.starts_with("- ")
+        || trimmed.starts_with("* ")
+        || ordered_list_marker(trimmed).is_some()
+    {
+        return None;
+    }
+    let normalized = trimmed.trim_end_matches(':');
+    if normalized.ends_with('.')
+        || normalized.contains(',')
+        || normalized
+            .chars()
+            .any(|character| matches!(character, '(' | ')' | '/' | '\\'))
+    {
+        return None;
+    }
+    let words = normalized.split_whitespace().collect::<Vec<_>>();
+    if words.is_empty() || words.len() > 5 {
+        return None;
+    }
+    let has_section_keyword = words.iter().any(|word| {
+        matches!(
+            word.to_ascii_lowercase().as_str(),
+            "assessment"
+                | "findings"
+                | "recommendation"
+                | "recommendations"
+                | "review"
+                | "summary"
+                | "strengths"
+                | "risks"
+        )
+    });
+    let title_case = words.iter().all(|word| {
+        word.chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_uppercase())
+    });
+    let heading_like = has_section_keyword || title_case;
+    heading_like.then(|| {
+        vec![Span::styled(
+            trimmed.to_owned(),
+            theme::accent_style().add_modifier(Modifier::BOLD),
+        )]
+    })
+}
+
+fn leading_bold_label_spans(text: &str, kind: &TranscriptKind) -> Option<Vec<Span<'static>>> {
+    let trimmed = text.trim_start();
+    let indent = &text[..text.len().saturating_sub(trimmed.len())];
+    let rest = trimmed.strip_prefix("**")?;
+    let (label, value) = rest.split_once("**")?;
+    let label = label.trim();
+    let value = value.trim_start();
+    if label.is_empty() || label.len() > 72 || value.is_empty() {
+        return None;
+    }
+    let label_style = match kind {
+        TranscriptKind::System => Style::default()
+            .fg(theme::cyan())
+            .add_modifier(Modifier::BOLD),
+        _ => theme::accent_style().add_modifier(Modifier::BOLD),
+    };
+    let mut spans = vec![
+        Span::styled(indent.to_owned(), theme::mute_style()),
+        Span::styled(label.to_owned(), label_style),
+    ];
+    if !label.ends_with(['.', ':', '?', '!']) {
+        spans.push(Span::styled(":".to_owned(), label_style));
+    }
+    spans.push(Span::styled(" ", theme::mute_style()));
+    spans.extend(value_spans(kind, value));
+    Some(spans)
+}
+
 fn split_key_value(text: &str) -> Option<(&str, &str)> {
     let (label, value) = text.split_once(':')?;
-    let trimmed_label = label.trim();
+    let trimmed_label = label.trim().trim_matches('*');
     if trimmed_label.is_empty()
         || trimmed_label.len() > 24
         || !trimmed_label
@@ -843,7 +976,11 @@ fn split_key_value(text: &str) -> Option<(&str, &str)> {
     {
         return None;
     }
-    Some((trimmed_label, value.trim_start()))
+    let trimmed_value = value
+        .trim_start()
+        .strip_prefix("**")
+        .unwrap_or(value.trim_start());
+    Some((trimmed_label, trimmed_value.trim_start()))
 }
 
 fn label_color(kind: &TranscriptKind) -> Color {
@@ -913,13 +1050,39 @@ fn highlight_inline_code(text: &str, base_style: Style) -> Vec<Span<'static>> {
                     .add_modifier(Modifier::BOLD),
             ));
         } else {
-            spans.push(Span::styled(part.to_owned(), base_style));
+            push_inline_text_spans(&mut spans, part, base_style);
         }
     }
     if spans.is_empty() {
         spans.push(Span::styled(String::new(), base_style));
     }
     spans
+}
+
+fn push_inline_text_spans(spans: &mut Vec<Span<'static>>, text: &str, base_style: Style) {
+    let mut remaining = text;
+    while let Some(start) = remaining.find("**") {
+        let (before, after_start) = remaining.split_at(start);
+        if !before.is_empty() {
+            spans.push(Span::styled(before.to_owned(), base_style));
+        }
+        let after_start = &after_start[2..];
+        let Some(end) = after_start.find("**") else {
+            spans.push(Span::styled(format!("**{after_start}"), base_style));
+            return;
+        };
+        let (bold, after_end) = after_start.split_at(end);
+        if !bold.is_empty() {
+            spans.push(Span::styled(
+                bold.to_owned(),
+                base_style.add_modifier(Modifier::BOLD),
+            ));
+        }
+        remaining = &after_end[2..];
+    }
+    if !remaining.is_empty() {
+        spans.push(Span::styled(remaining.to_owned(), base_style));
+    }
 }
 
 fn highlight_search(spans: Vec<Span<'static>>, search_query: Option<&str>) -> Line<'static> {
@@ -1016,9 +1179,10 @@ mod tests {
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
         let body = &lines[0];
 
-        assert_eq!(body.spans[0].content, "Run ");
-        assert_eq!(body.spans[1].content, "cargo test");
-        assert_eq!(body.spans[1].style.fg, Some(crate::theme::amber()));
+        assert_eq!(body.spans[0].content, "  ");
+        assert_eq!(body.spans[1].content, "Run ");
+        assert_eq!(body.spans[2].content, "cargo test");
+        assert_eq!(body.spans[2].style.fg, Some(crate::theme::amber()));
     }
 
     #[test]
@@ -1029,7 +1193,8 @@ mod tests {
 
         assert_eq!(lines[0].spans[1].content, "assistant ");
         assert_eq!(lines[0].spans[2].content, "Review Summary");
-        assert_eq!(lines[1].spans[0].content, "Looks good.");
+        assert_eq!(lines[1].spans[0].content, "  ");
+        assert_eq!(lines[1].spans[1].content, "Looks good.");
     }
 
     #[test]
@@ -1041,8 +1206,9 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[1].spans[0].content, "fn");
-        assert_eq!(lines[1].spans[0].style.fg, Some(crate::theme::accent()));
+        assert_eq!(lines[1].spans[0].content, "  ");
+        assert_eq!(lines[1].spans[1].content, "fn");
+        assert_eq!(lines[1].spans[1].style.fg, Some(crate::theme::accent()));
         let let_span = lines[2]
             .spans
             .iter()
@@ -1089,13 +1255,87 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[0].spans[1].content, "# ");
-        assert_eq!(lines[0].spans[2].content, "Plan");
-        assert_eq!(lines[0].spans[2].style.fg, Some(crate::theme::primary()));
-        assert_eq!(lines[1].spans[1].content, "> ");
-        assert_eq!(lines[1].spans[2].style.fg, Some(crate::theme::dim()));
-        assert_eq!(lines[2].spans[1].content, "1.");
-        assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::accent()));
+        let heading = lines
+            .iter()
+            .find(|line| line.to_string().contains("Plan"))
+            .expect("heading is rendered");
+        let quote = lines
+            .iter()
+            .find(|line| line.to_string().contains("important context"))
+            .expect("quote is rendered");
+        let ordered = lines
+            .iter()
+            .find(|line| line.to_string().contains("First step"))
+            .expect("ordered list is rendered");
+
+        assert_eq!(heading.spans[0].content, "  ");
+        assert_eq!(heading.spans[2].content, "Plan");
+        assert_eq!(heading.spans[2].style.fg, Some(crate::theme::primary()));
+        assert_eq!(quote.spans[2].content, "> ");
+        assert_eq!(quote.spans[3].style.fg, Some(crate::theme::dim()));
+        assert_eq!(ordered.spans[2].content, "1.");
+        assert_eq!(ordered.spans[2].style.fg, Some(crate::theme::accent()));
+    }
+
+    #[test]
+    fn markdown_sections_render_with_structure_not_raw_markup() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "Intro\n\n## Strengths\n\n---\n\n**Quality:** strong\n* fast checks",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+        let rendered = lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("Strengths"));
+        assert!(!rendered.contains("## Strengths"));
+        assert!(!rendered.contains("---"));
+        assert!(rendered.contains("Quality: strong"));
+        assert!(rendered.contains("* fast checks"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.spans.iter().any(|span| span.content.contains("─")))
+        );
+    }
+
+    #[test]
+    fn assistant_markdown_review_output_gets_reading_structure() {
+        let entries = vec![TranscriptEntry::assistant(
+            "Assistant",
+            "TUI streaming review\n\n**Architecture.** The Rust/Ratatui TUI is a thin renderer over a JSON event stream.\n**Where streaming events get filtered today.** There are already two layers of suppression.\n\nFindings\n\n* **You're closer than you think.** The default already filters aggressively.\n* **The filter policy is implicit.** Low-value behavior is split across two languages.\n\nMy recommendation\n\nMake verbosity an **explicit, named level** rather than a boolean.",
+        )];
+
+        let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
+        let rendered = lines
+            .iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(rendered.contains("TUI streaming review"));
+        assert!(rendered.contains("Architecture. The Rust/Ratatui TUI"));
+        assert!(rendered.contains("Findings"));
+        assert!(rendered.contains("My recommendation"));
+        assert!(!rendered.contains("**Architecture.**"));
+        assert!(!rendered.contains("**Where streaming events get filtered today.**"));
+        assert!(lines.iter().any(|line| {
+            line.to_string().contains("Architecture.")
+                && line
+                    .spans
+                    .iter()
+                    .any(|span| span.style.fg == Some(crate::theme::accent()))
+        }));
+        assert!(
+            lines
+                .windows(2)
+                .any(|window| window[0].to_string().trim().is_empty()
+                    && window[1].to_string().contains("Architecture."))
+        );
     }
 
     #[test]
@@ -1157,8 +1397,9 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[0].spans[0].to_string(), "* ");
-        assert_eq!(lines[0].spans[0].style.bg, None);
+        assert_eq!(lines[0].spans[0].content, "  ");
+        assert_eq!(lines[0].spans[1].to_string(), "* ");
+        assert_eq!(lines[0].spans[1].style.bg, None);
         assert_eq!(lines[1].spans[0].style.bg, None);
     }
 
@@ -1217,12 +1458,14 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines.len(), 8);
-        assert_eq!(lines[0].spans[0].content.chars().count(), 72);
-        assert_eq!(lines[0].spans[0].style.bg, Some(crate::theme::surface()));
-        assert!(lines[1].to_string().contains("review this"));
+        assert_eq!(lines.len(), 9);
+        assert!(lines[0].spans.is_empty());
+        assert_eq!(lines[1].spans[0].content.chars().count(), 72);
+        assert_eq!(lines[1].spans[0].style.bg, Some(crate::theme::surface()));
+        assert!(lines[2].to_string().contains("review this"));
+        assert!(lines[2].to_string().starts_with("  review this"));
         assert_eq!(
-            lines[1]
+            lines[2]
                 .spans
                 .iter()
                 .find(|span| span.content.contains("review this"))
@@ -1231,8 +1474,19 @@ mod tests {
                 .bg,
             Some(crate::theme::surface())
         );
-        assert_eq!(lines[4].spans[0].content, "Looks good.");
-        assert_eq!(lines[7].spans[0].content, "  · ");
+        assert!(
+            !lines[2]
+                .spans
+                .iter()
+                .find(|span| span.content.contains("review this"))
+                .expect("prompt text is styled")
+                .style
+                .add_modifier
+                .contains(Modifier::BOLD)
+        );
+        assert_eq!(lines[5].spans[0].content, "  ");
+        assert_eq!(lines[5].spans[1].content, "Looks good.");
+        assert_eq!(lines[8].spans[0].content, "  · ");
     }
 
     #[test]
@@ -1245,8 +1499,9 @@ mod tests {
 
         let lines = render_transcript_lines(&entries, &TranscriptRenderOptions::expanded());
 
-        assert_eq!(lines[0].spans[0].content, "Model response");
-        assert_eq!(lines[0].spans[0].style.fg, Some(crate::theme::primary()));
+        assert_eq!(lines[0].spans[0].content, "  ");
+        assert_eq!(lines[0].spans[1].content, "Model response");
+        assert_eq!(lines[0].spans[1].style.fg, Some(crate::theme::primary()));
         assert_eq!(lines[2].spans[1].content, "evidence ");
         assert_eq!(lines[2].spans[1].style.fg, Some(crate::theme::mute()));
         assert_eq!(lines[3].spans[0].content, "  ⌁ ");
