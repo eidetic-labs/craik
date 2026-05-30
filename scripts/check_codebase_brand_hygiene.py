@@ -1,9 +1,14 @@
 """Reject private comparison-brand language from public codebase artifacts.
 
-This guard allows existing technical runner/provider identifiers such as
-``codex``, ``claude``, or ``Claude Code`` when they describe API/runtime
-contracts, but blocks public comparison or positioning phrases that belong only
-in private planning notes.
+This guard allows official integration-vendor product identifiers — the names
+of backends craik actually adapts, such as ``codex``, ``Codex CLI``,
+``ChatGPT``, ``claude``, or ``Claude Code`` — when they describe API/runtime
+contracts. It blocks two things that belong only in private planning notes:
+
+1. Names of competing agent frameworks/tools craik does **not** integrate
+   (``OpenClaw``, ``Hermes Agent``, ``Aider``).
+2. Comparison or positioning phrasing of the ``<product>-style`` /
+   ``<product>-like`` shape, regardless of which product is named.
 """
 
 from __future__ import annotations
@@ -20,14 +25,6 @@ ALLOWLIST_CAP = 5
 
 _FORBIDDEN_BRAND_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
-        re.compile(r"\bCodex CLI\b", re.IGNORECASE),
-        "private comparison reference",
-    ),
-    (
-        re.compile(r"\bChatGPT\b", re.IGNORECASE),
-        "consumer-product comparison reference",
-    ),
-    (
         re.compile(r"\bOpenClaw\b", re.IGNORECASE),
         "private competitor reference",
     ),
@@ -37,10 +34,6 @@ _FORBIDDEN_BRAND_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (
         re.compile(r"\bAider\b", re.IGNORECASE),
-        "private competitor reference",
-    ),
-    (
-        re.compile(r"\bCopilot CLI\b", re.IGNORECASE),
         "private competitor reference",
     ),
     (
