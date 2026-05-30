@@ -26,7 +26,7 @@ use input::{
 use ratatui::{
     Frame, Terminal,
     backend::{CrosstermBackend, TestBackend},
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
@@ -39,7 +39,7 @@ use std::{
 };
 use transcript::{
     TranscriptRenderOptions, render_transcript_lines_window, search_match_count,
-    transcript_line_count, transcript_render_window_start, transcript_scroll_offset,
+    transcript_line_count, transcript_scroll_offset,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -203,6 +203,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(8),
+            Constraint::Length(1),
             Constraint::Length(input_panel_height(app)),
             Constraint::Length(1),
         ])
@@ -210,6 +211,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     let transcript_options = TranscriptRenderOptions {
         expand_details: app.expand_transcript_details,
         search_query: active_search_query(app),
+        content_width: Some(transcript_content_width(area.width)),
     };
 
     let slash_palette_lines =
@@ -271,7 +273,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             theme::accent_style(),
         )]));
     }
-    let input_inner = input_block.inner(vertical[1]);
+    let input_inner = input_block.inner(vertical[2]);
     let input_lines = if app.search_active {
         render_search_lines(
             &app.search_query,
@@ -281,21 +283,28 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
     } else {
         render_input_lines(&app.input, &app.slash_catalog)
     };
+    let input_row_offset = centered_input_row_offset(input_inner.height, input_lines.len());
+    let input_lines = vertically_center_input_lines(input_lines, input_row_offset);
     let input = Paragraph::new(input_lines)
         .block(input_block)
         .wrap(Wrap { trim: false });
-    frame.render_widget(input, vertical[1]);
+    frame.render_widget(input, vertical[2]);
+    let cursor_area = Rect {
+        y: input_inner.y.saturating_add(input_row_offset),
+        height: input_inner.height.saturating_sub(input_row_offset),
+        ..input_inner
+    };
     if app.search_active {
         frame.set_cursor_position(input_cursor_position(
             &app.search_query,
             app.search_query.len(),
-            input_inner,
+            cursor_area,
         ));
     } else {
         frame.set_cursor_position(input_cursor_position(
             &app.input,
             app.input_cursor,
-            input_inner,
+            cursor_area,
         ));
     }
 
@@ -313,7 +322,7 @@ fn draw_interactive_frame(frame: &mut Frame<'_>, app: &InteractiveApp) {
             details_collapsed: !app.expand_transcript_details,
         },
     ));
-    frame.render_widget(footer, vertical[2]);
+    frame.render_widget(footer, vertical[3]);
 }
 
 fn render_active_overlay(frame: &mut Frame<'_>, app: &InteractiveApp, area: ratatui::layout::Rect) {
@@ -696,6 +705,20 @@ fn input_panel_height(app: &InteractiveApp) -> u16 {
     }
 }
 
+fn centered_input_row_offset(input_height: u16, line_count: usize) -> u16 {
+    let visible_lines = u16::try_from(line_count)
+        .unwrap_or(u16::MAX)
+        .min(input_height);
+    input_height.saturating_sub(visible_lines) / 2
+}
+
+fn vertically_center_input_lines(lines: Vec<Line<'static>>, row_offset: u16) -> Vec<Line<'static>> {
+    let mut centered = Vec::with_capacity(lines.len().saturating_add(usize::from(row_offset)));
+    centered.extend((0..row_offset).map(|_| Line::default()));
+    centered.extend(lines);
+    centered
+}
+
 fn input_title(app: &InteractiveApp) -> String {
     if app.search_active {
         return "▌Search  Enter closes / Ctrl-N next / Ctrl-P previous / Esc cancel".to_owned();
@@ -709,20 +732,36 @@ fn render_transcript_panel(
     area: ratatui::layout::Rect,
     options: &TranscriptRenderOptions<'_>,
 ) {
-    let transcript_height = area.height.saturating_sub(1);
+    let activity_line = model_activity_line(app);
+    let content_width = transcript_content_width(area.width);
+    let activity_lines = activity_line
+        .map(|line| {
+            let mut lines = Vec::from([Line::default()]);
+            lines.extend(wrap_transcript_line(line, content_width));
+            lines
+        })
+        .unwrap_or_default();
+    let activity_height = u16::try_from(activity_lines.len()).unwrap_or(u16::MAX);
+    let transcript_height = area
+        .height
+        .saturating_sub(1)
+        .saturating_sub(activity_height);
     let offset = transcript_scroll_offset(
         &app.transcript,
         options,
         app.transcript_scroll,
         transcript_height,
     );
-    let transcript = Paragraph::new(render_transcript_lines_window(
-        &app.transcript,
-        options,
-        offset,
+    let transcript_lines =
+        render_transcript_lines_window(&app.transcript, options, offset, transcript_height);
+    let mut transcript_lines = visible_wrapped_transcript_lines(
+        transcript_lines,
+        content_width,
         transcript_height,
-    ))
-    .block(
+        app.transcript_scroll,
+    );
+    transcript_lines.extend(activity_lines);
+    let transcript = Paragraph::new(transcript_lines).block(
         Block::default()
             .title(transcript_title(
                 app,
@@ -732,14 +771,141 @@ fn render_transcript_panel(
             ))
             .title_style(theme::accent_style())
             .border_style(theme::mute_style())
-            .borders(Borders::LEFT),
-    )
-    .scroll((
-        offset.saturating_sub(transcript_render_window_start(offset)),
-        0,
-    ))
-    .wrap(Wrap { trim: false });
+            .borders(Borders::LEFT)
+            .padding(Padding::horizontal(1)),
+    );
     frame.render_widget(transcript, area);
+}
+
+fn visible_wrapped_transcript_lines(
+    lines: Vec<Line<'static>>,
+    width: usize,
+    visible_height: u16,
+    transcript_scroll: u16,
+) -> Vec<Line<'static>> {
+    let wrapped = wrap_transcript_lines(lines, width);
+    let visible_height = usize::from(visible_height);
+    if visible_height == 0 || wrapped.len() <= visible_height {
+        return wrapped;
+    }
+    let end = wrapped
+        .len()
+        .saturating_sub(usize::from(transcript_scroll))
+        .max(visible_height)
+        .min(wrapped.len());
+    let start = end.saturating_sub(visible_height);
+    wrapped[start..end].to_vec()
+}
+
+fn model_activity_line(app: &InteractiveApp) -> Option<Line<'static>> {
+    let label = if app.pending_approval_count() > 0 {
+        "waiting for approval"
+    } else if matches!(app.state.working_phase.as_deref(), Some("thinking")) {
+        "thinking"
+    } else if app.state.working_phase.is_some()
+        || matches!(app.state.run_status.as_deref(), Some("running"))
+    {
+        "working"
+    } else {
+        return None;
+    };
+    let detail = latest_activity_detail(app);
+    Some(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("◐ ", Style::default().fg(theme::amber())),
+        Span::styled(label.to_owned(), theme::primary_style()),
+        Span::styled("  ", theme::mute_style()),
+        Span::styled(detail, theme::dim_style()),
+    ]))
+}
+
+fn latest_activity_detail(app: &InteractiveApp) -> String {
+    if let Some(message) = app.state.progress_messages.last() {
+        return compact_activity_detail(message);
+    }
+    if let Some(item) = app.state.tool_events.last() {
+        let detail = item
+            .detail
+            .as_deref()
+            .map(|value| format!("{}: {value}", item.label))
+            .unwrap_or_else(|| item.label.clone());
+        return compact_activity_detail(&detail);
+    }
+    if let Some(command) = app.state.commands.last() {
+        return compact_activity_detail(command);
+    }
+    app.state
+        .backend
+        .as_deref()
+        .map(|backend| format!("{backend} is active"))
+        .unwrap_or_else(|| "waiting for the next event".to_owned())
+}
+
+fn compact_activity_detail(value: &str) -> String {
+    const MAX_CHARS: usize = 96;
+    let compact = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.chars().count() <= MAX_CHARS {
+        compact
+    } else {
+        format!(
+            "{}...",
+            compact
+                .chars()
+                .take(MAX_CHARS.saturating_sub(3))
+                .collect::<String>()
+        )
+    }
+}
+
+fn transcript_content_width(area_width: u16) -> usize {
+    usize::from(area_width.saturating_sub(3)).max(1)
+}
+
+fn wrap_transcript_lines(lines: Vec<Line<'static>>, width: usize) -> Vec<Line<'static>> {
+    if width < 12 {
+        return lines;
+    }
+    lines
+        .into_iter()
+        .flat_map(|line| wrap_transcript_line(line, width))
+        .collect()
+}
+
+fn wrap_transcript_line(line: Line<'static>, width: usize) -> Vec<Line<'static>> {
+    let continuation_prefix = "  ";
+    let continuation_width = continuation_prefix.chars().count();
+    let mut output = Vec::new();
+    let mut current = Vec::new();
+    let mut current_width = 0usize;
+
+    for span in line.spans {
+        let style = span.style;
+        let mut remaining = span.content.into_owned();
+        while !remaining.is_empty() {
+            if current_width >= width {
+                output.push(Line::from(current));
+                current = vec![Span::styled(continuation_prefix, theme::dim_style())];
+                current_width = continuation_width;
+            }
+            let available = width.saturating_sub(current_width).max(1);
+            let take = remaining.chars().take(available).collect::<String>();
+            current_width = current_width.saturating_add(take.chars().count());
+            current.push(Span::styled(take.clone(), style));
+            remaining = remaining.chars().skip(take.chars().count()).collect();
+            if !remaining.is_empty() {
+                output.push(Line::from(current));
+                current = vec![Span::styled(continuation_prefix, theme::dim_style())];
+                current_width = continuation_width;
+            }
+        }
+    }
+
+    if current.is_empty() {
+        output.push(Line::default());
+    } else {
+        output.push(Line::from(current));
+    }
+    output
 }
 
 fn transcript_title(
@@ -865,14 +1031,16 @@ fn usage() -> String {
 mod tests {
     use super::{
         InteractiveApp, Terminal, TestBackend, approval_overlay_lines, approval_overlay_title,
-        draw_interactive_frame, input_panel_height, input_title, overlay_detail_lines,
+        centered_input_row_offset, draw_interactive_frame, input_panel_height, input_title,
+        overlay_detail_lines, vertically_center_input_lines, visible_wrapped_transcript_lines,
     };
     use crate::{
         app::ActiveOverlay,
         theme::{ThemeMode, with_mode_for_test},
-        transcript::TranscriptEntry,
+        transcript::{TranscriptEntry, TranscriptKind},
     };
     use craik_tui_rs::parse_gateway_events;
+    use ratatui::text::Line;
 
     const CLAUDE_CODE_STREAM: &str =
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
@@ -923,7 +1091,8 @@ mod tests {
 
     #[test]
     fn fixture_backed_wide_frame_keeps_chat_home_full_width() {
-        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
         let rendered = render_app_frame(&app, 140, 42);
 
         assert!(rendered.contains("Chat"));
@@ -948,6 +1117,139 @@ mod tests {
         assert!(rendered.contains("Ctrl-R runs"));
         assert!(rendered.contains("Continue analysis"));
         assert!(rendered.contains("esc chat"));
+    }
+
+    #[test]
+    fn transcript_rows_have_padding_and_do_not_touch_prompt_area() {
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
+        app.input = "Continue analysis".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 120, 34);
+        let content_row = rows
+            .iter()
+            .find(|row| row.contains("Reviewed the plan"))
+            .expect("transcript content visible");
+        let input_row = rows
+            .iter()
+            .position(|row| row.contains("Continue analysis"))
+            .expect("input visible");
+
+        assert!(
+            content_row
+                .find("Reviewed")
+                .is_some_and(|column| column >= 2)
+        );
+        assert!(
+            rows[input_row.saturating_sub(1)]
+                .replace('│', "")
+                .trim()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn active_run_renders_activity_inside_transcript_panel() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.state.run_status = Some("running".to_owned());
+        app.state.working_phase = Some("thinking".to_owned());
+        app.state
+            .progress_messages
+            .push("Inspecting repository structure".to_owned());
+        app.input = "next question".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 100, 24);
+        let activity_row = rows
+            .iter()
+            .position(|row| row.contains("thinking") && row.contains("Inspecting repository"))
+            .expect("activity row visible in main transcript panel");
+        let input_row = rows
+            .iter()
+            .position(|row| row.contains("next question"))
+            .expect("composer stays pinned below transcript");
+
+        assert!(activity_row < input_row);
+        assert!(
+            rows.iter()
+                .any(|row| row.contains("●") || row.contains("◐"))
+        );
+    }
+
+    #[test]
+    fn wrapped_activity_row_reserves_transcript_space() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript.push(TranscriptEntry::new(
+            TranscriptKind::Assistant,
+            "Claude",
+            "The last visible transcript line should stay above the active run marker.",
+        ));
+        app.state.run_status = Some("running".to_owned());
+        app.state.working_phase = Some("thinking".to_owned());
+        app.state.progress_messages.push(
+            "Inspecting a very long path and collecting enough context that the activity message wraps on narrow terminal widths".to_owned(),
+        );
+        app.input = "follow up".to_owned();
+        app.input_cursor = app.input.len();
+
+        let rows = render_app_frame_rows(&app, 54, 14);
+        let activity_row = rows
+            .iter()
+            .position(|row| row.contains("thinking"))
+            .expect("wrapped activity remains visible");
+        let input_row = rows
+            .iter()
+            .position(|row| row.contains("follow up"))
+            .expect("composer remains visible");
+
+        assert!(activity_row < input_row);
+        assert!(
+            rows[input_row.saturating_sub(1)]
+                .replace('│', "")
+                .trim()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn wrapped_transcript_rows_keep_continuation_gutter() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.transcript.push(TranscriptEntry::new(
+            TranscriptKind::Command,
+            "Bash",
+            "Command: echo \"== crates ==\" && ls -1 crates 2>/dev/null; echo \"== git status ==\" && git status --short; echo \"== head ==\" && git log --oneline -1",
+        ));
+
+        let rows = render_app_frame_rows(&app, 72, 18);
+        let continuation = rows
+            .iter()
+            .find(|row| row.contains("--oneline"))
+            .expect("wrapped command continuation is visible");
+
+        assert!(
+            continuation
+                .find("--oneline")
+                .is_some_and(|column| column >= 3)
+        );
+    }
+
+    #[test]
+    fn wrapped_transcript_viewport_follows_visual_bottom() {
+        let lines = vec![
+            Line::from("alpha beta gamma delta epsilon zeta eta"),
+            Line::from("theta"),
+        ];
+
+        let visible = visible_wrapped_transcript_lines(lines, 12, 2, 0)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
+        let rendered = visible.join("\n");
+
+        assert_eq!(visible.len(), 2);
+        assert!(!rendered.contains("alpha"));
+        assert!(rendered.contains("theta"));
     }
 
     #[test]
@@ -998,7 +1300,8 @@ mod tests {
 
     #[test]
     fn fixture_backed_narrow_frame_prioritizes_transcript_over_activity_panel() {
-        let app = app_from_fixture(CLAUDE_CODE_STREAM);
+        let mut app = app_from_fixture(CLAUDE_CODE_STREAM);
+        app.active_overlay = None;
         let rendered = render_app_frame(&app, 72, 24);
 
         assert!(rendered.contains("Chat"));
@@ -1309,6 +1612,21 @@ mod tests {
         assert_eq!(input_panel_height(&app), 6);
         assert_eq!(input_title(&app), "");
         assert!(!input_title(&app).contains("Enter sends"));
+    }
+
+    #[test]
+    fn prompt_input_rows_are_vertically_centered_in_composer() {
+        assert_eq!(centered_input_row_offset(3, 1), 1);
+        assert_eq!(centered_input_row_offset(6, 4), 1);
+        assert_eq!(centered_input_row_offset(3, 3), 0);
+
+        let lines = vertically_center_input_lines(
+            vec![Line::from("Message craik or type / for commands")],
+            1,
+        );
+
+        assert!(lines[0].spans.is_empty());
+        assert_eq!(lines[1].to_string(), "Message craik or type / for commands");
     }
 
     #[test]

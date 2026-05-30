@@ -6,6 +6,7 @@ use crate::{
 };
 use craik_tui_rs::{GatewayAppState, GatewayCommand, GatewayEvent, format_gateway_error_event};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use serde_json::Value;
 use std::{collections::VecDeque, env, fs, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -214,7 +215,7 @@ impl InteractiveApp {
             transcript: Vec::new(),
             transcript_scroll: 0,
             transcript_focused: false,
-            expand_transcript_details: true,
+            expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
             approval_overlay_reviewed: false,
@@ -272,7 +273,7 @@ impl InteractiveApp {
             transcript: Vec::new(),
             transcript_scroll: 0,
             transcript_focused: false,
-            expand_transcript_details: true,
+            expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
             approval_overlay_reviewed: false,
@@ -874,7 +875,9 @@ impl InteractiveApp {
     }
 
     fn close_unreviewed_approval_overlay(&mut self) {
-        if self.active_overlay == Some(ActiveOverlay::Approvals) && !self.approval_overlay_reviewed
+        if self.active_overlay == Some(ActiveOverlay::Approvals)
+            && !self.approval_overlay_reviewed
+            && self.pending_approvals.is_empty()
         {
             self.active_overlay = None;
         }
@@ -1081,6 +1084,14 @@ impl InteractiveApp {
                 self.scroll_transcript_down();
                 LoopAction::Continue
             }
+            KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.scroll_transcript_up_by(1);
+                LoopAction::Continue
+            }
+            KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.scroll_transcript_down_by(1);
+                LoopAction::Continue
+            }
             KeyCode::Up => {
                 if self.slash_palette_active() {
                     self.select_previous_slash_suggestion();
@@ -1230,7 +1241,7 @@ impl InteractiveApp {
             "  Ctrl-F search; Ctrl-N / Ctrl-P navigate search results".to_owned(),
             "  Ctrl-T/G/H/Z jump to tool, approval, receipt, or error".to_owned(),
             "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
-            "  PageUp / PageDown scroll transcript".to_owned(),
+            "  PageUp / PageDown scroll transcript by page; Alt-Up / Alt-Down by line".to_owned(),
             "Approvals".to_owned(),
             "  Ctrl-A opens approval review; Ctrl-A approves from that overlay; Ctrl-X denies"
                 .to_owned(),
@@ -1471,10 +1482,11 @@ impl InteractiveApp {
             "run.output" => {
                 self.close_unreviewed_approval_overlay();
                 if let Some(summary) = event.data.get("summary").and_then(|value| value.as_str())
-                    && !recent_transcript_body_matches(&self.transcript, summary)
+                    && let Some(display_text) = run_output_transcript_text(summary)
+                    && !recent_transcript_body_matches(&self.transcript, &display_text)
                 {
                     self.transcript
-                        .push(TranscriptEntry::assistant("Assistant", summary));
+                        .push(TranscriptEntry::assistant("Assistant", &display_text));
                     self.follow_tail_after_transcript_update();
                 }
             }
@@ -1497,9 +1509,16 @@ impl InteractiveApp {
                         Some("tool_result") => "Tool result",
                         _ => "Assistant",
                     };
-                    if !recent_transcript_body_matches(&self.transcript, text) {
+                    let display_text = if kind == TranscriptKind::Assistant {
+                        assistant_event_transcript_text(text)
+                    } else {
+                        Some(text.trim().to_owned())
+                    };
+                    if let Some(display_text) = display_text
+                        && !recent_transcript_body_matches(&self.transcript, &display_text)
+                    {
                         self.transcript
-                            .push(TranscriptEntry::new(kind, title, text));
+                            .push(TranscriptEntry::new(kind, title, &display_text));
                         self.follow_tail_after_transcript_update();
                     }
                 }
@@ -2024,11 +2043,19 @@ impl InteractiveApp {
     }
 
     pub(crate) fn scroll_transcript_up(&mut self) {
-        self.transcript_scroll = self.transcript_scroll.saturating_add(4);
+        self.scroll_transcript_up_by(12);
     }
 
     pub(crate) fn scroll_transcript_down(&mut self) {
-        self.transcript_scroll = self.transcript_scroll.saturating_sub(4);
+        self.scroll_transcript_down_by(12);
+    }
+
+    pub(crate) fn scroll_transcript_up_by(&mut self, lines: u16) {
+        self.transcript_scroll = self.transcript_scroll.saturating_add(lines);
+    }
+
+    pub(crate) fn scroll_transcript_down_by(&mut self, lines: u16) {
+        self.transcript_scroll = self.transcript_scroll.saturating_sub(lines);
     }
 
     pub(crate) fn scroll_transcript_top(&mut self) {
@@ -3128,6 +3155,250 @@ fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
         || lower.contains("denied")
 }
 
+fn run_output_transcript_text(summary: &str) -> Option<String> {
+    let stripped = strip_craik_contract_output_sections(summary);
+    let trimmed = stripped.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if !looks_like_structured_output_contract(trimmed) {
+        return Some(trimmed.to_owned());
+    }
+    json_value_from_text(trimmed)
+        .as_ref()
+        .and_then(extract_contract_display_text)
+        .or_else(|| text_before_contract_marker(trimmed))
+}
+
+fn assistant_event_transcript_text(text: &str) -> Option<String> {
+    let stripped = strip_craik_contract_output_sections(text);
+    let candidate = stripped.trim();
+    if candidate.is_empty() {
+        None
+    } else if looks_like_structured_output_contract(candidate) {
+        run_output_transcript_text(candidate)
+    } else {
+        Some(candidate.to_owned())
+    }
+}
+
+fn strip_craik_contract_output_sections(text: &str) -> String {
+    let mut output = Vec::new();
+    let mut skipping_contract = false;
+    let mut skipping_fence = false;
+    let mut contract_had_fence = false;
+    let mut skipping_contract_group = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if let Some(kind) = craik_contract_heading_kind(&lower) {
+            remove_trailing_contract_separator(&mut output);
+            skipping_contract = true;
+            skipping_fence = false;
+            contract_had_fence = false;
+            skipping_contract_group = kind == ContractHeadingKind::Group;
+            continue;
+        }
+        if skipping_contract {
+            if trimmed.starts_with("```") {
+                if skipping_fence {
+                    skipping_contract = skipping_contract_group;
+                    skipping_fence = false;
+                    contract_had_fence = false;
+                } else {
+                    skipping_fence = true;
+                    contract_had_fence = true;
+                }
+                continue;
+            }
+            if skipping_fence
+                || trimmed.is_empty()
+                || looks_like_contract_json_line(trimmed)
+                || (contract_had_fence && craik_contract_heading_kind(&lower).is_some())
+            {
+                continue;
+            }
+            skipping_contract = false;
+            contract_had_fence = false;
+            skipping_contract_group = false;
+        }
+        output.push(line);
+    }
+    output.join("\n")
+}
+
+fn remove_trailing_contract_separator(output: &mut Vec<&str>) {
+    while output.last().is_some_and(|line| line.trim().is_empty()) {
+        output.pop();
+    }
+    if output.last().is_some_and(|line| {
+        matches!(
+            line.trim(),
+            "---" | "----" | "-----" | "***" | "___" | "—" | "–"
+        )
+    }) {
+        output.pop();
+    }
+    while output.last().is_some_and(|line| line.trim().is_empty()) {
+        output.pop();
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContractHeadingKind {
+    Group,
+    Single,
+}
+
+fn craik_contract_heading_kind(lower: &str) -> Option<ContractHeadingKind> {
+    if lower.contains("craik contract output")
+        || lower.contains("contract-shaped output")
+        || lower.contains("contract output")
+        || lower.contains("output contract")
+    {
+        return Some(ContractHeadingKind::Group);
+    }
+    if lower.contains("**craik.") || lower.starts_with("craik.") {
+        return Some(ContractHeadingKind::Single);
+    }
+    None
+}
+
+fn looks_like_contract_json_line(line: &str) -> bool {
+    line.starts_with('{')
+        || line.starts_with('}')
+        || line.starts_with('[')
+        || line.starts_with(']')
+        || line.ends_with(',')
+        || line.ends_with(':')
+        || line.contains("\"schema\"")
+        || line.contains("\"task_id\"")
+        || line.contains("\"status\"")
+        || line.contains("\"summary\"")
+        || line.contains("\"evidence\"")
+        || line.contains("\"receipt_ids\"")
+        || line.contains("\"commands_run\"")
+        || line.contains("\"capabilities_used\"")
+        || line.contains("\"policy_compliance\"")
+}
+
+fn looks_like_structured_output_contract(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    text.starts_with('{')
+        || text.starts_with('[')
+        || text.starts_with("```")
+        || lower.contains("output contract")
+        || lower.contains("craik contract output")
+        || lower.contains("**craik.")
+        || lower.contains("\"schema\"")
+}
+
+fn json_value_from_text(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    let unfenced = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+        .and_then(|value| value.strip_suffix("```"))
+        .map(str::trim)
+        .unwrap_or(trimmed);
+    serde_json::from_str::<Value>(unfenced)
+        .ok()
+        .or_else(|| parse_embedded_json(unfenced, '{', '}'))
+        .or_else(|| parse_embedded_json(unfenced, '[', ']'))
+}
+
+fn parse_embedded_json(text: &str, open: char, close: char) -> Option<Value> {
+    let start = text.find(open)?;
+    let end = text.rfind(close)?;
+    if end <= start {
+        return None;
+    }
+    serde_json::from_str::<Value>(&text[start..=end]).ok()
+}
+
+fn extract_contract_display_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => displayable_contract_text(text),
+        Value::Array(items) => items.iter().find_map(extract_contract_display_text),
+        Value::Object(object) => {
+            for key in ["observed_output", "payload", "output"] {
+                if let Some(text) = object.get(key).and_then(extract_contract_display_text) {
+                    return Some(text);
+                }
+            }
+            if let Some(outputs) = object.get("run_outputs").and_then(Value::as_array) {
+                for output in outputs {
+                    if let Some(text) = output
+                        .get("observed_output")
+                        .and_then(extract_contract_display_text)
+                    {
+                        return Some(text);
+                    }
+                    if let Some(text) = output
+                        .get("summary")
+                        .and_then(Value::as_str)
+                        .and_then(displayable_contract_text)
+                    {
+                        return Some(text);
+                    }
+                }
+            }
+            if let Some(content) = object.get("content")
+                && let Some(text) = extract_contract_display_text(content)
+            {
+                return Some(text);
+            }
+            for key in [
+                "final_answer",
+                "answer",
+                "text",
+                "response",
+                "result",
+                "summary",
+                "message",
+            ] {
+                if let Some(text) = object
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .and_then(displayable_contract_text)
+                {
+                    return Some(text);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn displayable_contract_text(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || looks_like_structured_output_contract(trimmed) {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+fn text_before_contract_marker(text: &str) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    let marker = lower
+        .find("output contract")
+        .or_else(|| lower.find("craik contract output"))
+        .or_else(|| lower.find("**craik."))
+        .or_else(|| lower.find("craik."))?;
+    let prefix = text[..marker].trim();
+    if prefix.is_empty()
+        || prefix.starts_with('{')
+        || prefix.starts_with('[')
+        || prefix.starts_with("```")
+    {
+        None
+    } else {
+        Some(prefix.to_owned())
+    }
+}
+
 fn is_low_value_lifecycle_message(event: &GatewayEvent, message: &str) -> bool {
     if event
         .data
@@ -3582,7 +3853,10 @@ fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
+    use super::{
+        ActiveOverlay, InteractiveApp, LoopAction, RunRecord, assistant_event_transcript_text,
+        export_file_stem,
+    };
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use crate::transcript::TranscriptKind;
@@ -4269,6 +4543,197 @@ mod tests {
         );
         assert!(transcript_text.contains("Tool: Read"));
         assert!(transcript_text.contains("Target: README.md"));
+    }
+
+    #[test]
+    fn structured_run_output_contract_does_not_dump_json_into_transcript() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let raw_contract = json!({
+            "schema": "craik.claude_code_run_execution",
+            "status": "completed",
+            "run_outputs": [
+                {
+                    "schema": "craik.run_output",
+                    "summary": "Reviewed the implementation plan.",
+                    "observed_output": {
+                        "text": "Reviewed the implementation plan and identified the next phase."
+                    }
+                }
+            ],
+            "receipt_ids": ["receipt_1"]
+        })
+        .to_string();
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.output".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({"summary": raw_contract}),
+        });
+
+        let transcript_text = app
+            .transcript
+            .iter()
+            .map(|entry| entry.body.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(transcript_text.contains("Reviewed the implementation plan"));
+        assert!(!transcript_text.contains("craik.claude_code_run_execution"));
+        assert!(!transcript_text.contains("\"run_outputs\""));
+        assert_eq!(app.run_records[0].outputs.len(), 1);
+        assert!(app.run_records[0].outputs[0].contains("craik.claude_code_run_execution"));
+    }
+
+    #[test]
+    fn output_contract_without_display_text_stays_out_of_chat_lane() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.output".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({"summary": "{\"schema\":\"craik.output_contract\",\"receipt_ids\":[\"receipt_1\"]}"}),
+        });
+
+        assert!(app.transcript.is_empty());
+        assert_eq!(app.run_records[0].outputs.len(), 1);
+    }
+
+    #[test]
+    fn assistant_contract_output_sections_are_removed_from_chat_lane() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.event".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "kind": "assistant_text",
+                "text": "## Craik contract output\n\n```json\n{\"schema\":\"craik.runner_step_result\",\"summary\":\"internal\"}\n```\n\n```json\n{\"schema\":\"craik.handoff\",\"outcome\":\"internal\"}\n```\n\n**Remaining risks:** none for this read-only confirmation."
+            }),
+        });
+
+        let transcript_text = app
+            .transcript
+            .iter()
+            .map(|entry| entry.body.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(transcript_text.contains("Remaining risks"));
+        assert!(!transcript_text.contains("Craik contract output"));
+        assert!(!transcript_text.contains("craik.runner_step_result"));
+        assert!(!transcript_text.contains("craik.handoff"));
+    }
+
+    #[test]
+    fn named_craik_contract_sections_are_removed_from_chat_lane() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let text = "**craik.runner_step_result**\n```json\n{\"task_id\":\"task_1\",\"status\":\"completed\",\"commands_run\":[\"git status\"]}\n```\n\n**craik.handoff**\n```json\n{\"task_id\":\"task_1\",\"summary\":\"internal\"}\n```\n";
+
+        assert_eq!(assistant_event_transcript_text(text), None);
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.event".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "kind": "assistant_text",
+                "text": text
+            }),
+        });
+
+        assert!(app.transcript.is_empty());
+    }
+
+    #[test]
+    fn mixed_final_answer_strips_named_contract_sections() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let text = "Yes — I can see the Craik repo.\n\n---\n\n**craik.runner_step_result**\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"git status\"],\n  \"capabilities_used\": [\"repo.read\"]\n}\n```\n\n**craik.handoff**\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\"\n}\n```\n\nEverything stayed read-only.";
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.output".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "summary": text
+            }),
+        });
+
+        let transcript_text = app
+            .transcript
+            .iter()
+            .map(|entry| entry.body.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(transcript_text.contains("Yes"));
+        assert!(transcript_text.contains("Everything stayed read-only"));
+        assert!(!transcript_text.contains("---"));
+        assert!(!transcript_text.contains("craik.runner_step_result"));
+        assert!(!transcript_text.contains("craik.handoff"));
+        assert!(!transcript_text.contains("\"commands_run\""));
+    }
+
+    #[test]
+    fn bare_contract_output_sections_are_removed_from_chat_lane() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        let text = "Confirmed.\n\n**Contract output**\n\ncraik.runner_step_result\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"pwd\", \"git status\"],\n  \"capabilities_used\": [\"repo.read\"],\n  \"receipts_required\": true\n}\n```\n\ncraik.handoff\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\",\n  \"state\": \"complete\"\n}\n```";
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.event".to_owned(),
+            created_at: None,
+            run_id: Some("run_contract".to_owned()),
+            task_id: Some("task_contract".to_owned()),
+            data: json!({
+                "kind": "assistant_text",
+                "text": text
+            }),
+        });
+
+        let transcript_text = app
+            .transcript
+            .iter()
+            .map(|entry| entry.body.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(transcript_text.contains("Confirmed."));
+        assert!(!transcript_text.contains("Contract output"));
+        assert!(!transcript_text.contains("craik.runner_step_result"));
+        assert!(!transcript_text.contains("craik.handoff"));
+        assert!(!transcript_text.contains("\"commands_run\""));
+        assert!(!transcript_text.contains("\"receipts_required\""));
+    }
+
+    #[test]
+    fn pending_approval_overlay_survives_run_output_until_reviewed() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            created_at: None,
+            run_id: Some("run_approval".to_owned()),
+            task_id: Some("task_approval".to_owned()),
+            data: json!({
+                "approval_id": "approval_edit_1",
+                "message": "Edit src/lib.rs?",
+                "tool": "Edit",
+                "target": "src/lib.rs"
+            }),
+        });
+        app.record_event(&GatewayEvent {
+            event_type: "run.output".to_owned(),
+            created_at: None,
+            run_id: Some("run_approval".to_owned()),
+            task_id: Some("task_approval".to_owned()),
+            data: json!({"summary": "Waiting for approval."}),
+        });
+
+        assert_eq!(app.pending_approval_count(), 1);
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
     }
 
     #[test]
@@ -5405,6 +5870,23 @@ mod tests {
         app.record_event(&event);
 
         assert_eq!(app.transcript_scroll, 12);
+    }
+
+    #[test]
+    fn transcript_scroll_keys_keep_footer_pinned_and_move_viewport() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.handle_key(KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE));
+        assert_eq!(app.transcript_scroll, 12);
+
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::ALT));
+        assert_eq!(app.transcript_scroll, 11);
+
+        app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::ALT));
+        assert_eq!(app.transcript_scroll, 12);
+
+        app.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+        assert_eq!(app.transcript_scroll, 0);
     }
 
     fn event(
