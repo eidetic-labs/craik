@@ -8,10 +8,10 @@ in ``execute_prompt``.
 
 from __future__ import annotations
 
+from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
 from craik.runtime.backend.adapters.base import Adapter
 from craik.runtime.backend.adapters.concrete import (
     AnthropicAPI,
-    AnthropicCLI,
     GoogleAPI,
     GoogleCLI,
     OpenAIAPI,
