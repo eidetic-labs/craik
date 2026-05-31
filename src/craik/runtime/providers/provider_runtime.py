@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -64,7 +63,9 @@ from craik.runtime.providers.provider_runtime_support import (
     _openai_usage,
     _provider_base_url,
     _redacted_mapping,
+    _resolve_secret_ref_name,
     _retry_after,
+    _safe_provider_options,
     _transport_for_config,
 )
 from craik.runtime.providers.provider_transport import (
@@ -438,47 +439,6 @@ class ChatCompletionsProviderAdapter:
                 "Chat Completions live access requires live_enabled=true and "
                 "an external secret resolver"
             )
-
-
-def _safe_provider_options(options: dict[str, Any]) -> dict[str, Any]:
-    reserved = {
-        "_fixture",
-        "_path",
-        "input",
-        "max_output_tokens",
-        "max_tokens",
-        "messages",
-        "metadata",
-        "model",
-        "reasoning",
-        "response_format",
-        "stream",
-        "temperature",
-        "text",
-        "thinking",
-        "tools",
-        "tool_choice",
-        "service_tier",
-    }
-    return {key: value for key, value in options.items() if key not in reserved}
-
-
-def _resolve_secret_ref_name(secret_ref_names: list[str]) -> str:
-    """Pick the secret reference to read at request time.
-
-    ``secret_ref_names`` lists candidate environment variables in priority
-    order (canonical first, legacy aliases after). The first candidate that is
-    actually present in the environment wins, so a legacy fallback such as
-    ``CRAIK_GEMINI_API_KEY`` keeps working when the canonical
-    ``CRAIK_GOOGLE_API_KEY`` is unset. When none are present, the canonical
-    (first) reference is returned so resolution errors name the preferred var.
-    """
-    if not secret_ref_names:
-        return ""
-    for ref in secret_ref_names:
-        if os.environ.get(ref):
-            return ref
-    return secret_ref_names[0]
 
 
 def adapter_for_provider(
