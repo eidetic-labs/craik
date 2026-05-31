@@ -43,6 +43,7 @@ Required fields:
 | `receipt.created` | run_id string; receipt_id string |
 | `run.output` | run_id string; summary string |
 | `run.completed` | run_id string; status string |
+| `assistant_text` | text string |
 | `error` | message string |
 
 Provider-specific adapters should preserve provider context when available:
