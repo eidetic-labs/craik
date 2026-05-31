@@ -37,7 +37,8 @@ class _LegacyRunAdapter(Protocol):
         events: list[BackendEvent],
         source: str,
         env: dict[str, str] | None,
-    ) -> BackendPromptResult: ...
+    ) -> BackendPromptResult:
+        """Execute the legacy backend path and return the audited result."""
 
 
 @dataclass(frozen=True)

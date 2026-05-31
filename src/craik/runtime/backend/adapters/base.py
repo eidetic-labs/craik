@@ -40,9 +40,11 @@ class Adapter(Protocol):
     vendor: str  # "anthropic" | "openai" | "google"
     surface: str  # "cli" | "api"
 
-    def supports_live_gating(self) -> bool: ...
+    def supports_live_gating(self) -> bool:
+        """Whether this adapter can gate tool calls before they execute."""
 
-    def run(self, ctx: RunContext) -> Iterable[BackendEvent]: ...
+    def run(self, ctx: RunContext) -> Iterable[BackendEvent]:
+        """Run the prompt described by ``ctx`` and yield canonical events."""
 
 
 # --- Family bases (template method) -----------------------------------------
