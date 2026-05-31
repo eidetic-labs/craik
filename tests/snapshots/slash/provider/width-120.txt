@@ -153,7 +153,7 @@
 │      │      │       │      │       │      │ "run… │      │       │      │       │      │       │      │       │      │
 │      │      │       │      │       │      │ "nam… │      │       │      │       │      │       │      │       │      │
 │      │      │       │      │       │      │ "run… │      │       │      │       │      │       │      │       │      │
-│ cra… │ 0.1… │ prov… │ Goo… │ gemi… │ ["c… │ [{"d… │ thi… │ ["CR… │ ["C… │ budg… │ quo… │ crai… │ {"b… │ ["do… │ 202… │
+│ cra… │ 0.1… │ prov… │ Goo… │ goog… │ ["c… │ [{"d… │ thi… │ ["CR… │ ["C… │ budg… │ quo… │ crai… │ {"b… │ ["do… │ 202… │
 │      │      │       │ Gem… │       │ "to… │ "Pro… │      │ "CRA… │      │       │      │       │ "ht… │ "doc… │      │
 │      │      │       │ Pro… │       │ "ru… │ chat  │      │       │      │       │      │       │ "de… │ "htt… │      │
 │      │      │       │      │       │      │ requ… │      │       │      │       │      │       │ "ge… │ "htt… │      │

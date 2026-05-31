@@ -8,7 +8,16 @@ from typing import Any, Literal, Protocol, cast
 
 from craik.contracts.models import RunnerResultStatus
 
-ProviderFamily = Literal["openai", "anthropic", "gemini", "chat_completions"]
+ProviderFamily = Literal["openai", "anthropic", "google", "gemini", "chat_completions"]
+
+
+def normalize_provider_family(family: str) -> str:
+    """Map deprecated provider-family aliases to their canonical token.
+
+    "gemini" is the legacy token for Google's provider family; it is still
+    accepted as input but normalized to the canonical "google".
+    """
+    return "google" if family == "gemini" else family
 
 
 class ProviderTransport(Protocol):
@@ -85,13 +94,14 @@ def _fixture_response(
     phase: str,
     status: RunnerResultStatus,
 ) -> dict[str, Any]:
-    text = f"{provider_family} fixture completed {phase} with status {status}."
+    family = normalize_provider_family(provider_family)
+    text = f"{family} fixture completed {phase} with status {status}."
     structured = {
         "phase": phase,
         "status": status,
         "summary": text,
     }
-    if provider_family == "openai":
+    if family == "openai":
         return {
             "id": response_id,
             "model": model,
@@ -107,7 +117,7 @@ def _fixture_response(
             ],
             "usage": {"input_tokens": 20, "output_tokens": 10, "total_tokens": 30},
         }
-    if provider_family == "chat_completions":
+    if family == "chat_completions":
         return {
             "id": response_id,
             "model": model,
@@ -131,7 +141,7 @@ def _fixture_response(
             ],
             "usage": {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
         }
-    if provider_family == "gemini":
+    if family == "google":
         return {
             "responseId": response_id,
             "modelVersion": model,

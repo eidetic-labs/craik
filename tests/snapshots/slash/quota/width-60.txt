@@ -5,7 +5,7 @@
 │ provid… │ anthro… │ budget… │ quota_… │         │        │
 │ provid… │ anthro… │ budget… │ quota_… │         │        │
 │ provid… │ fixture │ budget… │ quota_… │         │        │
-│ provid… │ gemini  │ budget… │ quota_… │         │        │
+│ provid… │ google  │ budget… │ quota_… │         │        │
 │ provid… │ chat_c… │ budget… │ quota_… │         │        │
 │ provid… │ chat_c… │ budget… │ quota_… │         │        │
 │ provid… │ chat_c… │ budget… │ quota_… │         │        │

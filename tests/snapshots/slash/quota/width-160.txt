@@ -4,7 +4,7 @@
 │ provider_anthropic                 │ anthropic         │ budget_anthropic_monthly        │ quota_anthropic_daily        │                 │                  │
 │ provider_anthropic_messages        │ anthropic         │ budget_anthropic_monthly        │ quota_anthropic_daily        │                 │                  │
 │ provider_fixture_local             │ fixture           │ budget_fixture_monthly          │ quota_fixture_daily          │                 │                  │
-│ provider_gemini                    │ gemini            │ budget_gemini_monthly           │ quota_gemini_daily           │                 │                  │
+│ provider_gemini                    │ google            │ budget_google_monthly           │ quota_google_daily           │                 │                  │
 │ provider_local_lm_studio           │ chat_completions  │ budget_local_lm_studio_monthly  │ quota_local_lm_studio_daily  │                 │                  │
 │ provider_local_ollama              │ chat_completions  │ budget_local_ollama_monthly     │ quota_local_ollama_daily     │                 │                  │
 │ provider_local_openai_compatible   │ chat_completions  │ budget_local_monthly            │ quota_local_daily            │                 │                  │

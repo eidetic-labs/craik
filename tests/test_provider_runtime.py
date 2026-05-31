@@ -150,9 +150,7 @@ def _anthropic_adapter(*, live_enabled: bool = False) -> AnthropicProviderAdapte
     )
 
 
-def _chat_completions_adapter(
-    *, live_enabled: bool = False
-) -> ChatCompletionsProviderAdapter:
+def _chat_completions_adapter(*, live_enabled: bool = False) -> ChatCompletionsProviderAdapter:
     return ChatCompletionsProviderAdapter(
         ProviderRuntimeConfig(
             provider_id="provider_openai_chat",
@@ -478,13 +476,9 @@ def test_gemini_payload_supports_messages_tools_structured_output_and_system_ins
 
     assert payload["_path"] == "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"
     assert payload["systemInstruction"] == {"parts": [{"text": "Follow the policy."}]}
-    assert payload["contents"] == [
-        {"role": "user", "parts": [{"text": "Create a plan."}]}
-    ]
+    assert payload["contents"] == [{"role": "user", "parts": [{"text": "Create a plan."}]}]
     assert payload["tools"][0]["functionDeclarations"][0]["name"] == "lookup_case"
-    assert payload["tools"][0]["functionDeclarations"][0]["parameters"]["required"] == [
-        "case_id"
-    ]
+    assert payload["tools"][0]["functionDeclarations"][0]["parameters"]["required"] == ["case_id"]
     assert payload["toolConfig"] == {"functionCallingConfig": {"mode": "AUTO"}}
     assert payload["generationConfig"]["maxOutputTokens"] == 1024
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
@@ -508,14 +502,10 @@ def test_gemini_payload_applies_profile_options_without_overriding_reserved_fiel
 
     payload = _gemini_adapter().build_payload(request)
 
-    assert payload["contents"] == [
-        {"role": "user", "parts": [{"text": "Create a plan."}]}
-    ]
+    assert payload["contents"] == [{"role": "user", "parts": [{"text": "Create a plan."}]}]
     assert payload["generationConfig"]["maxOutputTokens"] == 2048
     assert payload["generationConfig"]["temperature"] == 0.2
-    assert payload["generationConfig"]["thinkingConfig"] == {
-        "reasoningEffort": "high"
-    }
+    assert payload["generationConfig"]["thinkingConfig"] == {"reasoningEffort": "high"}
     assert payload["generationConfig"]["topP"] == 0.9
 
 
@@ -707,7 +697,7 @@ def test_live_provider_access_requires_explicit_enablement() -> None:
     [
         (_openai_adapter(), "openai"),
         (_anthropic_adapter(), "anthropic"),
-        (_gemini_adapter(), "gemini"),
+        (_gemini_adapter(), "google"),
     ],
 )
 def test_fixture_transport_yields_provider_family_response(
@@ -738,9 +728,7 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     anthropic = adapter_for_provider(registry.require("provider_anthropic"))
     gemini = adapter_for_provider(registry.require("provider_gemini"))
     openai_responses = adapter_for_provider(registry.require("provider_openai_responses"))
-    anthropic_messages = adapter_for_provider(
-        registry.require("provider_anthropic_messages")
-    )
+    anthropic_messages = adapter_for_provider(registry.require("provider_anthropic_messages"))
     openai_chat = adapter_for_provider(registry.require("provider_openai_chat"))
     local_openai_compatible = adapter_for_provider(
         registry.require("provider_local_openai_compatible")

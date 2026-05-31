@@ -165,7 +165,7 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                 {
                     "id": "provider_gemini",
                     "name": "Google Gemini Provider",
-                    "provider": "gemini",
+                    "provider": "google",
                     "modes": ["chat", "tool", "runner"],
                     "capabilities": _mvp_provider_capabilities(),
                     "trust_boundary": "third-party",
@@ -174,8 +174,8 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                         "CRAIK_GEMINI_BASE_URL",
                     ],
                     "secret_ref_names": ["CRAIK_GEMINI_API_KEY"],
-                    "budget_ref": "budget_gemini_monthly",
-                    "quota_ref": "quota_gemini_daily",
+                    "budget_ref": "budget_google_monthly",
+                    "quota_ref": "quota_google_daily",
                     "runtime_path": GEMINI_PROVIDER_ADAPTER,
                     "metadata": {
                         "base_url": "https://generativelanguage.googleapis.com",
@@ -320,9 +320,10 @@ def _validate_provider_base_url(provider: ModelProvider) -> None:
     configured = provider.metadata.get("base_url")
     if not isinstance(configured, str) or not configured:
         return
-    allow_local = provider.id.startswith("provider_local_") or provider.metadata.get(
-        "allow_local_base_url"
-    ) is True
+    allow_local = (
+        provider.id.startswith("provider_local_")
+        or provider.metadata.get("allow_local_base_url") is True
+    )
     try:
         assert_safe_provider_url(configured, allow_local=allow_local)
     except ProviderURLSafetyError as exc:

@@ -66,6 +66,7 @@ from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderFamily,
     ProviderTransport,
+    normalize_provider_family,
 )
 
 CredentialApprovalRequiredError = _provider_models.CredentialApprovalRequiredError
@@ -461,8 +462,8 @@ def adapter_for_provider(
     provider: ModelProvider, *, live_enabled: bool = False
 ) -> ProviderRuntimeAdapter:
     """Return the runtime adapter for a configured MVP provider."""
-    family = provider.provider
-    if family not in {"openai", "anthropic", "gemini", "chat_completions"}:
+    family = normalize_provider_family(provider.provider)
+    if family not in {"openai", "anthropic", "google", "chat_completions"}:
         raise ValueError(f"provider {provider.id} is not an MVP live provider")
     model = str(provider.metadata.get("default_model", ""))
     if not model:
@@ -481,9 +482,7 @@ def adapter_for_provider(
         max_retries=int(provider.metadata.get("max_retries", 3)),
         live_enabled=live_configured,
         credential_pool_id=(
-            _default_credential_pool_id(cast(ProviderFamily, family))
-            if live_configured
-            else None
+            _default_credential_pool_id(cast(ProviderFamily, family)) if live_configured else None
         ),
         docs_refs=_official_docs_for_family(cast(ProviderFamily, family)),
     )
@@ -492,6 +491,6 @@ def adapter_for_provider(
         return OpenAIProviderAdapter(config, transport=transport)
     if family == "anthropic":
         return AnthropicProviderAdapter(config, transport=transport)
-    if family == "gemini":
+    if family == "google":
         return GeminiProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)

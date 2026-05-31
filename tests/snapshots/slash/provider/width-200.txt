@@ -150,7 +150,7 @@
 │            │         │            │            │            │           │ "runner",  │           │            │           │            │           │            │           │            │           │
 │            │         │            │            │            │           │ "name":    │           │            │           │            │           │            │           │            │           │
 │            │         │            │            │            │           │ "runner.e… │           │            │           │            │           │            │           │            │           │
-│ craik.mod… │ 0.1.0   │ provider_… │ Google     │ gemini     │ ["chat",  │ [{"descri… │ third-pa… │ ["CRAIK_G… │ ["CRAIK_… │ budget_ge… │ quota_ge… │ craik.run… │ {"base_u… │ ["docs/re… │ 2026-05-… │
+│ craik.mod… │ 0.1.0   │ provider_… │ Google     │ google     │ ["chat",  │ [{"descri… │ third-pa… │ ["CRAIK_G… │ ["CRAIK_… │ budget_go… │ quota_go… │ craik.run… │ {"base_u… │ ["docs/re… │ 2026-05-… │
 │            │         │            │ Gemini     │            │ "tool",   │ "Provider  │           │ "CRAIK_GE… │           │            │           │            │ "https:/… │ "docs/ref… │           │
 │            │         │            │ Provider   │            │ "runner"] │ chat       │           │            │           │            │           │            │ "default… │ "https://… │           │
 │            │         │            │            │            │           │ request    │           │            │           │            │           │            │ "gemini-… │ "https://… │           │

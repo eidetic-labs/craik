@@ -30,6 +30,7 @@ from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderFamily,
     ProviderTransport,
+    normalize_provider_family,
 )
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
         ProviderRuntimeResult,
         ProviderTool,
     )
+
 
 def _transport_for_config(config: ProviderRuntimeConfig) -> ProviderTransport:
     if not config.live_enabled:
@@ -97,11 +99,12 @@ def _headers_for_auth_profile(
 
 def _provider_base_url(provider: ModelProvider) -> str:
     configured = provider.metadata.get("base_url")
+    family = normalize_provider_family(provider.provider)
     if isinstance(configured, str) and configured:
         url = configured
-    elif provider.provider == "anthropic":
+    elif family == "anthropic":
         url = "https://api.anthropic.com"
-    elif provider.provider == "gemini":
+    elif family == "google":
         url = "https://generativelanguage.googleapis.com"
     else:
         url = "https://api.openai.com"
@@ -115,15 +118,17 @@ def _provider_base_url(provider: ModelProvider) -> str:
 
 
 def _provider_allows_local_url(provider: ModelProvider) -> bool:
-    return provider.id.startswith("provider_local_") or provider.metadata.get(
-        "allow_local_base_url"
-    ) is True
+    return (
+        provider.id.startswith("provider_local_")
+        or provider.metadata.get("allow_local_base_url") is True
+    )
 
 
 def _official_docs_for_family(family: ProviderFamily) -> list[str]:
-    if family == "anthropic":
+    normalized = normalize_provider_family(family)
+    if normalized == "anthropic":
         return list(ANTHROPIC_OFFICIAL_DOCS)
-    if family == "gemini":
+    if normalized == "google":
         return list(GEMINI_OFFICIAL_DOCS)
     return list(OPENAI_OFFICIAL_DOCS)
 

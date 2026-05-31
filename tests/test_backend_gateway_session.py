@@ -210,7 +210,7 @@ def test_model_profile_names_are_readable_and_repair_legacy_defaults(tmp_path: P
     [
         ("openai/gpt-5.2", "provider_openai", "openai"),
         ("anthropic/claude-sonnet-4-20250514", "provider_anthropic", "anthropic"),
-        ("gemini/gemini-2.5-pro", "provider_gemini", "gemini"),
+        ("gemini/gemini-2.5-pro", "provider_gemini", "google"),
         ("ollama/llama3.2", "provider_local_ollama", "chat_completions"),
     ],
 )
@@ -309,9 +309,7 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     tool_events = [event for event in emitted if event.type == "tool.used"]
     assert [event.data["tool"] for event in tool_events] == ["Read", "Bash", "Edit"]
     assert tool_events[0].data["files"] == ["README.md"]
-    assert tool_events[1].data["command"] == (
-        "uv run pytest tests/test_backend_gateway_session.py"
-    )
+    assert tool_events[1].data["command"] == ("uv run pytest tests/test_backend_gateway_session.py")
     file_event = next(event for event in emitted if event.type == "file.changed")
     assert file_event.data["target"] == "README.md"
     approval_event = next(event for event in emitted if event.type == "approval.requested")
@@ -330,9 +328,7 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     ]
     assert {event.data["kind"] for event in hidden_events} >= {"event", "system", "result"}
     visible_progress = [
-        str(event.data["message"])
-        for event in emitted
-        if event.type == "run.progress"
+        str(event.data["message"]) for event in emitted if event.type == "run.progress"
     ]
     assert not any("Claude Code event:" in message for message in visible_progress)
     assert not any("Claude Code system event:" in message for message in visible_progress)
@@ -424,9 +420,7 @@ def _assert_provider_gateway_event_contract(
         )
 
     receipt_ids = [
-        event["data"]["receipt_id"]
-        for event in events
-        if event["type"] == "receipt.created"
+        event["data"]["receipt_id"] for event in events if event["type"] == "receipt.created"
     ]
     assert receipt_ids
     assert len(receipt_ids) == len(set(receipt_ids))

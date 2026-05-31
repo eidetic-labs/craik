@@ -24,6 +24,7 @@ from craik.runtime.providers.provider_runtime_support import (
 from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderTransport,
+    normalize_provider_family,
 )
 
 
@@ -35,16 +36,14 @@ class GeminiProviderAdapter:
         config: ProviderRuntimeConfig,
         transport: ProviderTransport | None = None,
     ) -> None:
-        if config.provider_family != "gemini":
-            raise ValueError("GeminiProviderAdapter requires provider_family='gemini'")
+        if normalize_provider_family(config.provider_family) != "google":
+            raise ValueError("GeminiProviderAdapter requires provider_family='google'")
         self.config = config
-        self.transport = transport or FixtureTransport(family="gemini", model=config.model)
+        self.transport = transport or FixtureTransport(family="google", model=config.model)
 
     def build_payload(self, request: ProviderRuntimeRequest) -> dict[str, Any]:
         system_parts = [
-            {"text": message.content}
-            for message in request.messages
-            if message.role == "system"
+            {"text": message.content} for message in request.messages if message.role == "system"
         ]
         chat_messages = [message for message in request.messages if message.role != "system"]
         method = "streamGenerateContent?alt=sse" if request.stream else "generateContent"
@@ -129,7 +128,7 @@ class GeminiProviderAdapter:
         text = "".join(text_parts)
         return ProviderRuntimeResult(
             provider_id=self.config.provider_id,
-            provider_family="gemini",
+            provider_family="google",
             model=str(response.get("modelVersion", self.config.model)),
             text=text,
             tool_calls=tool_calls,
@@ -147,7 +146,7 @@ class GeminiProviderAdapter:
     ) -> ProviderRuntimeErrorDecision:
         retryable = status_code in {408, 409, 429, 500, 502, 503, 504}
         return ProviderRuntimeErrorDecision(
-            provider_family="gemini",
+            provider_family="google",
             status_code=status_code,
             error_type=error_type,
             retryable=retryable,
