@@ -22,18 +22,18 @@ AUTH_PROFILES_FILENAME = "auth-profiles.json"
 AUTH_PROFILES_SCHEMA_VERSION = 1
 OWNER_ONLY_FILE_MODE = 0o600
 
-# Legacy provider-family token rewritten to its canonical form on load
+# Legacy provider-family identifier rewritten to its canonical form on load
 # (gemini→google rename). Persisted profile ids, families, and provider
-# metadata tokens are migrated in place and written back one time.
-_LEGACY_FAMILY_TOKEN = "gemini"
-_CANONICAL_FAMILY_TOKEN = "google"
+# metadata are migrated in place and written back one time.
+_LEGACY_FAMILY = "gemini"
+_CANONICAL_FAMILY = "google"
 
 
 def _canonical_profile_id(profile_id: str) -> str:
     """Rewrite a legacy ``gemini:*`` profile id to the canonical ``google:*``."""
-    prefix = f"{_LEGACY_FAMILY_TOKEN}:"
+    prefix = f"{_LEGACY_FAMILY}:"
     if profile_id.startswith(prefix):
-        return f"{_CANONICAL_FAMILY_TOKEN}:{profile_id[len(prefix):]}"
+        return f"{_CANONICAL_FAMILY}:{profile_id[len(prefix):]}"
     return profile_id
 
 
@@ -285,11 +285,11 @@ def _migrate_legacy_profile(profile: AuthProfile) -> tuple[AuthProfile, bool]:
     canonical_id = _canonical_profile_id(profile.id)
     if canonical_id != profile.id:
         update["id"] = canonical_id
-    if profile.provider_family == _LEGACY_FAMILY_TOKEN:
-        update["provider_family"] = _CANONICAL_FAMILY_TOKEN
-    if profile.metadata.get("provider") == _LEGACY_FAMILY_TOKEN:
+    if profile.provider_family == _LEGACY_FAMILY:
+        update["provider_family"] = _CANONICAL_FAMILY
+    if profile.metadata.get("provider") == _LEGACY_FAMILY:
         metadata = dict(profile.metadata)
-        metadata["provider"] = _CANONICAL_FAMILY_TOKEN
+        metadata["provider"] = _CANONICAL_FAMILY
         update["metadata"] = metadata
     if not update:
         return profile, False

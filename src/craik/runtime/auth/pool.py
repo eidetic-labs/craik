@@ -24,17 +24,17 @@ CREDENTIAL_POOL_FILENAME = "credential_pool.json"
 CREDENTIAL_POOL_SCHEMA_VERSION = 1
 OWNER_ONLY_FILE_MODE = 0o600
 
-# Legacy provider-family token rewritten to its canonical form on load so a
+# Legacy provider-family identifier rewritten to its canonical form on load so a
 # stored ``gemini:default`` pool resolves as ``google:default`` (gemini→google
 # rename). Mirrors the AuthProfileStore on-load migration.
-_LEGACY_FAMILY_TOKEN = "gemini"
-_CANONICAL_FAMILY_TOKEN = "google"
+_LEGACY_FAMILY = "gemini"
+_CANONICAL_FAMILY = "google"
 
 
 def _canonical_pool_token(value: str) -> str:
-    prefix = f"{_LEGACY_FAMILY_TOKEN}:"
+    prefix = f"{_LEGACY_FAMILY}:"
     if value.startswith(prefix):
-        return f"{_CANONICAL_FAMILY_TOKEN}:{value[len(prefix):]}"
+        return f"{_CANONICAL_FAMILY}:{value[len(prefix):]}"
     return value
 
 
@@ -248,8 +248,8 @@ def _migrate_legacy_pool(pool: CredentialPoolConfig) -> tuple[CredentialPoolConf
     canonical_id = _canonical_pool_token(pool.id)
     if canonical_id != pool.id:
         update["id"] = canonical_id
-    if pool.provider_family == _LEGACY_FAMILY_TOKEN:
-        update["provider_family"] = _CANONICAL_FAMILY_TOKEN
+    if pool.provider_family == _LEGACY_FAMILY:
+        update["provider_family"] = _CANONICAL_FAMILY
     entries = [
         entry.model_copy(update={"profile_id": _canonical_pool_token(entry.profile_id)})
         if _canonical_pool_token(entry.profile_id) != entry.profile_id
