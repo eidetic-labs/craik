@@ -138,7 +138,7 @@ class VendorProfile:
             return "rate_limit"
         if status_code >= 500:
             return "transient"
-        if 400 <= status_code < 500:
+        if status_code >= 400:
             return "invalid_request"
         return "unknown"
 
