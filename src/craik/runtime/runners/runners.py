@@ -61,7 +61,7 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
         _codex_matrix(),
         _claude_matrix(),
         _claude_code_matrix(),
-        _gemini_matrix(),
+        _google_matrix(),
         _fixture_matrix(),
         _provider_matrix(
             runner_id="provider_openai",
@@ -104,9 +104,9 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
             provider_family="anthropic",
         ),
         _provider_matrix(
-            runner_id="provider_gemini",
+            runner_id="provider_google",
             name="Gemini Provider Runner",
-            provider_family="gemini",
+            provider_family="google",
         ),
         _provider_matrix(
             runner_id="provider_anthropic_messages",
@@ -117,13 +117,26 @@ def default_runner_capability_matrices() -> dict[str, RunnerCapabilityMatrix]:
     return {matrix.runner.id: matrix for matrix in matrices}
 
 
+# Legacy runner-id aliases resolved on miss (gemini→google rename). Run records
+# and operator config that still name "gemini"/"provider_gemini" resolve to the
+# canonical google runners.
+_LEGACY_RUNNER_ID_ALIASES = {
+    "gemini": "google",
+    "provider_gemini": "provider_google",
+}
+
+
 def get_runner_capability_matrix(runner_id: str) -> RunnerCapabilityMatrix:
     """Return a built-in runner capability matrix by runner id."""
-    try:
-        return default_runner_capability_matrices()[runner_id]
-    except KeyError:
-        known = ", ".join(sorted(default_runner_capability_matrices()))
-        raise KeyError(f"unknown runner {runner_id!r}; known runners: {known}") from None
+    matrices = default_runner_capability_matrices()
+    matrix = matrices.get(runner_id)
+    if matrix is not None:
+        return matrix
+    aliased = _LEGACY_RUNNER_ID_ALIASES.get(runner_id)
+    if aliased is not None and aliased in matrices:
+        return matrices[aliased]
+    known = ", ".join(sorted(matrices))
+    raise KeyError(f"unknown runner {runner_id!r}; known runners: {known}")
 
 
 def capability_supported(matrix: RunnerCapabilityMatrix, capability: str) -> bool:
@@ -266,12 +279,12 @@ def _claude_code_matrix() -> RunnerCapabilityMatrix:
     )
 
 
-def _gemini_matrix() -> RunnerCapabilityMatrix:
+def _google_matrix() -> RunnerCapabilityMatrix:
     return RunnerCapabilityMatrix(
         runner=RunnerMetadata(
-            id="gemini",
+            id="google",
             name="Gemini",
-            adapter="gemini",
+            adapter="google",
             adapter_version="preview",
             mode="prompt-handoff",
             capabilities=["file.read", "memory.read", "review.comment", "result.structured"],

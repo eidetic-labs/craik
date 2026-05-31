@@ -73,10 +73,10 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
         "claude-code",
         "codex",
         "fixture",
-        "gemini",
+        "google",
         "provider_anthropic",
         "provider_anthropic_messages",
-        "provider_gemini",
+        "provider_google",
         "provider_local_lm_studio",
         "provider_local_ollama",
         "provider_local_openai_compatible",
@@ -89,11 +89,11 @@ def test_default_runner_matrix_contains_conservative_profiles() -> None:
     assert matrices["claude"].trust.default_grant_posture == "deny-by-default"
     assert matrices["claude-code"].runner.mode == "live"
     assert capability_supported(matrices["claude-code"], "file.write")
-    assert matrices["gemini"].trust.level == "low"
+    assert matrices["google"].trust.level == "low"
     assert matrices["fixture"].trust.requires_receipts is False
     assert matrices["provider_openai"].runner.adapter == "provider-runtime"
     assert matrices["provider_anthropic"].runner.metadata["provider_family"] == "anthropic"
-    assert matrices["provider_gemini"].runner.metadata["provider_family"] == "gemini"
+    assert matrices["provider_google"].runner.metadata["provider_family"] == "google"
     assert (
         matrices["provider_local_openai_compatible"].runner.metadata["provider_family"]
         == "chat_completions"

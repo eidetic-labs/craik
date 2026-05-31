@@ -92,7 +92,7 @@ def test_provider_certification_matrix_matches_fixture_expectations() -> None:
     rows = {row.provider_id: row for row in matrix.rows}
 
     assert set(fixture["required_provider_ids"]).issubset(rows)
-    for provider_id in ("provider_openai", "provider_anthropic", "provider_gemini"):
+    for provider_id in ("provider_openai", "provider_anthropic", "provider_google"):
         row = rows[provider_id]
         assert row.certification_status == "certified"
         assert row.trust_boundary == "third-party"

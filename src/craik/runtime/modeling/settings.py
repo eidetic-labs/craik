@@ -184,8 +184,8 @@ def _provider_identity(provider_name: str) -> tuple[str, str]:
         "anthropic": "provider_anthropic",
         "claude": "provider_anthropic",
         "openai": "provider_openai",
-        "gemini": "provider_gemini",
-        "google": "provider_gemini",
+        "gemini": "provider_google",
+        "google": "provider_google",
         "openai-compatible": "provider_local_openai_compatible",
         "local": "provider_local_openai_compatible",
         "ollama": "provider_local_ollama",
@@ -195,7 +195,9 @@ def _provider_identity(provider_name: str) -> tuple[str, str]:
     family = {
         "provider_anthropic": "anthropic",
         "provider_openai": "openai",
-        "provider_gemini": "gemini",
+        "provider_google": "google",
+        # Legacy provider-id in persisted records still resolves to the google family.
+        "provider_gemini": "google",
         "provider_local_openai_compatible": "local",
         "provider_local_ollama": "ollama",
         "provider_local_lm_studio": "lm-studio",

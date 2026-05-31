@@ -52,7 +52,7 @@ class ProviderOAuthCredentialSource:
                 return headers_for_profile(self.profile)
             except GoogleOAuthError as exc:
                 raise ProviderOAuthCredentialError(
-                    "Your Gemini OAuth credential could not be resolved. "
+                    "Your Google OAuth credential could not be resolved. "
                     "Re-run: craik auth login google"
                 ) from exc
         access_token = self._access_token()

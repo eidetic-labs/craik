@@ -46,7 +46,7 @@ class GeminiCredentialResult:
 def resolve_via_adc(
     *,
     scopes: list[str] | None = None,
-    profile_id: str = "gemini:vertex",
+    profile_id: str = "google:vertex",
     resolver: DefaultCredentialsResolver = google_auth_default,
 ) -> GeminiCredentialResult:
     """Resolve Gemini credentials from Google Application Default Credentials."""
@@ -67,7 +67,7 @@ def resolve_via_adc(
             "gcloud project or use `craik auth login gemini --service-account <path>`."
         )
     return GeminiCredentialResult(
-        profile=_gemini_profile(
+        profile=_google_profile(
             profile_id=profile_id,
             credential_source=GEMINI_ADC_CREDENTIAL_SOURCE,
             project_id=project_id,
@@ -82,7 +82,7 @@ def resolve_via_service_account(
     *,
     json_path: Path,
     scopes: list[str] | None = None,
-    profile_id: str = "gemini:vertex",
+    profile_id: str = "google:vertex",
     loader: ServiceAccountLoader | None = None,
 ) -> GeminiCredentialResult:
     """Resolve Gemini credentials from a service-account JSON file."""
@@ -104,7 +104,7 @@ def resolve_via_service_account(
     if not isinstance(project_id, str) or not project_id:
         raise GoogleOAuthError("Gemini service-account credentials did not include a project id")
     return GeminiCredentialResult(
-        profile=_gemini_profile(
+        profile=_google_profile(
             profile_id=profile_id,
             credential_source=GEMINI_SERVICE_ACCOUNT_CREDENTIAL_SOURCE,
             project_id=project_id,
@@ -161,7 +161,7 @@ def headers_for_profile(profile: AuthProfile) -> dict[str, str]:
 
 def store_google_adc_profile(
     *,
-    profile_id: str = "gemini:vertex",
+    profile_id: str = "google:vertex",
     project_id: str | None = None,
     resolver: DefaultCredentialsResolver = google_auth_default,
     env: dict[str, str] | None = None,
@@ -191,7 +191,7 @@ def store_google_adc_profile(
 def store_google_service_account_profile(
     *,
     json_path: Path,
-    profile_id: str = "gemini:vertex",
+    profile_id: str = "google:vertex",
     env: dict[str, str] | None = None,
 ) -> GeminiCredentialResult:
     """Resolve service-account credentials, store their profile, and return them."""
@@ -205,7 +205,7 @@ def store_google_service_account_profile(
     return result
 
 
-def _gemini_profile(
+def _google_profile(
     *,
     profile_id: str,
     credential_source: str,
@@ -215,7 +215,7 @@ def _gemini_profile(
 ) -> AuthProfile:
     metadata = {
         "source": "provider-oauth",
-        "provider": "gemini",
+        "provider": "google",
         "billing_surface": GEMINI_OAUTH_BILLING_SURFACE,
         "credential_source": credential_source,
         "gcp_project_id": project_id,
@@ -225,7 +225,7 @@ def _gemini_profile(
     return AuthProfile(
         id=profile_id,
         kind=CredentialKind.OAUTH,
-        provider_family="gemini",
+        provider_family="google",
         metadata=metadata,
         created_at=datetime.now(UTC),
         last_status="ok",

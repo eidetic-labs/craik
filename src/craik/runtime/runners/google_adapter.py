@@ -15,8 +15,13 @@ from craik.runtime.runners.preview_adapter import (
     request_from_compiled_prompt as _preview_request_from_compiled_prompt,
 )
 
+GOOGLE_RUNNER_ID = "google"
+# Deprecated alias; use GOOGLE_RUNNER_ID (gemini→google rename). Retained so
+# legacy run records that reference the "gemini" runner id still resolve.
 GEMINI_RUNNER_ID = "gemini"
-GEMINI_ADAPTER_VERSION = PREVIEW_ADAPTER_VERSION
+GOOGLE_ADAPTER_VERSION = PREVIEW_ADAPTER_VERSION
+# Deprecated alias; use GOOGLE_ADAPTER_VERSION (gemini→google rename).
+GEMINI_ADAPTER_VERSION = GOOGLE_ADAPTER_VERSION
 
 
 class GeminiRunnerAdapterError(RuntimeError):
@@ -31,10 +36,10 @@ class GeminiRunnerRequestError(GeminiRunnerAdapterError):
 class GeminiRunnerAdapter(PreviewFixtureAdapter):
     """Preview adapter for Gemini-compatible prompt handoff and fixture runs."""
 
-    runner_id: str = GEMINI_RUNNER_ID
+    runner_id: str = GOOGLE_RUNNER_ID
     display_name: str = "Gemini"
     live_mode: str = "prompt-handoff"
-    adapter_version: str = GEMINI_ADAPTER_VERSION
+    adapter_version: str = GOOGLE_ADAPTER_VERSION
     fixture_status: RunnerResultStatus = "completed"
     live_available: bool = False
     executable: str | None = None
@@ -52,7 +57,7 @@ def request_from_compiled_prompt(
     """Build a Gemini runner request from a compiled prompt."""
     return _preview_request_from_compiled_prompt(
         compiled,
-        runner_id=GEMINI_RUNNER_ID,
+        runner_id=GOOGLE_RUNNER_ID,
         adapter_factory=GeminiRunnerAdapter,
         request_error=GeminiRunnerRequestError,
         created_at=created_at,

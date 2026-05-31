@@ -65,8 +65,8 @@ def _active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | N
         "anthropic": "provider_anthropic",
         "claude": "provider_anthropic",
         "openai": "provider_openai",
-        "gemini": "provider_gemini",
-        "google": "provider_gemini",
+        "gemini": "provider_google",
+        "google": "provider_google",
         "openai-compatible": "provider_local_openai_compatible",
         "local": "provider_local_openai_compatible",
         "ollama": "provider_local_ollama",
@@ -93,4 +93,3 @@ def _claude_code_command_summary(env: dict[str, str] | None) -> str:
         parts.extend(["--permission-mode", permission_mode])
     parts.extend(["-p", "<compiled Craik prompt>"])
     return " ".join(parts)
-

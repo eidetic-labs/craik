@@ -188,17 +188,17 @@ def google_oauth_login(
     if service_account_path is not None:
         result = store_google_service_account_profile(
             json_path=service_account_path,
-            profile_id=profile_id or "gemini:vertex",
+            profile_id=profile_id or "google:vertex",
             env=env,
         )
     else:
         result = store_google_adc_profile(
-            profile_id=profile_id or "gemini:vertex",
+            profile_id=profile_id or "google:vertex",
             project_id=project_id,
             env=env,
         )
     capture = AuthCaptureResult(
-        provider="gemini",
+        provider="google",
         profile=result.profile,
         status=result.status(),
         credential_storage=credential_storage_status(env),

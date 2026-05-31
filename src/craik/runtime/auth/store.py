@@ -22,6 +22,20 @@ AUTH_PROFILES_FILENAME = "auth-profiles.json"
 AUTH_PROFILES_SCHEMA_VERSION = 1
 OWNER_ONLY_FILE_MODE = 0o600
 
+# Legacy provider-family token rewritten to its canonical form on load
+# (gemini→google rename). Persisted profile ids, families, and provider
+# metadata tokens are migrated in place and written back one time.
+_LEGACY_FAMILY_TOKEN = "gemini"
+_CANONICAL_FAMILY_TOKEN = "google"
+
+
+def _canonical_profile_id(profile_id: str) -> str:
+    """Rewrite a legacy ``gemini:*`` profile id to the canonical ``google:*``."""
+    prefix = f"{_LEGACY_FAMILY_TOKEN}:"
+    if profile_id.startswith(prefix):
+        return f"{_CANONICAL_FAMILY_TOKEN}:{profile_id[len(prefix):]}"
+    return profile_id
+
 
 class AuthProfileStoreError(RuntimeError):
     """Raised when auth profile state cannot be loaded or written."""
@@ -51,11 +65,16 @@ class AuthProfileStore:
             return sorted(self._read_unlocked().values(), key=lambda profile: profile.id)
 
     def get(self, profile_id: str) -> AuthProfile:
-        """Return one auth profile by id."""
+        """Return one auth profile by id, resolving legacy gemini ids."""
         with self._locked():
             profiles = self._read_unlocked()
             try:
                 return profiles[profile_id]
+            except KeyError:
+                pass
+            canonical = _canonical_profile_id(profile_id)
+            try:
+                return profiles[canonical]
             except KeyError as exc:
                 raise AuthProfileNotFoundError(f"auth profile not found: {profile_id}") from exc
 
@@ -178,7 +197,12 @@ class AuthProfileStore:
                 profiles[profile.id] = profile
         except ValidationError as exc:
             raise AuthProfileStoreError("auth profile store contains invalid profile data") from exc
-        return profiles
+        migrated, changed = _migrate_legacy_profiles(profiles)
+        if changed:
+            # One-time on-load migration: rewrite legacy gemini identities to
+            # google and persist within the same lock so it never re-runs.
+            self._write_unlocked(migrated)
+        return migrated
 
     def _write_unlocked(self, profiles: dict[str, AuthProfile]) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
@@ -234,6 +258,42 @@ class AuthProfileStore:
         finally:
             os.close(lock_fd)
             self.lock_path.unlink(missing_ok=True)
+
+
+def _migrate_legacy_profiles(
+    profiles: dict[str, AuthProfile],
+) -> tuple[dict[str, AuthProfile], bool]:
+    """Rewrite legacy gemini profile identities to google in place.
+
+    Returns the (possibly rewritten) profile map keyed by canonical id and a
+    flag indicating whether any profile was changed. Only the profile-level
+    identity is migrated: id prefix, ``provider_family``, and the ``provider``
+    token in ``metadata``. Signed ``authorization_provenance`` receipts are left
+    byte-for-byte intact so their ``self_hash`` stays valid.
+    """
+    changed = False
+    migrated: dict[str, AuthProfile] = {}
+    for profile in profiles.values():
+        new_profile, profile_changed = _migrate_legacy_profile(profile)
+        changed = changed or profile_changed
+        migrated[new_profile.id] = new_profile
+    return migrated, changed
+
+
+def _migrate_legacy_profile(profile: AuthProfile) -> tuple[AuthProfile, bool]:
+    update: dict[str, object] = {}
+    canonical_id = _canonical_profile_id(profile.id)
+    if canonical_id != profile.id:
+        update["id"] = canonical_id
+    if profile.provider_family == _LEGACY_FAMILY_TOKEN:
+        update["provider_family"] = _CANONICAL_FAMILY_TOKEN
+    if profile.metadata.get("provider") == _LEGACY_FAMILY_TOKEN:
+        metadata = dict(profile.metadata)
+        metadata["provider"] = _CANONICAL_FAMILY_TOKEN
+        update["metadata"] = metadata
+    if not update:
+        return profile, False
+    return profile.model_copy(update=update), True
 
 
 def _append_unique(existing: list[str] | None, value: str | None) -> list[str] | None:

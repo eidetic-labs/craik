@@ -161,7 +161,7 @@ def test_persistent_agent_launch_demo_runs_provider_matrix(
     assert result["provider_ids"] == [
         "provider_openai",
         "provider_anthropic",
-        "provider_gemini",
+        "provider_google",
         "provider_local_ollama",
     ]
     assert len(result["provider_executions"]) == 4

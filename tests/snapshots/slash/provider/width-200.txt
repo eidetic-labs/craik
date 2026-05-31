@@ -151,9 +151,9 @@
 │            │         │            │            │            │           │ "name":    │           │            │           │            │           │            │           │            │           │
 │            │         │            │            │            │           │ "runner.e… │           │            │           │            │           │            │           │            │           │
 │ craik.mod… │ 0.1.0   │ provider_… │ Google     │ google     │ ["chat",  │ [{"descri… │ third-pa… │ ["CRAIK_G… │ ["CRAIK_… │ budget_go… │ quota_go… │ craik.run… │ {"base_u… │ ["docs/re… │ 2026-05-… │
-│            │         │            │ Gemini     │            │ "tool",   │ "Provider  │           │ "CRAIK_GE… │           │            │           │            │ "https:/… │ "docs/ref… │           │
-│            │         │            │ Provider   │            │ "runner"] │ chat       │           │            │           │            │           │            │ "default… │ "https://… │           │
-│            │         │            │            │            │           │ request    │           │            │           │            │           │            │ "gemini-… │ "https://… │           │
+│            │         │            │ Gemini     │            │ "tool",   │ "Provider  │           │ "CRAIK_GE… │ "CRAIK_G… │            │           │            │ "https:/… │ "docs/ref… │           │
+│            │         │            │ Provider   │            │ "runner"] │ chat       │           │ "CRAIK_GO… │           │            │           │            │ "default… │ "https://… │           │
+│            │         │            │            │            │           │ request    │           │ "CRAIK_GE… │           │            │           │            │ "gemini-… │ "https://… │           │
 │            │         │            │            │            │           │ execution… │           │            │           │            │           │            │ "docs_ve… │ "https://… │           │
 │            │         │            │            │            │           │ "grant_re… │           │            │           │            │           │            │ "2026-05… │ "https://… │           │
 │            │         │            │            │            │           │ true,      │           │            │           │            │           │            │           │            │           │

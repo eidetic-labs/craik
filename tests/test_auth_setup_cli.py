@@ -92,7 +92,7 @@ def test_auth_setup_supports_anthropic_gemini_and_local_dry_run(tmp_path: Path) 
     assert gemini.exit_code == 0, gemini.output
     assert local.exit_code == 0, local.output
     assert json.loads(anthropic.stdout)["profile"]["id"] == "anthropic:default"
-    assert json.loads(gemini.stdout)["profile"]["provider_family"] == "gemini"
+    assert json.loads(gemini.stdout)["profile"]["provider_family"] == "google"
     local_payload = json.loads(local.stdout)
     assert local_payload["profile"]["provider_family"] == "chat_completions"
     assert local_payload["profile"]["metadata"]["allow_local_base_url"] is True

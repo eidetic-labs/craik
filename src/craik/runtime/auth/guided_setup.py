@@ -25,10 +25,18 @@ GUIDED_PROVIDER_DEFAULTS = {
         "env_var": "CRAIK_ANTHROPIC_API_KEY",
         "base_url": "https://api.anthropic.com",
     },
+    "google": {
+        "family": "google",
+        "profile_id": "google:default",
+        "env_var": "CRAIK_GOOGLE_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com",
+    },
+    # Deprecated alias; use "google" (gemini→google rename). Retained so
+    # `craik auth setup gemini` still maps to the google defaults.
     "gemini": {
-        "family": "gemini",
-        "profile_id": "gemini:default",
-        "env_var": "CRAIK_GEMINI_API_KEY",
+        "family": "google",
+        "profile_id": "google:default",
+        "env_var": "CRAIK_GOOGLE_API_KEY",
         "base_url": "https://generativelanguage.googleapis.com",
     },
     "local": {

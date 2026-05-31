@@ -210,7 +210,7 @@ def test_model_profile_names_are_readable_and_repair_legacy_defaults(tmp_path: P
     [
         ("openai/gpt-5.2", "provider_openai", "openai"),
         ("anthropic/claude-sonnet-4-20250514", "provider_anthropic", "anthropic"),
-        ("gemini/gemini-2.5-pro", "provider_gemini", "google"),
+        ("gemini/gemini-2.5-pro", "provider_google", "google"),
         ("ollama/llama3.2", "provider_local_ollama", "chat_completions"),
     ],
 )

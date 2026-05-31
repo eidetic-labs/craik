@@ -154,9 +154,9 @@
 │         │         │         │         │         │         │ "name": │         │         │         │         │         │         │         │         │        │
 │         │         │         │         │         │         │ "runne… │         │         │         │         │         │         │         │         │        │
 │ craik.… │ 0.1.0   │ provid… │ Google  │ google  │ ["chat… │ [{"des… │ third-… │ ["CRAI… │ ["CRAI… │ budget… │ quota_… │ craik.… │ {"base… │ ["docs… │ 2026-… │
-│         │         │         │ Gemini  │         │ "tool", │ "Provi… │         │ "CRAIK… │         │         │         │         │ "https… │ "docs/… │        │
-│         │         │         │ Provid… │         │ "runne… │ chat    │         │         │         │         │         │         │ "defau… │ "https… │        │
-│         │         │         │         │         │         │ request │         │         │         │         │         │         │ "gemin… │ "https… │        │
+│         │         │         │ Gemini  │         │ "tool", │ "Provi… │         │ "CRAIK… │ "CRAIK… │         │         │         │ "https… │ "docs/… │        │
+│         │         │         │ Provid… │         │ "runne… │ chat    │         │ "CRAIK… │         │         │         │         │ "defau… │ "https… │        │
+│         │         │         │         │         │         │ request │         │ "CRAIK… │         │         │         │         │ "gemin… │ "https… │        │
 │         │         │         │         │         │         │ execut… │         │         │         │         │         │         │ "docs_… │ "https… │        │
 │         │         │         │         │         │         │ "grant… │         │         │         │         │         │         │ "2026-… │ "https… │        │
 │         │         │         │         │         │         │ true,   │         │         │         │         │         │         │         │         │        │
