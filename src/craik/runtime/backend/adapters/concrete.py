@@ -1,0 +1,69 @@
+"""Concrete per-vendor adapter stubs (Phase 2 placeholders).
+
+These six classes exist so ``select_adapter`` has something to instantiate and
+return for each canonical ``"<vendor>-<surface>"`` id. They are deliberately
+minimal: each implements the ``Adapter`` protocol structurally but its ``run``
+raises ``NotImplementedError``.
+
+Phase 4 will rebase these onto ``CLIAdapter`` / ``APIAdapter`` and implement
+real behavior (per-vendor ``supports_live_gating`` truth, native-event mapping,
+the governed tool-loop, etc.); Task 2.4 will add a ``_legacy_run`` to
+``AnthropicCLI`` / ``AnthropicAPI``. Keep them minimal until then.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+from craik.runtime.backend.adapters.base import RunContext
+from craik.runtime.backend.events import BackendEvent
+
+
+class _NotImplementedAdapter:
+    """Structural ``Adapter`` whose ``run`` raises until Phase 4.
+
+    Subclasses set ``vendor`` / ``surface`` class attributes.
+    """
+
+    vendor: str
+    surface: str
+
+    def supports_live_gating(self) -> bool:
+        # Sensible permissive default; the real per-vendor truth (e.g.
+        # ``OpenAICLI`` observe-only -> ``False``) lands in Phase 4.
+        return True
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        # A normal method that raises on call -- NOT a generator. Raising
+        # immediately is the desired behavior for these Phase-2 stubs.
+        raise NotImplementedError(f"{type(self).__name__}.run is not implemented until Phase 4")
+
+
+class AnthropicCLI(_NotImplementedAdapter):
+    vendor = "anthropic"
+    surface = "cli"
+
+
+class AnthropicAPI(_NotImplementedAdapter):
+    vendor = "anthropic"
+    surface = "api"
+
+
+class OpenAICLI(_NotImplementedAdapter):
+    vendor = "openai"
+    surface = "cli"
+
+
+class OpenAIAPI(_NotImplementedAdapter):
+    vendor = "openai"
+    surface = "api"
+
+
+class GoogleCLI(_NotImplementedAdapter):
+    vendor = "google"
+    surface = "cli"
+
+
+class GoogleAPI(_NotImplementedAdapter):
+    vendor = "google"
+    surface = "api"
