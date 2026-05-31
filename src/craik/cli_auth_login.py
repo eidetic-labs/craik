@@ -32,6 +32,7 @@ from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
 from craik.runtime.auth.sources.google_oauth import GoogleOAuthError
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError
 from craik.runtime.contract import CommandResult, craik_command
+from craik.runtime.providers.provider_transport import normalize_provider_family
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
 from craik.runtime.shell.credential_storage import credential_storage_status
 from craik.runtime.shell.readiness import resolve_readiness
@@ -40,7 +41,7 @@ storage_app = typer.Typer(help="Inspect and migrate credential storage posture."
 auth_app.add_typer(storage_app, name="storage")
 
 DEFAULT_CLAUDE_CLI_PROVIDERS = {"anthropic"}
-DEFAULT_OAUTH_PROVIDERS = {"gemini"}
+DEFAULT_OAUTH_PROVIDERS = {"google"}
 
 
 @auth_app.command("login")
@@ -51,7 +52,12 @@ DEFAULT_OAUTH_PROVIDERS = {"gemini"}
 def auth_login_provider(
     provider: Annotated[
         str,
-        typer.Argument(help="Provider family: openai, anthropic, gemini, or local."),
+        typer.Argument(
+            help=(
+                "Provider family: openai, anthropic, google, or local "
+                "(gemini accepted as a legacy alias)."
+            ),
+        ),
     ] = "openai",
     no_browser: Annotated[
         bool,
@@ -106,7 +112,7 @@ def auth_login_provider(
 ) -> CommandResult:
     """Capture and cache provider credentials in local credential storage."""
     try:
-        normalized_provider = provider.strip().lower()
+        normalized_provider = normalize_provider_family(provider.strip().lower())
         if mode is None:
             normalized_mode = _default_login_mode(
                 normalized_provider,
@@ -127,9 +133,9 @@ def auth_login_provider(
                 if base_url is not None:
                     raise typer.BadParameter("--base-url is only supported by --mode=api-key")
                 if project_id is not None:
-                    raise typer.BadParameter("--project-id is only supported for gemini OAuth")
+                    raise typer.BadParameter("--project-id is only supported for google OAuth")
                 if service_account is not None:
-                    raise typer.BadParameter("--service-account is only supported for gemini OAuth")
+                    raise typer.BadParameter("--service-account is only supported for google OAuth")
                 if dry_run:
                     raise typer.BadParameter("--dry-run is not supported for Anthropic OAuth login")
                 _confirm_reauthentication(provider, profile_id=profile_id)
@@ -160,7 +166,7 @@ def auth_login_provider(
                 raise typer.BadParameter("--base-url is only supported by --mode=api-key")
             if dry_run:
                 raise typer.BadParameter("--dry-run is not supported for browser OAuth login")
-            if normalized_provider == "gemini":
+            if normalized_provider == "google":
                 oauth_result = google_oauth_login(
                     profile_id=profile_id,
                     project_id=project_id,
@@ -168,7 +174,7 @@ def auth_login_provider(
                 )
             else:
                 if service_account is not None:
-                    raise typer.BadParameter("--service-account is only supported for gemini OAuth")
+                    raise typer.BadParameter("--service-account is only supported for google OAuth")
                 oauth_result = browser_oauth_login(
                     provider,
                     profile_id=profile_id,
@@ -246,7 +252,12 @@ def auth_login_provider(
 def auth_logout_provider(
     provider: Annotated[
         str,
-        typer.Argument(help="Provider family: openai, anthropic, gemini, or local."),
+        typer.Argument(
+            help=(
+                "Provider family: openai, anthropic, google, or local "
+                "(gemini accepted as a legacy alias)."
+            ),
+        ),
     ],
     profile_id: Annotated[
         str | None,
@@ -315,10 +326,10 @@ def auth_migrate_secrets(
 
 
 def _default_env_var(provider: str) -> str:
-    normalized = provider.lower()
+    normalized = normalize_provider_family(provider.lower())
     if normalized == "anthropic":
         return "CRAIK_ANTHROPIC_API_KEY"
-    if normalized == "gemini":
+    if normalized == "google":
         return "CRAIK_GEMINI_API_KEY"
     if normalized == "local":
         return "LOCAL_OPENAI_COMPATIBLE_API_KEY"
@@ -348,12 +359,12 @@ def _default_login_mode(
 
 
 def _provider_setup_url(provider: str) -> str | None:
-    normalized = provider.lower()
+    normalized = normalize_provider_family(provider.lower())
     if normalized == "openai":
         return "https://platform.openai.com/api-keys"
     if normalized == "anthropic":
         return "https://console.anthropic.com/settings/keys"
-    if normalized == "gemini":
+    if normalized == "google":
         return "https://aistudio.google.com/app/apikey"
     if normalized == "local":
         return None

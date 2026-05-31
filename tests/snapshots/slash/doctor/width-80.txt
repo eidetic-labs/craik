@@ -39,7 +39,8 @@ result
 │   │   ├── name: provider_auth
 │   │   ├── status: warning
 │   │   ├── summary: No provider auth profiles are configured.
-│   │   └── action: Run craik auth login openai, anthropic, gemini, or local.
+│   │   └── action: Run craik auth login openai, anthropic, google, or local
+│   │       (gemini accepted as a legacy alias).
 │   ├── [8]
 │   │   ├── name: anthropic_env_credential
 │   │   ├── status: warning

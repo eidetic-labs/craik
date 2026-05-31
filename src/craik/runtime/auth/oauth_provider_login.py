@@ -36,6 +36,7 @@ from craik.runtime.auth.sources.openai_oauth import (
     store_openai_oauth_profile,
 )
 from craik.runtime.auth.store import AuthProfileStore
+from craik.runtime.providers.provider_transport import normalize_provider_family
 from craik.runtime.shell.credential_storage import (
     CredentialStorageStatus,
     credential_storage_status,
@@ -72,13 +73,13 @@ def browser_oauth_login(
     env: dict[str, str] | None = None,
 ) -> OAuthLoginResult:
     """Create a provider OAuth profile through a loopback browser login."""
-    normalized = provider.strip().lower()
+    normalized = normalize_provider_family(provider.strip().lower())
     if normalized == "anthropic":
         raise AnthropicOAuthError(
             "Anthropic browser OAuth login is not supported. Use Claude CLI delegation "
             "or a Console API key."
         )
-    if normalized == "gemini":
+    if normalized == "google":
         return google_oauth_login(
             profile_id=profile_id,
             project_id=project_id,

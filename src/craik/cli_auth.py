@@ -153,7 +153,12 @@ def auth_add(
 def auth_setup(
     provider: Annotated[
         str,
-        typer.Argument(help="Provider family: openai, anthropic, gemini, or local."),
+        typer.Argument(
+            help=(
+                "Provider family: openai, anthropic, google, or local "
+                "(gemini accepted as a legacy alias)."
+            ),
+        ),
     ],
     profile_id: Annotated[
         str | None,
@@ -474,6 +479,7 @@ def _profile_payload(profile: AuthProfile) -> dict[str, Any]:
         "authorization_receipt_ids": [receipt.id for receipt in profile.authorization_provenance],
     }
 
+
 def _operator_session_payload(session: Any) -> dict[str, Any]:
     return {
         "subject": session.subject,
@@ -484,6 +490,7 @@ def _operator_session_payload(session: Any) -> dict[str, Any]:
         "expires_at": session.expires_at.isoformat(),
         "refresh_token_ref": session.refresh_token_ref,
     }
+
 
 def _oidc_allow_loopback_http_from_env() -> bool:
     return os.environ.get("CRAIK_OIDC_ALLOW_LOOPBACK_HTTP") == "1"
