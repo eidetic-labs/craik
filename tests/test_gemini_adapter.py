@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from craik.contracts.models import CompiledPrompt, PromptSection, RunnerAdapterRequest
-from craik.runtime.runners.gemini_adapter import (
+from craik.runtime.runners.google_adapter import (
     GeminiRunnerAdapter,
     GeminiRunnerRequestError,
     request_from_compiled_prompt,

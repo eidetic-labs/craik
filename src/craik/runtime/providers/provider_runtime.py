@@ -39,8 +39,12 @@ from craik.runtime.providers.provider_models import (
 from craik.runtime.providers.provider_models import (
     ProviderTool as ProviderTool,
 )
-from craik.runtime.providers.provider_runtime_gemini import (
+from craik.runtime.providers.provider_runtime_google import (
+    # GeminiProviderAdapter re-export is a deprecated alias (gemini→google rename).
     GeminiProviderAdapter as GeminiProviderAdapter,
+)
+from craik.runtime.providers.provider_runtime_google import (
+    GoogleProviderAdapter as GoogleProviderAdapter,
 )
 from craik.runtime.providers.provider_runtime_support import (
     _anthropic_message,
@@ -492,5 +496,5 @@ def adapter_for_provider(
     if family == "anthropic":
         return AnthropicProviderAdapter(config, transport=transport)
     if family == "google":
-        return GeminiProviderAdapter(config, transport=transport)
+        return GoogleProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)

@@ -95,7 +95,7 @@ def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) ->
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _gemini_login)
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _gemini_login)
 
     result = runner.invoke(
         app,

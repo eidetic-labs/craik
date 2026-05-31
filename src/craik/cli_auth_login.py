@@ -25,11 +25,11 @@ from craik.runtime.auth.oauth_provider_login import (
     OAuthLoginResult,
     anthropic_claude_cli_login,
     browser_oauth_login,
-    gemini_oauth_login,
+    google_oauth_login,
 )
 from craik.runtime.auth.sources.anthropic_claude_cli import AnthropicClaudeCliError
 from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthError
-from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError
+from craik.runtime.auth.sources.google_oauth import GoogleOAuthError
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthError
 from craik.runtime.contract import CommandResult, craik_command
 from craik.runtime.providers.provider_url_safety import ProviderURLSafetyError
@@ -131,9 +131,7 @@ def auth_login_provider(
                 if service_account is not None:
                     raise typer.BadParameter("--service-account is only supported for gemini OAuth")
                 if dry_run:
-                    raise typer.BadParameter(
-                        "--dry-run is not supported for Anthropic OAuth login"
-                    )
+                    raise typer.BadParameter("--dry-run is not supported for Anthropic OAuth login")
                 _confirm_reauthentication(provider, profile_id=profile_id)
                 oauth_result = anthropic_claude_cli_login(
                     profile_id=profile_id,
@@ -163,7 +161,7 @@ def auth_login_provider(
             if dry_run:
                 raise typer.BadParameter("--dry-run is not supported for browser OAuth login")
             if normalized_provider == "gemini":
-                oauth_result = gemini_oauth_login(
+                oauth_result = google_oauth_login(
                     profile_id=profile_id,
                     project_id=project_id,
                     service_account_path=service_account,
@@ -219,7 +217,7 @@ def auth_login_provider(
     except (
         AnthropicClaudeCliError,
         AnthropicOAuthError,
-        GeminiOAuthError,
+        GoogleOAuthError,
         OpenAIOAuthError,
     ) as error:
         _raise_oauth_error(str(error))

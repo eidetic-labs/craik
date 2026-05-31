@@ -28,7 +28,7 @@ from craik.runtime.providers.provider_transport import (
 )
 
 
-class GeminiProviderAdapter:
+class GoogleProviderAdapter:
     """Gemini generateContent payload and response normalization."""
 
     def __init__(
@@ -37,7 +37,7 @@ class GeminiProviderAdapter:
         transport: ProviderTransport | None = None,
     ) -> None:
         if normalize_provider_family(config.provider_family) != "google":
-            raise ValueError("GeminiProviderAdapter requires provider_family='google'")
+            raise ValueError("GoogleProviderAdapter requires provider_family='google'")
         self.config = config
         self.transport = transport or FixtureTransport(family="google", model=config.model)
 
@@ -198,4 +198,7 @@ def _gemini_usage(value: Any) -> dict[str, int]:
     }
 
 
-__all__ = ["GeminiProviderAdapter"]
+# Deprecated alias; use GoogleProviderAdapter (gemini→google rename).
+GeminiProviderAdapter = GoogleProviderAdapter
+
+__all__ = ["GeminiProviderAdapter", "GoogleProviderAdapter"]

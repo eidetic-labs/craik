@@ -33,7 +33,7 @@ from craik.runtime.providers.provider_runtime import (
     AnthropicProviderAdapter,
     ChatCompletionsProviderAdapter,
     CredentialApprovalRequiredError,
-    GeminiProviderAdapter,
+    GoogleProviderAdapter,
     OpenAIProviderAdapter,
     ProviderLiveAccessNotConfiguredError,
     ProviderMessage,
@@ -163,8 +163,8 @@ def _chat_completions_adapter(*, live_enabled: bool = False) -> ChatCompletionsP
     )
 
 
-def _gemini_adapter(*, live_enabled: bool = False) -> GeminiProviderAdapter:
-    return GeminiProviderAdapter(
+def _gemini_adapter(*, live_enabled: bool = False) -> GoogleProviderAdapter:
+    return GoogleProviderAdapter(
         ProviderRuntimeConfig(
             provider_id="provider_gemini",
             provider_family="gemini",
@@ -701,7 +701,7 @@ def test_live_provider_access_requires_explicit_enablement() -> None:
     ],
 )
 def test_fixture_transport_yields_provider_family_response(
-    adapter: OpenAIProviderAdapter | AnthropicProviderAdapter | GeminiProviderAdapter,
+    adapter: OpenAIProviderAdapter | AnthropicProviderAdapter | GoogleProviderAdapter,
     family: ProviderFamily,
 ) -> None:
     transport: ProviderTransport = FixtureTransport(
@@ -740,7 +740,7 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     assert isinstance(anthropic, AnthropicProviderAdapter)
     assert anthropic.config.secret_ref_name == "CRAIK_ANTHROPIC_API_KEY"
     assert anthropic.config.docs_refs == list(ANTHROPIC_OFFICIAL_DOCS)
-    assert isinstance(gemini, GeminiProviderAdapter)
+    assert isinstance(gemini, GoogleProviderAdapter)
     assert gemini.config.secret_ref_name == "CRAIK_GEMINI_API_KEY"
     assert gemini.config.base_url == "https://generativelanguage.googleapis.com"
     assert gemini.config.docs_refs == list(GEMINI_OFFICIAL_DOCS)

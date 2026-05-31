@@ -8,7 +8,7 @@ from craik.runtime.providers.model_providers import default_model_provider_regis
 from craik.runtime.providers.provider_certification import _provider_matrix_row
 from craik.runtime.providers.provider_config import ProviderRuntimeConfig
 from craik.runtime.providers.provider_runtime import adapter_for_provider
-from craik.runtime.providers.provider_runtime_gemini import GeminiProviderAdapter
+from craik.runtime.providers.provider_runtime_google import GoogleProviderAdapter
 from craik.runtime.providers.provider_runtime_support import _official_docs_for_family
 from craik.runtime.providers.provider_transport import normalize_provider_family
 
@@ -58,7 +58,7 @@ def test_adapter_for_provider_accepts_legacy_gemini_token() -> None:
         docs_refs=_official_docs_for_family("gemini"),
     )
     # The legacy token is accepted as an alias; the adapter constructs.
-    adapter = GeminiProviderAdapter(config)
+    adapter = GoogleProviderAdapter(config)
     assert adapter is not None
 
 

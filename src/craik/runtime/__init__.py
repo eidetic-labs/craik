@@ -29,7 +29,7 @@ _LEGACY_MODULE_TARGETS = {
     "craik.runtime.docker_sandbox_backend": "craik.runtime.sandbox.docker_sandbox_backend",
     "craik.runtime.exit_discipline": "craik.runtime.work.exit_discipline",
     "craik.runtime.freshness": "craik.runtime.memory.freshness",
-    "craik.runtime.gemini_adapter": "craik.runtime.runners.gemini_adapter",
+    "craik.runtime.gemini_adapter": "craik.runtime.runners.google_adapter",
     "craik.runtime.graph": "craik.runtime.work.graph",
     "craik.runtime.handoffs": "craik.runtime.work.handoffs",
     "craik.runtime.http_transport": "craik.runtime.providers.http_transport",
@@ -70,6 +70,10 @@ _LEGACY_MODULE_TARGETS = {
     "craik.runtime.provider_failover": "craik.runtime.providers.provider_failover",
     "craik.runtime.provider_runner": "craik.runtime.providers.provider_runner",
     "craik.runtime.provider_runtime": "craik.runtime.providers.provider_runtime",
+    # Deprecated import path; resolves to provider_runtime_google (gemini→google rename).
+    "craik.runtime.providers.provider_runtime_gemini": (
+        "craik.runtime.providers.provider_runtime_google"
+    ),
     "craik.runtime.provider_runtime_support": "craik.runtime.providers.provider_runtime_support",
     "craik.runtime.provider_transport": "craik.runtime.providers.provider_transport",
     "craik.runtime.public_docs": "craik.runtime.projects.public_docs",

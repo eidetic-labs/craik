@@ -18,7 +18,9 @@ from craik.runtime.providers.provider_url_safety import (
 )
 
 ANTHROPIC_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.AnthropicProviderAdapter"
-GEMINI_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.GeminiProviderAdapter"
+GOOGLE_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.GoogleProviderAdapter"
+# Deprecated alias; use GOOGLE_PROVIDER_ADAPTER (gemini→google rename).
+GEMINI_PROVIDER_ADAPTER = GOOGLE_PROVIDER_ADAPTER
 OPENAI_PROVIDER_ADAPTER = "craik.runtime.providers.provider_runtime.OpenAIProviderAdapter"
 CHAT_COMPLETIONS_PROVIDER_ADAPTER = (
     "craik.runtime.providers.provider_runtime.ChatCompletionsProviderAdapter"
@@ -176,7 +178,7 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                     "secret_ref_names": ["CRAIK_GEMINI_API_KEY"],
                     "budget_ref": "budget_google_monthly",
                     "quota_ref": "quota_google_daily",
-                    "runtime_path": GEMINI_PROVIDER_ADAPTER,
+                    "runtime_path": GOOGLE_PROVIDER_ADAPTER,
                     "metadata": {
                         "base_url": "https://generativelanguage.googleapis.com",
                         "default_model": "gemini-2.5-pro",
