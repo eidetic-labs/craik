@@ -10,6 +10,7 @@ from typing import Protocol
 
 from craik.runtime.backend.claude_code import CLAUDE_PERMISSION_MODE_ENV
 from craik.runtime.contract.command_result import CommandResult
+from craik.runtime.providers.provider_transport import normalize_provider_family
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest
 from craik.runtime.shell.transcript_renderers import (
     render_claude_event,
@@ -62,10 +63,9 @@ def _display_model_label(active_model: str | None) -> str:
         "anthropic": "Anthropic",
         "claude": "Anthropic",
         "openai": "OpenAI",
-        "gemini": "Google",
         "google": "Google",
         "fixture": "Fixture",
-    }.get(provider, _title_model_id(provider))
+    }.get(normalize_provider_family(provider), _title_model_id(provider))
     model_label = _title_model_id(model)
     if provider_label == "Google" and model_label.startswith("Gemini "):
         return f"Google {model_label}"
@@ -280,14 +280,10 @@ def _is_claude_code_run_result(result: CommandResult) -> bool:
 
 
 def _is_audited_run_payload(payload: object) -> bool:
-    return (
-        isinstance(payload, dict)
-        and payload.get("schema")
-        in {
-            "craik.provider_backed_run_execution",
-            "craik.claude_code_run_execution",
-        }
-    )
+    return isinstance(payload, dict) and payload.get("schema") in {
+        "craik.provider_backed_run_execution",
+        "craik.claude_code_run_execution",
+    }
 
 
 def _claude_code_run_approval_request(text: str, *, mode: str = "Default") -> ConfirmationRequest:

@@ -4,7 +4,7 @@
 │ provider_anthropic │ anthropic        │ budget_anthropic_… │ quota_anthropic_d… │                 │                  │
 │ provider_anthropi… │ anthropic        │ budget_anthropic_… │ quota_anthropic_d… │                 │                  │
 │ provider_fixture_… │ fixture          │ budget_fixture_mo… │ quota_fixture_dai… │                 │                  │
-│ provider_gemini    │ gemini           │ budget_gemini_mon… │ quota_gemini_daily │                 │                  │
+│ provider_gemini    │ google           │ budget_google_mon… │ quota_google_daily │                 │                  │
 │ provider_local_lm… │ chat_completions │ budget_local_lm_s… │ quota_local_lm_st… │                 │                  │
 │ provider_local_ol… │ chat_completions │ budget_local_olla… │ quota_local_ollam… │                 │                  │
 │ provider_local_op… │ chat_completions │ budget_local_mont… │ quota_local_daily  │                 │                  │

@@ -891,11 +891,11 @@ def test_runners_matrix_lists_built_in_trust_profiles() -> None:
         "codex",
         "claude",
         "claude-code",
-        "gemini",
+        "google",
         "fixture",
         "provider_anthropic",
         "provider_anthropic_messages",
-        "provider_gemini",
+        "provider_google",
         "provider_local_lm_studio",
         "provider_local_ollama",
         "provider_local_vllm",
@@ -922,7 +922,7 @@ def test_runners_matrix_filters_one_runner() -> None:
 def test_provider_certification_command_filters_provider_matrix() -> None:
     result = runner.invoke(
         app,
-        ["provider", "certification", "--provider-id", "provider_gemini"],
+        ["provider", "certification", "--provider-id", "provider_google"],
     )
 
     assert result.exception is None, result.output
@@ -931,7 +931,7 @@ def test_provider_certification_command_filters_provider_matrix() -> None:
     assert result.stdout.strip().endswith("}")
     payload = json.loads(result.stdout)
     assert payload["schema"] == "craik.provider_certification_matrix"
-    assert [row["provider_id"] for row in payload["rows"]] == ["provider_gemini"]
+    assert [row["provider_id"] for row in payload["rows"]] == ["provider_google"]
     row = payload["rows"][0]
     assert row["certification_status"] == "certified"
     assert row["auth"] == "supported"

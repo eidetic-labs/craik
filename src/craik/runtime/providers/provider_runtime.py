@@ -39,8 +39,12 @@ from craik.runtime.providers.provider_models import (
 from craik.runtime.providers.provider_models import (
     ProviderTool as ProviderTool,
 )
-from craik.runtime.providers.provider_runtime_gemini import (
+from craik.runtime.providers.provider_runtime_google import (
+    # GeminiProviderAdapter re-export is a deprecated alias (gemini→google rename).
     GeminiProviderAdapter as GeminiProviderAdapter,
+)
+from craik.runtime.providers.provider_runtime_google import (
+    GoogleProviderAdapter as GoogleProviderAdapter,
 )
 from craik.runtime.providers.provider_runtime_support import (
     _anthropic_message,
@@ -59,13 +63,16 @@ from craik.runtime.providers.provider_runtime_support import (
     _openai_usage,
     _provider_base_url,
     _redacted_mapping,
+    _resolve_secret_ref_name,
     _retry_after,
+    _safe_provider_options,
     _transport_for_config,
 )
 from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderFamily,
     ProviderTransport,
+    normalize_provider_family,
 )
 
 CredentialApprovalRequiredError = _provider_models.CredentialApprovalRequiredError
@@ -434,40 +441,17 @@ class ChatCompletionsProviderAdapter:
             )
 
 
-def _safe_provider_options(options: dict[str, Any]) -> dict[str, Any]:
-    reserved = {
-        "_fixture",
-        "_path",
-        "input",
-        "max_output_tokens",
-        "max_tokens",
-        "messages",
-        "metadata",
-        "model",
-        "reasoning",
-        "response_format",
-        "stream",
-        "temperature",
-        "text",
-        "thinking",
-        "tools",
-        "tool_choice",
-        "service_tier",
-    }
-    return {key: value for key, value in options.items() if key not in reserved}
-
-
 def adapter_for_provider(
     provider: ModelProvider, *, live_enabled: bool = False
 ) -> ProviderRuntimeAdapter:
     """Return the runtime adapter for a configured MVP provider."""
-    family = provider.provider
-    if family not in {"openai", "anthropic", "gemini", "chat_completions"}:
+    family = normalize_provider_family(provider.provider)
+    if family not in {"openai", "anthropic", "google", "chat_completions"}:
         raise ValueError(f"provider {provider.id} is not an MVP live provider")
     model = str(provider.metadata.get("default_model", ""))
     if not model:
         raise ValueError(f"provider {provider.id} metadata requires default_model")
-    secret_ref_name = provider.secret_ref_names[0] if provider.secret_ref_names else ""
+    secret_ref_name = _resolve_secret_ref_name(provider.secret_ref_names)
     live_configured = live_enabled or bool(provider.metadata.get("live_enabled", False))
     config = ProviderRuntimeConfig(
         provider_id=provider.id,
@@ -481,9 +465,7 @@ def adapter_for_provider(
         max_retries=int(provider.metadata.get("max_retries", 3)),
         live_enabled=live_configured,
         credential_pool_id=(
-            _default_credential_pool_id(cast(ProviderFamily, family))
-            if live_configured
-            else None
+            _default_credential_pool_id(cast(ProviderFamily, family)) if live_configured else None
         ),
         docs_refs=_official_docs_for_family(cast(ProviderFamily, family)),
     )
@@ -492,6 +474,6 @@ def adapter_for_provider(
         return OpenAIProviderAdapter(config, transport=transport)
     if family == "anthropic":
         return AnthropicProviderAdapter(config, transport=transport)
-    if family == "gemini":
-        return GeminiProviderAdapter(config, transport=transport)
+    if family == "google":
+        return GoogleProviderAdapter(config, transport=transport)
     return ChatCompletionsProviderAdapter(config, transport=transport)

@@ -59,9 +59,9 @@ def test_provider_oauth_source_uses_anthropic_api_key_header(monkeypatch) -> Non
         lambda ref: StoredCredential(value=f"value-for-{ref}", backend="test", secure=True),
     )
 
-    headers = ProviderOAuthCredentialSource(
-        _oauth_profile(provider="anthropic")
-    ).headers_for("anthropic")
+    headers = ProviderOAuthCredentialSource(_oauth_profile(provider="anthropic")).headers_for(
+        "anthropic"
+    )
 
     assert headers == {"x-api-key": "value-for-anthropic:subscription:access"}
     assert "Authorization" not in headers
@@ -320,7 +320,7 @@ def test_auth_login_gemini_defaults_to_oauth_mode(monkeypatch, tmp_path) -> None
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _login)
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _login)
     result = runner.invoke(
         app,
         ["auth", "login", "gemini", "--json"],
@@ -577,7 +577,7 @@ def test_auth_login_gemini_oauth_uses_adc_or_service_account_flow(monkeypatch, t
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _login)
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _login)
     result = runner.invoke(
         app,
         [

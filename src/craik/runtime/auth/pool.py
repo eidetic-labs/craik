@@ -23,6 +23,21 @@ from craik.runtime.providers.provider_transport import ProviderFamily
 CREDENTIAL_POOL_FILENAME = "credential_pool.json"
 CREDENTIAL_POOL_SCHEMA_VERSION = 1
 OWNER_ONLY_FILE_MODE = 0o600
+
+# Legacy provider-family identifier rewritten to its canonical form on load so a
+# stored ``gemini:default`` pool resolves as ``google:default`` (gemini→google
+# rename). Mirrors the AuthProfileStore on-load migration.
+_LEGACY_FAMILY = "gemini"
+_CANONICAL_FAMILY = "google"
+
+
+def _canonical_pool_token(value: str) -> str:
+    prefix = f"{_LEGACY_FAMILY}:"
+    if value.startswith(prefix):
+        return f"{_CANONICAL_FAMILY}:{value[len(prefix):]}"
+    return value
+
+
 PoolStrategy = Literal["round_robin", "failover", "weighted"]
 PoolOutcome = Literal["success", "failed", "rejected", "rate_limited"]
 
@@ -83,10 +98,16 @@ class CredentialPool:
             self._write_unlocked(pools)
 
     def get(self, pool_id: str) -> CredentialPoolConfig:
-        """Return one credential pool."""
+        """Return one credential pool, resolving legacy gemini ids."""
         with self._locked():
+            pools = self._read_unlocked()
             try:
-                return self._read_unlocked()[pool_id]
+                return pools[pool_id]
+            except KeyError:
+                pass
+            canonical = _canonical_pool_token(pool_id)
+            try:
+                return pools[canonical]
             except KeyError as exc:
                 raise CredentialPoolError(f"credential pool not found: {pool_id}") from exc
 
@@ -148,7 +169,11 @@ class CredentialPool:
         for item in raw_pools:
             pool = CredentialPoolConfig.model_validate(item)
             pools[pool.id] = pool
-        return pools
+        migrated, changed = _migrate_legacy_pools(pools)
+        if changed:
+            # One-time on-load migration to the canonical google family.
+            self._write_unlocked(migrated)
+        return migrated
 
     def _write_unlocked(self, pools: dict[str, CredentialPoolConfig]) -> None:
         self.home.mkdir(parents=True, exist_ok=True)
@@ -203,6 +228,39 @@ class CredentialPool:
         finally:
             os.close(lock_fd)
             self.lock_path.unlink(missing_ok=True)
+
+
+def _migrate_legacy_pools(
+    pools: dict[str, CredentialPoolConfig],
+) -> tuple[dict[str, CredentialPoolConfig], bool]:
+    """Rewrite legacy gemini pool identities to google in place."""
+    changed = False
+    migrated: dict[str, CredentialPoolConfig] = {}
+    for pool in pools.values():
+        new_pool, pool_changed = _migrate_legacy_pool(pool)
+        changed = changed or pool_changed
+        migrated[new_pool.id] = new_pool
+    return migrated, changed
+
+
+def _migrate_legacy_pool(pool: CredentialPoolConfig) -> tuple[CredentialPoolConfig, bool]:
+    update: dict[str, object] = {}
+    canonical_id = _canonical_pool_token(pool.id)
+    if canonical_id != pool.id:
+        update["id"] = canonical_id
+    if pool.provider_family == _LEGACY_FAMILY:
+        update["provider_family"] = _CANONICAL_FAMILY
+    entries = [
+        entry.model_copy(update={"profile_id": _canonical_pool_token(entry.profile_id)})
+        if _canonical_pool_token(entry.profile_id) != entry.profile_id
+        else entry
+        for entry in pool.profiles
+    ]
+    if any(new is not old for new, old in zip(entries, pool.profiles, strict=True)):
+        update["profiles"] = entries
+    if not update:
+        return pool, False
+    return pool.model_copy(update=update), True
 
 
 def _pool_for(

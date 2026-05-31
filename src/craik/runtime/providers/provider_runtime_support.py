@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import TYPE_CHECKING, Any
 
 from craik.contracts.models import CapabilityReceipt, ModelProvider
@@ -30,6 +31,7 @@ from craik.runtime.providers.provider_transport import (
     FixtureTransport,
     ProviderFamily,
     ProviderTransport,
+    normalize_provider_family,
 )
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
@@ -45,6 +47,7 @@ if TYPE_CHECKING:
         ProviderRuntimeResult,
         ProviderTool,
     )
+
 
 def _transport_for_config(config: ProviderRuntimeConfig) -> ProviderTransport:
     if not config.live_enabled:
@@ -97,11 +100,12 @@ def _headers_for_auth_profile(
 
 def _provider_base_url(provider: ModelProvider) -> str:
     configured = provider.metadata.get("base_url")
+    family = normalize_provider_family(provider.provider)
     if isinstance(configured, str) and configured:
         url = configured
-    elif provider.provider == "anthropic":
+    elif family == "anthropic":
         url = "https://api.anthropic.com"
-    elif provider.provider == "gemini":
+    elif family == "google":
         url = "https://generativelanguage.googleapis.com"
     else:
         url = "https://api.openai.com"
@@ -115,15 +119,17 @@ def _provider_base_url(provider: ModelProvider) -> str:
 
 
 def _provider_allows_local_url(provider: ModelProvider) -> bool:
-    return provider.id.startswith("provider_local_") or provider.metadata.get(
-        "allow_local_base_url"
-    ) is True
+    return (
+        provider.id.startswith("provider_local_")
+        or provider.metadata.get("allow_local_base_url") is True
+    )
 
 
 def _official_docs_for_family(family: ProviderFamily) -> list[str]:
-    if family == "anthropic":
+    normalized = normalize_provider_family(family)
+    if normalized == "anthropic":
         return list(ANTHROPIC_OFFICIAL_DOCS)
-    if family == "gemini":
+    if normalized == "google":
         return list(GEMINI_OFFICIAL_DOCS)
     return list(OPENAI_OFFICIAL_DOCS)
 
@@ -446,3 +452,44 @@ def _redacted_mapping(value: dict[str, Any]) -> dict[str, Any]:
     if isinstance(redacted, dict):
         return redacted
     return {}
+
+
+def _safe_provider_options(options: dict[str, Any]) -> dict[str, Any]:
+    reserved = {
+        "_fixture",
+        "_path",
+        "input",
+        "max_output_tokens",
+        "max_tokens",
+        "messages",
+        "metadata",
+        "model",
+        "reasoning",
+        "response_format",
+        "stream",
+        "temperature",
+        "text",
+        "thinking",
+        "tools",
+        "tool_choice",
+        "service_tier",
+    }
+    return {key: value for key, value in options.items() if key not in reserved}
+
+
+def _resolve_secret_ref_name(secret_ref_names: list[str]) -> str:
+    """Pick the secret reference to read at request time.
+
+    ``secret_ref_names`` lists candidate environment variables in priority
+    order (canonical first, legacy aliases after). The first candidate that is
+    actually present in the environment wins, so a legacy fallback such as
+    ``CRAIK_GEMINI_API_KEY`` keeps working when the canonical
+    ``CRAIK_GOOGLE_API_KEY`` is unset. When none are present, the canonical
+    (first) reference is returned so resolution errors name the preferred var.
+    """
+    if not secret_ref_names:
+        return ""
+    for ref in secret_ref_names:
+        if os.environ.get(ref):
+            return ref
+    return secret_ref_names[0]

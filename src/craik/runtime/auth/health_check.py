@@ -9,6 +9,7 @@ from urllib import request
 from urllib.parse import urlsplit, urlunsplit
 
 from craik.runtime.auth.profile import AuthProfile, CredentialStatus
+from craik.runtime.providers.provider_transport import normalize_provider_family
 
 HealthCheckStatus = Literal["ok", "rejected", "unknown"]
 _DEFAULT_HEALTH_CHECK_TIMEOUT_SECONDS = 5.0
@@ -69,7 +70,7 @@ def _health_check_headers(provider: str, secret: str) -> dict[str, str]:
             "x-api-key": secret,
             "anthropic-version": "2023-06-01",
         }
-    if provider == "gemini":
+    if normalize_provider_family(provider) == "google":
         return {"x-goog-api-key": secret}
     return {"Authorization": f"Bearer {secret}"}
 
@@ -84,7 +85,7 @@ def _health_check_url(profile: AuthProfile, provider: str) -> str:
     if not split.scheme or not split.netloc:
         raise ValueError("provider health-check base_url must be an absolute URL")
     path = split.path.rstrip("/")
-    suffix = "/v1beta/models" if provider == "gemini" else "/v1/models"
+    suffix = "/v1beta/models" if normalize_provider_family(provider) == "google" else "/v1/models"
     if path.endswith("/v1") or path.endswith("/v1beta"):
         path = f"{path}/models"
     elif not path.endswith("/models"):
@@ -95,7 +96,7 @@ def _health_check_url(profile: AuthProfile, provider: str) -> str:
 def _default_health_check_base_url(provider: str) -> str:
     if provider == "anthropic":
         return "https://api.anthropic.com"
-    if provider == "gemini":
+    if normalize_provider_family(provider) == "google":
         return "https://generativelanguage.googleapis.com"
     return "https://api.openai.com"
 

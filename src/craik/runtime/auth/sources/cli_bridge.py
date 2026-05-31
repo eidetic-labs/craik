@@ -10,7 +10,10 @@ from dataclasses import dataclass
 from typing import Any, BinaryIO, Literal
 
 from craik.runtime.auth.profile import CredentialStatus
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 
 TokenExtractor = Literal["stdout_json", "stdout_line"]
 MAX_CLI_BRIDGE_OUTPUT_BYTES = 1024 * 1024
@@ -38,7 +41,7 @@ class CLIBridgeCredentialSource:
                 "Authorization": f"Bearer {token}",
                 "anthropic-version": "2023-06-01",
             }
-        if family == "gemini":
+        if normalize_provider_family(family) == "google":
             return {"x-goog-api-key": token}
         return {"Authorization": f"Bearer {token}"}
 

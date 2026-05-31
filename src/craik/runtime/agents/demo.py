@@ -48,7 +48,7 @@ class PersistentAgentLaunchDemo:
         providers = provider_ids or (
             "provider_openai",
             "provider_anthropic",
-            "provider_gemini",
+            "provider_google",
             "provider_local_ollama",
         )
         if not allow_live:
@@ -184,7 +184,7 @@ def _demo_commands(project_id: str, provider_id: str) -> list[str]:
     return [
         "craik auth setup --provider openai --profile demo-openai",
         "craik auth setup --provider anthropic --profile demo-anthropic",
-        "craik auth setup --provider gemini --profile demo-gemini",
+        "craik auth setup --provider google --profile demo-google",
         "craik provider local-presets",
         (
             "craik agent launch "

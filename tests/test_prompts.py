@@ -102,9 +102,9 @@ def test_prompt_compiler_surfaces_runner_policy_boundaries(
     )
     CaseFileAssembler(store).build(task.id)
 
-    compiled = PromptCompiler(store).compile(task.id, runner_id="gemini")
+    compiled = PromptCompiler(store).compile(task.id, runner_id="google")
 
-    assert "Runner id: gemini" in compiled.prompt
+    assert "Runner id: google" in compiled.prompt
     assert "Trust level: low" in compiled.prompt
     assert "memory.write: unsupported" in compiled.prompt
     assert "Do not treat assumptions, stale risks, or omitted context as facts." in compiled.prompt

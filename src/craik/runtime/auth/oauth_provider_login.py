@@ -24,9 +24,9 @@ from craik.runtime.auth.sources.anthropic_oauth import (
     AnthropicOAuthError,
     store_anthropic_oauth_profile,
 )
-from craik.runtime.auth.sources.gemini_oauth import (
-    store_gemini_adc_profile,
-    store_gemini_service_account_profile,
+from craik.runtime.auth.sources.google_oauth import (
+    store_google_adc_profile,
+    store_google_service_account_profile,
 )
 from craik.runtime.auth.sources.openai_oauth import (
     OPENAI_OAUTH_REDIRECT_PATH,
@@ -36,6 +36,7 @@ from craik.runtime.auth.sources.openai_oauth import (
     store_openai_oauth_profile,
 )
 from craik.runtime.auth.store import AuthProfileStore
+from craik.runtime.providers.provider_transport import normalize_provider_family
 from craik.runtime.shell.credential_storage import (
     CredentialStorageStatus,
     credential_storage_status,
@@ -72,14 +73,14 @@ def browser_oauth_login(
     env: dict[str, str] | None = None,
 ) -> OAuthLoginResult:
     """Create a provider OAuth profile through a loopback browser login."""
-    normalized = provider.strip().lower()
+    normalized = normalize_provider_family(provider.strip().lower())
     if normalized == "anthropic":
         raise AnthropicOAuthError(
             "Anthropic browser OAuth login is not supported. Use Claude CLI delegation "
             "or a Console API key."
         )
-    if normalized == "gemini":
-        return gemini_oauth_login(
+    if normalized == "google":
+        return google_oauth_login(
             profile_id=profile_id,
             project_id=project_id,
             service_account_path=None,
@@ -176,7 +177,7 @@ def _default_token_prompt(prompt: str) -> str:
     return input(prompt)
 
 
-def gemini_oauth_login(
+def google_oauth_login(
     *,
     profile_id: str | None = None,
     project_id: str | None = None,
@@ -185,19 +186,19 @@ def gemini_oauth_login(
 ) -> OAuthLoginResult:
     """Create a Gemini OAuth profile via ADC or a service-account JSON file."""
     if service_account_path is not None:
-        result = store_gemini_service_account_profile(
+        result = store_google_service_account_profile(
             json_path=service_account_path,
-            profile_id=profile_id or "gemini:vertex",
+            profile_id=profile_id or "google:vertex",
             env=env,
         )
     else:
-        result = store_gemini_adc_profile(
-            profile_id=profile_id or "gemini:vertex",
+        result = store_google_adc_profile(
+            profile_id=profile_id or "google:vertex",
             project_id=project_id,
             env=env,
         )
     capture = AuthCaptureResult(
-        provider="gemini",
+        provider="google",
         profile=result.profile,
         status=result.status(),
         credential_storage=credential_storage_status(env),
@@ -242,9 +243,14 @@ def _store_oauth_profile(
     raise ValueError("provider loopback OAuth login supports openai or anthropic")
 
 
+# Deprecated alias; use google_oauth_login (gemini→google rename).
+gemini_oauth_login = google_oauth_login
+
+
 __all__ = [
     "OAuthLoginResult",
     "anthropic_claude_cli_login",
     "browser_oauth_login",
     "gemini_oauth_login",
+    "google_oauth_login",
 ]

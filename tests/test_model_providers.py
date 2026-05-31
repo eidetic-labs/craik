@@ -131,8 +131,8 @@ def test_default_registry_includes_certified_mvp_provider_metadata() -> None:
     )
     assert anthropic.metadata["default_model"] == "claude-sonnet-4-20250514"
     assert "CRAIK_ANTHROPIC_API_KEY" in anthropic.secret_ref_names
-    assert gemini.provider == "gemini"
-    assert gemini.runtime_path == "craik.runtime.providers.provider_runtime.GeminiProviderAdapter"
+    assert gemini.provider == "google"
+    assert gemini.runtime_path == "craik.runtime.providers.provider_runtime.GoogleProviderAdapter"
     assert gemini.metadata["base_url"] == "https://generativelanguage.googleapis.com"
     assert gemini.metadata["default_model"] == "gemini-2.5-pro"
     assert "CRAIK_GEMINI_API_KEY" in gemini.secret_ref_names

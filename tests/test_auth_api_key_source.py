@@ -29,21 +29,21 @@ def test_env_var_api_key_source_returns_bearer_header(
     assert headers == {"Authorization": "Bearer openai-secret"}
 
 
-def test_env_var_api_key_source_returns_gemini_header(
+@pytest.mark.parametrize("family", ["google", "gemini"])
+def test_env_var_api_key_source_returns_google_header(
+    family: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
 
-    headers = EnvVarApiKeySource("GEMINI_API_KEY").headers_for("gemini")
+    headers = EnvVarApiKeySource("GEMINI_API_KEY").headers_for(family)  # type: ignore[arg-type]
 
     assert headers == {"x-goog-api-key": "gemini-secret"}
 
 
 def test_env_var_api_key_source_preserves_empty_local_provider_headers() -> None:
     assert EnvVarApiKeySource("").headers_for("chat_completions") == {}
-    assert EnvVarApiKeySource("").headers_for("anthropic") == {
-        "anthropic-version": "2023-06-01"
-    }
+    assert EnvVarApiKeySource("").headers_for("anthropic") == {"anthropic-version": "2023-06-01"}
 
 
 def test_env_var_api_key_source_status_uses_safe_messages(

@@ -69,7 +69,10 @@ def provider_auth_check(payloads: list[dict[str, Any]]) -> DiagnosticCheck:
             name="provider_auth",
             status="warning",
             summary="No provider auth profiles are configured.",
-            action="Run craik auth login openai, anthropic, gemini, or local.",
+            action=(
+                "Run craik auth login openai, anthropic, google, or local "
+                "(gemini accepted as a legacy alias)."
+            ),
         )
     if any(item["health"]["status"] == "ok" for item in payloads):
         return DiagnosticCheck(

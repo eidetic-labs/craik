@@ -8,7 +8,10 @@ from datetime import UTC, datetime
 from pydantic import Field, model_validator
 
 from craik.contracts.models import CraikModel
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
     assert_safe_provider_url,
@@ -76,9 +79,10 @@ class ProviderRuntimeConfig(CraikModel):
             except ProviderURLSafetyError as exc:
                 raise ValueError(str(exc)) from exc
         expected_refs: Sequence[str]
-        if self.provider_family == "anthropic":
+        family = normalize_provider_family(self.provider_family)
+        if family == "anthropic":
             expected_refs = ANTHROPIC_OFFICIAL_DOCS
-        elif self.provider_family == "gemini":
+        elif family == "google":
             expected_refs = GEMINI_OFFICIAL_DOCS
         else:
             expected_refs = OPENAI_OFFICIAL_DOCS

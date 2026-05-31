@@ -7,9 +7,12 @@ from datetime import UTC, datetime
 
 from craik.runtime.auth.profile import AuthProfile, CredentialStatus
 from craik.runtime.auth.sources.anthropic_oauth import AnthropicOAuthClient, AnthropicOAuthError
-from craik.runtime.auth.sources.gemini_oauth import GeminiOAuthError, headers_for_profile
+from craik.runtime.auth.sources.google_oauth import GoogleOAuthError, headers_for_profile
 from craik.runtime.auth.sources.openai_oauth import OpenAIOAuthClient, OpenAIOAuthError
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 from craik.runtime.providers.provider_url_safety import (
     ProviderURLSafetyError,
     assert_safe_provider_url,
@@ -39,15 +42,18 @@ class ProviderOAuthCredentialSource:
                 "profile provider family mismatch. "
                 f"Re-run: craik auth login {self.profile.provider_family}"
             )
-        if self.profile.provider_family == "gemini" and self.profile.metadata.get(
-            "credential_source"
-        ) in {"adc", "service_account"}:
+        if normalize_provider_family(
+            self.profile.provider_family
+        ) == "google" and self.profile.metadata.get("credential_source") in {
+            "adc",
+            "service_account",
+        }:
             try:
                 return headers_for_profile(self.profile)
-            except GeminiOAuthError as exc:
+            except GoogleOAuthError as exc:
                 raise ProviderOAuthCredentialError(
-                    "Your Gemini OAuth credential could not be resolved. "
-                    "Re-run: craik auth login gemini"
+                    "Your Google OAuth credential could not be resolved. "
+                    "Re-run: craik auth login google"
                 ) from exc
         access_token = self._access_token()
         if self._is_expired():
@@ -132,7 +138,7 @@ class ProviderOAuthCredentialSource:
             CredentialStorageError,
             OpenAIOAuthError,
             AnthropicOAuthError,
-            GeminiOAuthError,
+            GoogleOAuthError,
         ) as exc:
             raise ProviderOAuthCredentialError(
                 f"Your {_provider_label(self.profile)} OAuth credential could not be "

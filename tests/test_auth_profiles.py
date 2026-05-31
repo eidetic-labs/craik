@@ -263,7 +263,8 @@ def test_stigmem_credential_source_resolves_fact_value() -> None:
         thread.join(timeout=2)
 
 
-def test_stigmem_credential_source_returns_gemini_header() -> None:
+@pytest.mark.parametrize("family", ["google", "gemini"])
+def test_stigmem_credential_source_returns_google_header(family: str) -> None:
     server, thread = _stigmem_credential_server("craik-test-not-a-real-stigmem-key")
     try:
         source = StigmemCredentialSource.from_config(
@@ -272,7 +273,7 @@ def test_stigmem_credential_source_returns_gemini_header() -> None:
             entity="credential:gemini:work",
         )
 
-        assert source.headers_for("gemini") == {
+        assert source.headers_for(family) == {  # type: ignore[arg-type]
             "x-goog-api-key": "craik-test-not-a-real-stigmem-key"
         }
     finally:

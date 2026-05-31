@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from craik.contracts.models import CompiledPrompt, PromptSection, RunnerAdapterRequest
-from craik.runtime.runners.gemini_adapter import (
+from craik.runtime.runners.google_adapter import (
     GeminiRunnerAdapter,
     GeminiRunnerRequestError,
     request_from_compiled_prompt,
@@ -24,11 +24,11 @@ def test_gemini_adapter_fixture_success_returns_normalized_outputs() -> None:
 
     assert isinstance(adapter, RunnerAdapter)
     assert result.status == "completed"
-    assert result.runner.id == "gemini"
+    assert result.runner.id == "google"
     assert result.runner.adapter_version == "0.2.0-preview"
     assert result.runner.metadata["adapter_mode"] == "fixture"
     assert result.outputs["prompt_handoff"]["prompt"] == compiled.prompt
-    assert result.outputs["handoff_input"]["agent"] == "runner:gemini"
+    assert result.outputs["handoff_input"]["agent"] == "runner:google"
     assert result.outputs["handoff_input"]["status"] == "completed"
     assert result.outputs["receipt_inputs"][0]["capability_grant_id"] == "grant_review_comment"
     assert result.outputs["receipt_inputs"][0]["result"]["status"] == "passed"
@@ -100,7 +100,7 @@ def _compiled_prompt() -> CompiledPrompt:
         task_id="task_review_docs",
         case_file_id="case_review_docs",
         policy_envelope_id="policy_task_review_docs",
-        runner_id="gemini",
+        runner_id="google",
         runner_mode="prompt-handoff",
         capability_grant_ids=["grant_review_comment"],
         expected_output_schemas=["craik.runner_adapter_result", "craik.handoff"],

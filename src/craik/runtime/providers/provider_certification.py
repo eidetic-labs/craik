@@ -12,10 +12,13 @@ from craik.runtime.providers.model_providers import (
     ModelProviderRegistry,
     default_model_provider_registry,
 )
+from craik.runtime.providers.provider_transport import normalize_provider_family
 
-MVPProviderFamily = Literal["openai", "anthropic", "gemini"]
+MVPProviderFamily = Literal["openai", "anthropic", "google", "gemini"]
 ProviderCertificationStatus = Literal["certified", "blocked"]
-ProviderMatrixFamily = Literal["openai", "anthropic", "gemini", "chat_completions", "fixture"]
+ProviderMatrixFamily = Literal[
+    "openai", "anthropic", "google", "gemini", "chat_completions", "fixture"
+]
 ProviderMatrixStatus = Literal["certified", "fixture_only", "unsupported"]
 ProviderCapabilityStatus = Literal["supported", "fixture_only", "unsupported"]
 
@@ -60,8 +63,7 @@ class ProviderCertification(CraikModel):
         overlap = set(self.supported_requirements) & set(self.blocked_requirements)
         if overlap:
             raise ValueError(
-                "provider requirements cannot be both supported and blocked: "
-                f"{sorted(overlap)}"
+                "provider requirements cannot be both supported and blocked: " f"{sorted(overlap)}"
             )
         return self
 
@@ -158,7 +160,7 @@ def provider_certification_matrix_payload(
 
 def _provider_matrix_row(provider: ModelProvider) -> ProviderCertificationMatrixRow:
     provider_id = provider.id
-    family = cast(ProviderMatrixFamily, provider.provider)
+    family = cast(ProviderMatrixFamily, normalize_provider_family(provider.provider))
     capability_names = {capability.name for capability in provider.capabilities}
     docs = list(provider.docs)
     runtime_path = provider.runtime_path
@@ -169,7 +171,7 @@ def _provider_matrix_row(provider: ModelProvider) -> ProviderCertificationMatrix
     status: ProviderMatrixStatus = "certified"
     if is_fixture:
         status = "fixture_only"
-    elif family not in {"openai", "anthropic", "gemini", "chat_completions"}:
+    elif family not in {"openai", "anthropic", "google", "chat_completions"}:
         status = "unsupported"
     notes: list[str] = []
     live_behavior = "live_opt_in"

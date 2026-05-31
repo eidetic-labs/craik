@@ -2,7 +2,7 @@
   "required_provider_ids": [
     "provider_openai",
     "provider_anthropic",
-    "provider_gemini",
+    "provider_google",
     "provider_local_openai_compatible",
     "provider_local_ollama",
     "provider_local_lm_studio",

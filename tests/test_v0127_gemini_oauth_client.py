@@ -50,7 +50,7 @@ def test_resolve_via_adc_returns_oauth_profile_without_keyring_handles() -> None
     assert result.credentials is credentials
     assert result.gcp_project_id == "craik-project"
     assert result.profile.kind is CredentialKind.OAUTH
-    assert result.profile.provider_family == "gemini"
+    assert result.profile.provider_family == "google"
     assert result.profile.metadata["credential_source"] == GEMINI_ADC_CREDENTIAL_SOURCE
     assert result.profile.metadata["gcp_project_id"] == "craik-project"
     assert result.profile.metadata["billing_surface"] == GEMINI_OAUTH_BILLING_SURFACE

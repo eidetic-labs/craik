@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from craik.runtime.paths import ensure_craik_home
+from craik.runtime.providers.provider_transport import normalize_provider_family
 
 
 @dataclass(frozen=True)
@@ -183,8 +184,8 @@ def _provider_identity(provider_name: str) -> tuple[str, str]:
         "anthropic": "provider_anthropic",
         "claude": "provider_anthropic",
         "openai": "provider_openai",
-        "gemini": "provider_gemini",
-        "google": "provider_gemini",
+        "gemini": "provider_google",
+        "google": "provider_google",
         "openai-compatible": "provider_local_openai_compatible",
         "local": "provider_local_openai_compatible",
         "ollama": "provider_local_ollama",
@@ -194,7 +195,9 @@ def _provider_identity(provider_name: str) -> tuple[str, str]:
     family = {
         "provider_anthropic": "anthropic",
         "provider_openai": "openai",
-        "provider_gemini": "gemini",
+        "provider_google": "google",
+        # Legacy provider-id in persisted records still resolves to the google family.
+        "provider_gemini": "google",
         "provider_local_openai_compatible": "local",
         "provider_local_ollama": "ollama",
         "provider_local_lm_studio": "lm-studio",
@@ -218,11 +221,13 @@ def _display_name(provider_family: str, model: str, options: dict[str, object]) 
 def readable_model_name(provider_family: str, model: str) -> str:
     """Return a human-oriented model label while preserving the raw id elsewhere."""
     normalized_family = provider_family.replace("_", "-").lower()
+    canonical_family = normalize_provider_family(normalized_family)
     if normalized_family == "anthropic":
         return _readable_anthropic_model(model)
     if normalized_family == "openai":
         return _readable_openai_model(model)
-    if normalized_family == "gemini":
+    if canonical_family == "google":
+        # role-2: the model NAME parser still inspects "gemini-..." tokens.
         return _readable_gemini_model(model)
     provider_label = {
         "ollama": "Ollama",
@@ -322,12 +327,16 @@ def _legacy_display_name(provider_family: str, model: str, options: dict[str, ob
     provider_label = {
         "anthropic": "Anthropic Claude",
         "openai": "OpenAI",
+        "google": "Google Gemini",
         "gemini": "Google Gemini",
         "ollama": "Ollama",
         "lm-studio": "LM Studio",
         "vllm": "vLLM",
         "local": "Local OpenAI-compatible",
-    }.get(provider_family, provider_family.replace("_", " ").title())
+    }.get(
+        normalize_provider_family(provider_family),
+        provider_family.replace("_", " ").title(),
+    )
     effort = options.get("reasoning_effort")
     effort_label = f" {str(effort).title()}" if isinstance(effort, str) and effort else ""
     return f"{provider_label} {model}{effort_label}"

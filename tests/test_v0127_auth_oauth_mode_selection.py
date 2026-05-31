@@ -84,18 +84,42 @@ def test_anthropic_claude_cli_mode_is_not_public(tmp_path) -> None:
     assert "api-key or oauth" in result.output
 
 
-def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:
+def test_google_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:
     called: dict[str, bool] = {}
 
-    def _gemini_login(**kwargs):
-        called["gemini"] = True
+    def _google_login(**kwargs):
+        called["google"] = True
         return OAuthLoginResult(
-            capture=_capture_result("gemini", CredentialKind.KEYRING_REF),
+            capture=_capture_result("google", CredentialKind.KEYRING_REF),
             authorization_url="gcloud auth application-default login",
             browser_opened=False,
         )
 
-    monkeypatch.setattr("craik.cli_auth_login.gemini_oauth_login", _gemini_login)
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _google_login)
+
+    result = runner.invoke(
+        app,
+        ["auth", "login", "google", "--json"],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert called == {"google": True}
+    assert json.loads(result.stdout)["authorization_url"] == "gcloud auth application-default login"
+
+
+def test_gemini_alias_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) -> None:
+    called: dict[str, bool] = {}
+
+    def _google_login(**kwargs):
+        called["google"] = True
+        return OAuthLoginResult(
+            capture=_capture_result("google", CredentialKind.KEYRING_REF),
+            authorization_url="gcloud auth application-default login",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _google_login)
 
     result = runner.invoke(
         app,
@@ -104,8 +128,50 @@ def test_gemini_defaults_to_oauth_when_mode_is_omitted(monkeypatch, tmp_path) ->
     )
 
     assert result.exit_code == 0, result.output
-    assert called == {"gemini": True}
+    assert called == {"google": True}
     assert json.loads(result.stdout)["authorization_url"] == "gcloud auth application-default login"
+
+
+def test_google_oauth_accepts_project_id_and_service_account(monkeypatch, tmp_path) -> None:
+    captured: dict[str, object] = {}
+
+    def _google_login(**kwargs):
+        captured.update(kwargs)
+        return OAuthLoginResult(
+            capture=_capture_result("google", CredentialKind.KEYRING_REF),
+            authorization_url="gcloud auth application-default login",
+            browser_opened=False,
+        )
+
+    monkeypatch.setattr("craik.cli_auth_login.google_oauth_login", _google_login)
+    sa_path = tmp_path / "sa.json"
+    sa_path.write_text("{}", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "auth",
+            "login",
+            "gemini",
+            "--mode=oauth",
+            "--project-id=proj-1",
+            f"--service-account={sa_path}",
+            "--json",
+        ],
+        env={"CRAIK_HOME": str(tmp_path / "home")},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["project_id"] == "proj-1"
+    assert str(captured["service_account_path"]) == str(sa_path)
+
+
+def test_auth_login_help_advertises_google_provider() -> None:
+    result = runner.invoke(app, ["auth", "login", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "google" in result.output
+    assert "openai, anthropic, gemini, or local" not in result.output
 
 
 def test_openai_defaults_to_oauth_when_mode_is_omitted_without_api_key(
