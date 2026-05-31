@@ -741,7 +741,9 @@ def test_adapter_for_default_mvp_providers_uses_verified_docs_and_secret_referen
     assert anthropic.config.secret_ref_name == "CRAIK_ANTHROPIC_API_KEY"
     assert anthropic.config.docs_refs == list(ANTHROPIC_OFFICIAL_DOCS)
     assert isinstance(gemini, GoogleProviderAdapter)
-    assert gemini.config.secret_ref_name == "CRAIK_GEMINI_API_KEY"
+    # Canonical env var with no env set; the legacy CRAIK_GEMINI_API_KEY fallback
+    # is exercised in tests/test_provider_family_normalization_branches.py.
+    assert gemini.config.secret_ref_name == "CRAIK_GOOGLE_API_KEY"
     assert gemini.config.base_url == "https://generativelanguage.googleapis.com"
     assert gemini.config.docs_refs == list(GEMINI_OFFICIAL_DOCS)
     assert isinstance(openai_responses, OpenAIProviderAdapter)

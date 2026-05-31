@@ -10,7 +10,10 @@ from typing import Any, Literal, Protocol
 from pydantic import Field, field_validator, model_validator
 
 from craik.contracts.models import CapabilityReceipt, CraikModel
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 
 CredentialHealthStatus = Literal["unknown", "ok", "expired", "rejected", "rate_limited"]
 
@@ -76,7 +79,9 @@ class AuthProfile(CraikModel):
         """Require complete OAuth metadata for provider OAuth profiles."""
         if self.kind is not CredentialKind.OAUTH:
             return self
-        if self.provider_family == "gemini" and self.metadata.get("credential_source") in {
+        if normalize_provider_family(self.provider_family) == "google" and self.metadata.get(
+            "credential_source"
+        ) in {
             "adc",
             "service_account",
         }:
@@ -85,13 +90,12 @@ class AuthProfile(CraikModel):
             if any(not scope.strip() for scope in self.oauth_scope_list):
                 raise ValueError("oauth_scope_list entries must be non-empty")
             if not isinstance(self.metadata.get("gcp_project_id"), str):
-                raise ValueError("gemini oauth auth profiles require metadata.gcp_project_id")
-            if (
-                self.metadata.get("credential_source") == "service_account"
-                and not isinstance(self.metadata.get("service_account_path"), str)
+                raise ValueError("google oauth auth profiles require metadata.gcp_project_id")
+            if self.metadata.get("credential_source") == "service_account" and not isinstance(
+                self.metadata.get("service_account_path"), str
             ):
                 raise ValueError(
-                    "gemini service-account oauth profiles require service_account_path"
+                    "google service-account oauth profiles require service_account_path"
                 )
             return self
 
@@ -103,9 +107,7 @@ class AuthProfile(CraikModel):
             "oauth_refresh_keyring_handle": self.oauth_refresh_keyring_handle,
         }
         missing = [
-            field
-            for field, value in required_strings.items()
-            if not value or not value.strip()
+            field for field, value in required_strings.items() if not value or not value.strip()
         ]
         if self.oauth_scope_list is None or not self.oauth_scope_list:
             missing.append("oauth_scope_list")

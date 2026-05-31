@@ -8,7 +8,10 @@ from craik.contracts.models import MemoryScope
 from craik.runtime.auth.profile import CredentialStatus
 from craik.runtime.memory.memory import StigmemClient, StigmemConfig
 from craik.runtime.memory.memory_errors import StigmemRequestError
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 
 STIGMEM_CREDENTIAL_RELATION = "craik:credential:value"
 
@@ -59,7 +62,7 @@ class StigmemCredentialSource:
                 "anthropic-version": "2023-06-01",
                 "x-api-key": secret,
             }
-        if family == "gemini":
+        if normalize_provider_family(family) == "google":
             return {"x-goog-api-key": secret}
         return {"Authorization": f"Bearer {secret}"}
 

@@ -9,7 +9,10 @@ from craik.runtime.auth.sources.anthropic_env import (
     anthropic_headers_for_credential,
     resolve_anthropic_credential_from_env,
 )
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 from craik.runtime.secrets import SecretNotFoundError, SecretRef, SecretResolver
 
 
@@ -34,7 +37,7 @@ class EnvVarApiKeySource:
             secret = credential.token if credential is not None else self._resolve_secret()
             return anthropic_headers_for_credential(secret)
         secret = self._resolve_secret()
-        if family == "gemini":
+        if normalize_provider_family(family) == "google":
             return {"x-goog-api-key": secret} if secret else {}
         if secret:
             return {"Authorization": f"Bearer {secret}"}

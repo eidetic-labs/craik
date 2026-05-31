@@ -330,7 +330,7 @@ def _default_env_var(provider: str) -> str:
     if normalized == "anthropic":
         return "CRAIK_ANTHROPIC_API_KEY"
     if normalized == "google":
-        return "CRAIK_GEMINI_API_KEY"
+        return "CRAIK_GOOGLE_API_KEY"
     if normalized == "local":
         return "LOCAL_OPENAI_COMPATIBLE_API_KEY"
     return "CRAIK_OPENAI_API_KEY"

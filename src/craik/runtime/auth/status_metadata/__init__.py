@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from craik.runtime.auth.profile import AuthProfile, CredentialKind
 from craik.runtime.auth.sources.anthropic_env import resolve_anthropic_credential_from_env
+from craik.runtime.providers.provider_transport import normalize_provider_family
 
 
 def credential_source_for_profile(
@@ -37,8 +38,8 @@ def billing_surface_for_profile(
         return _anthropic_billing_surface(profile, env)
     if profile.provider_family == "openai":
         return _openai_billing_surface(profile)
-    if profile.provider_family == "gemini":
-        return _gemini_billing_surface(profile)
+    if normalize_provider_family(profile.provider_family) == "google":
+        return _google_billing_surface(profile)
     return None
 
 
@@ -99,7 +100,7 @@ def _openai_billing_surface(profile: AuthProfile) -> str | None:
     return None
 
 
-def _gemini_billing_surface(profile: AuthProfile) -> str | None:
+def _google_billing_surface(profile: AuthProfile) -> str | None:
     if profile.kind is CredentialKind.OAUTH:
         source = profile.metadata.get("credential_source")
         if source == "adc":
@@ -108,6 +109,11 @@ def _gemini_billing_surface(profile: AuthProfile) -> str | None:
             return "GCP project (Vertex AI, service-account)"
     if profile.kind is CredentialKind.API_KEY:
         env_var = profile.metadata.get("env_var")
-        if env_var in {"GEMINI_API_KEY", "GOOGLE_API_KEY", "CRAIK_GEMINI_API_KEY"}:
+        if env_var in {
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "CRAIK_GEMINI_API_KEY",
+            "CRAIK_GOOGLE_API_KEY",
+        }:
             return "Google AI Studio (per-token)"
     return None

@@ -175,7 +175,7 @@ def default_model_provider_registry() -> ModelProviderRegistry:
                         "CRAIK_GEMINI_MODEL",
                         "CRAIK_GEMINI_BASE_URL",
                     ],
-                    "secret_ref_names": ["CRAIK_GEMINI_API_KEY"],
+                    "secret_ref_names": ["CRAIK_GOOGLE_API_KEY", "CRAIK_GEMINI_API_KEY"],
                     "budget_ref": "budget_google_monthly",
                     "quota_ref": "quota_google_daily",
                     "runtime_path": GOOGLE_PROVIDER_ADAPTER,

@@ -32,13 +32,14 @@ def test_cli_bridge_stdout_line_extracts_first_nonempty_line() -> None:
     assert source.headers_for("openai") == {"Authorization": "Bearer line-token"}
 
 
-def test_cli_bridge_returns_gemini_api_key_header() -> None:
+@pytest.mark.parametrize("family", ["google", "gemini"])
+def test_cli_bridge_returns_google_api_key_header(family: str) -> None:
     source = CLIBridgeCredentialSource(
         command=(sys.executable, "-c", "print('gemini-token')"),
         token_extractor="stdout_line",
     )
 
-    assert source.headers_for("gemini") == {"x-goog-api-key": "gemini-token"}
+    assert source.headers_for(family) == {"x-goog-api-key": "gemini-token"}  # type: ignore[arg-type]
 
 
 def test_cli_bridge_error_messages_do_not_include_stdout_token_material() -> None:

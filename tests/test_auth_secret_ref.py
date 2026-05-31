@@ -55,14 +55,17 @@ def test_secret_ref_source_resolves_env_secret(monkeypatch: pytest.MonkeyPatch) 
     assert "env-secret" not in str(source.status())
 
 
-def test_secret_ref_source_returns_gemini_header(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("family", ["google", "gemini"])
+def test_secret_ref_source_returns_google_header(
+    family: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("CRAIK_PROVIDER_SECRET", "env-secret")
     source = SecretRefCredentialSource(
         ref="CRAIK_PROVIDER_SECRET",
         manager=EnvVarSecretManager(),
     )
 
-    headers = source.headers_for("gemini")
+    headers = source.headers_for(family)  # type: ignore[arg-type]
 
     assert headers == {"x-goog-api-key": "env-secret"}
 

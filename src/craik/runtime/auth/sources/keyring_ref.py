@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 from craik.runtime.auth.profile import CredentialStatus
 from craik.runtime.auth.sources.anthropic_env import anthropic_headers_for_credential
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 from craik.runtime.shell.credential_storage import CredentialStorageError, get_cached_credential
 
 
@@ -22,7 +25,7 @@ class KeyringRefCredentialSource:
         secret = self._resolve_secret()
         if family == "anthropic":
             return anthropic_headers_for_credential(secret, credential_mode=self.credential_mode)
-        if family == "gemini":
+        if normalize_provider_family(family) == "google":
             return {"x-goog-api-key": secret}
         return {"Authorization": f"Bearer {secret}"}
 

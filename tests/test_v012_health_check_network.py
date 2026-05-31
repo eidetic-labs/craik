@@ -49,6 +49,11 @@ def _profile(provider: str, *, base_url: str | None = None) -> AuthProfile:
             "https://generativelanguage.googleapis.com/v1beta/models",
             "x-goog-api-key",
         ),
+        (
+            "google",
+            "https://generativelanguage.googleapis.com/v1beta/models",
+            "x-goog-api-key",
+        ),
     ],
 )
 def test_health_check_uses_provider_model_endpoint(

@@ -15,7 +15,10 @@ from pathlib import Path
 from typing import Protocol
 
 from craik.runtime.auth.profile import CredentialStatus
-from craik.runtime.providers.provider_transport import ProviderFamily
+from craik.runtime.providers.provider_transport import (
+    ProviderFamily,
+    normalize_provider_family,
+)
 from craik.runtime.secrets import SecretNotFoundError, SecretRef, SecretResolver
 
 
@@ -97,7 +100,7 @@ class SecretRefCredentialSource:
                 "anthropic-version": "2023-06-01",
                 "x-api-key": secret,
             }
-        if family == "gemini":
+        if normalize_provider_family(family) == "google":
             return {"x-goog-api-key": secret}
         return {"Authorization": f"Bearer {secret}"}
 
