@@ -14,9 +14,13 @@ the governed tool-loop, etc.); Task 2.4 will add a ``_legacy_run`` to
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from craik.runtime.backend.adapters.base import RunContext
 from craik.runtime.backend.events import BackendEvent
+
+if TYPE_CHECKING:
+    from craik.runtime.backend.session import BackendPromptResult
 
 
 class _NotImplementedAdapter:
@@ -43,10 +47,60 @@ class AnthropicCLI(_NotImplementedAdapter):
     vendor = "anthropic"
     surface = "cli"
 
+    def _legacy_run(
+        self,
+        ctx: RunContext,
+        *,
+        events: list[BackendEvent],
+        source: str,
+        env: dict[str, str] | None,
+    ) -> BackendPromptResult:
+        """Bridge to the legacy claude-code path (Task 2.4 seam).
+
+        ``source`` is accepted for signature symmetry with ``AnthropicAPI`` but
+        is unused by the claude path. ``env`` is the ORIGINAL value (possibly
+        None) -- threaded separately from ``ctx.env`` to preserve byte-identical
+        behavior.
+        """
+        # Lazy import: `session` imports `select_adapter`, so importing it at
+        # module scope here would create a cycle.
+        from craik.runtime.backend.session import _legacy_claude_code_run
+
+        return _legacy_claude_code_run(
+            prompt=ctx.prompt,
+            env=env,
+            emit=ctx.emit,
+            events=events,
+            require_operator_approval=ctx.require_operator_approval,
+        )
+
 
 class AnthropicAPI(_NotImplementedAdapter):
     vendor = "anthropic"
     surface = "api"
+
+    def _legacy_run(
+        self,
+        ctx: RunContext,
+        *,
+        events: list[BackendEvent],
+        source: str,
+        env: dict[str, str] | None,
+    ) -> BackendPromptResult:
+        """Bridge to the legacy provider path (Task 2.4 seam).
+
+        ``env`` is the ORIGINAL value (possibly None) -- threaded separately
+        from ``ctx.env`` to preserve byte-identical behavior.
+        """
+        from craik.runtime.backend.session import _legacy_provider_run
+
+        return _legacy_provider_run(
+            prompt=ctx.prompt,
+            env=env,
+            emit=ctx.emit,
+            events=events,
+            source=source,  # type: ignore[arg-type]
+        )
 
 
 class OpenAICLI(_NotImplementedAdapter):

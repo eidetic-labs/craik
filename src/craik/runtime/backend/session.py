@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol, cast
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.contracts.models import RunOutput
@@ -28,6 +28,25 @@ from craik.runtime.work.tasks import create_task
 
 PromptSource = Literal["tui", "cli", "slash", "jsonl", "channel"]
 BackendPreference = Literal["auto", "provider", "claude-code"]
+
+
+class _LegacyRunAdapter(Protocol):
+    """Adapters that bridge to a legacy ``execute_prompt`` branch (Task 2.4).
+
+    ``select_adapter`` only ever resolves the dispatch identifiers used here
+    (``anthropic-cli`` / ``anthropic-api``) to ``AnthropicCLI`` / ``AnthropicAPI``,
+    both of which implement ``_legacy_run``. This Protocol narrows the dispatch
+    site without widening the public ``Adapter`` protocol with a legacy hook.
+    """
+
+    def _legacy_run(
+        self,
+        ctx: object,
+        *,
+        events: list[BackendEvent],
+        source: str,
+        env: dict[str, str] | None,
+    ) -> BackendPromptResult: ...
 
 
 @dataclass(frozen=True)
@@ -71,61 +90,112 @@ def execute_prompt(
             data={"source": source, "prompt_preview": _clip(normalized_prompt)},
         )
     )
-    if backend == "claude-code" or (
-        backend == "auto" and _anthropic_marker_uses_claude_code(env)
-    ):
-        emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
-        emit(
-            BackendEvent(
-                type="run.working",
-                data={"backend": "claude-code", "phase": "starting"},
-            )
+    # `approval_required`'s default must reproduce today's `backend == "claude-code"`
+    # rule EXACTLY -- computed here, before dispatch, so the value handed to the
+    # claude path is identical. (The provider path ignores it.)
+    approval_required = (
+        require_operator_approval
+        if require_operator_approval is not None
+        else backend == "claude-code"
+    )
+    # Map the legacy `BackendPreference` to a canonical adapter id. "auto" stays
+    # "auto" and is resolved by `select_adapter` via the SAME anthropic-marker
+    # rule the old branch used, so routing is preserved:
+    #   claude-code      -> anthropic-cli (claude path)
+    #   auto + marker    -> anthropic-cli (claude path)  [resolved in select_adapter]
+    #   auto, no marker  -> anthropic-api (provider path)
+    #   provider         -> anthropic-api (provider path)
+    identifier = {"claude-code": "anthropic-cli", "provider": "anthropic-api"}.get(backend, backend)
+    from craik.runtime.backend.adapters.base import RunContext
+    from craik.runtime.backend.adapters.registry import select_adapter
+
+    adapter = cast(_LegacyRunAdapter, select_adapter(identifier, env))
+    ctx = RunContext(
+        prompt=normalized_prompt,
+        # `RunContext.env` is non-optional, so coerce None -> {} for protocol
+        # correctness. The legacy helpers do NOT read from `ctx.env`: the
+        # ORIGINAL `env` (possibly None) is threaded separately via the `env=`
+        # argument below so behavior stays byte-identical (e.g.
+        # `LocalStore.from_env(None)` vs `from_env({})`).
+        env=env or {},
+        emit=emit,
+        # Legacy paths do not gate via `decide`; a placeholder satisfies the
+        # protocol without affecting either legacy branch.
+        decide=lambda _request: "allow",
+        require_operator_approval=approval_required,
+    )
+    return adapter._legacy_run(ctx, events=events, source=source, env=env)
+
+
+def _legacy_claude_code_run(
+    *,
+    prompt: str,
+    env: dict[str, str] | None,
+    emit: Callable[[BackendEvent], None],
+    events: list[BackendEvent],
+    require_operator_approval: bool,
+) -> BackendPromptResult:
+    """Verbatim body of the legacy claude-code branch of ``execute_prompt``."""
+    emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
+    emit(
+        BackendEvent(
+            type="run.working",
+            data={"backend": "claude-code", "phase": "starting"},
         )
-        approval_required = (
-            require_operator_approval
-            if require_operator_approval is not None
-            else backend == "claude-code"
+    )
+    approval_required = require_operator_approval
+    payload = _execute_claude_code_prompt(
+        prompt,
+        env=env,
+        stream=emit,
+        require_operator_approval=approval_required,
+    )
+    run = payload.get("run")
+    task = payload.get("task")
+    run_id = run.get("id") if isinstance(run, dict) else None
+    task_id = task.get("id") if isinstance(task, dict) else None
+    emit(
+        BackendEvent(
+            type="run.started",
+            run_id=run_id if isinstance(run_id, str) else None,
+            task_id=task_id if isinstance(task_id, str) else None,
+            data={"backend": "claude-code"},
         )
-        payload = _execute_claude_code_prompt(
-            normalized_prompt,
-            env=env,
-            stream=emit,
-            require_operator_approval=approval_required,
-        )
-        run = payload.get("run")
-        task = payload.get("task")
-        run_id = run.get("id") if isinstance(run, dict) else None
-        task_id = task.get("id") if isinstance(task, dict) else None
-        emit(
-            BackendEvent(
-                type="run.started",
-                run_id=run_id if isinstance(run_id, str) else None,
-                task_id=task_id if isinstance(task_id, str) else None,
-                data={"backend": "claude-code"},
-            )
-        )
-        receipt_ids = payload.get("receipt_ids")
-        for receipt_id in receipt_ids if isinstance(receipt_ids, list) else []:
-            if isinstance(receipt_id, str):
-                emit(
-                    BackendEvent(
-                        type="receipt.created",
-                        run_id=run_id if isinstance(run_id, str) else None,
-                        task_id=task_id if isinstance(task_id, str) else None,
-                        data={"receipt_id": receipt_id},
-                    )
+    )
+    receipt_ids = payload.get("receipt_ids")
+    for receipt_id in receipt_ids if isinstance(receipt_ids, list) else []:
+        if isinstance(receipt_id, str):
+            emit(
+                BackendEvent(
+                    type="receipt.created",
+                    run_id=run_id if isinstance(run_id, str) else None,
+                    task_id=task_id if isinstance(task_id, str) else None,
+                    data={"receipt_id": receipt_id},
                 )
-        status = payload.get("status")
-        emit(
-            BackendEvent(
-                type="run.completed",
-                run_id=run_id if isinstance(run_id, str) else None,
-                task_id=task_id if isinstance(task_id, str) else None,
-                data={"status": status, "backend": "claude-code"},
             )
+    status = payload.get("status")
+    emit(
+        BackendEvent(
+            type="run.completed",
+            run_id=run_id if isinstance(run_id, str) else None,
+            task_id=task_id if isinstance(task_id, str) else None,
+            data={"status": status, "backend": "claude-code"},
         )
-        _persist_gateway_event_history(payload, events, env=env)
-        return BackendPromptResult(payload=payload, events=events)
+    )
+    _persist_gateway_event_history(payload, events, env=env)
+    return BackendPromptResult(payload=payload, events=events)
+
+
+def _legacy_provider_run(
+    *,
+    prompt: str,
+    env: dict[str, str] | None,
+    emit: Callable[[BackendEvent], None],
+    events: list[BackendEvent],
+    source: PromptSource,
+) -> BackendPromptResult:
+    """Verbatim body of the legacy provider branch of ``execute_prompt``."""
+    normalized_prompt = prompt
     store = LocalStore.from_env(env)
     try:
         store.initialize()
@@ -304,9 +374,11 @@ def _persist_gateway_event_history(
     if not isinstance(run_id, str) or not isinstance(task_id, str):
         return
     raw_receipt_ids = payload.get("receipt_ids")
-    receipt_ids = [
-        receipt_id for receipt_id in raw_receipt_ids if isinstance(receipt_id, str)
-    ] if isinstance(raw_receipt_ids, list) else []
+    receipt_ids = (
+        [receipt_id for receipt_id in raw_receipt_ids if isinstance(receipt_id, str)]
+        if isinstance(raw_receipt_ids, list)
+        else []
+    )
     output = RunOutput(
         id=f"run_output_{run_id}_gateway_events",
         run_id=run_id,
