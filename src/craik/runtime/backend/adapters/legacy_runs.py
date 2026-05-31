@@ -15,21 +15,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
+from craik.runtime.backend import session
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.provider_events import (
     model_display_name,
     provider_family,
     provider_tool_call_events,
-)
-from craik.runtime.backend.session import (
-    BackendPromptResult,
-    PromptSource,
-    _execute_claude_code_prompt,
-    _persist_gateway_event_history,
-    _title_from_prompt,
-    active_model_profile,
-    active_provider_and_model,
-    live_provider_enabled,
 )
 from craik.runtime.projects.project_registry import ProjectRegistry
 from craik.runtime.providers.provider_runner import ProviderBackedRunExecutor
@@ -45,7 +36,7 @@ def _legacy_claude_code_run(
     emit: Callable[[BackendEvent], None],
     events: list[BackendEvent],
     require_operator_approval: bool,
-) -> BackendPromptResult:
+) -> session.BackendPromptResult:
     """Verbatim body of the legacy claude-code branch of ``execute_prompt``."""
     emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
     emit(
@@ -55,7 +46,7 @@ def _legacy_claude_code_run(
         )
     )
     approval_required = require_operator_approval
-    payload = _execute_claude_code_prompt(
+    payload = session._execute_claude_code_prompt(
         prompt,
         env=env,
         stream=emit,
@@ -93,8 +84,8 @@ def _legacy_claude_code_run(
             data={"status": status, "backend": "claude-code"},
         )
     )
-    _persist_gateway_event_history(payload, events, env=env)
-    return BackendPromptResult(payload=payload, events=events)
+    session._persist_gateway_event_history(payload, events, env=env)
+    return session.BackendPromptResult(payload=payload, events=events)
 
 
 def _legacy_provider_run(
@@ -103,15 +94,15 @@ def _legacy_provider_run(
     env: dict[str, str] | None,
     emit: Callable[[BackendEvent], None],
     events: list[BackendEvent],
-    source: PromptSource,
-) -> BackendPromptResult:
+    source: session.PromptSource,
+) -> session.BackendPromptResult:
     """Verbatim body of the legacy provider branch of ``execute_prompt``."""
     normalized_prompt = prompt
     store = LocalStore.from_env(env)
     try:
         store.initialize()
         project = ProjectRegistry(store).add_project(Path.cwd())
-        title = _title_from_prompt(normalized_prompt)
+        title = session._title_from_prompt(normalized_prompt)
         task = create_task(
             store,
             title=title,
@@ -122,8 +113,8 @@ def _legacy_provider_run(
             expected_outputs=["runner_step_result", "handoff"],
         )
         CaseFileAssembler(store).build(task.id)
-        provider_id, model = active_provider_and_model(env)
-        active_profile = active_model_profile(env)
+        provider_id, model = session.active_provider_and_model(env)
+        active_profile = session.active_model_profile(env)
         selected_provider_family = provider_family(provider_id)
         display_name = model_display_name(
             provider_id=provider_id,
@@ -141,7 +132,7 @@ def _legacy_provider_run(
                     "model": model,
                     "display_name": display_name,
                     "profile": active_profile.as_dict() if active_profile is not None else None,
-                    "live_enabled": live_provider_enabled(env),
+                    "live_enabled": session.live_provider_enabled(env),
                 },
             )
         )
@@ -174,7 +165,7 @@ def _legacy_provider_run(
             task_id=task.id,
             provider_id=provider_id,
             grants=[fixture_shell_grant(task.id)],
-            live_enabled=live_provider_enabled(env),
+            live_enabled=session.live_provider_enabled(env),
             model=model,
             provider_options=active_profile.options if active_profile is not None else None,
         )
@@ -259,8 +250,8 @@ def _legacy_provider_run(
                 },
             )
         )
-        _persist_gateway_event_history(payload, events, store=store)
-        return BackendPromptResult(payload=payload, events=events)
+        session._persist_gateway_event_history(payload, events, store=store)
+        return session.BackendPromptResult(payload=payload, events=events)
     except Exception as error:
         emit(BackendEvent(type="error", data={"message": str(error)}))
         raise

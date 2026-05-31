@@ -64,7 +64,7 @@ class AnthropicCLI(_NotImplementedAdapter):
         """
         # Lazy import: `legacy_runs` imports `session`, which (lazily) imports
         # `registry` -> `concrete`; keeping this function-local avoids a cycle.
-        from craik.runtime.backend.legacy_runs import _legacy_claude_code_run
+        from craik.runtime.backend.adapters.legacy_runs import _legacy_claude_code_run
 
         return _legacy_claude_code_run(
             prompt=ctx.prompt,
@@ -92,7 +92,7 @@ class AnthropicAPI(_NotImplementedAdapter):
         ``env`` is the ORIGINAL value (possibly None) -- threaded separately
         from ``ctx.env`` to preserve byte-identical behavior.
         """
-        from craik.runtime.backend.legacy_runs import _legacy_provider_run
+        from craik.runtime.backend.adapters.legacy_runs import _legacy_provider_run
 
         return _legacy_provider_run(
             prompt=ctx.prompt,
