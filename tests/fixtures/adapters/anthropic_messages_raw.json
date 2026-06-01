@@ -1,0 +1,25 @@
+{
+  "id": "msg_anthropic_api_exemplar",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-20250514",
+  "stop_reason": "tool_use",
+  "content": [
+    {
+      "type": "text",
+      "text": "Running the requested shell command now. craik.runner_step_result"
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_anthropic_api_shell",
+      "name": "run_shell_command",
+      "input": {
+        "command": "fixture-action"
+      }
+    }
+  ],
+  "usage": {
+    "input_tokens": 42,
+    "output_tokens": 17
+  }
+}

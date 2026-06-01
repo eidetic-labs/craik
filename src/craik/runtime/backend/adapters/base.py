@@ -15,7 +15,15 @@ from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.events import (
+    BackendEvent,
+    EventSource,
+    ReceiptDecidedBy,
+    ReceiptDecision,
+    ReceiptMode,
+    approval_resolved_event,
+    receipt_event,
+)
 
 # Envelope schema sections that must never leak into emitted events. The vendor
 # paths declare these as expected runner outputs; adapters strip any matching
@@ -63,6 +71,24 @@ class RunContext:
     emit: Callable[[BackendEvent], None]
     decide: Callable[[dict[str, Any]], str]
     require_operator_approval: bool
+
+
+@dataclass(frozen=True)
+class ReceiptPosture:
+    """Static governance posture an API adapter stamps on every receipt event.
+
+    Each concrete ``APIAdapter`` declares a class-level ``posture`` so the base
+    ``run`` loop can emit receipt events without per-vendor branching: the
+    ``source`` (originating adapter), the ``execution`` model (``"craik"`` when
+    craik ran the tool itself via the side-effects layer), the permission
+    ``mode``, and who ``decided_by``. Frozen because the posture is a fixed trait
+    of the adapter, not per-run state.
+    """
+
+    source: EventSource
+    execution: str
+    mode: ReceiptMode
+    decided_by: ReceiptDecidedBy
 
 
 class Adapter(Protocol):
@@ -172,6 +198,11 @@ class APIAdapter(abc.ABC):
 
     vendor: str
     surface: str
+    # Concrete adapters declare a class-level posture; the base run loop stamps
+    # it onto every emitted receipt event. ``None`` keeps a posture-less adapter
+    # (e.g. a minimal test fake) on the silent loop -- it threads messages and
+    # emits no receipt events.
+    posture: ReceiptPosture | None = None
 
     def __init__(self) -> None:
         # Subclasses MUST call super().__init__(). The tool registry and the
@@ -212,7 +243,25 @@ class APIAdapter(abc.ABC):
         return self._governed_tools(self.registered_tools)
 
     def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
-        """Template: drive the craik tool-loop with a per-tool veto gate."""
+        """Template: the ONE governed tool-loop shared by every API adapter.
+
+        Per turn: request the model, map to (events, tool_calls), yield the
+        events, and -- for each requested tool -- consult ``ctx.decide`` BEFORE
+        executing.
+
+        * ``allow`` runs ``execute_tool`` (which routes through the gated
+          side-effects layer and returns the standardized
+          ``{"allowed", "receipt_id", "output", "tool_call_id"}`` dict). The
+          emitted receipt event then reflects the side-effects layer's ACTUAL
+          ``allowed`` verdict via ``_receipt_event`` -- NOT just ``ctx.decide`` --
+          so a decision-source disagreement (gate veto despite an ``allow``
+          decision) emits a ``deny`` receipt matching the persisted denial.
+        * ``deny`` skips execution entirely and yields ``_events_for_denied``.
+
+        The tool-result message threaded back to the model carries ONLY the
+        redacted ``output`` (never the craik-internal ``receipt_id``), with the
+        ``tool_call_id`` for multi-tool correlation.
+        """
         messages: list[dict[str, Any]] = [{"role": "user", "content": ctx.prompt}]
         while True:
             response = self.request(messages, tools=self.function_tools(), env=ctx.env)
@@ -225,20 +274,107 @@ class APIAdapter(abc.ABC):
                 decision = ctx.decide(tool_call)
                 if decision == "allow":
                     result = self.execute_tool(tool_call)
-                    messages.append({"role": "tool", "content": result})
+                    yield from self._receipt_event(tool_call, result)
+                    messages.append(self._tool_result_message(tool_call, result))
                 else:
-                    # Denied: thread a denial result back so the model can
-                    # adapt instead of stalling. The tool is NOT executed.
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "content": {
-                                "tool_call_id": tool_call.get("id"),
-                                "decision": "deny",
-                                "error": "denied by craik governance",
-                            },
-                        }
-                    )
+                    # Denied: NOT executed. Emit the governance events and thread
+                    # a denial result back so the model can adapt instead of stall.
+                    yield from self._events_for_denied(tool_call)
+                    messages.append(self._denial_message(tool_call))
+
+    def _receipt_event(
+        self,
+        tool_call: dict[str, Any],
+        result: dict[str, Any],
+    ) -> list[BackendEvent]:
+        """Emit the receipt event reflecting the side-effects layer's verdict.
+
+        Branches on ``result["allowed"]`` -- the gate's ACTUAL verdict, not the
+        ``ctx.decide`` decision. When the gate allowed the effect, a ``decision=
+        "allow"`` receipt is emitted with the persisted receipt id; when the gate
+        vetoed despite an ``allow`` decision, a ``decision="deny"`` receipt is
+        emitted carrying the DENIAL receipt id (and no allow event). Either way
+        the ``tool_call_id`` rides on the event ``data`` for multi-tool
+        correlation. A posture-less adapter emits nothing (fake/test path).
+        """
+        posture = self.posture
+        if posture is None:
+            return []
+        allowed = bool(result.get("allowed"))
+        decision: ReceiptDecision = "allow" if allowed else "deny"
+        decided_by: ReceiptDecidedBy = posture.decided_by if allowed else "policy"
+        receipt_id = str(result.get("receipt_id") or "receipt_api_run")
+        event = receipt_event(
+            receipt_id=receipt_id,
+            source=posture.source,
+            purpose="execution",
+            execution=posture.execution,  # type: ignore[arg-type]
+            mode=posture.mode,
+            decision=decision,
+            decided_by=decided_by,
+        )
+        event.data["tool_call_id"] = result.get("tool_call_id") or tool_call.get("id")
+        return [event]
+
+    def _events_for_denied(self, tool_call: dict[str, Any]) -> list[BackendEvent]:
+        """Governance events for a tool vetoed at the decision gate (no exec).
+
+        Default: a resolved-as-deny ``approval`` event plus a ``deny``
+        ``receipt.created``. Overridable per adapter; a posture-less adapter
+        emits nothing.
+        """
+        posture = self.posture
+        if posture is None:
+            return []
+        approval_id = optional_str(tool_call.get("id")) or "approval_api_denied"
+        deny_receipt = receipt_event(
+            receipt_id=f"receipt_denied_{approval_id}",
+            source=posture.source,
+            purpose="execution",
+            execution=posture.execution,  # type: ignore[arg-type]
+            mode=posture.mode,
+            decision="deny",
+            decided_by="policy",
+        )
+        deny_receipt.data["tool_call_id"] = tool_call.get("id")
+        return [
+            approval_resolved_event(
+                approval_id=approval_id,
+                decision="deny",
+                source=posture.source,
+                decided_by="policy",
+            ),
+            deny_receipt,
+        ]
+
+    @staticmethod
+    def _tool_result_message(
+        tool_call: dict[str, Any],
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Thread the tool result back to the model.
+
+        Carries ONLY the redacted ``output`` plus the ``tool_call_id`` -- never
+        the craik-internal ``receipt_id`` (which must not leak into model
+        context).
+        """
+        return {
+            "role": "tool",
+            "tool_call_id": result.get("tool_call_id") or tool_call.get("id"),
+            "content": result.get("output"),
+        }
+
+    @staticmethod
+    def _denial_message(tool_call: dict[str, Any]) -> dict[str, Any]:
+        """Thread a denial result back so the model can adapt instead of stall."""
+        return {
+            "role": "tool",
+            "content": {
+                "tool_call_id": tool_call.get("id"),
+                "decision": "deny",
+                "error": "denied by craik governance",
+            },
+        }
 
     @abc.abstractmethod
     def request(
@@ -256,7 +392,21 @@ class APIAdapter(abc.ABC):
 
     @abc.abstractmethod
     def execute_tool(self, tool_call: dict[str, Any]) -> dict[str, Any]:
-        """Execute one ALLOWED tool call and return its result payload."""
+        """Execute one ALLOWED tool call via the gated side-effects layer.
+
+        MUST return the standardized dict the base ``run`` loop consumes::
+
+            {
+                "allowed": bool,        # the side-effects layer's ACTUAL verdict
+                "receipt_id": str | None,  # persisted receipt id (allow or deny)
+                "output": <redacted>,   # threaded to the model; NEVER the dict
+                "tool_call_id": str,    # for multi-tool correlation
+            }
+
+        ``allowed`` is the gate's verdict and MAY be ``False`` even though
+        ``ctx.decide`` said allow (a decision-source disagreement); the base
+        reconciles this so the emitted receipt reflects the persisted truth.
+        """
 
     @abc.abstractmethod
     def auth_headers(self, env: dict[str, str]) -> dict[str, str]:

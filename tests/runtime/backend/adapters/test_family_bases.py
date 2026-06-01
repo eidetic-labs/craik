@@ -12,10 +12,23 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from craik.runtime.backend.adapters.base import APIAdapter, CLIAdapter, RunContext
+from craik.runtime.backend.adapters.base import (
+    APIAdapter,
+    CLIAdapter,
+    ReceiptPosture,
+    RunContext,
+)
 from craik.runtime.backend.events import (
     BackendEvent,
     assistant_text_event,
+)
+
+# A test posture so the base run loop emits receipt/approval events for the fake.
+_TEST_POSTURE = ReceiptPosture(
+    source="anthropic-api",
+    execution="craik",
+    mode="default",
+    decided_by="operator",
 )
 
 
@@ -99,6 +112,7 @@ class FakeAPIAdapter(APIAdapter):
 
     vendor = "anthropic"
     surface = "api"
+    posture = _TEST_POSTURE
 
     def __init__(
         self, *, map_responses: list[tuple[list[BackendEvent], list[dict[str, Any]]]]
@@ -136,7 +150,14 @@ class FakeAPIAdapter(APIAdapter):
     def execute_tool(self, tool_call: dict[str, Any]) -> dict[str, Any]:
         self.calls.append("execute_tool")
         self.executed.append(tool_call)
-        return {"tool_call_id": tool_call["id"], "result": "ok"}
+        # The standardized base contract: the gate allowed the effect, a receipt
+        # was persisted, and ONLY the redacted output is threaded to the model.
+        return {
+            "allowed": True,
+            "receipt_id": f"receipt_{tool_call['id']}",
+            "output": {"result": "ok"},
+            "tool_call_id": tool_call["id"],
+        }
 
 
 def test_api_tool_loop_allows_executes_and_continues() -> None:
@@ -153,7 +174,24 @@ def test_api_tool_loop_allows_executes_and_continues() -> None:
     # Two model turns -> two requests; the allowed tool was executed once.
     assert adapter.calls.count("request") == 2
     assert adapter.executed == [tool_call]
-    assert [e.data["text"] for e in events] == ["thinking", "done"]
+    text = [e.data["text"] for e in events if e.type == "assistant_text"]
+    assert text == ["thinking", "done"]
+
+    # The base emits a receipt for the executed tool reflecting the gate verdict
+    # (allowed -> decision="allow"), carrying the tool_call_id for correlation.
+    receipts = [e for e in events if e.type == "receipt.created"]
+    assert len(receipts) == 1
+    assert receipts[0].data["decision"] == "allow"
+    assert receipts[0].data["execution"] == "craik"
+    assert receipts[0].data["receipt_id"] == "receipt_t1"
+    assert receipts[0].data["tool_call_id"] == "t1"
+
+    # Only the redacted output is threaded back -- never the craik receipt_id.
+    second_request_messages = adapter.messages_seen[1]
+    tool_msg = next(m for m in second_request_messages if m.get("role") == "tool")
+    assert tool_msg["content"] == {"result": "ok"}
+    assert tool_msg["tool_call_id"] == "t1"
+    assert "receipt_id" not in str(tool_msg)
 
 
 def test_api_tool_loop_deny_does_not_execute() -> None:
@@ -165,12 +203,19 @@ def test_api_tool_loop_deny_does_not_execute() -> None:
         ]
     )
 
-    list(adapter.run(_ctx(decide=lambda req: "deny")))
+    events = list(adapter.run(_ctx(decide=lambda req: "deny")))
 
     assert adapter.executed == []
     # A denial result is still threaded back so the model can react.
     second_request_messages = adapter.messages_seen[1]
     assert any("deny" in str(m).lower() for m in second_request_messages)
+
+    # The base emits the governance events for a vetoed tool: a resolved-as-deny
+    # approval plus a deny receipt. No allow receipt is emitted.
+    approvals = [e for e in events if e.type == "approval.resolved"]
+    assert approvals and approvals[0].data["decision"] == "deny"
+    receipts = [e for e in events if e.type == "receipt.created"]
+    assert receipts and all(r.data["decision"] == "deny" for r in receipts)
 
 
 # --- Governance: hosted-tool stripping --------------------------------------
