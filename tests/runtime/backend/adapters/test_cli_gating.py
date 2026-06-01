@@ -2,7 +2,7 @@
 
 Component-level. Two concerns:
 
-1. ``make_operator_decide`` (in ``craik.runtime.backend.adapters.hook_bridge``): the
+1. ``make_operator_decide`` (in ``craik.runtime.backend.adapters.hook_gating``): the
    gateway factory that turns a forwarded tool-request payload into an
    ``allow``/``deny`` decision by opening an approval request, emitting an
    ``approval.requested`` event (so the TUI shows the modal), and BLOCKING on the
@@ -35,8 +35,8 @@ from craik.runtime.backend.adapters.hook_bridge import (
     VENDOR_ENV,
     HookBridgeServer,
     forward_tool_request,
-    make_operator_decide,
 )
+from craik.runtime.backend.adapters.hook_gating import make_operator_decide
 from craik.runtime.backend.adapters.openai_cli import OpenAICLI
 from craik.runtime.backend.events import BackendEvent
 
