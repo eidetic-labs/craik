@@ -32,10 +32,10 @@ from typing import Protocol
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.runtime.backend import session
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 from craik.runtime.backend.adapters.base import (
     ReceiptPosture,
     RunContext,
-    clean_assistant_text,
 )
 from craik.runtime.backend.events import (
     BackendEvent,

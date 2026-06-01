@@ -14,7 +14,7 @@ behavior on the assistant-text paths. It must:
 
 from __future__ import annotations
 
-from craik.runtime.backend.adapters.base import clean_assistant_text
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 
 # The real production output shape (live anthropic-cli dogfooding evidence):
 # prose the operator WANTS, then a "## What I can see" list, then the hidden

@@ -51,10 +51,10 @@ import shutil
 from collections.abc import Iterable, Iterator
 from typing import Any
 
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 from craik.runtime.backend.adapters.base import (
     CLIAdapter,
     RunContext,
-    clean_assistant_text,
     optional_str,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile

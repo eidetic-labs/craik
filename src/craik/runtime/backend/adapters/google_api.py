@@ -44,11 +44,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 from craik.runtime.backend.adapters.base import (
     APIAdapter,
     ReceiptPosture,
     RunContext,
-    clean_assistant_text,
     optional_str,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
