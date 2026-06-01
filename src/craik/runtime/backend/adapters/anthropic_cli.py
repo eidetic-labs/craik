@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING, Any
 from craik.runtime.backend.adapters.base import (
     CLIAdapter,
     RunContext,
+    clean_assistant_text,
     optional_str,
-    strip_contract_envelopes,
 )
 from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV, VENDOR_ENV
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
@@ -290,7 +290,7 @@ class AnthropicCLI(CLIAdapter):
         """
         kind = str(native.get("kind") or "")
         if kind == "assistant_text":
-            text = strip_contract_envelopes(str(native.get("text") or ""))
+            text = clean_assistant_text(str(native.get("text") or ""))
             if text:
                 self._coalescer.update(None, text)
             return None

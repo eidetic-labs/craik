@@ -48,8 +48,8 @@ from craik.runtime.backend.adapters.base import (
     APIAdapter,
     ReceiptPosture,
     RunContext,
+    clean_assistant_text,
     optional_str,
-    strip_contract_envelopes,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.events import (
@@ -293,7 +293,7 @@ class GoogleAPI(APIAdapter):
                         command=optional_str(_command_from_args(tool_call["args"])),
                     )
                 )
-        text = strip_contract_envelopes("".join(text_parts))
+        text = clean_assistant_text("".join(text_parts))
         if text:
             events.insert(0, assistant_text_event(text=text, source=_SOURCE))
         return events, tool_calls

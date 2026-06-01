@@ -35,7 +35,7 @@ from craik.runtime.backend import session
 from craik.runtime.backend.adapters.base import (
     ReceiptPosture,
     RunContext,
-    strip_contract_envelopes,
+    clean_assistant_text,
 )
 from craik.runtime.backend.events import (
     BackendEvent,
@@ -331,8 +331,8 @@ def provider_typed_events(
     """
     run_id = core.run_id
     task_id = core.task_id
-    text = strip_contract_envelopes(
-        " ".join(step.text for step in core.result.provider_results if step.text)
+    text = clean_assistant_text(
+        "\n".join(step.text for step in core.result.provider_results if step.text)
     )
     if text:
         yield assistant_text_event(text=text, source=source, run_id=run_id, task_id=task_id)
