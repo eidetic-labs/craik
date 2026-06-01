@@ -81,19 +81,21 @@ def test_unknown_identifier_raises_value_error(identifier: str) -> None:
         select_adapter(identifier, _ctx_env())
 
 
-def test_stub_run_raises_not_implemented_naming_class() -> None:
-    from craik.runtime.backend.adapters.base import RunContext
+def test_no_phase2_stubs_remain() -> None:
+    # All six ids now resolve to real Phase-4 adapters; ``openai-cli`` was the
+    # last stub and graduated to the real observe-only ``OpenAICLI`` in Task 4.6,
+    # so the placeholder ``_NotImplementedAdapter`` base no longer exists.
+    from craik.runtime.backend.adapters import concrete
 
-    # ``openai-cli`` is the last remaining Phase-2 stub (OpenAIAPI graduated to a
-    # real adapter in Task 4.5); its ``run`` still raises a class-named error.
-    adapter = select_adapter("openai-cli", _ctx_env())
-    ctx = RunContext(
-        prompt="hi",
-        env={},
-        emit=lambda event: None,
-        decide=lambda request: "allow",
-        require_operator_approval=False,
-    )
-
-    with pytest.raises(NotImplementedError, match="OpenAICLI"):
-        adapter.run(ctx)
+    assert not hasattr(concrete, "_NotImplementedAdapter")
+    for identifier in (
+        "anthropic-cli",
+        "anthropic-api",
+        "openai-cli",
+        "openai-api",
+        "google-cli",
+        "google-api",
+    ):
+        adapter = select_adapter(identifier, _ctx_env())
+        # A real adapter exposes the graduated capability surface.
+        assert hasattr(adapter, "supports_live_gating")

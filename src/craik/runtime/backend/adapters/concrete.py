@@ -1,30 +1,25 @@
-"""Concrete per-vendor adapter stubs (Phase 2 placeholders).
+"""Concrete per-vendor adapter re-exports (back-compat shim).
 
-These classes exist so ``select_adapter`` has something to instantiate and
-return for each canonical ``"<vendor>-<surface>"`` id. The remaining stubs are
-deliberately minimal: each implements the ``Adapter`` protocol structurally but
-its ``run`` raises ``NotImplementedError``.
+Phase 4 rebased every vendor adapter onto ``CLIAdapter`` / ``APIAdapter`` in its
+own module. This module now exists ONLY to re-export those real classes so
+existing ``from ...concrete import ...`` imports keep resolving:
+:class:`AnthropicCLI` (Task 4.1), :class:`AnthropicAPI` (Task 4.2),
+:class:`GoogleCLI` (Task 4.3), :class:`GoogleAPI` (Task 4.4),
+:class:`OpenAIAPI` (Task 4.5), and :class:`OpenAICLI` (Task 4.6, observe-only).
 
-Phase 4 rebases these onto ``CLIAdapter`` / ``APIAdapter`` one vendor at a time.
-The real :class:`AnthropicCLI` (Task 4.1), :class:`AnthropicAPI` (Task 4.2),
-:class:`GoogleCLI` (Task 4.3), :class:`GoogleAPI` (Task 4.4), and
-:class:`OpenAIAPI` (Task 4.5) now live in their own modules and are re-exported
-here for back-compat so existing ``from ...concrete import ...`` imports keep
-resolving; the remaining one (``OpenAICLI``) stays a stub until its own Phase-4
-task lands.
+No stubs remain: the last placeholder (``OpenAICLI`` over a
+``_NotImplementedAdapter`` base) was replaced by the real observe-only adapter
+in Task 4.6, so the placeholder base is gone.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 from craik.runtime.backend.adapters.anthropic_api import AnthropicAPI
 from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
-from craik.runtime.backend.adapters.base import RunContext
 from craik.runtime.backend.adapters.google_api import GoogleAPI
 from craik.runtime.backend.adapters.google_cli import GoogleCLI
 from craik.runtime.backend.adapters.openai_api import OpenAIAPI
-from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.adapters.openai_cli import OpenAICLI
 
 __all__ = [
     "AnthropicAPI",
@@ -34,34 +29,3 @@ __all__ = [
     "OpenAIAPI",
     "OpenAICLI",
 ]
-
-
-class _NotImplementedAdapter:
-    """Structural ``Adapter`` whose ``run`` raises until Phase 4.
-
-    Subclasses set ``vendor`` / ``surface`` class attributes.
-    """
-
-    vendor: str
-    surface: str
-
-    def supports_live_gating(self) -> bool:
-        # Sensible permissive default; the real per-vendor truth (e.g.
-        # ``OpenAICLI`` observe-only -> ``False``) lands in Phase 4.
-        return True
-
-    def auth_source(self) -> str:
-        # Metadata-only default until each vendor's Phase-4 task names its real
-        # auth profile/source. Satisfies the ``Adapter`` protocol; acquires no
-        # credentials.
-        return f"{self.vendor}_unconfigured"
-
-    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
-        # A normal method that raises on call -- NOT a generator. Raising
-        # immediately is the desired behavior for these Phase-2 stubs.
-        raise NotImplementedError(f"{type(self).__name__}.run is not implemented until Phase 4")
-
-
-class OpenAICLI(_NotImplementedAdapter):
-    vendor = "openai"
-    surface = "cli"
