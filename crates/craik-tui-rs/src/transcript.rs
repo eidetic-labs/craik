@@ -386,6 +386,8 @@ fn is_collapsible(kind: &TranscriptKind) -> bool {
             | TranscriptKind::File
             | TranscriptKind::Approval
             | TranscriptKind::Receipt
+            | TranscriptKind::Progress
+            | TranscriptKind::System
     )
 }
 

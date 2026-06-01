@@ -208,6 +208,14 @@ pub(crate) struct InteractiveApp {
     /// into `transcript`. Lets a growing `assistant_text` snapshot supersede the
     /// run's earlier partial in place instead of stacking duplicates.
     assistant_text_entry: Option<(String, usize)>,
+    /// Identity of the in-flight coalesced Progress entry: `(run_id, index)` into
+    /// `transcript`. Repeated `run.progress` updates for one run supersede this
+    /// entry in place (one updating status line) instead of stacking N frozen
+    /// lines. The slot is honoured only while the tracked index is still the
+    /// transcript tail; once any other entry is pushed (a tool/assistant/system
+    /// line, run completion, etc.) the tail moves and the next progress update
+    /// starts a fresh line. See `supersede_progress`.
+    progress_entry: Option<(String, usize)>,
 }
 
 impl InteractiveApp {
@@ -250,6 +258,7 @@ impl InteractiveApp {
             last_submitted_text: None,
             last_prompt_preview: None,
             assistant_text_entry: None,
+            progress_entry: None,
         };
         app.send_commands([
             GatewayCommand::SessionStatus,
@@ -310,6 +319,7 @@ impl InteractiveApp {
             last_submitted_text: None,
             last_prompt_preview: None,
             assistant_text_entry: None,
+            progress_entry: None,
         }
     }
 
@@ -1350,9 +1360,8 @@ impl InteractiveApp {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str())
                     && !should_hide_transcript_event(event)
                     && should_show_progress_message(event, message)
+                    && self.supersede_progress(event, message)
                 {
-                    self.transcript
-                        .push(TranscriptEntry::progress("Progress", message));
                     self.follow_tail_after_transcript_update();
                 }
             }
@@ -1587,6 +1596,38 @@ impl InteractiveApp {
         self.transcript
             .push(TranscriptEntry::assistant("Assistant", text));
         self.assistant_text_entry = Some((run_key, self.transcript.len() - 1));
+        true
+    }
+
+    /// Render a `run.progress` update, superseding this run's earlier progress
+    /// line in place rather than stacking a fresh frozen line per update.
+    /// Returns whether the transcript changed.
+    ///
+    /// The tracked slot is honoured only when it is still the transcript tail
+    /// AND keyed to the same run. The tail check is what implements the
+    /// "reset on a non-progress entry or new run" requirement without
+    /// instrumenting every other push site: as soon as a tool/assistant/system
+    /// line (or a different run's progress) is appended, the tracked index is no
+    /// longer the tail, so the next progress update appends fresh. A `run_id` of
+    /// `None` collapses to the `""` key (run-less progress streams share one
+    /// slot), mirroring `supersede_assistant_text`.
+    fn supersede_progress(&mut self, event: &GatewayEvent, message: &str) -> bool {
+        let run_key = event.run_id.clone().unwrap_or_default();
+        if let Some((existing_run, index)) = self.progress_entry.as_ref()
+            && *existing_run == run_key
+            && *index + 1 == self.transcript.len()
+            && let Some(entry) = self.transcript.get_mut(*index)
+            && entry.kind == TranscriptKind::Progress
+        {
+            if entry.body == message {
+                return false;
+            }
+            entry.update_body(message);
+            return true;
+        }
+        self.transcript
+            .push(TranscriptEntry::progress("Progress", message));
+        self.progress_entry = Some((run_key, self.transcript.len() - 1));
         true
     }
 
@@ -4227,6 +4268,72 @@ mod tests {
             assistant,
             vec!["Reading the repo now."],
             "growing coalesced assistant text supersedes earlier snapshots"
+        );
+    }
+
+    #[test]
+    fn repeated_progress_for_one_run_collapses_to_single_updating_line() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        for message in [
+            "Claude Code is starting up.",
+            "Claude Code is reading files.",
+            "Claude Code is editing files.",
+        ] {
+            app.record_event(&GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
+                created_at: None,
+                run_id: Some("run_progress".to_owned()),
+                task_id: None,
+                data: json!({"message": message, "transcript_visibility": "visible"}),
+            });
+        }
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["Claude Code is editing files."],
+            "repeated progress for one run supersedes earlier updates in place"
+        );
+    }
+
+    #[test]
+    fn progress_for_new_run_does_not_supersede_prior_run() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_a".to_owned()),
+            task_id: None,
+            data: json!({"message": "Run A progress.", "transcript_visibility": "visible"}),
+        });
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_b".to_owned()),
+            task_id: None,
+            data: json!({"message": "Run B progress.", "transcript_visibility": "visible"}),
+        });
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["Run A progress.", "Run B progress."],
+            "a new run's progress starts a fresh line rather than overwriting the prior run"
         );
     }
 
