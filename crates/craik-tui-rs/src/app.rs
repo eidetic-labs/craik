@@ -148,6 +148,11 @@ struct PendingApproval {
     risk: Option<String>,
     command: Option<String>,
     preview: Option<String>,
+    /// The Claude permission mode this approval was raised under (e.g.
+    /// `bypassPermissions`), when the event carries it. Captured so the
+    /// most-dangerous mode forces the high-risk two-press gate independent of
+    /// the free-text risk string.
+    permission_mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2682,6 +2687,7 @@ impl PendingApproval {
                 event,
                 &["preview", "diff", "patch", "command_preview", "text"],
             ),
+            permission_mode: first_string_data(event, &["permission_mode", "mode"]),
         }
     }
 
@@ -2787,12 +2793,22 @@ impl PendingApproval {
     }
 
     /// A destructive / high-risk approval that must keep an explicit
-    /// confirmation gate even under the single-press keymap. Mirrors the
-    /// `is_high_risk_text` heuristic the modal already uses to render the
-    /// "Warning: high-risk approval" affordance, so the visual distinction and
-    /// the extra-press gate are driven by the same signal.
+    /// confirmation gate even under the single-press keymap. Triggered by
+    /// EITHER signal:
+    ///   - `bypassPermissions` mode -- the most dangerous mode, so it is always
+    ///     high-risk regardless of the free-text risk string (which a backend
+    ///     may leave benign or empty); OR
+    ///   - the `is_high_risk_text` needle heuristic the modal already uses to
+    ///     render the "Warning: high-risk approval" affordance.
     fn is_high_risk(&self) -> bool {
-        self.risk.as_deref().is_some_and(is_high_risk_text)
+        self.is_bypass_permissions() || self.risk.as_deref().is_some_and(is_high_risk_text)
+    }
+
+    /// Whether this approval was raised under `bypassPermissions` mode.
+    fn is_bypass_permissions(&self) -> bool {
+        self.permission_mode
+            .as_deref()
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("bypassPermissions"))
     }
 
     fn risk_label(&self) -> &str {
@@ -5874,6 +5890,52 @@ mod tests {
             !app.transcript
                 .iter()
                 .any(|entry| entry.title == "Approving")
+        );
+    }
+
+    #[test]
+    fn bypass_permissions_approval_is_high_risk_even_without_risk_keywords() {
+        // A bypassPermissions-mode approval with a benign risk string (none of
+        // the "write"/"delete"/"exec"... needles) must still be treated as
+        // high-risk: bypassPermissions is the most dangerous mode, so it always
+        // requires the two-press confirm regardless of the risk text.
+        let event = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bypass_1",
+                "message": "Proceed?",
+                "tool": "Read",
+                "permission_mode": "bypassPermissions",
+                "risk": "routine"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&event);
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert!(
+            app.selected_approval_is_high_risk(),
+            "bypassPermissions is always high-risk regardless of risk text"
+        );
+
+        // First 'a' must only arm, not commit.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a bypassPermissions approval is not approved on the first press"
+        );
+        // Second 'a' commits.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "the explicit confirm press approves the bypassPermissions approval"
         );
     }
 
