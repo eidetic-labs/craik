@@ -29,7 +29,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget, Wrap},
 };
 use render::{StatusLineMetrics, status_line};
 use std::{
@@ -140,7 +140,8 @@ fn main() -> anyhow::Result<()> {
                 Block::default()
                     .title("Craik Gateway")
                     .border_style(theme::mute_style())
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             ),
             frame.area(),
         );
@@ -673,6 +674,7 @@ fn render_approval_overlay(
                 .title_style(border_style)
                 .border_style(border_style)
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .padding(Padding::horizontal(1)),
         )
         .style(theme::surface_style())
@@ -1688,6 +1690,36 @@ mod tests {
         assert!(
             rows.iter()
                 .any(|row| row.contains('+') && row.contains("new"))
+        );
+    }
+
+    #[test]
+    fn approval_overlay_uses_rounded_boxed_frame() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "approval.requested",
+                    "data": {
+                        "approval_id": "approval_edit_1",
+                        "message": "Edit src/lib.rs?",
+                        "tool": "Edit",
+                        "target": "src/lib.rs"
+                    }
+                }"#,
+            )
+            .expect("approval fixture parses"),
+        );
+        app.active_overlay = Some(ActiveOverlay::Approvals);
+
+        let rendered = render_app_frame(&app, 120, 50);
+        assert!(
+            rendered.contains('╭') && rendered.contains('╰'),
+            "approval overlay boxed frame uses rounded corners"
+        );
+        assert!(
+            !rendered.contains('┌'),
+            "approval overlay boxed frame drops square corners"
         );
     }
 
