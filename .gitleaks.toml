@@ -18,3 +18,10 @@ regexes = [
   '''craik-test-not-a-real-[A-Za-z0-9_-]+''',
   '''token=craik-test-not-a-real-[A-Za-z0-9_-]+''',
 ]
+
+[[allowlists]]
+description = "Adapter test docstrings describe event source/execution tokens as prose (e.g. 'source=<vendor>-api'); not secrets — generic-api-key false positive."
+regexTarget = "line"
+regexes = [
+  '''source=<vendor>-api''',
+]

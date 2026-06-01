@@ -4,12 +4,16 @@ A DELTA of the API-side exemplar :mod:`anthropic_api`. The gate->execute->emit
 tool-loop and the receipt allow/deny reconciliation now live once in
 :class:`~craik.runtime.backend.adapters.base.APIAdapter`, so this adapter only
 declares a ``posture`` and fills the four vendor hooks (``request`` /
-``map_response`` / ``execute_tool`` / ``auth_headers``). It does NOT override
-``run``: the gate->execute->emit orchestration -- including the receipt event
-that reflects the side-effects layer's ACTUAL ``allowed`` verdict (not just
-``ctx.decide``) and the ``approval``-denied + denial-receipt emission for a
-vetoed tool -- is inherited. ``execute_tool`` returns the standardized
+``map_response`` / ``execute_tool`` / ``auth_headers``). The base
+``direct_tool_loop`` owns the gate->execute->emit orchestration -- including the
+receipt event that reflects the side-effects layer's ACTUAL ``allowed`` verdict
+(not just ``ctx.decide``) and the ``approval``-denied + denial-receipt emission
+for a vetoed tool. ``execute_tool`` returns the standardized
 ``{"allowed", "receipt_id", "output", "tool_call_id"}`` dict the base consumes.
+
+Task 5.5a: ``run`` is OVERRIDDEN to compose the audited provider core (the live
+path); the base ``direct_tool_loop`` remains the fixture-tested direct-HTTP
+design. See :meth:`GoogleAPI.run` for the dual-path split.
 
 Composition over reinvention:
   * Request building reuses the provider-runtime types (``ProviderMessage`` /
@@ -27,21 +31,23 @@ Composition over reinvention:
     (``run_shell_command_ref``): authorize -> execute -> signed
     ``CapabilityReceipt`` with redacted output. Execution NEVER bypasses it.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired into
-the live ``execute_prompt`` path (cutover is Task 4.7). The google-api id has no
-legacy ``execute_prompt`` branch (only the anthropic ids route through one
-pre-cutover), so -- like ``GoogleCLI`` and unlike the anthropic exemplar -- this
-adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The google-api id has no legacy ``execute_prompt`` branch (only the anthropic
+ids route through one), so -- like ``GoogleCLI`` and unlike the anthropic
+exemplar -- this adapter carries no ``_legacy_run`` bridge and no
+``CRAIK_BACKEND_LEGACY_RUN`` fallback.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from craik.runtime.backend.adapters.base import (
     APIAdapter,
     ReceiptPosture,
+    RunContext,
     optional_str,
     strip_contract_envelopes,
 )
@@ -134,12 +140,24 @@ class GoogleAPI(APIAdapter):
         profile: VendorProfile | None = None,
         *,
         side_effects: SideEffectGate | None = None,
+        original_env: dict[str, str] | None = None,
+        prompt_source: str = "tui",
     ) -> None:
         super().__init__()
         # ``select_adapter`` injects the profile + side-effect gate at the Task
         # 4.7 cutover; until then default to the canonical google profile.
         self.profile: VendorProfile = profile or vendor_profile("google")
         self._side_effects = side_effects
+        # The ORIGINAL env (possibly None) the provider core needs -- threaded
+        # separately from ``RunContext.env`` (coerced to ``{}``), like the legacy
+        # provider path. 5.7 injects this; tests set it directly.
+        self.original_env: dict[str, str] | None = original_env
+        # Operator ``PromptSource`` recorded on the created task by the provider
+        # core; 5.7 injects the real source, defaulting to ``"tui"`` until then.
+        self.prompt_source: str = prompt_source
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
         # The governed function-tool the model may call. Registered here so the
         # base ``function_tools`` (which strips hosted tools) sends exactly this.
         self.register_tool(
@@ -162,6 +180,25 @@ class GoogleAPI(APIAdapter):
         resolves.
         """
         return _AUTH_SOURCE
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited provider core, yielding the NEW TYPED event sequence.
+
+        OVERRIDES the base ``APIAdapter.run`` (the direct-HTTP tool-loop): the
+        live-today provider path runs + persists through the SAME
+        ``ProviderBackedRunExecutor`` all families share, via the shared
+        ``audited_core.provider_api_run`` wiring (the identical body
+        ``AnthropicAPI`` / ``OpenAIAPI`` also compose): it derives typed events,
+        captures the audited payload onto ``self.last_payload``, and closes the
+        store once. See ``AnthropicAPI.run`` for the dual-path split (base
+        ``direct_tool_loop`` stays the fixture-tested direct-HTTP design) and the
+        vendor/provider_family alignment note. This ``run()`` IS the live
+        ``execute_prompt`` path (google-api has no legacy branch / no
+        ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
+        """
+        from craik.runtime.backend.adapters.audited_core import provider_api_run
+
+        return provider_api_run(self, ctx)
 
     # --- abstract hooks -----------------------------------------------------
 

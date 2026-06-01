@@ -113,7 +113,7 @@ def _run_with_gate(decision: str, gate: SideEffectGate) -> list[BackendEvent]:
         decide=lambda request: decision,
         require_operator_approval=False,
     )
-    return list(adapter.run(ctx))
+    return list(adapter.direct_tool_loop(ctx))
 
 
 def _run(decision: str, executor: _RecordingExecutor) -> list[BackendEvent]:

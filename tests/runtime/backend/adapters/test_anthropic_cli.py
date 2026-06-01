@@ -25,6 +25,17 @@ def _fixture_lines() -> list[str]:
 
 
 def _run_fixture() -> list[BackendEvent]:
+    """Drive the fixture through the CLI TEMPLATE surface (build_command -> spawn ->
+    parse_stream).
+
+    Task 5.5a repurposes ``AnthropicCLI.run`` as the live path that composes the
+    audited claude core (the core spawns), so ``run`` no longer reads the injected
+    ``spawn``. The template hooks (``build_command`` / ``spawn`` / ``parse_stream``)
+    remain the abstract CLI surface that maps a native stream to typed events; this
+    fixture test exercises THAT surface directly via ``parse_stream`` over a fake
+    ``spawn``, which is exactly the path the typed ``run`` re-uses through
+    ``map_native_event`` + the Coalescer.
+    """
     adapter = AnthropicCLI()
     lines = _fixture_lines()
 
@@ -39,7 +50,8 @@ def _run_fixture() -> list[BackendEvent]:
         decide=lambda request: "allow",
         require_operator_approval=False,
     )
-    return list(adapter.run(ctx))
+    cmd = adapter.build_command(ctx)
+    return list(adapter.parse_stream(adapter.spawn(cmd, ctx.env), ctx))
 
 
 def test_supports_live_gating_is_true() -> None:

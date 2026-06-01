@@ -243,7 +243,29 @@ class APIAdapter(abc.ABC):
         return self._governed_tools(self.registered_tools)
 
     def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
-        """Template: the ONE governed tool-loop shared by every API adapter.
+        """Default API entry point: the direct-HTTP governed tool-loop.
+
+        Two distinct API run paths exist (Task 5.5a documents the split):
+
+        * ``direct_tool_loop`` -- the live-NETWORK gate->request->map_response->
+          execute_tool loop owned here by the base. It is the fixture-tested
+          design (the Phase-4 ``*API`` unit tests + ``test_family_bases`` drive
+          it) and the path a posture-less fake/test adapter uses. It is NOT the
+          live provider path.
+        * the provider-CORE path -- the concrete ``*API`` adapters OVERRIDE
+          ``run`` to compose ``audited_core.run_provider_typed`` (the proven
+          provider execution + persistence the legacy provider layer uses) and
+          emit typed events from its result. That is the live-today path.
+
+        The base ``run`` defaults to ``direct_tool_loop`` so a non-overriding
+        adapter (e.g. ``FakeAPIAdapter``) still loops; concrete live adapters
+        override ``run`` and keep ``direct_tool_loop`` available for their loop
+        tests.
+        """
+        return self.direct_tool_loop(ctx)
+
+    def direct_tool_loop(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """The direct-HTTP governed tool-loop shared by every API adapter.
 
         Per turn: request the model, map to (events, tool_calls), yield the
         events, and -- for each requested tool -- consult ``ctx.decide`` BEFORE

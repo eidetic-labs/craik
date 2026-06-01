@@ -1,32 +1,31 @@
 """Legacy ``execute_prompt`` run branches, extracted from ``session`` (Task 2.4).
 
-These two helpers hold the byte-identical bodies of the legacy claude-code and
-provider branches. They live in their own module purely to keep ``session`` under
-the file-size guard; the adapters' ``_legacy_run`` methods bridge here.
+These two helpers hold the EMISSION layer of the legacy claude-code and provider
+branches. The audited run itself (execute + receipt persistence + payload
+assembly) now lives in the emission-agnostic cores in ``audited_core``; these
+helpers call a core, then emit the (old-shape) events the legacy path has always
+emitted -- derived from the core's structured result -- persist history, and
+return the same :class:`~craik.runtime.backend.session.BackendPromptResult`.
+Behavior is byte-identical to the pre-extraction bodies.
 
 Import direction is one-way: ``legacy_runs`` imports from ``session`` (for the
-shared private helpers and the in-module provider selectors), and ``session``
-must NOT import ``legacy_runs``.
+shared private helpers) and from ``audited_core``; ``session`` must NOT import
+either.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
-from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.runtime.backend import session
+from craik.runtime.backend.adapters.audited_core import (
+    run_claude_code_core,
+    run_provider_core,
+)
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.provider_events import (
-    model_display_name,
-    provider_family,
     provider_tool_call_events,
 )
-from craik.runtime.projects.project_registry import ProjectRegistry
-from craik.runtime.providers.provider_runner import ProviderBackedRunExecutor
-from craik.runtime.store import LocalStore
-from craik.runtime.work.case_files import CaseFileAssembler
-from craik.runtime.work.tasks import create_task
 
 
 def _legacy_claude_code_run(
@@ -37,7 +36,7 @@ def _legacy_claude_code_run(
     events: list[BackendEvent],
     require_operator_approval: bool,
 ) -> session.BackendPromptResult:
-    """Verbatim body of the legacy claude-code branch of ``execute_prompt``."""
+    """Emit the legacy claude-code events around the audited claude-code core."""
     emit(BackendEvent(type="model.selected", data={"backend": "claude-code"}))
     emit(
         BackendEvent(
@@ -45,47 +44,43 @@ def _legacy_claude_code_run(
             data={"backend": "claude-code", "phase": "starting"},
         )
     )
-    approval_required = require_operator_approval
-    payload = session._execute_claude_code_prompt(
-        prompt,
+    # The native per-line claude stream events are emitted DURING the core run
+    # via this same ``emit`` sink (preserving today's interleaving exactly).
+    core = run_claude_code_core(
+        prompt=prompt,
         env=env,
+        require_operator_approval=require_operator_approval,
         stream=emit,
-        require_operator_approval=approval_required,
     )
-    run = payload.get("run")
-    task = payload.get("task")
-    run_id = run.get("id") if isinstance(run, dict) else None
-    task_id = task.get("id") if isinstance(task, dict) else None
+    run_id = core.run_id
+    task_id = core.task_id
     emit(
         BackendEvent(
             type="run.started",
-            run_id=run_id if isinstance(run_id, str) else None,
-            task_id=task_id if isinstance(task_id, str) else None,
+            run_id=run_id,
+            task_id=task_id,
             data={"backend": "claude-code"},
         )
     )
-    receipt_ids = payload.get("receipt_ids")
-    for receipt_id in receipt_ids if isinstance(receipt_ids, list) else []:
-        if isinstance(receipt_id, str):
-            emit(
-                BackendEvent(
-                    type="receipt.created",
-                    run_id=run_id if isinstance(run_id, str) else None,
-                    task_id=task_id if isinstance(task_id, str) else None,
-                    data={"receipt_id": receipt_id},
-                )
+    for receipt_id in core.receipt_ids:
+        emit(
+            BackendEvent(
+                type="receipt.created",
+                run_id=run_id,
+                task_id=task_id,
+                data={"receipt_id": receipt_id},
             )
-    status = payload.get("status")
+        )
     emit(
         BackendEvent(
             type="run.completed",
-            run_id=run_id if isinstance(run_id, str) else None,
-            task_id=task_id if isinstance(task_id, str) else None,
-            data={"status": status, "backend": "claude-code"},
+            run_id=run_id,
+            task_id=task_id,
+            data={"status": core.status, "backend": "claude-code"},
         )
     )
-    session._persist_gateway_event_history(payload, events, env=env)
-    return session.BackendPromptResult(payload=payload, events=events)
+    session._persist_gateway_event_history(core.payload, events, env=env)
+    return session.BackendPromptResult(payload=core.payload, events=events)
 
 
 def _legacy_provider_run(
@@ -96,35 +91,27 @@ def _legacy_provider_run(
     events: list[BackendEvent],
     source: session.PromptSource,
 ) -> session.BackendPromptResult:
-    """Verbatim body of the legacy provider branch of ``execute_prompt``."""
-    normalized_prompt = prompt
-    store = LocalStore.from_env(env)
+    """Emit the legacy provider events around the audited provider core."""
     try:
-        store.initialize()
-        project = ProjectRegistry(store).add_project(Path.cwd())
-        title = session._title_from_prompt(normalized_prompt)
-        task = create_task(
-            store,
-            title=title,
-            objective=normalized_prompt,
-            project_id=project.id,
-            requested_by=f"user:{source}",
-            mode="implement",
-            expected_outputs=["runner_step_result", "handoff"],
-        )
-        CaseFileAssembler(store).build(task.id)
-        provider_id, model = session.active_provider_and_model(env)
-        active_profile = session.active_model_profile(env)
-        selected_provider_family = provider_family(provider_id)
-        display_name = model_display_name(
-            provider_id=provider_id,
-            model=model,
-            profile=active_profile,
-        )
+        core = run_provider_core(prompt=prompt, env=env, source=source)
+    except Exception as error:
+        emit(BackendEvent(type="error", data={"message": str(error)}))
+        raise
+    store = core.store
+    try:
+        result = core.result
+        provider_id = core.provider_id
+        selected_provider_family = core.provider_family
+        model = core.model
+        resolved_model = core.resolved_model
+        display_name = core.display_name
+        active_profile = core.active_profile
+        run_id = core.run_id
+        task_id = core.task_id
         emit(
             BackendEvent(
                 type="model.selected",
-                task_id=task.id,
+                task_id=task_id,
                 data={
                     "backend": "provider",
                     "provider_id": provider_id,
@@ -139,7 +126,7 @@ def _legacy_provider_run(
         emit(
             BackendEvent(
                 type="run.working",
-                task_id=task.id,
+                task_id=task_id,
                 data={
                     "backend": "provider",
                     "provider_id": provider_id,
@@ -152,7 +139,7 @@ def _legacy_provider_run(
         emit(
             BackendEvent(
                 type="run.progress",
-                task_id=task.id,
+                task_id=task_id,
                 data={
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
@@ -161,20 +148,11 @@ def _legacy_provider_run(
                 },
             )
         )
-        result = ProviderBackedRunExecutor(store).execute(
-            task_id=task.id,
-            provider_id=provider_id,
-            grants=[fixture_shell_grant(task.id)],
-            live_enabled=session.live_provider_enabled(env),
-            model=model,
-            provider_options=active_profile.options if active_profile is not None else None,
-        )
-        resolved_model = result.provider_results[-1].model if result.provider_results else model
         emit(
             BackendEvent(
                 type="run.started",
-                run_id=result.run.id,
-                task_id=task.id,
+                run_id=run_id,
+                task_id=task_id,
                 data={
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
@@ -184,15 +162,15 @@ def _legacy_provider_run(
         )
         for event in provider_tool_call_events(
             result,
-            run_id=result.run.id,
-            task_id=task.id,
+            run_id=run_id,
+            task_id=task_id,
         ):
             emit(event)
         emit(
             BackendEvent(
                 type="run.progress",
-                run_id=result.run.id,
-                task_id=task.id,
+                run_id=run_id,
+                task_id=task_id,
                 data={
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
@@ -204,31 +182,24 @@ def _legacy_provider_run(
                 },
             )
         )
-        payload = provider_run_payload(result)
-        payload["project"] = project.model_dump(mode="json", by_alias=True)
-        payload["task"] = task.model_dump(mode="json", by_alias=True)
-        if active_profile is not None:
-            payload["model_profile"] = active_profile.as_dict()
-        receipt_ids = payload.get("receipt_ids")
-        for receipt_id in receipt_ids if isinstance(receipt_ids, list) else []:
-            if isinstance(receipt_id, str):
-                emit(
-                    BackendEvent(
-                        type="receipt.created",
-                        run_id=result.run.id,
-                        task_id=task.id,
-                        data={
-                            "receipt_id": receipt_id,
-                            "provider_id": provider_id,
-                            "provider_family": selected_provider_family,
-                        },
-                    )
+        for receipt_id in core.receipt_ids:
+            emit(
+                BackendEvent(
+                    type="receipt.created",
+                    run_id=run_id,
+                    task_id=task_id,
+                    data={
+                        "receipt_id": receipt_id,
+                        "provider_id": provider_id,
+                        "provider_family": selected_provider_family,
+                    },
                 )
+            )
         emit(
             BackendEvent(
                 type="run.output",
-                run_id=result.run.id,
-                task_id=task.id,
+                run_id=run_id,
+                task_id=task_id,
                 data={
                     "summary": result.run.stop_reason,
                     "provider_id": provider_id,
@@ -240,18 +211,18 @@ def _legacy_provider_run(
         emit(
             BackendEvent(
                 type="run.completed",
-                run_id=result.run.id,
-                task_id=task.id,
+                run_id=run_id,
+                task_id=task_id,
                 data={
-                    "status": result.run.status,
+                    "status": core.status,
                     "provider_id": provider_id,
                     "provider_family": selected_provider_family,
                     "model": resolved_model,
                 },
             )
         )
-        session._persist_gateway_event_history(payload, events, store=store)
-        return session.BackendPromptResult(payload=payload, events=events)
+        session._persist_gateway_event_history(core.payload, events, store=store)
+        return session.BackendPromptResult(payload=core.payload, events=events)
     except Exception as error:
         emit(BackendEvent(type="error", data={"message": str(error)}))
         raise

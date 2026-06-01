@@ -13,11 +13,11 @@ records via the Phase-1 typed builders. The adapter therefore owns only the
 translation table, not a second copy of the parser; the contract-strip and the
 optional-string coercion are shared base helpers reused by every adapter.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired
-into the live ``execute_prompt`` path (that cutover is Task 4.7). The live
-PreToolUse hook bridge (Phase 5) is represented here by a config point only --
-``pre_tool_use_hook_config`` names where the hook would be registered; no live
-daemon is started.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path;
+the legacy claude-code path is retained as the ``CRAIK_BACKEND_LEGACY_RUN=1``
+fallback. The live PreToolUse hook bridge (Phase 5) is represented here by a
+config point only -- ``pre_tool_use_hook_config`` names where the hook would be
+registered; no live daemon is started.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
     ReceiptDecision,
     approval_resolved_event,
     receipt_event,
@@ -68,10 +69,30 @@ class AnthropicCLI(CLIAdapter):
     vendor = "anthropic"
     surface = "cli"
 
-    def __init__(self, profile: VendorProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: VendorProfile | None = None,
+        *,
+        original_env: dict[str, str] | None = None,
+    ) -> None:
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
         # until then default to the canonical anthropic profile.
         self.vendor_profile: VendorProfile = profile or _default_anthropic_profile()
+        # The ORIGINAL env (possibly None) the claude core needs -- threaded
+        # separately from ``RunContext.env`` (which is coerced to ``{}``), exactly
+        # as the legacy path threads ``env=`` separately (e.g.
+        # ``LocalStore.from_env(None)`` vs ``from_env({})``). ``select_adapter``
+        # injects this at the Task 5.7 cutover; tests set it directly.
+        self.original_env: dict[str, str] | None = original_env
+        # Live-gating hook overlay (Task 5.6): when the gateway opens a
+        # ``hook_bridge_session`` for a gated run it sets this to the session's
+        # ``{CRAIK_HOOK_SOCKET, CRAIK_HOOK_VENDOR}`` overlay. ``run`` merges it OVER
+        # the env threaded to the claude core, so the claude subprocess env (built
+        # by ``claude_code._claude_code_env`` from ``os.environ`` + this env) carries
+        # the bridge address for the PreToolUse ``craik-hook`` client. ``None``
+        # (default, and the only value pre-cutover) means no live bridge -- the env
+        # is unchanged. The gateway sets it in Task 5.7; tests set it directly.
+        self.hook_env: dict[str, str] | None = None
         # Phase-5 gating config: the REAL PreToolUse hook that registers the
         # ``craik-hook`` client as Claude Code's pre-tool command (anthropic-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.claude/settings.json``
@@ -79,6 +100,14 @@ class AnthropicCLI(CLIAdapter):
         # before launch; this object holds only the data structure + the env keys
         # the gateway must set -- no daemon is started here.
         self.pre_tool_use_hook_config: dict[str, Any] = _pre_tool_use_hook_config()
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
+        # Per-run governance attribution for the delegated-observed receipts
+        # (parity item C). ``run()`` sets the honest value from the gating posture
+        # before the stream starts; the conservative default is the ungated
+        # ``"bypass"`` (never falsely ``operator``).
+        self._decided_by: ReceiptDecidedBy = "bypass"
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -147,6 +176,80 @@ class AnthropicCLI(CLIAdapter):
         if flushed is not None:
             yield flushed
 
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited claude core, yielding the NEW TYPED event sequence.
+
+        This OVERRIDES the ``CLIAdapter`` template (build_command -> spawn ->
+        parse_stream): the live claude run is executed + persisted by
+        ``run_claude_code_core`` (the core spawns the subprocess), NOT by this
+        adapter's ``spawn``. ``run()`` only re-shapes EMISSION -- it is the typed
+        counterpart of ``legacy_runs._legacy_claude_code_run``, deriving NEW typed
+        events from the SAME ``ClaudeCoreResult`` the legacy layer derives OLD
+        events from.
+
+        Sequence:
+          1. The core streams each native claude line to an injected sink; the
+             sink maps it through THIS adapter's ``map_native_event`` (+ the
+             per-run ``Coalescer``), so assistant-text snapshots coalesce and
+             tool / approval / receipt kinds become typed events. Those typed
+             native events are buffered (the sink is push; ``run`` is a
+             generator) and yielded first, followed by the single coalesced
+             ``assistant_text``.
+          2. After the core returns, the framing events (``run.started`` /
+             per-receipt ``receipt.created`` with ``execution=delegated-observed``
+             / ``run.completed``) are derived from the result and yielded.
+
+        ``build_command`` / ``spawn`` / ``parse_stream`` are retained as the
+        abstract CLI surface (still exercised by the Phase-4 fixture tests) but
+        are NOT on this live path. This ``run()`` IS the live ``execute_prompt``
+        path; the legacy claude-code path is the ``CRAIK_BACKEND_LEGACY_RUN=1``
+        fallback.
+        """
+        from craik.runtime.backend.adapters.audited_core import (
+            claude_framing_events,
+            cli_observed_decided_by,
+            run_claude_code_core,
+            typed_claude_stream_sink,
+        )
+
+        # Parity item C (Task 5.7): the receipt governance attribution is honest
+        # to whether this run was actually gated. ``map_native_event`` (the
+        # per-line ``result`` receipt) and the framing receipts both read it; set
+        # it for the whole run BEFORE the core streams a single line.
+        self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
+        self._coalescer = Coalescer()
+        native_events: list[BackendEvent] = []
+        sink = typed_claude_stream_sink(
+            map_native=self.map_native_event,
+            coalescer=self._coalescer,
+            sink=native_events.append,
+        )
+        core = run_claude_code_core(
+            prompt=ctx.prompt,
+            # The ORIGINAL env (possibly None), threaded like the legacy path,
+            # with the live-gating overlay merged OVER it WHEN a bridge is active
+            # (Task 5.6 seam). ``hook_env`` is ``None`` pre-cutover, so this is the
+            # unchanged original env until the gateway sets it in Task 5.7.
+            env=_merge_hook_env(self.original_env, self.hook_env),
+            require_operator_approval=ctx.require_operator_approval,
+            stream=sink,
+        )
+        self.last_payload = core.payload
+        # Assemble the full typed sequence first so the gateway-event-history
+        # artifact (parity item C: the 5.5a review flagged AnthropicCLI omitted
+        # it) is persisted with the SAME events the run yields -- matching the
+        # provider (``run_provider_typed``) and generic-CLI (``run_cli_typed``)
+        # paths, which both persist it.
+        events: list[BackendEvent] = list(native_events)
+        flushed = self._coalescer.flush(None, source=_SOURCE)
+        if flushed is not None:
+            events.append(flushed)
+        events.extend(claude_framing_events(core, source=_SOURCE, decided_by=self._decided_by))
+        from craik.runtime.backend import session
+
+        session._persist_gateway_event_history(core.payload, events, env=self.original_env)
+        yield from events
+
     def _legacy_run(
         self,
         ctx: RunContext,
@@ -155,11 +258,12 @@ class AnthropicCLI(CLIAdapter):
         source: str,
         env: dict[str, str] | None,
     ) -> BackendPromptResult:
-        """Bridge to the legacy claude-code path (pre-cutover seam).
+        """Bridge to the legacy claude-code path (``CRAIK_BACKEND_LEGACY_RUN`` fallback).
 
-        ``execute_prompt`` still drives the live path through this bridge until
-        the Task 4.7 cutover replaces it with ``run``; keeping it here preserves
-        byte-identical behavior. ``source`` is accepted for signature symmetry
+        ``run`` is now the default live ``execute_prompt`` path; this bridge is
+        the opt-in fallback selected by ``CRAIK_BACKEND_LEGACY_RUN=1``, kept here
+        because it preserves byte-identical behavior. ``source`` is accepted for
+        signature symmetry
         with ``AnthropicAPI`` but is unused by the claude path. ``env`` is the
         ORIGINAL value (possibly None), threaded separately from ``ctx.env``.
         """
@@ -197,12 +301,12 @@ class AnthropicCLI(CLIAdapter):
         if kind == "permission_denial":
             return _map_permission_denial(native)
         if kind == "result":
-            return _map_result_receipt(native)
+            return _map_result_receipt(native, decided_by=self._decided_by)
         return None
 
 
 # The ``craik-hook`` console script (defined in pyproject, entry point
-# ``craik.runtime.backend.adapters.hook_bridge:craik_hook_main``) is the pre-tool
+# ``craik.runtime.hooks.client:craik_hook_main``) is the pre-tool
 # gating client the CLI invokes. The live spawn (PR B) resolves its absolute path
 # and the real bridge socket; the matcher ``*`` registers it for every tool.
 _HOOK_COMMAND = "craik-hook"
@@ -237,6 +341,23 @@ def _pre_tool_use_hook_config() -> dict[str, Any]:
     }
 
 
+def _merge_hook_env(
+    original_env: dict[str, str] | None,
+    hook_env: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Merge the live-gating ``hook_env`` overlay OVER ``original_env``.
+
+    Returns ``original_env`` unchanged when there is no overlay (the pre-cutover
+    case, so byte-identical to the legacy threading). When an overlay is present
+    it wins on key collision -- it is the authoritative bridge address. A ``None``
+    original env with an overlay becomes just the overlay (merged onto the
+    subprocess env by ``claude_code._claude_code_env``).
+    """
+    if not hook_env:
+        return original_env
+    return {**(original_env or {}), **hook_env}
+
+
 def _default_anthropic_profile() -> VendorProfile:
     return vendor_profile("anthropic")
 
@@ -263,22 +384,26 @@ def _map_permission_denial(native: dict[str, Any]) -> BackendEvent:
     )
 
 
-def _map_result_receipt(native: dict[str, Any]) -> BackendEvent:
+def _map_result_receipt(
+    native: dict[str, Any],
+    *,
+    decided_by: ReceiptDecidedBy = "bypass",
+) -> BackendEvent:
     # The Claude CLI ran the tool; craik authorized + OBSERVED it. Hence
     # ``execution="delegated-observed"``. ``purpose`` is a stable descriptor of
     # what the receipt attests (matching the canonical receipt shape); the
     # result text is informational and is NOT smuggled into the purpose field.
+    # ``decided_by`` is the REAL governance attribution threaded from the run's
+    # gating posture (parity item C): ``"operator"`` only when an operator
+    # actually decided (a gated run), else ``"bypass"`` (ungated / observe).
     return receipt_event(
         receipt_id="receipt_anthropic_cli_run",
         source=_SOURCE,
         purpose="execution",
         execution="delegated-observed",
-        # TODO(Phase 5): thread the real permission mode
-        # (ask/auto/acceptEdits/plan) from RunContext once the hook bridge
-        # carries it.
         mode="default",
         decision="allow",
-        decided_by="operator",
+        decided_by=decided_by,
     )
 
 

@@ -1,18 +1,20 @@
-"""Golden routing tests for ``execute_prompt`` dispatch through the adapter seam.
+"""Golden routing tests for ``execute_prompt`` dispatch through the typed run().
 
-CHECKPOINT 2 safety net: these tests snapshot the FULL event sequence (and key
-payload fields) produced by ``execute_prompt`` for both the provider path and
-the claude-code path. They are written against the pre-refactor code to capture
-the golden, then must continue to pass byte-identically (modulo the volatile
-``created_at`` field) after the if/else is replaced by adapter dispatch.
+CHECKPOINT-5 artifact (Task 5.7): ``execute_prompt`` now routes through each
+adapter's typed ``run()`` by DEFAULT. These snapshots assert the NEW typed event
+sequences (the legacy framing is gone; partials coalesce; receipts carry the
+differentiated governance fields and the vendor source token). The
+``CRAIK_BACKEND_LEGACY_RUN=1`` fallback test proves the OLD sequence is still
+reachable through the retained legacy path.
 
-The harness here mirrors ``tests/test_backend_gateway_session.py``:
+The diff legacy->typed (the maintainer's review artifact) is summarized in the
+Task 5.7 report.
+
+The harness mirrors ``tests/test_backend_gateway_session.py``:
 - ``_repo`` / ``_env`` reproduce the temp git repo + CRAIK_HOME used there.
-- The provider golden reuses the ``CRAIK_FIXTURE=1`` deterministic provider run
-  exercised by ``test_gateway_prompt_execution_emits_audited_events``.
-- The claude golden replicates EXACTLY the monkeypatch from
-  ``test_gateway_anthropic_marker_prompt_streams_typed_claude_events`` so the
-  claude path is deterministic without a real subprocess.
+- The provider golden reuses the ``CRAIK_FIXTURE=1`` deterministic provider run.
+- The claude golden replicates the deterministic claude-marker subprocess
+  monkeypatch so the claude path is deterministic without a real subprocess.
 """
 
 from __future__ import annotations
@@ -54,11 +56,7 @@ def _claude_cli_marker_profile() -> AuthProfile:
 
 
 def _normalize_events(events: list[BackendEvent]) -> list[dict[str, Any]]:
-    """Snapshot the full event sequence, stripping the volatile ``created_at``.
-
-    Every other field (``type``, ``source``, ``run_id``, ``task_id``, ``data``)
-    is preserved verbatim so the snapshot is byte-identical across the refactor.
-    """
+    """Snapshot the full event sequence, stripping the volatile ``created_at``."""
     snapshot: list[dict[str, Any]] = []
     for event in events:
         as_dict = event.as_dict()
@@ -69,11 +67,7 @@ def _normalize_events(events: list[BackendEvent]) -> list[dict[str, Any]]:
 
 
 def _install_claude_marker_subprocess(monkeypatch) -> None:
-    """Replicate the deterministic claude-code subprocess monkeypatch.
-
-    Mirrors ``test_gateway_anthropic_marker_prompt_streams_typed_claude_events``
-    verbatim so the claude path runs without a real ``claude`` binary.
-    """
+    """Replicate the deterministic claude-code subprocess monkeypatch."""
     original_popen = subprocess.Popen
 
     monkeypatch.setattr(
@@ -126,136 +120,20 @@ def _install_claude_marker_subprocess(monkeypatch) -> None:
     )
 
 
-# --- Golden snapshots --------------------------------------------------------
-# These literals were captured from the pre-refactor code by running each test
-# once and pasting the normalized event sequence. After the refactor they must
-# match byte-identically (modulo created_at, which _normalize_events strips).
+# --- NEW typed golden snapshots (Task 5.7 cutover) ---------------------------
 
 
-def test_provider_path_event_sequence_is_golden(tmp_path: Path, monkeypatch) -> None:
+def test_provider_path_typed_event_sequence_is_golden(tmp_path: Path, monkeypatch) -> None:
+    """The provider path emits the NEW typed sequence under the default run()."""
     _repo(tmp_path, monkeypatch)
     env = {**_env(tmp_path), "CRAIK_FIXTURE": "1"}
 
     result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
     snapshot = _normalize_events(result.events)
+    types = [event["type"] for event in snapshot]
 
-    expected = [
-        {
-            "type": "prompt.submitted",
-            "source": "gateway",
-            "run_id": None,
-            "task_id": None,
-            "data": {"source": "tui", "prompt_preview": "Upgrade Craik Docs"},
-        },
-        {
-            "type": "model.selected",
-            "source": "gateway",
-            "run_id": None,
-            "task_id": "task_upgrade_craik_docs",
-            "data": {
-                "backend": "provider",
-                "provider_id": "provider_openai",
-                "provider_family": "openai",
-                "model": None,
-                "display_name": "OpenAI Provider",
-                "profile": None,
-                "live_enabled": False,
-            },
-        },
-        {
-            "type": "run.working",
-            "source": "gateway",
-            "run_id": None,
-            "task_id": "task_upgrade_craik_docs",
-            "data": {
-                "backend": "provider",
-                "provider_id": "provider_openai",
-                "provider_family": "openai",
-                "model": None,
-                "phase": "thinking",
-            },
-        },
-        {
-            "type": "run.progress",
-            "source": "gateway",
-            "run_id": None,
-            "task_id": "task_upgrade_craik_docs",
-            "data": {
-                "provider_id": "provider_openai",
-                "provider_family": "openai",
-                "model": None,
-                "message": "OpenAI Provider is preparing an audited provider run.",
-            },
-        },
-    ]
-
-    # The full prefix (deterministic, payload-stable) must match exactly.
-    assert snapshot[: len(expected)] == expected
-
-    # Tail invariants: structure and ordering of the remaining events. The
-    # run_id / receipt ids are fixture-stable; assert the type sequence and key
-    # fields rather than re-pasting volatile ids.
-    types = [e["type"] for e in snapshot]
-    assert types[0] == "prompt.submitted"
-    assert types[-1] == "run.completed"
-    assert types == [
-        "prompt.submitted",
-        "model.selected",
-        "run.working",
-        "run.progress",
-        "run.started",
-        *[t for t in types if t == "tool.used"],
-        "run.progress",
-        *[t for t in types if t == "receipt.created"],
-        "run.output",
-        "run.completed",
-    ]
-
-    run_started = next(e for e in snapshot if e["type"] == "run.started")
-    run_id = run_started["run_id"]
-    assert run_id is not None
-    # Every post-start event carries the SAME run_id + task_id + provider fields.
-    for event in snapshot:
-        if event["type"] in {
-            "run.started",
-            "tool.used",
-            "receipt.created",
-            "run.output",
-            "run.completed",
-        }:
-            assert event["run_id"] == run_id
-            assert event["task_id"] == "task_upgrade_craik_docs"
-            assert event["data"]["provider_id"] == "provider_openai"
-            assert event["data"]["provider_family"] == "openai"
-
-    completed = snapshot[-1]
-    assert completed["data"]["status"] in {"completed", "blocked", "failed", "interrupted"}
-
-    # Key payload fields.
-    assert result.payload["task"]["id"] == "task_upgrade_craik_docs"
-    assert result.payload["run"]["task_id"] == "task_upgrade_craik_docs"
-    assert result.payload["run"]["id"] == run_id
-
-
-def test_claude_code_path_event_sequence_is_golden(tmp_path: Path, monkeypatch) -> None:
-    _repo(tmp_path, monkeypatch)
-    env = _env(tmp_path)
-    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
-    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
-    _install_claude_marker_subprocess(monkeypatch)
-
-    # auto + marker -> claude path
-    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
-    snapshot = _normalize_events(result.events)
-
-    types = [e["type"] for e in snapshot]
-    assert types[0] == "prompt.submitted"
-    # The fixed framing emitted by the claude branch around the streamed events.
-    assert types[1] == "model.selected"
-    assert types[2] == "run.working"
-    assert types[-1] == "run.completed"
-
-    # Framing events have the exact fixed payloads of the claude branch.
+    # The session-level prompt.submitted is still emitted by execute_prompt
+    # itself; everything after is the typed run() sequence.
     assert snapshot[0] == {
         "type": "prompt.submitted",
         "source": "gateway",
@@ -263,6 +141,147 @@ def test_claude_code_path_event_sequence_is_golden(tmp_path: Path, monkeypatch) 
         "task_id": None,
         "data": {"source": "tui", "prompt_preview": "Upgrade Craik Docs"},
     }
+    # Legacy framing chatter is GONE.
+    assert "model.selected" not in types
+    assert "run.working" not in types
+    # Typed sequence shape: optional assistant_text, tool.used*, run.started,
+    # receipt.created*, run.output, run.completed.
+    assert types[-1] == "run.completed"
+    assert types == [
+        "prompt.submitted",
+        *[t for t in types if t == "assistant_text"],
+        *[t for t in types if t == "tool.used"],
+        "run.started",
+        *[t for t in types if t == "receipt.created"],
+        "run.output",
+        "run.completed",
+    ]
+    # The default fixture env resolves the openai provider family -> openai-api.
+    non_session = [e for e in snapshot if e["type"] != "prompt.submitted"]
+    assert all(e["source"] == "openai-api" for e in non_session)
+    # Receipts carry the differentiated governance fields (craik execution).
+    receipts = [e for e in snapshot if e["type"] == "receipt.created"]
+    assert receipts
+    for receipt in receipts:
+        assert receipt["data"]["execution"] == "craik"
+        assert receipt["data"]["decided_by"] == "operator"
+        assert receipt["data"]["decision"] == "allow"
+        assert receipt["data"]["purpose"] == "execution"
+    # Payload contract holds.
+    run_started = next(e for e in snapshot if e["type"] == "run.started")
+    run_id = run_started["run_id"]
+    assert run_id is not None
+    assert result.payload["task"]["id"] == "task_upgrade_craik_docs"
+    assert result.payload["run"]["id"] == run_id
+    completed = snapshot[-1]
+    assert completed["data"]["status"] in {"completed", "blocked", "failed", "interrupted"}
+
+
+def test_claude_code_path_typed_event_sequence_is_golden(tmp_path: Path, monkeypatch) -> None:
+    """auto + marker routes to the typed AnthropicCLI run() (no legacy framing)."""
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    _install_claude_marker_subprocess(monkeypatch)
+
+    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
+    snapshot = _normalize_events(result.events)
+    types = [event["type"] for event in snapshot]
+
+    assert snapshot[0]["type"] == "prompt.submitted"
+    # Legacy claude framing is GONE: no model.selected / run.working / run.event /
+    # file.changed / approval.requested chatter.
+    for legacy_type in ("model.selected", "run.working", "run.event", "file.changed"):
+        assert legacy_type not in types
+    # Typed claude sequence: tool.used*, then framing (run.started + receipts +
+    # run.completed). The native result line maps to one delegated-observed
+    # receipt; framing adds the per-id receipts.
+    assert "tool.used" in types
+    assert "run.started" in types
+    assert types[-1] == "run.completed"
+    tool_events = [e for e in snapshot if e["type"] == "tool.used"]
+    assert [e["data"]["tool"] for e in tool_events] == ["Read", "Bash", "Edit"]
+    assert all(e["source"] == "anthropic-cli" for e in tool_events)
+    # auto + marker is UNgated (require_operator_approval defaults to False), so
+    # the delegated-observed receipts attribute "bypass", never "operator"
+    # (parity item C).
+    receipts = [e for e in snapshot if e["type"] == "receipt.created"]
+    assert receipts
+    for receipt in receipts:
+        assert receipt["data"]["execution"] == "delegated-observed"
+        assert receipt["data"]["decided_by"] == "bypass"
+    assert result.payload["backend"] == "claude-code"
+
+
+def test_claude_code_explicit_backend_attributes_operator(tmp_path: Path, monkeypatch) -> None:
+    """``backend="claude-code"`` is a GATED run -> operator-attributed receipts.
+
+    The explicit selector defaults ``require_operator_approval`` to True (today's
+    rule), so an operator decision occurs and the receipts honestly attribute
+    ``operator`` -- contrast the ungated auto+marker case above.
+    """
+    _repo(tmp_path, monkeypatch)
+    env = {**_env(tmp_path), "CRAIK_CLAUDE_CODE_RUN_APPROVED": "1"}
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    _install_claude_marker_subprocess(monkeypatch)
+
+    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui", backend="claude-code")
+    snapshot = _normalize_events(result.events)
+
+    assert result.payload["backend"] == "claude-code"
+    receipts = [e for e in snapshot if e["type"] == "receipt.created"]
+    assert receipts
+    for receipt in receipts:
+        assert receipt["data"]["decided_by"] == "operator"
+    tool_events = [e for e in snapshot if e["type"] == "tool.used"]
+    assert [e["data"]["tool"] for e in tool_events] == ["Read", "Bash", "Edit"]
+
+
+# --- Legacy fallback: the OLD sequence is still reachable --------------------
+
+
+def test_legacy_run_flag_restores_old_provider_sequence(tmp_path: Path, monkeypatch) -> None:
+    """``CRAIK_BACKEND_LEGACY_RUN=1`` routes back to the legacy provider path.
+
+    Proves the retained legacy fallback: the OLD event sequence (with
+    ``model.selected`` / ``run.working`` / ``run.progress`` framing and the
+    ``gateway`` source) holds when the flag is set.
+    """
+    _repo(tmp_path, monkeypatch)
+    env = {**_env(tmp_path), "CRAIK_FIXTURE": "1", "CRAIK_BACKEND_LEGACY_RUN": "1"}
+
+    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
+    snapshot = _normalize_events(result.events)
+    types = [event["type"] for event in snapshot]
+
+    # The legacy framing chatter is BACK.
+    assert types[:4] == ["prompt.submitted", "model.selected", "run.working", "run.progress"]
+    assert types[-1] == "run.completed"
+    # Legacy events stamp the "gateway" source (not the vendor token).
+    assert all(event["source"] == "gateway" for event in snapshot)
+    # Legacy provider receipts carry provider_id/provider_family, NOT the typed
+    # differentiated governance fields.
+    receipts = [e for e in snapshot if e["type"] == "receipt.created"]
+    assert receipts
+    for receipt in receipts:
+        assert receipt["data"]["provider_id"] == "provider_openai"
+        assert "execution" not in receipt["data"]
+    assert result.payload["task"]["id"] == "task_upgrade_craik_docs"
+
+
+def test_legacy_run_flag_restores_old_claude_sequence(tmp_path: Path, monkeypatch) -> None:
+    """``CRAIK_BACKEND_LEGACY_RUN=1`` restores the legacy claude framing too."""
+    _repo(tmp_path, monkeypatch)
+    env = {**_env(tmp_path), "CRAIK_BACKEND_LEGACY_RUN": "1"}
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    _install_claude_marker_subprocess(monkeypatch)
+
+    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
+    snapshot = _normalize_events(result.events)
+    types = [event["type"] for event in snapshot]
+
     assert snapshot[1] == {
         "type": "model.selected",
         "source": "gateway",
@@ -277,56 +296,9 @@ def test_claude_code_path_event_sequence_is_golden(tmp_path: Path, monkeypatch) 
         "task_id": None,
         "data": {"backend": "claude-code", "phase": "starting"},
     }
-
-    # The streamed claude events appear in-between, in stable order.
-    assert "tool.used" in types
+    # Legacy claude stream surfaces the catch-all run.event + file.changed +
+    # approval.requested events that the typed path drops.
+    assert "run.event" in types
     assert "file.changed" in types
     assert "approval.requested" in types
-    assert "run.event" in types
-    assert "run.started" in types
-    assert "run.completed" in types
-
-    tool_events = [e for e in snapshot if e["type"] == "tool.used"]
-    assert [e["data"]["tool"] for e in tool_events] == ["Read", "Bash", "Edit"]
-
-    completed = snapshot[-1]
-    assert completed["data"]["backend"] == "claude-code"
-
     assert result.payload["backend"] == "claude-code"
-
-    # Capture the full normalized snapshot to a module attribute so a second
-    # explicit-backend run can be compared against it byte-for-byte.
-    test_claude_code_path_event_sequence_is_golden.snapshot = snapshot  # type: ignore[attr-defined]
-
-
-def test_claude_code_explicit_backend_matches_auto_marker(tmp_path: Path, monkeypatch) -> None:
-    """``backend="claude-code"`` must route to the same claude path as auto+marker.
-
-    Reproduces the claude golden with the explicit backend selector. The marker
-    profile is NOT installed here on purpose -- the explicit ``backend`` value
-    alone must select the claude path (today's ``backend == "claude-code"``
-    branch). approval_required differs (explicit claude-code -> True), but that
-    only affects the claude run's internals, not the framing event sequence.
-    """
-    _repo(tmp_path, monkeypatch)
-    # Explicit claude-code -> approval_required defaults to True; supply the
-    # audited non-interactive approval marker so the run proceeds (this is the
-    # documented escape hatch, not a behavior change).
-    env = {**_env(tmp_path), "CRAIK_CLAUDE_CODE_RUN_APPROVED": "1"}
-    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
-    _install_claude_marker_subprocess(monkeypatch)
-
-    result = execute_prompt("Upgrade Craik Docs", env=env, source="tui", backend="claude-code")
-    snapshot = _normalize_events(result.events)
-
-    types = [e["type"] for e in snapshot]
-    assert types[0] == "prompt.submitted"
-    assert types[1] == "model.selected"
-    assert types[2] == "run.working"
-    assert types[-1] == "run.completed"
-    assert snapshot[1]["data"] == {"backend": "claude-code"}
-    assert snapshot[2]["data"] == {"backend": "claude-code", "phase": "starting"}
-    assert result.payload["backend"] == "claude-code"
-
-    tool_events = [e for e in snapshot if e["type"] == "tool.used"]
-    assert [e["data"]["tool"] for e in tool_events] == ["Read", "Bash", "Edit"]

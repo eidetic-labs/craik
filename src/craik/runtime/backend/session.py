@@ -90,33 +90,141 @@ def execute_prompt(
         if require_operator_approval is not None
         else backend == "claude-code"
     )
-    # Map the legacy `BackendPreference` to a canonical adapter id. "auto" stays
-    # "auto" and is resolved by `select_adapter` via the SAME anthropic-marker
-    # rule the old branch used, so routing is preserved:
+    # Map the legacy `BackendPreference` to a canonical adapter id, AND accept the
+    # six canonical ids directly. "auto" stays "auto" and is resolved by
+    # `select_adapter` via the SAME anthropic-marker rule the old branch used, so
+    # routing is preserved:
     #   claude-code      -> anthropic-cli (claude path)
+    #   provider         -> anthropic-api (provider path)
     #   auto + marker    -> anthropic-cli (claude path)  [resolved in select_adapter]
     #   auto, no marker  -> anthropic-api (provider path)
-    #   provider         -> anthropic-api (provider path)
-    identifier = {"claude-code": "anthropic-cli", "provider": "anthropic-api"}.get(backend, backend)
+    #   <vendor>-<surface> -> passed through unchanged (id exposure)
+    #
+    # The generic provider preference (`provider`, and `auto` with no anthropic
+    # marker) does NOT pin a vendor: the active model/env decides the provider
+    # family at runtime. Resolve it to the matching `<family>-api` typed adapter
+    # (openai/anthropic/google) so the typed `run()`'s vendor guard agrees with
+    # the family the provider core resolves. Families WITHOUT a typed vendor
+    # adapter (e.g. `chat_completions` for local / OpenAI-compatible providers)
+    # have no run() to cut over to; they route to the legacy provider path below.
     from craik.runtime.backend.adapters.base import RunContext
     from craik.runtime.backend.adapters.registry import select_adapter
 
-    adapter = cast(_LegacyRunAdapter, select_adapter(identifier, env))
+    # Resolve whether this is the claude path (explicit `claude-code`, or `auto` +
+    # the anthropic marker -- the SAME rule `select_adapter("auto")` used).
+    is_claude_path = backend == "claude-code" or (
+        backend == "auto" and _anthropic_marker_uses_claude_code(env)
+    )
+    legacy_run = _legacy_run_enabled(env)
+    legacy_provider_family_run = False
+
+    if is_claude_path:
+        identifier = "anthropic-cli"
+    elif backend in {"provider", "auto"}:
+        # Generic provider preference: it does NOT pin a vendor (the active
+        # model/env decides the provider family at runtime). Under the LEGACY
+        # flag, route to the `anthropic-api` legacy bridge (the only id carrying
+        # `_legacy_run`, which forwards to the env-resolved `_legacy_provider_run`).
+        # Otherwise route to the typed adapter matching the ACTIVE provider
+        # family; families with NO typed vendor adapter (e.g. `chat_completions`
+        # for local / OpenAI-compatible providers) fall back to the legacy
+        # provider path below.
+        if legacy_run:
+            identifier = "anthropic-api"
+        else:
+            provider_api_id = _resolve_provider_api_id(env)
+            if provider_api_id is None:
+                legacy_provider_family_run = True
+                identifier = "anthropic-api"
+            else:
+                identifier = provider_api_id
+    else:
+        # A canonical `<vendor>-<surface>` id passed straight through (id
+        # exposure); `select_adapter` validates it.
+        identifier = backend
+
+    selected = select_adapter(identifier, env, prompt_source=source)
     ctx = RunContext(
         prompt=normalized_prompt,
         # `RunContext.env` is non-optional, so coerce None -> {} for protocol
-        # correctness. The legacy helpers do NOT read from `ctx.env`: the
-        # ORIGINAL `env` (possibly None) is threaded separately via the `env=`
-        # argument below so behavior stays byte-identical (e.g.
+        # correctness. The cores do NOT read from `ctx.env`: the ORIGINAL `env`
+        # (possibly None) is threaded separately (injected as the adapter's
+        # `original_env` by `select_adapter`, and to the legacy helpers via the
+        # `env=` argument) so behavior stays identical (e.g.
         # `LocalStore.from_env(None)` vs `from_env({})`).
         env=env or {},
         emit=emit,
-        # Legacy paths do not gate via `decide`; a placeholder satisfies the
-        # protocol without affecting either legacy branch.
+        # Live CLI gating threads its `decide` through the hook bridge (the
+        # gateway wires `hook_env`); the in-process placeholder satisfies the
+        # protocol for paths that do not gate via `ctx.decide` (the provider /
+        # claude-observe paths and the legacy branch).
         decide=lambda _request: "allow",
         require_operator_approval=approval_required,
     )
-    return adapter._legacy_run(ctx, events=events, source=source, env=env)
+    # Legacy run path. Reached two ways, and ONLY for an adapter that carries a
+    # `_legacy_run` bridge (the anthropic ids -- the only ids that had a legacy
+    # `execute_prompt` branch pre-cutover):
+    #   1. `CRAIK_BACKEND_LEGACY_RUN=1` -- the explicit, predictable maintainer
+    #      opt-in to the pre-cutover `_legacy_run` path (a real run() failure is
+    #      NOT auto-swallowed; this is the deliberate fallback toggle). For the
+    #      generic provider preference this resolved `identifier` to `anthropic-api`
+    #      above so the bridge is reachable; a canonical non-anthropic id passed
+    #      directly has no legacy branch, so the flag is a no-op there (typed run).
+    #   2. `legacy_provider_family_run` -- the active provider family has NO typed
+    #      vendor adapter to run() (e.g. `chat_completions` for local /
+    #      OpenAI-compatible providers); the anthropic-api `_legacy_run` bridge
+    #      forwards to `_legacy_provider_run` (the env-resolved provider path).
+    if (legacy_run or legacy_provider_family_run) and hasattr(selected, "_legacy_run"):
+        legacy_adapter = cast(_LegacyRunAdapter, selected)
+        return legacy_adapter._legacy_run(ctx, events=events, source=source, env=env)
+
+    # Default path (Task 5.7 cutover): consume the adapter's typed `run()`,
+    # appending each event to `events` and streaming it via `emit`, then build
+    # the `BackendPromptResult` from the audited payload the run captured.
+    for event in selected.run(ctx):
+        emit(event)
+    payload = getattr(selected, "last_payload", None)
+    if not isinstance(payload, dict):
+        # A run() that completed without exposing a payload cannot satisfy the
+        # `BackendPromptResult` contract; surface it rather than return an empty
+        # shell that downstream consumers would silently mis-read.
+        raise RuntimeError(
+            f"adapter {identifier!r} run() did not expose an audited payload; "
+            "cannot build BackendPromptResult"
+        )
+    return BackendPromptResult(payload=payload, events=events)
+
+
+def _legacy_run_enabled(env: dict[str, str] | None) -> bool:
+    """Return whether `CRAIK_BACKEND_LEGACY_RUN=1` selects the legacy run path."""
+    values = os.environ if env is None else env
+    return values.get("CRAIK_BACKEND_LEGACY_RUN") == "1"
+
+
+def _resolve_provider_api_id(env: dict[str, str] | None) -> str | None:
+    """Resolve the active provider family to its `<family>-api` typed adapter id.
+
+    The generic provider preference does not pin a vendor; the active model/env
+    decides the family. Returns the matching canonical `<vendor>-api` id for the
+    three families that HAVE a typed vendor adapter (`anthropic` / `openai` /
+    `google`), or ``None`` for any other family (e.g. `chat_completions` for local
+    / OpenAI-compatible providers, which has no typed run() and must use the
+    legacy provider path). The resolution mirrors `run_provider_core`'s own family
+    resolution so the selected adapter agrees with the run()'s vendor guard.
+    """
+    from craik.runtime.backend.provider_events import provider_family
+    from craik.runtime.providers.provider_transport import normalize_provider_family
+
+    provider_id, _model = active_provider_and_model(env)
+    family = provider_family(provider_id)
+    if family is None:
+        return None
+    canonical = normalize_provider_family(family)
+    return {
+        "anthropic": "anthropic-api",
+        "openai": "openai-api",
+        "google": "google-api",
+    }.get(canonical)
 
 
 def _persist_gateway_event_history(

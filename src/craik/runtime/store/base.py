@@ -101,6 +101,7 @@ from craik.runtime.store_kinds import CONTRACT_KINDS
 
 DATABASE_NAME = "craik.sqlite3"
 
+
 class LocalStoreError(RuntimeError):
     """Base error for local store failures."""
 
@@ -124,28 +125,40 @@ class UnknownContractError(LocalStoreError):
     """Raised when a contract is not part of the local store schema."""
 
 
-
-
 class LocalStoreCore:
     """SQLite persistence for v0.1 runtime state."""
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, *, same_thread: bool = True) -> None:
         self.database_path = database_path
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.database_path)
+        # ``same_thread=False`` opens a cross-thread-tolerant connection
+        # (``check_same_thread=False``) for the ONE caller that legitimately needs
+        # it: the hook-bridge gateway, whose ``serve_forever`` accept loop runs the
+        # ``decide`` callback on a DIFFERENT thread than the one that opened the
+        # handle (Task 5.7 item B). SQLite is single-thread-bound by default, so
+        # the gated CLI gate would otherwise raise a thread-affinity error and
+        # fail closed. Access to that bridge handle is serialized by the single
+        # accept loop, so dropping the check is safe there; every other caller
+        # keeps the default single-thread guard.
+        self._connection = sqlite3.connect(self.database_path, check_same_thread=same_thread)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._transaction_depth = 0
 
     @classmethod
-    def from_paths(cls, paths: CraikPaths) -> Self:
+    def from_paths(cls, paths: CraikPaths, *, same_thread: bool = True) -> Self:
         """Open the default local store under a resolved Craik home."""
-        return cls(paths.state / DATABASE_NAME)
+        return cls(paths.state / DATABASE_NAME, same_thread=same_thread)
 
     @classmethod
-    def from_env(cls, env: dict[str, str] | None = None) -> Self:
-        """Ensure Craik home exists and open its default local store."""
-        return cls.from_paths(ensure_craik_home(env))
+    def from_env(cls, env: dict[str, str] | None = None, *, same_thread: bool = True) -> Self:
+        """Ensure Craik home exists and open its default local store.
+
+        ``same_thread=False`` yields a cross-thread-tolerant handle for the
+        hook-bridge gateway only (see :meth:`__init__`); the default keeps the
+        single-thread sqlite guard for every ordinary caller.
+        """
+        return cls.from_paths(ensure_craik_home(env), same_thread=same_thread)
 
     def close(self) -> None:
         """Close the underlying SQLite connection."""
@@ -182,8 +195,7 @@ class LocalStoreCore:
             message = f"cannot read local store migration history: {error}"
             raise LocalStoreCorruptError(message) from error
         return [
-            {"version": int(row["version"]), "applied_at": str(row["applied_at"])}
-            for row in rows
+            {"version": int(row["version"]), "applied_at": str(row["applied_at"])} for row in rows
         ]
 
     @contextmanager
@@ -201,9 +213,7 @@ class LocalStoreCore:
                 self._connection.execute(f"RELEASE SAVEPOINT {name}")
                 if not isinstance(error, sqlite3.DatabaseError):
                     raise
-                raise LocalStoreCorruptError(
-                    f"local store transaction failed: {error}"
-                ) from error
+                raise LocalStoreCorruptError(f"local store transaction failed: {error}") from error
             finally:
                 self._transaction_depth -= 1
             return
@@ -287,6 +297,8 @@ class LocalStoreCore:
         except sqlite3.DatabaseError as error:
             raise LocalStoreCorruptError(f"cannot list contracts {schema_name}: {error}") from error
         return [_parse_payload(model, str(row["payload_json"])) for row in rows]
+
+
 def _parse_payload(model: ContractModel, payload_json: str) -> BaseModel:
     try:
         return model.model_validate_json(payload_json)
@@ -327,6 +339,7 @@ def _cast_required[T: BaseModel](model: type[T], value: BaseModel) -> T:
     if not isinstance(value, model):
         raise TypeError(f"expected {model.__name__}, got {type(value).__name__}")
     return value
+
 
 __all__ = [
     "json",

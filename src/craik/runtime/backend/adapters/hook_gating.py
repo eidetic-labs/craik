@@ -17,15 +17,16 @@ free of the gating / approvals stack -- preserving the "tiny client, heavy
 gateway" split. The heavy ``events`` / ``approvals`` imports are kept
 FUNCTION-LOCAL for the same reason.
 
-Composability, not live wiring (scope: PR A): this delivers a tested unit. It
-does NOT start the bridge in the live ``execute_prompt`` loop and does NOT touch
-any adapter ``spawn``; that cutover is PR B. The ``resolve_lookup`` seam keeps
-it testable without the live run loop: a ``(approval_id) -> "allow" | "deny" |
-None`` probe over the approval store's resolution state. The operator resolves
-over JSONL via ``approval.decide`` -> ``decide_approval`` (records the delegation
-``status="resolved"`` with a ``resolution`` ``"approved: ..."`` / ``"denied:
-..."``); PR B supplies a ``resolve_lookup`` that reads that state, and tests
-inject a pre-queued decision through the same seam.
+Live wiring (PR B landed): the bridge IS started in the live ``execute_prompt``
+loop -- ``gateway.cli_gating_loop.gated_cli_run_session`` runs a gated CLI
+adapter off the stdin thread inside a ``hook_bridge_session``. The
+``resolve_lookup`` seam also keeps this unit testable without the live run loop:
+a ``(approval_id) -> "allow" | "deny" | None`` probe over the approval store's
+resolution state. The operator resolves over JSONL via ``approval.decide`` ->
+``decide_approval`` (records the delegation ``status="resolved"`` with a
+``resolution`` ``"approved: ..."`` / ``"denied: ..."``); the live driver supplies
+a ``resolve_lookup`` that reads that state, and tests inject a pre-queued
+decision through the same seam.
 
 Fail-closed: a timeout with no resolution, or ANY exception from
 ``open_approval_request`` / ``resolve_lookup`` / ``emit``, resolves to **deny**
@@ -34,12 +35,27 @@ Fail-closed: a timeout with no resolution, or ANY exception from
 
 from __future__ import annotations
 
+import shutil
+import tempfile
+import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from craik.runtime.backend.adapters.hook_bridge import _ALLOW, _DENY
+from craik.runtime.backend.adapters.hook_bridge import (
+    SOCKET_ENV,
+    VENDOR_ENV,
+    HookBridgeServer,
+)
+
+# The transport sentinels are DEFINED in the thin client (their canonical home);
+# import them from there rather than via ``hook_bridge``'s re-export so the
+# private names resolve cleanly (``hook_bridge`` does not list them in
+# ``__all__``). Matches the documented canonical-source split.
+from craik.runtime.hooks.client import _ALLOW, _DENY
 
 if TYPE_CHECKING:
     from craik.runtime.backend.events import BackendEvent
@@ -54,6 +70,24 @@ _GATE_RETRY_PATH = "approve in the TUI modal, then the CLI retries the blocked t
 
 # Resolution poll cadence; the wait is bounded by the caller's ``timeout``.
 _POLL_INTERVAL_SECONDS = 0.01
+
+# The two ``resolution``-prefix tokens ``decide_approval`` writes (see
+# ``reviewing.approvals.decide_approval``: ``resolution = f"{decision}: ..."``
+# with ``decision`` one of ``"approved"`` / ``"denied"``). They survive
+# ``sanitize_runtime_text`` unchanged (no control chars / backticks / ``##``), so
+# the store-reading ``resolve_lookup`` keys off them.
+_RESOLVED_APPROVED_PREFIX = "approved"
+_RESOLVED_DENIED_PREFIX = "denied"
+
+# Default bridge-session shutdown join bound: the background accept loop returns
+# promptly once ``close()`` drops the server socket, but the join is bounded so a
+# wedged handler can never hang gateway teardown.
+_BRIDGE_JOIN_SECONDS = 5.0
+
+# Hook-bridge operator-decision timeout default for a live gate. Well under the
+# CLI hook's own documented 600 s ceiling so a stuck operator/bridge fails closed
+# before the CLI's timeout fires (see ``hooks.client._MAX_HOOK_TIMEOUT_SECONDS``).
+_DEFAULT_GATE_TIMEOUT_SECONDS = 300.0
 
 
 def make_operator_decide(
@@ -113,6 +147,121 @@ def make_operator_decide(
         return _wait_for_operator_decision(approval_id, resolve_lookup, timeout)
 
     return decide
+
+
+def make_store_resolve_lookup(store: ApprovalStore) -> Callable[[str], str | None]:
+    """Build the real ``resolve_lookup`` over an approval store's resolution state.
+
+    Returns ``(approval_id) -> "allow" | "deny" | None``: it reads the delegation
+    from ``store`` and maps its recorded resolution to a bridge decision, closing
+    the live loop the gateway already drives -- operator ``approval.decide`` (over
+    JSONL) -> ``approvals_decide_result`` -> ``decide_approval`` records the
+    delegation ``status="resolved"`` with a ``resolution`` of ``"approved: ..."``
+    / ``"denied: ..."``; this lookup parses that exact prefix.
+
+    Returns ``None`` (still pending / unknown) when the delegation is missing, is
+    not an ``approval``, is not yet ``resolved``, or carries an unrecognized
+    resolution -- so :func:`_wait_for_operator_decision` keeps blocking rather than
+    treating an indeterminate state as a decision. Any store error surfaces as a
+    raised exception, which the caller's poll loop already treats as fail-closed
+    ``deny``.
+    """
+
+    def resolve_lookup(approval_id: str) -> str | None:
+        delegation = store.get_human_delegation(approval_id)
+        if delegation is None or delegation.kind != "approval":
+            return None
+        if delegation.status != "resolved":
+            return None
+        resolution = delegation.resolution or ""
+        if resolution.startswith(_RESOLVED_APPROVED_PREFIX):
+            return _ALLOW
+        if resolution.startswith(_RESOLVED_DENIED_PREFIX):
+            return _DENY
+        return None
+
+    return resolve_lookup
+
+
+@contextmanager
+def hook_bridge_session(
+    *,
+    store: ApprovalStore,
+    emit: Callable[[BackendEvent], None],
+    env: dict[str, str] | None = None,
+    timeout: float = _DEFAULT_GATE_TIMEOUT_SECONDS,
+    vendor: str = "anthropic",
+) -> Iterator[tuple[str, dict[str, str]]]:
+    """Run a live hook-bridge for one gated CLI run; yield ``(socket_path, overlay)``.
+
+    Starts a :class:`HookBridgeServer` bound to a real operator ``decide``
+    (``make_operator_decide`` over ``make_store_resolve_lookup(store)``) on a
+    background daemon thread, on a per-run Unix socket under a private temp dir,
+    and yields the socket path plus the env overlay the CLI spawn MUST merge::
+
+        {CRAIK_HOOK_SOCKET: <socket_path>, CRAIK_HOOK_VENDOR: <vendor>}
+
+    On exit (normal / interrupt / timeout / exception) it stops the server (drops
+    the listening socket, ending the accept loop), joins the background thread
+    bounded by :data:`_BRIDGE_JOIN_SECONDS`, and unlinks the socket + its temp
+    dir. Cleanup never converts the fail-closed default: a hook firing during or
+    after teardown finds no socket and the client resolves that to ``deny``
+    (matching the bridge/decide contract); the operator-decision timeout is
+    likewise a ``deny`` inside ``decide``.
+
+    .. note:: **Concurrency requirement (live wiring).** This helper only STARTS
+       the bridge; it does not run the adapter. The live gate is two concurrent
+       loops sharing this ``store``: (a) the gateway's JSONL stdin loop must KEEP
+       READING ``approval.decide`` messages -> ``decide_approval`` (which records
+       the resolution this session's ``resolve_lookup`` reads), WHILE (b) the
+       gated CLI subprocess runs and its hook blocks in ``decide`` on the bridge
+       thread. Therefore the gated adapter MUST run OFF the stdin-reading thread
+       (the CLI run on a worker thread while the gateway services approvals) --
+       otherwise ``decide`` blocks forever waiting for a resolution the stalled
+       stdin loop can never deliver (self-deadlock). The
+       ``gateway.cli_gating_loop.gated_cli_run_session`` driver now satisfies this:
+       it runs the gated adapter on a worker thread while the stdin loop keeps
+       servicing approvals. The bridge ``decide`` callback is already invoked on
+       the bridge's own accept thread here.
+
+       SECOND constraint -- store thread-affinity: ``decide`` calls
+       ``open_approval_request`` (and ``resolve_lookup`` calls
+       ``get_human_delegation``) on the BRIDGE accept thread, while the gateway
+       writes the resolution (``decide_approval``) on the stdin thread. The real
+       ``LocalStore`` wraps a ``sqlite3`` connection that is single-thread-bound
+       (``check_same_thread`` default), so the driver does NOT share one
+       ``LocalStore`` connection across the bridge thread and the stdin thread --
+       it gives the bridge its own store handle (a separate connection over the
+       SAME on-disk Craik home, opened ``same_thread=False``), so both threads see
+       each other's writes while respecting SQLite's thread affinity.
+    """
+    socket_dir = Path(tempfile.mkdtemp(prefix="craik-hook-"))
+    socket_path = str(socket_dir / "bridge.sock")
+    decide = make_operator_decide(
+        store=store,
+        emit=emit,
+        timeout=timeout,
+        resolve_lookup=make_store_resolve_lookup(store),
+    )
+    server = HookBridgeServer(socket_path, decide=decide)
+    server.start()
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="craik-hook-bridge",
+        daemon=True,
+    )
+    thread.start()
+    overlay = {SOCKET_ENV: socket_path, VENDOR_ENV: vendor}
+    try:
+        yield socket_path, overlay
+    finally:
+        # Stop the server FIRST: closing the listening socket makes the blocking
+        # ``accept()`` raise ``OSError``, so ``serve_forever`` returns and the
+        # thread can be joined. Cleanup is best-effort + fail-closed: a socket
+        # already gone simply leaves nothing to remove.
+        server.close()
+        thread.join(timeout=_BRIDGE_JOIN_SECONDS)
+        shutil.rmtree(socket_dir, ignore_errors=True)
 
 
 def _summarize_tool_request(payload: dict[str, Any]) -> tuple[str, str, str | None]:
@@ -175,4 +324,8 @@ def _first_str(*values: Any) -> str | None:
     return None
 
 
-__all__ = ["make_operator_decide"]
+__all__ = [
+    "hook_bridge_session",
+    "make_operator_decide",
+    "make_store_resolve_lookup",
+]

@@ -50,7 +50,7 @@ dev = [
 
 [project.scripts]
 craik = "craik.cli:main"
-craik-hook = "craik.runtime.backend.adapters.hook_bridge:craik_hook_main"
+craik-hook = "craik.runtime.hooks.client:craik_hook_main"
 
 [project.urls]
 Homepage = "https://github.com/eidetic-labs/craik"

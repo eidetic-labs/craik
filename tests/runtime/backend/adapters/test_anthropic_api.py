@@ -102,7 +102,7 @@ def _run_with_gate(
         decide=lambda request: decision,
         require_operator_approval=False,
     )
-    return list(adapter.run(ctx))
+    return list(adapter.direct_tool_loop(ctx))
 
 
 def _run(decision: str, executor: _RecordingExecutor) -> list[BackendEvent]:
@@ -129,7 +129,7 @@ def _run(decision: str, executor: _RecordingExecutor) -> list[BackendEvent]:
         decide=lambda request: decision,
         require_operator_approval=False,
     )
-    return list(adapter.run(ctx))
+    return list(adapter.direct_tool_loop(ctx))
 
 
 def test_supports_live_gating_is_true() -> None:

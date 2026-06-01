@@ -15,13 +15,13 @@ stream classifier) -- and each parsed kind is translated to a canonical
 :class:`BackendEvent` via the Phase-1 typed builders. The contract-strip and the
 optional-string coercion are shared base helpers reused by every adapter.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired
-into the live ``execute_prompt`` path (that cutover is Task 4.7). The live
-BeforeTool hook bridge (Phase 5) is represented here by a config point only --
-``before_tool_hook_config`` names where the hook would be registered; no live
-daemon is started. The google CLI has no legacy ``execute_prompt`` branch (only
-the anthropic ids route through one pre-cutover), so -- unlike the anthropic
-exemplar -- this adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The live BeforeTool hook bridge (Phase 5) is represented here by a config point
+only -- ``before_tool_hook_config`` names where the hook would be registered; no
+live daemon is started. The google CLI has no legacy ``execute_prompt`` branch
+(only the anthropic ids route through one), so -- unlike the anthropic exemplar
+-- this adapter carries no ``_legacy_run`` bridge and no ``CRAIK_BACKEND_LEGACY_RUN``
+fallback.
 """
 
 from __future__ import annotations
@@ -43,6 +43,7 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
     receipt_event,
     tool_event,
 )
@@ -75,10 +76,26 @@ class GoogleCLI(CLIAdapter):
     vendor = "google"
     surface = "cli"
 
-    def __init__(self, profile: VendorProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: VendorProfile | None = None,
+        *,
+        original_env: dict[str, str] | None = None,
+    ) -> None:
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
-        # until then default to the canonical google profile.
+        # until then default to the canonical google profile. ``original_env`` is
+        # the ORIGINAL (possibly None) operator env threaded to the audited core
+        # like the claude path; the gateway injects it in Task 5.7.
         self.profile: VendorProfile = profile or vendor_profile("google")
+        self.original_env: dict[str, str] | None = original_env
+        # Live-gating hook overlay (Task 5.6): when the gateway opens a
+        # ``hook_bridge_session`` for a gated run it sets this to the session's
+        # ``{CRAIK_HOOK_SOCKET, CRAIK_HOOK_VENDOR}`` overlay, which ``run`` merges
+        # into the Gemini spawn env so the BeforeTool ``craik-hook`` client reaches
+        # the bridge. ``None`` (default, and the only value pre-cutover) means no
+        # live bridge -- the spawn env is unchanged. The gateway sets it in Task
+        # 5.7; tests set it directly.
+        self.hook_env: dict[str, str] | None = None
         # Phase-5 gating config: the REAL BeforeTool hook that registers the
         # ``craik-hook`` client as the Gemini CLI's pre-tool command (google-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.gemini/settings.json``
@@ -87,6 +104,13 @@ class GoogleCLI(CLIAdapter):
         # because it is the load-bearing precondition for the hook to fire at all
         # (google-cli.md §1/§5); no daemon is started here.
         self.before_tool_hook_config: dict[str, Any] = _before_tool_hook_config()
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
+        # Per-run governance attribution for the delegated-observed receipt
+        # (parity item C). ``run()`` sets the honest value from the gating posture
+        # before the stream starts; default ``"bypass"`` (never falsely operator).
+        self._decided_by: ReceiptDecidedBy = "bypass"
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -103,6 +127,44 @@ class GoogleCLI(CLIAdapter):
         re-implementing auth.
         """
         return _AUTH_SOURCE
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited CLI core and yield the typed Gemini event sequence.
+
+        Runs + persists the audited CLI run via ``cli_audited.run_cli_typed``
+        (the SAME store/receipt machinery the claude / provider cores use): it
+        spawns the REAL ``gemini`` subprocess (``build_command``) with the
+        workspace-trust-pre-authorized ``spawn_env``, maps each native
+        ``stream-json`` line through THIS adapter's ``map_native_event`` + the
+        per-run ``Coalescer`` AS IT ARRIVES, then yields the coalesced
+        ``assistant_text``, the per-line ``tool.used`` / ``receipt.created``
+        (``source="google-cli"`` / ``execution="delegated-observed"``), and the
+        run framing. Live-gating hook env is set by the gateway; here we just
+        run. This ``run()`` IS the live ``execute_prompt`` path (google-cli has
+        no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
+        """
+        from craik.runtime.backend.adapters.audited_core import cli_observed_decided_by
+        from craik.runtime.backend.cli.cli_audited import run_cli_typed
+
+        self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
+        self._coalescer = Coalescer()
+        yield from run_cli_typed(
+            prompt=ctx.prompt,
+            env=self.original_env,
+            argv=self.build_command(ctx),
+            spawn_env=self.spawn_env(dict(ctx.env)),
+            vendor="google",
+            source=_SOURCE,
+            map_native=self.map_native_event,
+            coalescer=self._coalescer,
+            # The live-gating overlay (set by the gateway's hook_bridge_session in
+            # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
+            hook_env=self.hook_env,
+            on_payload=self._capture_payload,
+        )
+
+    def _capture_payload(self, payload: dict[str, object]) -> None:
+        self.last_payload = payload
 
     def build_command(self, ctx: RunContext) -> list[str]:
         """Return the Gemini CLI stream-json argv for this run.
@@ -188,7 +250,7 @@ class GoogleCLI(CLIAdapter):
         if kind == "tool_use":
             return _map_tool_use(native)
         if kind == "result":
-            return _map_result_receipt(native)
+            return _map_result_receipt(native, decided_by=self._decided_by)
         return None
 
 
@@ -252,22 +314,26 @@ def _command_from_input(tool_input: Any) -> str | None:
     return None
 
 
-def _map_result_receipt(native: dict[str, Any]) -> BackendEvent:
+def _map_result_receipt(
+    native: dict[str, Any],
+    *,
+    decided_by: ReceiptDecidedBy = "bypass",
+) -> BackendEvent:
     # The Gemini CLI ran the tool; craik authorized + OBSERVED it. Hence
     # ``execution="delegated-observed"`` (the CLI observe model). ``purpose`` is
     # a stable descriptor of what the receipt attests (matching the canonical
     # receipt shape); the result text is informational and is NOT smuggled into
-    # the purpose field.
+    # the purpose field. ``decided_by`` is the REAL governance attribution
+    # threaded from the run's gating posture (parity item C): ``"operator"`` only
+    # when an operator actually decided (a gated run), else ``"bypass"`` (ungated).
     return receipt_event(
         receipt_id="receipt_google_cli_run",
         source=_SOURCE,
         purpose="execution",
         execution="delegated-observed",
-        # TODO(Phase 5): thread the real permission mode from RunContext once
-        # the BeforeTool hook bridge carries it.
         mode="default",
         decision="allow",
-        decided_by="operator",
+        decided_by=decided_by,
     )
 
 
