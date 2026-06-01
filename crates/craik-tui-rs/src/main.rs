@@ -192,8 +192,10 @@ fn initialize_detected_theme() {
 /// (`COLORFGBG`, then the dark default) still applies.
 ///
 /// The raw read happens BEFORE crossterm's event reader is constructed, so it
-/// never contends with crossterm for stdin and cannot corrupt the input
-/// stream. This path cannot be unit-tested (it needs a live terminal that
+/// never contends with crossterm for stdin and never injects spurious key
+/// events: a reply arriving after the deadline lands in the tty buffer and is
+/// later parsed by crossterm as a discarded (unsupported) escape sequence, not
+/// a keypress. This path cannot be unit-tested (it needs a live terminal that
 /// answers OSC 11); the decision-to-query logic and the response parser are
 /// covered separately.
 #[cfg(unix)]
@@ -237,14 +239,28 @@ fn query_terminal_background() -> Option<()> {
                 remaining.as_millis().min(i32::MAX as u128) as i32,
             )
         };
-        if ready <= 0 {
-            // Timeout (0) or error (<0): stop. If we already have a partial
-            // reply, try to parse it; otherwise fall through to the chain.
+        if ready == 0 {
+            // Timeout: stop. A partial reply (if any) is parsed below; else we
+            // fall through to the env/COLORFGBG/default chain.
+            break;
+        }
+        if ready < 0 {
+            // A signal during poll returns EINTR; retry within the deadline.
+            // Any other error: give up and fall through to the chain.
+            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
             break;
         }
         // SAFETY: a single byte read into a stack buffer; fd is the tty.
         let n = unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) };
-        if n <= 0 {
+        if n < 0 {
+            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            break;
+        }
+        if n == 0 {
             break;
         }
         buffer.push(byte[0]);
@@ -532,7 +548,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &InteractiveApp, area: Rect) {
         StatusLineMetrics {
             in_flight: app.in_flight,
             pending_approval: app.latest_pending_approval(),
-            approval_reviewed: app.active_overlay == Some(app::ActiveOverlay::Approvals)
+            approval_armed: app.active_overlay == Some(app::ActiveOverlay::Approvals)
                 && app.selected_approval_is_armed(),
             backend_connected: app.backend_connected,
             queued_inputs: app.queued_inputs.len(),

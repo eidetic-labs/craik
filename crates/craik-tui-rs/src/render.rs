@@ -24,7 +24,7 @@ pub struct ActivityMetrics<'a> {
 pub struct StatusLineMetrics<'a> {
     pub in_flight: bool,
     pub pending_approval: Option<&'a str>,
-    pub approval_reviewed: bool,
+    pub approval_armed: bool,
     pub backend_connected: bool,
     pub queued_inputs: usize,
     pub active_overlay: Option<&'a str>,
@@ -230,7 +230,7 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
                 // operator knows the next `a` commits the destructive action.
                 middle.push(FooterHint {
                     key: "a",
-                    label: if metrics.approval_reviewed {
+                    label: if metrics.approval_armed {
                         "confirm approve".to_owned()
                     } else {
                         "approve".to_owned()
@@ -240,7 +240,7 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
                 middle.push(FooterHint {
                     key: "d",
                     label: "deny".to_owned(),
-                    urgent: metrics.approval_reviewed,
+                    urgent: metrics.approval_armed,
                 });
             } else {
                 middle.push(FooterHint {
@@ -551,7 +551,7 @@ mod tests {
         StatusLineMetrics {
             in_flight: false,
             pending_approval: None,
-            approval_reviewed: false,
+            approval_armed: false,
             backend_connected: true,
             queued_inputs: 0,
             active_overlay: None,
@@ -827,7 +827,7 @@ mod tests {
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
                 pending_approval: Some("approval_123"),
-                approval_reviewed: false,
+                approval_armed: false,
                 ..status_metrics()
             },
         )
@@ -841,7 +841,7 @@ mod tests {
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
                 pending_approval: Some("approval_123"),
-                approval_reviewed: true,
+                approval_armed: true,
                 ..status_metrics()
             },
         )
