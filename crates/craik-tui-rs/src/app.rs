@@ -1562,8 +1562,15 @@ impl InteractiveApp {
 
     /// Render a coalesced `assistant_text` snapshot, superseding the same run's
     /// earlier (smaller) snapshot in place. Returns whether the transcript
-    /// changed. The typed contract guarantees per-run identity, so dedup is by
-    /// `run_id` rather than a content-window match.
+    /// changed. Dedup is by `run_id` rather than a content-window match.
+    ///
+    /// `run_id` is not contract-required on `assistant_text` (the backend
+    /// `Coalescer` permits run-less streams); a missing id falls to the `""`
+    /// key, collapsing run-less snapshots into one slot, mirroring the backend's
+    /// `None`-key grouping. This tracks only the most-recent run's slot, which is
+    /// sufficient because the gateway has a single run in flight at a time; if
+    /// concurrent runs are ever introduced, interleaved snapshots would stack
+    /// rather than supersede and this would need a per-run map.
     fn supersede_assistant_text(&mut self, event: &GatewayEvent, text: &str) -> bool {
         let run_key = event.run_id.clone().unwrap_or_default();
         if let Some((existing_run, index)) = self.assistant_text_entry.as_ref()
