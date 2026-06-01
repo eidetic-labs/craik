@@ -2777,7 +2777,9 @@ impl PendingApproval {
         }
         lines.push(String::new());
         if self.is_high_risk() {
-            lines.push("Actions: [a] approve (press twice to confirm)  [d] deny  [Esc] defer".to_owned());
+            lines.push(
+                "Actions: [a] approve (press twice to confirm)  [d] deny  [Esc] defer".to_owned(),
+            );
         } else {
             lines.push("Actions: [a] approve  [d] deny  [Esc] defer".to_owned());
         }
@@ -3017,7 +3019,11 @@ fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     lines.join("\n")
 }
 
-fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: Option<&str>) -> String {
+fn summarize_tool_event(
+    event: &GatewayEvent,
+    tool: &str,
+    fallback_message: Option<&str>,
+) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Tool: {tool}"));
     push_optional_data_line(&mut lines, event, "Provider", "provider_id");
@@ -4344,7 +4350,11 @@ mod tests {
             })
             .map(|entry| entry.body.as_str())
             .collect();
-        assert_eq!(tools.len(), 1, "tool.used without message must still render");
+        assert_eq!(
+            tools.len(),
+            1,
+            "tool.used without message must still render"
+        );
         assert!(
             tools[0].contains("src/lib.rs"),
             "rendered tool line should carry the target: {:?}",
@@ -5920,7 +5930,10 @@ mod tests {
 
         // Select approval A and arm it with a single 'a' (does NOT commit).
         app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
-        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_1");
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_1"
+        );
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             !app.transcript
@@ -5932,7 +5945,10 @@ mod tests {
         // Navigate to B. The arm must NOT carry over: a single 'a' on B must
         // only arm B, never commit it.
         app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
-        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_2");
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_2"
+        );
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             !app.transcript
@@ -5959,7 +5975,10 @@ mod tests {
 
         // Arm + commit high-risk A (two 'a' presses on A).
         app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
-        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_1");
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_1"
+        );
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
@@ -5971,7 +5990,10 @@ mod tests {
 
         // Select B; the committed decision on A must have disarmed the gate.
         app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
-        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_2");
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_2"
+        );
         app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             !app.transcript

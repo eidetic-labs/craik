@@ -379,7 +379,7 @@ mod tests {
         // A pre-injected OSC11 response (tests / wrappers) is authoritative.
         assert!(!should_query_osc11(|key| (key
             == "CRAIK_TUI_OSC11_RESPONSE")
-        .then(|| "\u{1b}]11;rgb:ffff/ffff/ffff\u{7}".to_owned())));
+            .then(|| "\u{1b}]11;rgb:ffff/ffff/ffff\u{7}".to_owned())));
         // COLORFGBG already answers the question -> skip the round-trip.
         assert!(!should_query_osc11(
             |key| (key == "COLORFGBG").then(|| "0;15".to_owned())

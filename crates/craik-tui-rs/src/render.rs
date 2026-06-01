@@ -767,8 +767,16 @@ mod tests {
         let hints = super::footer_hints(&state, &status_metrics());
 
         assert!(hints.len() <= 4, "footer never exceeds four slots");
-        assert_eq!(hints.first().map(|hint| hint.key), Some("/"), "`/` anchors the left slot");
-        assert_eq!(hints.last().map(|hint| hint.key), Some("?"), "`?` anchors the right slot");
+        assert_eq!(
+            hints.first().map(|hint| hint.key),
+            Some("/"),
+            "`/` anchors the left slot"
+        );
+        assert_eq!(
+            hints.last().map(|hint| hint.key),
+            Some("?"),
+            "`?` anchors the right slot"
+        );
         let middle = hints.len().saturating_sub(2);
         assert!(middle <= 2, "at most two ranked middle hints");
     }
@@ -794,7 +802,11 @@ mod tests {
             .iter()
             .map(|hint| hint.key)
             .collect();
-        assert_eq!(middle_keys, vec!["a", "d"], "approve/deny are the ranked middle");
+        assert_eq!(
+            middle_keys,
+            vec!["a", "d"],
+            "approve/deny are the ranked middle"
+        );
     }
 
     #[test]
