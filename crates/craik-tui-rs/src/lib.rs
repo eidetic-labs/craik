@@ -13,10 +13,23 @@ use std::{
 const GATEWAY_EVENT_CONTRACT_JSON: &str =
     include_str!("../../../src/craik/runtime/backend/gateway_event_contract.json");
 
+/// Default originating-adapter token for events that predate the typed
+/// `source` envelope field (older replays, session-level events). Mirrors the
+/// backend's `EventSource` default of `"gateway"`.
+pub fn default_event_source() -> String {
+    "gateway".to_owned()
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct GatewayEvent {
     #[serde(rename = "type")]
     pub event_type: String,
+    /// Vendor×surface identity of the originating adapter (top-level envelope
+    /// field). One of `anthropic-cli`, `anthropic-api`, `openai-cli`,
+    /// `openai-api`, `google-cli`, `google-api`, `gateway`. Defaults to
+    /// `"gateway"` for events that omit it.
+    #[serde(default = "default_event_source")]
+    pub source: String,
     pub created_at: Option<String>,
     pub run_id: Option<String>,
     pub task_id: Option<String>,
@@ -1099,6 +1112,7 @@ mod tests {
     fn session_history_updates_dashboard_state() {
         let event = GatewayEvent {
             event_type: "session.history".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -1121,6 +1135,7 @@ mod tests {
     fn model_changed_uses_active_profile_display_name() {
         let event = GatewayEvent {
             event_type: "model.changed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -1157,6 +1172,7 @@ mod tests {
     fn model_selected_uses_profile_reasoning_effort() {
         let event = GatewayEvent {
             event_type: "model.selected".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -1180,6 +1196,7 @@ mod tests {
     fn session_status_updates_mode_and_active_model() {
         let event = GatewayEvent {
             event_type: "session.status".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -1213,6 +1230,7 @@ mod tests {
     fn slash_completed_summarizes_structured_run_lists() {
         let event = GatewayEvent {
             event_type: "slash.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -1323,6 +1341,7 @@ mod tests {
     fn contract_diagnostic_includes_context_and_recovery() {
         let event = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: Some("task_contract".to_owned()),
@@ -1348,6 +1367,7 @@ mod tests {
     fn contract_error_event_formats_structured_recovery_detail() {
         let event = GatewayEvent {
             event_type: "error".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_contract".to_owned()),
             task_id: Some("task_contract".to_owned()),

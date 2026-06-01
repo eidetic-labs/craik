@@ -204,6 +204,10 @@ pub(crate) struct InteractiveApp {
     auto_select_latest_run: bool,
     last_submitted_text: Option<String>,
     last_prompt_preview: Option<String>,
+    /// Identity of the in-flight coalesced assistant entry: `(run_id, index)`
+    /// into `transcript`. Lets a growing `assistant_text` snapshot supersede the
+    /// run's earlier partial in place instead of stacking duplicates.
+    assistant_text_entry: Option<(String, usize)>,
 }
 
 impl InteractiveApp {
@@ -245,6 +249,7 @@ impl InteractiveApp {
             auto_select_latest_run: true,
             last_submitted_text: None,
             last_prompt_preview: None,
+            assistant_text_entry: None,
         };
         app.send_commands([
             GatewayCommand::SessionStatus,
@@ -304,6 +309,7 @@ impl InteractiveApp {
             auto_select_latest_run: true,
             last_submitted_text: None,
             last_prompt_preview: None,
+            assistant_text_entry: None,
         }
     }
 
@@ -1468,18 +1474,33 @@ impl InteractiveApp {
                 ));
                 self.follow_tail_after_transcript_update();
             }
-            "receipt.created" => {
-                if let Some(receipt_id) = event
+            "receipt.created"
+                if event
                     .data
                     .get("receipt_id")
                     .and_then(|value| value.as_str())
-                {
-                    self.transcript.push(TranscriptEntry::new(
-                        TranscriptKind::Receipt,
-                        "Evidence saved",
-                        &summarize_receipt_marker(event, receipt_id),
-                    ));
-                    self.follow_tail_after_transcript_update();
+                    .is_some() =>
+            {
+                self.transcript.push(TranscriptEntry::new(
+                    TranscriptKind::Receipt,
+                    "Evidence saved",
+                    &summarize_receipt_marker(event),
+                ));
+                self.follow_tail_after_transcript_update();
+            }
+            "assistant_text" => {
+                // Assistant text is coalesced upstream (the backend Coalescer
+                // supersedes cumulative snapshots), so the per-run stream is a
+                // growing snapshot. Supersede the run's existing Assistant entry
+                // in place rather than stacking N partials.
+                if let Some(text) = event.data.get("text").and_then(|value| value.as_str()) {
+                    let display_text = text.trim();
+                    if display_text.is_empty() {
+                        return;
+                    }
+                    if self.supersede_assistant_text(event, display_text) {
+                        self.follow_tail_after_transcript_update();
+                    }
                 }
             }
             "run.output" => {
@@ -1491,39 +1512,6 @@ impl InteractiveApp {
                     self.transcript
                         .push(TranscriptEntry::assistant("Assistant", &display_text));
                     self.follow_tail_after_transcript_update();
-                }
-            }
-            "run.event" => {
-                if let Some(text) = event
-                    .data
-                    .get("text")
-                    .or_else(|| event.data.get("message"))
-                    .and_then(|value| value.as_str())
-                {
-                    if should_hide_transcript_event(event) {
-                        return;
-                    }
-                    let event_kind = event.data.get("kind").and_then(|value| value.as_str());
-                    let kind = match event_kind {
-                        Some("tool_result") => TranscriptKind::Tool,
-                        _ => TranscriptKind::Assistant,
-                    };
-                    let title = match event_kind {
-                        Some("tool_result") => "Tool result",
-                        _ => "Assistant",
-                    };
-                    let display_text = if kind == TranscriptKind::Assistant {
-                        assistant_event_transcript_text(text)
-                    } else {
-                        Some(text.trim().to_owned())
-                    };
-                    if let Some(display_text) = display_text
-                        && !recent_transcript_body_matches(&self.transcript, &display_text)
-                    {
-                        self.transcript
-                            .push(TranscriptEntry::new(kind, title, &display_text));
-                        self.follow_tail_after_transcript_update();
-                    }
                 }
             }
             "run.completed" => {
@@ -1570,6 +1558,29 @@ impl InteractiveApp {
             }
             _ => {}
         }
+    }
+
+    /// Render a coalesced `assistant_text` snapshot, superseding the same run's
+    /// earlier (smaller) snapshot in place. Returns whether the transcript
+    /// changed. The typed contract guarantees per-run identity, so dedup is by
+    /// `run_id` rather than a content-window match.
+    fn supersede_assistant_text(&mut self, event: &GatewayEvent, text: &str) -> bool {
+        let run_key = event.run_id.clone().unwrap_or_default();
+        if let Some((existing_run, index)) = self.assistant_text_entry.as_ref()
+            && *existing_run == run_key
+            && let Some(entry) = self.transcript.get_mut(*index)
+            && entry.kind == TranscriptKind::Assistant
+        {
+            if entry.body == text {
+                return false;
+            }
+            entry.update_body(text);
+            return true;
+        }
+        self.transcript
+            .push(TranscriptEntry::assistant("Assistant", text));
+        self.assistant_text_entry = Some((run_key, self.transcript.len() - 1));
+        true
     }
 
     fn record_run_event(&mut self, event: &GatewayEvent) {
@@ -2879,20 +2890,23 @@ fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str
     lines.join("\n")
 }
 
-fn summarize_receipt_marker(event: &GatewayEvent, receipt_id: &str) -> String {
-    let mut parts = vec![compact_text(receipt_id, 42)];
-    if let Some(run_id) = event.run_id.as_deref() {
-        parts.push(format!("run {}", compact_text(run_id, 28)));
+fn summarize_receipt_marker(event: &GatewayEvent) -> String {
+    // Differentiate evidence lines by the typed governance identity carried on
+    // the event envelope/data: vendor×surface `source`, `execution` posture,
+    // and the `decision (decided_by)` attribution. Without these, every receipt
+    // collapsed to an identical generic string (the duplicate-evidence bug).
+    let mut parts = vec![event.source.clone()];
+    if let Some(execution) = string_data(event, "execution") {
+        parts.push(execution);
     }
-    if let Some(provider) = event
-        .data
-        .get("provider_id")
-        .and_then(|value| value.as_str())
-    {
-        parts.push(compact_text(provider, 32));
+    if let Some(decision) = string_data(event, "decision") {
+        match string_data(event, "decided_by") {
+            Some(decided_by) => parts.push(format!("{decision} ({decided_by})")),
+            None => parts.push(decision),
+        }
     }
     format!(
-        "Saved evidence. Ctrl-E opens details. {}",
+        "Saved evidence · {}. Ctrl-E opens details.",
         parts.join(" · ")
     )
 }
@@ -3160,8 +3174,12 @@ fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
 }
 
 fn run_output_transcript_text(summary: &str) -> Option<String> {
-    let stripped = strip_craik_contract_output_sections(summary);
-    let trimmed = stripped.trim();
+    // Phase 4 strips contract envelopes at the source (every adapter runs
+    // `strip_contract_envelopes` before emitting text), so the TUI no longer
+    // needs to defensively scrub contract sections out of `run.output`
+    // summaries. A summary that still parses as a structured-output contract is
+    // reduced to its display text; everything else passes through verbatim.
+    let trimmed = summary.trim();
     if trimmed.is_empty() {
         return None;
     }
@@ -3172,118 +3190,6 @@ fn run_output_transcript_text(summary: &str) -> Option<String> {
         .as_ref()
         .and_then(extract_contract_display_text)
         .or_else(|| text_before_contract_marker(trimmed))
-}
-
-fn assistant_event_transcript_text(text: &str) -> Option<String> {
-    let stripped = strip_craik_contract_output_sections(text);
-    let candidate = stripped.trim();
-    if candidate.is_empty() {
-        None
-    } else if looks_like_structured_output_contract(candidate) {
-        run_output_transcript_text(candidate)
-    } else {
-        Some(candidate.to_owned())
-    }
-}
-
-fn strip_craik_contract_output_sections(text: &str) -> String {
-    let mut output = Vec::new();
-    let mut skipping_contract = false;
-    let mut skipping_fence = false;
-    let mut contract_had_fence = false;
-    let mut skipping_contract_group = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        let lower = trimmed.to_ascii_lowercase();
-        if let Some(kind) = craik_contract_heading_kind(&lower) {
-            remove_trailing_contract_separator(&mut output);
-            skipping_contract = true;
-            skipping_fence = false;
-            contract_had_fence = false;
-            skipping_contract_group = kind == ContractHeadingKind::Group;
-            continue;
-        }
-        if skipping_contract {
-            if trimmed.starts_with("```") {
-                if skipping_fence {
-                    skipping_contract = skipping_contract_group;
-                    skipping_fence = false;
-                    contract_had_fence = false;
-                } else {
-                    skipping_fence = true;
-                    contract_had_fence = true;
-                }
-                continue;
-            }
-            if skipping_fence
-                || trimmed.is_empty()
-                || looks_like_contract_json_line(trimmed)
-                || (contract_had_fence && craik_contract_heading_kind(&lower).is_some())
-            {
-                continue;
-            }
-            skipping_contract = false;
-            contract_had_fence = false;
-            skipping_contract_group = false;
-        }
-        output.push(line);
-    }
-    output.join("\n")
-}
-
-fn remove_trailing_contract_separator(output: &mut Vec<&str>) {
-    while output.last().is_some_and(|line| line.trim().is_empty()) {
-        output.pop();
-    }
-    if output.last().is_some_and(|line| {
-        matches!(
-            line.trim(),
-            "---" | "----" | "-----" | "***" | "___" | "—" | "–"
-        )
-    }) {
-        output.pop();
-    }
-    while output.last().is_some_and(|line| line.trim().is_empty()) {
-        output.pop();
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ContractHeadingKind {
-    Group,
-    Single,
-}
-
-fn craik_contract_heading_kind(lower: &str) -> Option<ContractHeadingKind> {
-    if lower.contains("craik contract output")
-        || lower.contains("contract-shaped output")
-        || lower.contains("contract output")
-        || lower.contains("output contract")
-    {
-        return Some(ContractHeadingKind::Group);
-    }
-    if lower.contains("**craik.") || lower.starts_with("craik.") {
-        return Some(ContractHeadingKind::Single);
-    }
-    None
-}
-
-fn looks_like_contract_json_line(line: &str) -> bool {
-    line.starts_with('{')
-        || line.starts_with('}')
-        || line.starts_with('[')
-        || line.starts_with(']')
-        || line.ends_with(',')
-        || line.ends_with(':')
-        || line.contains("\"schema\"")
-        || line.contains("\"task_id\"")
-        || line.contains("\"status\"")
-        || line.contains("\"summary\"")
-        || line.contains("\"evidence\"")
-        || line.contains("\"receipt_ids\"")
-        || line.contains("\"commands_run\"")
-        || line.contains("\"capabilities_used\"")
-        || line.contains("\"policy_compliance\"")
 }
 
 fn looks_like_structured_output_contract(text: &str) -> bool {
@@ -3734,11 +3640,21 @@ fn receipt_detail_from_event(event: &GatewayEvent) -> String {
     if let Some(task_id) = event.task_id.as_deref() {
         parts.push(format!("task={task_id}"));
     }
-    if let Some(provider) = string_data(event, "provider_id") {
-        parts.push(format!("provider={provider}"));
+    parts.push(format!("source={}", event.source));
+    if let Some(purpose) = string_data(event, "purpose") {
+        parts.push(format!("purpose={purpose}"));
     }
-    if let Some(family) = string_data(event, "provider_family") {
-        parts.push(format!("family={family}"));
+    if let Some(execution) = string_data(event, "execution") {
+        parts.push(format!("execution={execution}"));
+    }
+    if let Some(mode) = string_data(event, "mode") {
+        parts.push(format!("mode={mode}"));
+    }
+    if let Some(decision) = string_data(event, "decision") {
+        parts.push(format!("decision={decision}"));
+    }
+    if let Some(decided_by) = string_data(event, "decided_by") {
+        parts.push(format!("decided_by={decided_by}"));
     }
     parts.join(" | ")
 }
@@ -3857,10 +3773,7 @@ fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ActiveOverlay, InteractiveApp, LoopAction, RunRecord, assistant_event_transcript_text,
-        export_file_stem,
-    };
+    use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use crate::transcript::TranscriptKind;
@@ -3899,6 +3812,7 @@ mod tests {
     fn status_not_ready_surfaces_blocked_run_guidance() {
         let status = GatewayEvent {
             event_type: "session.status".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -3925,6 +3839,7 @@ mod tests {
     fn session_history_loads_persisted_receipts_into_run_records() {
         let history = GatewayEvent {
             event_type: "session.history".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -3976,6 +3891,7 @@ mod tests {
     fn completed_run_without_output_is_visible() {
         let completed = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_empty".to_owned()),
             task_id: None,
@@ -4174,6 +4090,7 @@ mod tests {
         let mut app =
             InteractiveApp::for_test_with_messages([WorkerMessage::Event(GatewayEvent {
                 event_type: "error".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: Some("run_contract".to_owned()),
                 task_id: Some("task_contract".to_owned()),
@@ -4200,9 +4117,117 @@ mod tests {
     }
 
     #[test]
+    fn distinct_receipts_render_distinct_evidence_lines() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        let first = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_a".to_owned()),
+            task_id: Some("task_a".to_owned()),
+            data: json!({
+                "receipt_id": "receipt_a",
+                "purpose": "execution",
+                "execution": "craik",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "operator"
+            }),
+        };
+        let second = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            source: "google-cli".to_owned(),
+            created_at: None,
+            run_id: Some("run_b".to_owned()),
+            task_id: Some("task_b".to_owned()),
+            data: json!({
+                "receipt_id": "receipt_b",
+                "purpose": "execution",
+                "execution": "delegated-observed",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "bypass"
+            }),
+        };
+
+        app.record_event(&first);
+        app.record_event(&second);
+
+        let evidence: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Receipt)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(evidence.len(), 2, "two receipts render two evidence lines");
+        assert_ne!(
+            evidence[0], evidence[1],
+            "receipts that differ by source/execution/decided_by must render distinct lines"
+        );
+        assert!(evidence[0].contains("anthropic-api"));
+        assert!(evidence[0].contains("craik"));
+        assert!(evidence[0].contains("operator"));
+        assert!(evidence[1].contains("google-cli"));
+        assert!(evidence[1].contains("delegated-observed"));
+        assert!(evidence[1].contains("bypass"));
+    }
+
+    #[test]
+    fn assistant_text_event_renders_assistant_entry() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "assistant_text".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: Some("task_text".to_owned()),
+            data: json!({"text": "I can see the repo."}),
+        });
+
+        let assistant: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Assistant)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(assistant, vec!["I can see the repo."]);
+    }
+
+    #[test]
+    fn coalesced_assistant_text_supersedes_rather_than_stacks() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        for snapshot in ["Reading", "Reading the repo", "Reading the repo now."] {
+            app.record_event(&GatewayEvent {
+                event_type: "assistant_text".to_owned(),
+                source: "anthropic-api".to_owned(),
+                created_at: None,
+                run_id: Some("run_grow".to_owned()),
+                task_id: Some("task_grow".to_owned()),
+                data: json!({"text": snapshot}),
+            });
+        }
+
+        let assistant: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Assistant)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            assistant,
+            vec!["Reading the repo now."],
+            "growing coalesced assistant text supersedes earlier snapshots"
+        );
+    }
+
+    #[test]
     fn approval_request_tracks_pending_state_and_actions() {
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4210,6 +4235,7 @@ mod tests {
         };
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4261,6 +4287,7 @@ mod tests {
     fn approval_overlay_surfaces_real_payload_fields_and_queue_position() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4277,6 +4304,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4329,6 +4357,7 @@ mod tests {
     fn claude_code_approval_modal_uses_only_source_fields_without_governance_section() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4363,6 +4392,7 @@ mod tests {
     fn approval_payload_aliases_preserve_source_fields() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4398,6 +4428,7 @@ mod tests {
     fn claude_code_approval_without_id_still_surfaces_as_pending() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4433,6 +4464,7 @@ mod tests {
         let events = [
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4440,20 +4472,23 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
                 data: json!({"message": "Claude Code event: user.", "transcript_visibility": "hidden"}),
             },
             GatewayEvent {
-                event_type: "run.event".to_owned(),
+                event_type: "assistant_text".to_owned(),
+                source: "anthropic-cli".to_owned(),
                 created_at: None,
-                run_id: None,
+                run_id: Some("run_1".to_owned()),
                 task_id: None,
-                data: json!({"backend": "claude-code", "kind": "assistant_text", "text": "I can see the repo."}),
+                data: json!({"text": "I can see the repo."}),
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4461,6 +4496,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "tool.used".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4474,6 +4510,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4481,6 +4518,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4488,6 +4526,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4495,6 +4534,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4502,6 +4542,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4509,6 +4550,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.output".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: Some("run_1".to_owned()),
                 task_id: None,
@@ -4570,6 +4612,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_contract".to_owned()),
             task_id: Some("task_contract".to_owned()),
@@ -4595,6 +4638,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_contract".to_owned()),
             task_id: Some("task_contract".to_owned()),
@@ -4605,112 +4649,14 @@ mod tests {
         assert_eq!(app.run_records[0].outputs.len(), 1);
     }
 
-    #[test]
-    fn assistant_contract_output_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": "## Craik contract output\n\n```json\n{\"schema\":\"craik.runner_step_result\",\"summary\":\"internal\"}\n```\n\n```json\n{\"schema\":\"craik.handoff\",\"outcome\":\"internal\"}\n```\n\n**Remaining risks:** none for this read-only confirmation."
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Remaining risks"));
-        assert!(!transcript_text.contains("Craik contract output"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-    }
-
-    #[test]
-    fn named_craik_contract_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "**craik.runner_step_result**\n```json\n{\"task_id\":\"task_1\",\"status\":\"completed\",\"commands_run\":[\"git status\"]}\n```\n\n**craik.handoff**\n```json\n{\"task_id\":\"task_1\",\"summary\":\"internal\"}\n```\n";
-
-        assert_eq!(assistant_event_transcript_text(text), None);
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": text
-            }),
-        });
-
-        assert!(app.transcript.is_empty());
-    }
-
-    #[test]
-    fn mixed_final_answer_strips_named_contract_sections() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "Yes — I can see the Craik repo.\n\n---\n\n**craik.runner_step_result**\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"git status\"],\n  \"capabilities_used\": [\"repo.read\"]\n}\n```\n\n**craik.handoff**\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\"\n}\n```\n\nEverything stayed read-only.";
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.output".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "summary": text
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Yes"));
-        assert!(transcript_text.contains("Everything stayed read-only"));
-        assert!(!transcript_text.contains("---"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-        assert!(!transcript_text.contains("\"commands_run\""));
-    }
-
-    #[test]
-    fn bare_contract_output_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "Confirmed.\n\n**Contract output**\n\ncraik.runner_step_result\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"pwd\", \"git status\"],\n  \"capabilities_used\": [\"repo.read\"],\n  \"receipts_required\": true\n}\n```\n\ncraik.handoff\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\",\n  \"state\": \"complete\"\n}\n```";
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": text
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Confirmed."));
-        assert!(!transcript_text.contains("Contract output"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-        assert!(!transcript_text.contains("\"commands_run\""));
-        assert!(!transcript_text.contains("\"receipts_required\""));
-    }
+    // Contract-strip chat-lane tests were removed in Phase 6 Task 6.1: the
+    // backend now strips contract envelopes at the source (every adapter runs
+    // `strip_contract_envelopes`), and the TUI no longer routes assistant
+    // content through `run.event`. The `strip_craik_contract_output_sections`
+    // band-aid and its helpers were deleted, so these tests no longer have a
+    // production target. Assistant rendering is covered by
+    // `assistant_text_event_renders_assistant_entry` and
+    // `coalesced_assistant_text_supersedes_rather_than_stacks`.
 
     #[test]
     fn pending_approval_overlay_survives_run_output_until_reviewed() {
@@ -4718,6 +4664,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_approval".to_owned()),
             task_id: Some("task_approval".to_owned()),
@@ -4730,6 +4677,7 @@ mod tests {
         });
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_approval".to_owned()),
             task_id: Some("task_approval".to_owned()),
@@ -4744,6 +4692,7 @@ mod tests {
     fn run_records_collect_evidence_and_can_be_navigated() {
         let first = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4751,6 +4700,7 @@ mod tests {
         };
         let tool = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4758,6 +4708,7 @@ mod tests {
         };
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4765,6 +4716,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_2".to_owned()),
             task_id: Some("task_2".to_owned()),
@@ -4800,6 +4752,7 @@ mod tests {
     fn run_filter_preserves_manual_selection_while_new_events_arrive() {
         let first = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_done".to_owned()),
             task_id: None,
@@ -4807,6 +4760,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_active".to_owned()),
             task_id: None,
@@ -4814,6 +4768,7 @@ mod tests {
         };
         let third = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_new".to_owned()),
             task_id: None,
@@ -4940,6 +4895,7 @@ mod tests {
     fn live_events_stream_into_run_provenance_detail() {
         let started = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4947,6 +4903,7 @@ mod tests {
         };
         let working = GatewayEvent {
             event_type: "run.working".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4958,6 +4915,7 @@ mod tests {
         };
         let tool = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4970,6 +4928,7 @@ mod tests {
         };
         let output = GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -5004,6 +4963,7 @@ mod tests {
     fn multiple_approvals_can_be_selected_and_decided() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5016,6 +4976,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5058,6 +5019,7 @@ mod tests {
     fn approval_resolution_removes_selected_item_and_keeps_next_pending_selected() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5070,6 +5032,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5082,6 +5045,7 @@ mod tests {
         };
         let resolved = GatewayEvent {
             event_type: "approval.resolved".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5109,6 +5073,7 @@ mod tests {
     fn approval_resolution_clears_pending_state_and_shows_decision() {
         let requested = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5119,6 +5084,7 @@ mod tests {
         };
         let resolved = GatewayEvent {
             event_type: "approval.resolved".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5146,6 +5112,7 @@ mod tests {
     fn tool_events_surface_command_target_and_detail() {
         let event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5209,6 +5176,7 @@ mod tests {
         let mut app = InteractiveApp::for_test_with_messages([]);
         let glob_event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5220,6 +5188,7 @@ mod tests {
         };
         let read_event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5252,6 +5221,7 @@ mod tests {
     fn model_events_update_state_and_receipts_surface_provider_context() {
         let model = GatewayEvent {
             event_type: "model.selected".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: Some("task_1".to_owned()),
@@ -5265,13 +5235,17 @@ mod tests {
         };
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "anthropic-api".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
             data: json!({
                 "receipt_id": "receipt_run_1_provider",
-                "provider_id": "provider_anthropic",
-                "provider_family": "anthropic"
+                "purpose": "execution",
+                "execution": "craik",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "operator"
             }),
         };
         let mut app = InteractiveApp::for_test_with_messages([]);
@@ -5292,12 +5266,15 @@ mod tests {
                 .all(|entry| entry.title != "Model selected")
         );
 
+        // The evidence line is now differentiated by the typed governance
+        // identity (source / execution / decision) rather than collapsing to a
+        // generic receipt-id string.
         let receipt_entry = app.transcript.last().expect("receipt transcript entry");
         assert_eq!(receipt_entry.title, "Evidence saved");
-        assert!(receipt_entry.body.contains("receipt_run_1_provider"));
         assert!(receipt_entry.body.contains("Ctrl-E opens details"));
-        assert!(receipt_entry.body.contains("run run_1"));
-        assert!(receipt_entry.body.contains("provider_anthropic"));
+        assert!(receipt_entry.body.contains("anthropic-api"));
+        assert!(receipt_entry.body.contains("craik"));
+        assert!(receipt_entry.body.contains("allow (operator)"));
 
         app.open_overlay(ActiveOverlay::Evidence);
         let detail = app
@@ -5309,9 +5286,12 @@ mod tests {
         assert!(detail.contains("Receipt"));
         assert!(detail.contains("Run: run_1"));
         assert!(detail.contains("Task: task_1"));
-        assert!(detail.contains("Provider: provider_anthropic"));
+        // Under the typed contract, provider identity rides the `source`
+        // envelope on the receipt, not a `provider_id` data field.
         assert!(detail.contains("Receipt detail:"));
-        assert!(detail.contains("provider=provider_anthropic"));
+        assert!(detail.contains("source=anthropic-api"));
+        assert!(detail.contains("execution=craik"));
+        assert!(detail.contains("decided_by=operator"));
         assert!(detail.contains("Provenance:"));
     }
 
@@ -5319,6 +5299,7 @@ mod tests {
     fn session_ready_updates_state_without_crowding_transcript() {
         let ready = GatewayEvent {
             event_type: "session.ready".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -5466,6 +5447,7 @@ mod tests {
     fn approval_overlay_requires_review_before_approval_key_decides() {
         let event = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5693,6 +5675,7 @@ mod tests {
         ];
         let event = GatewayEvent {
             event_type: "model.changed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -5863,6 +5846,7 @@ mod tests {
     fn incoming_transcript_events_do_not_reset_scrolled_back_view() {
         let event = GatewayEvent {
             event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5901,6 +5885,7 @@ mod tests {
     ) -> GatewayEvent {
         GatewayEvent {
             event_type: event_type.to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: run_id.map(str::to_owned),
             task_id: task_id.map(str::to_owned),

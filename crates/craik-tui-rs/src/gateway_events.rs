@@ -193,6 +193,7 @@ mod tests {
     fn terminal_event_detection_covers_request_boundaries() {
         let completed = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -200,6 +201,7 @@ mod tests {
         };
         let progress = GatewayEvent {
             event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -214,6 +216,7 @@ mod tests {
     fn slash_catalog_parses_command_hints() {
         let event = GatewayEvent {
             event_type: "slash.catalog".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -256,6 +259,7 @@ mod tests {
     fn slash_output_summarizes_structured_payloads() {
         let event = GatewayEvent {
             event_type: "slash.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,

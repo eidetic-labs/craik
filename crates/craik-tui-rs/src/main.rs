@@ -1173,27 +1173,30 @@ mod tests {
 
     const CLAUDE_CODE_STREAM: &str =
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
+    // The second tuple element is the typed `source` envelope token (vendor ×
+    // surface) the fixture now carries; it surfaces in the differentiated
+    // evidence line. The third is a model-label fragment shown in the frame.
     const PROVIDER_FIXTURES: &[(&str, &str, &str)] = &[
         (
             include_str!(
                 "../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"
             ),
-            "provider_anthropic_messages",
+            "anthropic-api",
             "Sonnet 4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
-            "provider_openai_responses",
+            "openai-api",
             "GPT-5.4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
-            "provider_gemini",
+            "google-api",
             "Google Gemini 2.5 Pro",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_local_ollama_stream.jsonl"),
-            "provider_local_ollama",
+            "openai-api",
             "Local Ollama Llama 3.1 8B",
         ),
     ];
@@ -1440,14 +1443,14 @@ mod tests {
 
     #[test]
     fn provider_fixtures_render_provider_neutral_tui_frames() {
-        for (input, provider_id, model_fragment) in PROVIDER_FIXTURES {
+        for (input, source_token, model_fragment) in PROVIDER_FIXTURES {
             let app = app_from_fixture(input);
             let rendered = render_app_frame(&app, 144, 38);
 
             assert!(rendered.contains("Chat"));
             assert!(!rendered.contains("Activity"));
             assert!(!rendered.contains("Run provenance"));
-            assert!(rendered.contains(*provider_id));
+            assert!(rendered.contains(*source_token));
             assert!(rendered.contains(*model_fragment));
             assert!(!rendered.contains("Run completed"));
         }
