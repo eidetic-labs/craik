@@ -4107,6 +4107,36 @@ mod tests {
     }
 
     #[test]
+    fn live_anthropic_cli_stream_renders_output_without_no_model_output_flag() {
+        // Regression on the operator's REAL captured anthropic-cli run, extracted
+        // from the persisted gateway_event_history (typed contract: tool.used +
+        // receipt.created + assistant_text + framing, and NO run.output). Drives
+        // the actual interactive app and asserts the model's text renders AND the
+        // spurious "No model output" flag does NOT fire.
+        let fixture = include_str!("../../../tests/fixtures/gateway/anthropic_cli_live_run.jsonl");
+        let events = crate::parse_gateway_events(fixture).expect("live fixture parses");
+        let messages = events.into_iter().map(WorkerMessage::Event);
+        let mut app = InteractiveApp::for_test_with_messages(messages);
+        app.in_flight = true;
+
+        app.drain_worker();
+
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.kind == TranscriptKind::Assistant
+                    && entry.body.contains("I can see the Craik repo")),
+            "assistant_text from the live run must render in the transcript"
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "No model output"),
+            "live anthropic-cli stream must not report No model output"
+        );
+    }
+
+    #[test]
     fn prompt_submission_stream_lifecycle_reaches_completed_state() {
         let events = [
             event(
