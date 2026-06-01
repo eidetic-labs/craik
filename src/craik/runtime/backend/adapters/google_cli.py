@@ -87,6 +87,14 @@ class GoogleCLI(CLIAdapter):
         # like the claude path; the gateway injects it in Task 5.7.
         self.profile: VendorProfile = profile or vendor_profile("google")
         self.original_env: dict[str, str] | None = original_env
+        # Live-gating hook overlay (Task 5.6): when the gateway opens a
+        # ``hook_bridge_session`` for a gated run it sets this to the session's
+        # ``{CRAIK_HOOK_SOCKET, CRAIK_HOOK_VENDOR}`` overlay, which ``run`` merges
+        # into the Gemini spawn env so the BeforeTool ``craik-hook`` client reaches
+        # the bridge. ``None`` (default, and the only value pre-cutover) means no
+        # live bridge -- the spawn env is unchanged. The gateway sets it in Task
+        # 5.7; tests set it directly.
+        self.hook_env: dict[str, str] | None = None
         # Phase-5 gating config: the REAL BeforeTool hook that registers the
         # ``craik-hook`` client as the Gemini CLI's pre-tool command (google-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.gemini/settings.json``
@@ -138,6 +146,9 @@ class GoogleCLI(CLIAdapter):
             source=_SOURCE,
             map_native=self.map_native_event,
             coalescer=self._coalescer,
+            # The live-gating overlay (set by the gateway's hook_bridge_session in
+            # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
+            hook_env=self.hook_env,
         )
 
     def build_command(self, ctx: RunContext) -> list[str]:

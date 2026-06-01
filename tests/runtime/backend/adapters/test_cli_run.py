@@ -227,3 +227,100 @@ def test_cli_core_handles_start_error_without_hanging(tmp_path: Path, monkeypatc
 
     assert core.status == "failed"
     assert core.run_id is not None
+
+
+# --- CLI hook-env injection seam (Task 5.6) ---------------------------------
+
+
+def _install_env_capturing_subprocess(
+    monkeypatch, binary: str, fixture: Path
+) -> dict[str, dict[str, str]]:
+    """Fake ``binary`` subprocess + capture the ``env`` passed to ``Popen``."""
+    captured: dict[str, dict[str, str]] = {}
+    original_popen = subprocess.Popen
+    lines = fixture.read_text(encoding="utf-8").splitlines()
+
+    def _popen(args, **kwargs):
+        if Path(args[0]).name != binary:
+            return original_popen(args, **kwargs)
+        captured["env"] = dict(kwargs.get("env") or {})
+        return _FakeProcess(lines)
+
+    monkeypatch.setattr("craik.runtime.sandbox.local_process_backend.subprocess.Popen", _popen)
+    return captured
+
+
+def test_run_cli_core_merges_hook_env_into_subprocess_env(tmp_path: Path, monkeypatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    captured = _install_env_capturing_subprocess(monkeypatch, "gemini", _GEMINI_FIXTURE)
+
+    hook_env = {"CRAIK_HOOK_SOCKET": "/run/craik/bridge.sock", "CRAIK_HOOK_VENDOR": "google"}
+    run_cli_core(
+        prompt="Review the implementation plan",
+        env=env,
+        argv=["gemini", "-p", "x", "--output-format", "stream-json"],
+        spawn_env={"GEMINI_CLI_TRUST_WORKSPACE": "true"},
+        vendor="google",
+        stream=lambda line: None,
+        hook_env=hook_env,
+    )
+
+    # The subprocess saw BOTH the base spawn env and the merged hook overlay.
+    assert captured["env"]["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
+    assert captured["env"]["CRAIK_HOOK_SOCKET"] == "/run/craik/bridge.sock"
+    assert captured["env"]["CRAIK_HOOK_VENDOR"] == "google"
+
+
+def test_run_cli_core_without_hook_env_leaves_spawn_env_untouched(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    captured = _install_env_capturing_subprocess(monkeypatch, "gemini", _GEMINI_FIXTURE)
+
+    run_cli_core(
+        prompt="Review the implementation plan",
+        env=env,
+        argv=["gemini", "-p", "x", "--output-format", "stream-json"],
+        spawn_env={"GEMINI_CLI_TRUST_WORKSPACE": "true"},
+        vendor="google",
+        stream=lambda line: None,
+    )
+
+    # No bridge active pre-cutover -> no hook env keys reach the subprocess.
+    assert "CRAIK_HOOK_SOCKET" not in captured["env"]
+    assert "CRAIK_HOOK_VENDOR" not in captured["env"]
+
+
+def test_google_cli_run_passes_hook_env_to_spawn(tmp_path: Path, monkeypatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    captured = _install_env_capturing_subprocess(monkeypatch, "gemini", _GEMINI_FIXTURE)
+
+    adapter = GoogleCLI(original_env=env)
+    adapter.hook_env = {
+        "CRAIK_HOOK_SOCKET": "/run/craik/g.sock",
+        "CRAIK_HOOK_VENDOR": "google",
+    }
+    list(adapter.run(_ctx(env)))
+
+    # The adapter's hook_env overlay reached the spawned gemini subprocess.
+    assert captured["env"]["CRAIK_HOOK_SOCKET"] == "/run/craik/g.sock"
+    assert captured["env"]["CRAIK_HOOK_VENDOR"] == "google"
+    # ... alongside the workspace-trust flag the adapter sets in spawn_env.
+    assert captured["env"]["GEMINI_CLI_TRUST_WORKSPACE"] == "true"
+
+
+def test_openai_cli_run_never_gets_hook_env(tmp_path: Path, monkeypatch) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    captured = _install_env_capturing_subprocess(monkeypatch, "codex", _CODEX_FIXTURE)
+
+    adapter = OpenAICLI(original_env=env)
+    # Observe-only: no hook_env attribute/seam, and the spawned codex subprocess
+    # never receives bridge env (live governance routes via openai-api).
+    assert not hasattr(adapter, "hook_env")
+    list(adapter.run(_ctx(env)))
+    assert "CRAIK_HOOK_SOCKET" not in captured["env"]
+    assert "CRAIK_HOOK_VENDOR" not in captured["env"]

@@ -66,6 +66,7 @@ def run_cli_core(
     spawn_env: dict[str, str],
     vendor: str,
     stream: Callable[[str], None],
+    hook_env: dict[str, str] | None = None,
 ) -> CliCoreResult:
     """Run an audited vendor-CLI subprocess and return its structured result.
 
@@ -74,6 +75,13 @@ def run_cli_core(
     feeding each native stdout line to ``stream`` AS IT ARRIVES, bounds the wait
     so it never hangs, and treats any nonzero exit / no output / timeout /
     interrupt as a COMPLETED-WITH-ERROR run.
+
+    ``hook_env`` is the OPTIONAL live-gating overlay (Task 5.6): when a gateway
+    hook-bridge session is active it carries ``{CRAIK_HOOK_SOCKET, CRAIK_HOOK_VENDOR}``
+    (from ``hook_gating.hook_bridge_session``), and is MERGED OVER ``spawn_env`` so
+    the spawned CLI's pre-tool ``craik-hook`` client can reach the bridge. ``None``
+    (the default, and the only value pre-cutover) leaves ``spawn_env`` untouched.
+    The overlay wins on key collision -- it is the authoritative bridge address.
 
     Receipt persistence (observe-only design): these CLI runs are
     ``delegated-observed`` -- the vendor CLI authored + ran the tool calls; craik
@@ -120,7 +128,8 @@ def run_cli_core(
             run.id,
             RunTransition(status="running", phase="act", iteration=1, last_step_key=vendor),
         )
-        outcome = stream_cli_subprocess(argv, spawn_env, on_line=stream)
+        merged_spawn_env = {**spawn_env, **hook_env} if hook_env else spawn_env
+        outcome = stream_cli_subprocess(argv, merged_spawn_env, on_line=stream)
         receipt = _put_cli_observed_receipt(store, task.id, run.id, vendor=vendor, outcome=outcome)
         store.put_run_output(
             RunOutput(
@@ -237,6 +246,7 @@ def run_cli_typed(
     source: EventSource,
     map_native: Callable[[dict[str, object]], BackendEvent | None],
     coalescer: Coalescer,
+    hook_env: dict[str, str] | None = None,
 ) -> Iterator[BackendEvent]:
     """Compose the CLI core and yield the adapter's NEW TYPED event sequence.
 
@@ -249,6 +259,10 @@ def run_cli_typed(
     the gateway-event-history artifact. A subprocess failure still yields a clean
     framed sequence ending in ``run.completed`` (status ``failed`` /
     ``interrupted``).
+
+    ``hook_env`` is forwarded to :func:`run_cli_core` -- the optional live-gating
+    overlay merged into the subprocess env. ``None`` (the default, and the only
+    value pre-cutover) leaves the spawn env untouched.
     """
     collected: list[BackendEvent] = []
 
@@ -270,6 +284,7 @@ def run_cli_typed(
         spawn_env=spawn_env,
         vendor=vendor,
         stream=_on_line,
+        hook_env=hook_env,
     )
     events: list[BackendEvent] = []
     flushed = coalescer.flush(None, source=source)

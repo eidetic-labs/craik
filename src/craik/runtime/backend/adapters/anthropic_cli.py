@@ -83,6 +83,15 @@ class AnthropicCLI(CLIAdapter):
         # ``LocalStore.from_env(None)`` vs ``from_env({})``). ``select_adapter``
         # injects this at the Task 5.7 cutover; tests set it directly.
         self.original_env: dict[str, str] | None = original_env
+        # Live-gating hook overlay (Task 5.6): when the gateway opens a
+        # ``hook_bridge_session`` for a gated run it sets this to the session's
+        # ``{CRAIK_HOOK_SOCKET, CRAIK_HOOK_VENDOR}`` overlay. ``run`` merges it OVER
+        # the env threaded to the claude core, so the claude subprocess env (built
+        # by ``claude_code._claude_code_env`` from ``os.environ`` + this env) carries
+        # the bridge address for the PreToolUse ``craik-hook`` client. ``None``
+        # (default, and the only value pre-cutover) means no live bridge -- the env
+        # is unchanged. The gateway sets it in Task 5.7; tests set it directly.
+        self.hook_env: dict[str, str] | None = None
         # Phase-5 gating config: the REAL PreToolUse hook that registers the
         # ``craik-hook`` client as Claude Code's pre-tool command (anthropic-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.claude/settings.json``
@@ -200,8 +209,11 @@ class AnthropicCLI(CLIAdapter):
         )
         core = run_claude_code_core(
             prompt=ctx.prompt,
-            # The ORIGINAL env (possibly None), threaded like the legacy path.
-            env=self.original_env,
+            # The ORIGINAL env (possibly None), threaded like the legacy path,
+            # with the live-gating overlay merged OVER it WHEN a bridge is active
+            # (Task 5.6 seam). ``hook_env`` is ``None`` pre-cutover, so this is the
+            # unchanged original env until the gateway sets it in Task 5.7.
+            env=_merge_hook_env(self.original_env, self.hook_env),
             require_operator_approval=ctx.require_operator_approval,
             stream=sink,
         )
@@ -299,6 +311,23 @@ def _pre_tool_use_hook_config() -> dict[str, Any]:
             }
         },
     }
+
+
+def _merge_hook_env(
+    original_env: dict[str, str] | None,
+    hook_env: dict[str, str] | None,
+) -> dict[str, str] | None:
+    """Merge the live-gating ``hook_env`` overlay OVER ``original_env``.
+
+    Returns ``original_env`` unchanged when there is no overlay (the pre-cutover
+    case, so byte-identical to the legacy threading). When an overlay is present
+    it wins on key collision -- it is the authoritative bridge address. A ``None``
+    original env with an overlay becomes just the overlay (merged onto the
+    subprocess env by ``claude_code._claude_code_env``).
+    """
+    if not hook_env:
+        return original_env
+    return {**(original_env or {}), **hook_env}
 
 
 def _default_anthropic_profile() -> VendorProfile:

@@ -181,6 +181,76 @@ def test_anthropic_cli_run_strips_contract_envelopes(tmp_path: Path, monkeypatch
     assert "craik.handoff" not in blob
 
 
+def _install_claude_env_capturing_subprocess(monkeypatch) -> dict[str, dict[str, str]]:
+    """Claude marker subprocess that records the ``env`` passed to ``Popen``."""
+    captured: dict[str, dict[str, str]] = {}
+    original_popen = subprocess.Popen
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _Process:
+        stdout = iter(['{"type":"result","result":"done"}\n'])
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    def _popen(args, **kwargs):
+        if Path(args[0]).name != "claude":
+            return original_popen(args, **kwargs)
+        captured["env"] = dict(kwargs.get("env") or {})
+        return _Process()
+
+    monkeypatch.setattr(
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
+        _popen,
+    )
+    return captured
+
+
+def test_anthropic_cli_run_merges_hook_env_into_claude_subprocess(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    captured = _install_claude_env_capturing_subprocess(monkeypatch)
+
+    adapter = AnthropicCLI(original_env=env)
+    adapter.hook_env = {
+        "CRAIK_HOOK_SOCKET": "/run/craik/a.sock",
+        "CRAIK_HOOK_VENDOR": "anthropic",
+    }
+    list(adapter.run(_ctx("Upgrade Craik Docs")))
+
+    # The claude subprocess env (built from os.environ + the threaded env)
+    # carries the merged hook overlay for the PreToolUse craik-hook client.
+    assert captured["env"]["CRAIK_HOOK_SOCKET"] == "/run/craik/a.sock"
+    assert captured["env"]["CRAIK_HOOK_VENDOR"] == "anthropic"
+
+
+def test_anthropic_cli_run_without_hook_env_passes_no_bridge_env(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    captured = _install_claude_env_capturing_subprocess(monkeypatch)
+
+    adapter = AnthropicCLI(original_env=env)
+    # hook_env defaults to None pre-cutover: no bridge env reaches the subprocess.
+    assert adapter.hook_env is None
+    list(adapter.run(_ctx("Upgrade Craik Docs")))
+    assert "CRAIK_HOOK_SOCKET" not in captured["env"]
+
+
 # --- provider API path: compose the provider core ---------------------------
 
 

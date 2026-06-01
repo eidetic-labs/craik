@@ -24,6 +24,7 @@ without a live CLI.
 from __future__ import annotations
 
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,10 +36,20 @@ from craik.runtime.backend.adapters.hook_bridge import (
     VENDOR_ENV,
     HookBridgeServer,
 )
-from craik.runtime.backend.adapters.hook_gating import make_operator_decide
+from craik.runtime.backend.adapters.hook_gating import (
+    hook_bridge_session,
+    make_operator_decide,
+    make_store_resolve_lookup,
+)
 from craik.runtime.backend.adapters.openai_cli import OpenAICLI
 from craik.runtime.backend.events import BackendEvent, validate_event
 from craik.runtime.hooks.client import forward_tool_request
+from craik.runtime.paths import ensure_craik_home
+from craik.runtime.reviewing.approvals import (
+    decide_approval,
+    open_approval_request,
+)
+from craik.runtime.store import LocalStore
 
 
 class _FakeApprovalStore:
@@ -272,3 +283,183 @@ def test_openai_cli_has_no_hook_config() -> None:
     assert not hasattr(adapter, "pre_tool_use_hook_config")
     assert not hasattr(adapter, "before_tool_hook_config")
     assert adapter.supports_live_gating() is False
+
+
+# --- make_store_resolve_lookup (Task 5.6) ----------------------------------
+
+
+def _open_gate(store: LocalStore, approval_id: str) -> None:
+    open_approval_request(
+        store,
+        approval_id=approval_id,
+        task_id="task_gate",
+        capability="Bash",
+        target="rm -rf /tmp/x",
+        risk="r",
+        policy="strict",
+        requested_by="craik:cli-hook-bridge",
+        retry_path="approve in TUI",
+    )
+
+
+def test_store_resolve_lookup_approved_returns_allow(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        _open_gate(store, "approval_a")
+        lookup = make_store_resolve_lookup(store)
+        # Pending before any decision.
+        assert lookup("approval_a") is None
+        decide_approval(store, "approval_a", decision="approved", operator="op", reason="ok")
+        assert lookup("approval_a") == "allow"
+    finally:
+        store.close()
+
+
+def test_store_resolve_lookup_denied_returns_deny(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        _open_gate(store, "approval_d")
+        lookup = make_store_resolve_lookup(store)
+        decide_approval(store, "approval_d", decision="denied", operator="op", reason="no")
+        assert lookup("approval_d") == "deny"
+    finally:
+        store.close()
+
+
+def test_store_resolve_lookup_unknown_returns_none(tmp_path: Path) -> None:
+    paths = ensure_craik_home({"CRAIK_HOME": str(tmp_path / "home")})
+    store = LocalStore.from_paths(paths)
+    store.initialize()
+    try:
+        lookup = make_store_resolve_lookup(store)
+        # An id with no opened delegation is pending/unknown -> keep blocking.
+        assert lookup("approval_missing") is None
+    finally:
+        store.close()
+
+
+# --- hook_bridge_session end-to-end (Task 5.6) ------------------------------
+#
+# These drive the FULL loop in-process with no real CLI: a tool-request is
+# forwarded to the yielded socket from a worker thread (the ``craik-hook`` client
+# transport), it BLOCKS in ``decide`` until the operator resolves the gate via
+# the real ``decide_approval`` cycle, and the store ``resolve_lookup`` unblocks
+# it. The store is a thread-safe in-memory ``ApprovalStore`` (the real
+# ``LocalStore``'s SQLite connection is single-thread-bound, and the live 5.7
+# gateway services approvals concurrently -- see ``hook_bridge_session``'s 5.7
+# concurrency note); ``open_approval_request`` / ``decide_approval`` are the REAL
+# helpers, so the recorded resolution state is exactly what the gateway writes.
+
+
+class _LockedApprovalStore(_FakeApprovalStore):
+    """Thread-safe in-memory ``ApprovalStore`` for the cross-thread bridge test."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+
+    def put_human_delegation(self, delegation: HumanDelegationPoint) -> None:
+        with self._lock:
+            super().put_human_delegation(delegation)
+
+    def get_human_delegation(self, delegation_id: str) -> HumanDelegationPoint | None:
+        with self._lock:
+            return super().get_human_delegation(delegation_id)
+
+    def list_human_delegations(self) -> list[HumanDelegationPoint]:
+        with self._lock:
+            return super().list_human_delegations()
+
+    def put_receipt(self, receipt):  # type: ignore[no-untyped-def]
+        return receipt
+
+
+def _forward_in_thread(
+    socket_path: str, payload: dict[str, object], result: dict[str, str]
+) -> threading.Thread:
+    def _run() -> None:
+        result["decision"] = forward_tool_request(socket_path, payload, timeout=5.0)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return thread
+
+
+def _await_one_open_gate(store: _FakeApprovalStore, deadline: float) -> str | None:
+    while time.monotonic() < deadline:
+        for delegation in store.list_human_delegations():
+            if delegation.kind == "approval" and delegation.status == "open":
+                return delegation.id
+        time.sleep(0.01)
+    return None
+
+
+def test_hook_bridge_session_blocks_then_allows_on_resolution() -> None:
+    store = _LockedApprovalStore()
+    events: list[BackendEvent] = []
+    captured_socket: dict[str, str] = {}
+    with hook_bridge_session(store=store, emit=events.append, timeout=5.0, vendor="anthropic") as (
+        socket_path,
+        overlay,
+    ):
+        captured_socket["path"] = socket_path
+        # The overlay carries the bridge address + vendor the CLI spawn merges.
+        assert overlay[SOCKET_ENV] == socket_path
+        assert overlay[VENDOR_ENV] == "anthropic"
+
+        result: dict[str, str] = {}
+        thread = _forward_in_thread(socket_path, dict(_BASH_PAYLOAD), result)
+
+        # The hook BLOCKS pending: no decision while the gate is unresolved.
+        approval_id = _await_one_open_gate(store, time.monotonic() + 3.0)
+        assert approval_id is not None
+        assert "decision" not in result
+
+        # The operator approves via the same decide_approval cycle the gateway
+        # drives; the session's store resolve_lookup then unblocks the hook.
+        decide_approval(store, approval_id, decision="approved", operator="op", reason="ok")
+        thread.join(timeout=5.0)
+        assert result["decision"] == "allow"
+
+    # approval.requested was emitted carrying the REAL approval id.
+    requested = [e for e in events if e.type == "approval.requested"]
+    assert len(requested) == 1
+    assert requested[0].data["approval_id"] == approval_id
+    # The socket is cleaned up on session exit.
+    assert not Path(captured_socket["path"]).exists()
+
+
+def test_hook_bridge_session_denied_resolution_returns_deny() -> None:
+    store = _LockedApprovalStore()
+    events: list[BackendEvent] = []
+    with hook_bridge_session(store=store, emit=events.append, timeout=5.0) as (
+        socket_path,
+        _overlay,
+    ):
+        result: dict[str, str] = {}
+        thread = _forward_in_thread(socket_path, dict(_BASH_PAYLOAD), result)
+        approval_id = _await_one_open_gate(store, time.monotonic() + 3.0)
+        assert approval_id is not None
+        decide_approval(store, approval_id, decision="denied", operator="op", reason="no")
+        thread.join(timeout=5.0)
+        assert result["decision"] == "deny"
+
+
+def test_hook_bridge_session_times_out_to_deny() -> None:
+    store = _LockedApprovalStore()
+    events: list[BackendEvent] = []
+    socket_path_holder: dict[str, str] = {}
+    # A short bridge timeout: a never-resolved request fails closed to deny.
+    with hook_bridge_session(store=store, emit=events.append, timeout=0.2) as (
+        socket_path,
+        _overlay,
+    ):
+        socket_path_holder["path"] = socket_path
+        decision = forward_tool_request(socket_path, dict(_BASH_PAYLOAD), timeout=5.0)
+        assert decision == "deny"
+        assert any(e.type == "approval.requested" for e in events)
+    assert not Path(socket_path_holder["path"]).exists()
