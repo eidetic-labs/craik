@@ -111,6 +111,16 @@ class OpenAICLI(CLIAdapter):
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
         # until then default to the canonical openai profile.
         self.profile: VendorProfile = profile or vendor_profile("openai")
+        # NO PreToolUse hook config -- deliberately absent (the gating CLIs hold a
+        # ``pre_tool_use_hook_config`` / ``before_tool_hook_config`` here). The
+        # codex ``PreToolUse`` / ``PermissionRequest`` hook does NOT fire for the
+        # shell tool at the pinned version (verified negative across project +
+        # user config, ``--full-auto``, ``approval_policy="untrusted"``, isolated
+        # ``CODEX_HOME``, and both ``.*`` + ``Bash`` matchers -- root cause:
+        # incomplete ``unified_exec`` interception). Registering ``craik-hook``
+        # here would be a false enforcement boundary. See the module docstring +
+        # ``docs/adapters/vendor-capabilities.md`` § OpenAI / ``flows/openai-cli.md``.
+        # Live governance over OpenAI goes through the ``openai-api`` surface.
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
