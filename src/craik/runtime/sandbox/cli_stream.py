@@ -22,7 +22,7 @@ are at the sibling-module layout cap.
 from __future__ import annotations
 
 import queue
-import subprocess
+import subprocess  # nosec B404 - types only; argv-only spawn via start_reviewed_local_process.
 import threading
 import time
 from collections.abc import Callable, Mapping
