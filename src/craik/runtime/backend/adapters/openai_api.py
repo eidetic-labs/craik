@@ -170,6 +170,9 @@ class OpenAIAPI(APIAdapter):
         # Operator ``PromptSource`` recorded on the created task by the provider
         # core; 5.7 injects the real source, defaulting to ``"tui"`` until then.
         self.prompt_source: str = prompt_source
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
         # Primary surface is the Responses API; the Chat Completions fallback is a
         # real, selectable branch (request building + response parsing) that
         # shares the inherited gate->execute->emit loop.
@@ -216,7 +219,11 @@ class OpenAIAPI(APIAdapter):
             env=self.original_env,
             source=_SOURCE,
             provider_source=self.prompt_source,  # type: ignore[arg-type]
+            on_payload=self._capture_payload,
         )
+
+    def _capture_payload(self, payload: dict[str, object]) -> None:
+        self.last_payload = payload
 
     # --- abstract hooks -----------------------------------------------------
 

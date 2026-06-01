@@ -178,19 +178,24 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
     assert "Audited run" in result.text
     assert "from stream" in result.text
     assert isinstance(result.payload, dict)
+    # Typed claude run() sequence (Task 5.7 cutover): no legacy `run.progress` /
+    # `run.event` chatter; canonical `tool.used` + run framing instead. The
+    # underlying audited persistence (run output / receipts / handoff /
+    # structured events) is unchanged and asserted below.
     event_types = [event["type"] for event in result.payload["gateway_events"]]
     assert "run.started" in event_types
-    assert "run.progress" in event_types
+    assert "run.progress" not in event_types
+    assert "run.event" not in event_types
     assert "tool.used" in event_types
-    assert "run.event" in event_types
     assert event_types[-1] == "run.completed"
     tool_event = next(
         event for event in result.payload["gateway_events"] if event["type"] == "tool.used"
     )
-    assert tool_event["data"]["backend"] == "claude-code"
-    assert tool_event["data"]["kind"] == "tool_use"
+    # The typed tool event carries the canonical `tool` + `target`, sourced from
+    # the vendor token (no legacy `backend` / `kind` / `files` fields).
+    assert tool_event["source"] == "anthropic-cli"
     assert tool_event["data"]["tool"] == "Read"
-    assert tool_event["data"]["files"] == ["README.md"]
+    assert tool_event["data"]["target"] == "README.md"
     assert "unsupported auth profile kind/source" not in result.text
     assert "requires operator approval" not in result.text
     store = LocalStore.from_env(env)

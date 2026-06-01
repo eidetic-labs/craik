@@ -43,6 +43,7 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
     receipt_event,
     tool_event,
 )
@@ -103,6 +104,13 @@ class GoogleCLI(CLIAdapter):
         # because it is the load-bearing precondition for the hook to fire at all
         # (google-cli.md §1/§5); no daemon is started here.
         self.before_tool_hook_config: dict[str, Any] = _before_tool_hook_config()
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
+        # Per-run governance attribution for the delegated-observed receipt
+        # (parity item C). ``run()`` sets the honest value from the gating posture
+        # before the stream starts; default ``"bypass"`` (never falsely operator).
+        self._decided_by: ReceiptDecidedBy = "bypass"
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -134,8 +142,10 @@ class GoogleCLI(CLIAdapter):
         run framing. Live-gating hook env is set by the gateway in Task 5.6; here
         we just run. NOT wired into ``execute_prompt`` (Task 5.7).
         """
+        from craik.runtime.backend.adapters.audited_core import cli_observed_decided_by
         from craik.runtime.backend.cli.cli_audited import run_cli_typed
 
+        self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
         self._coalescer = Coalescer()
         yield from run_cli_typed(
             prompt=ctx.prompt,
@@ -149,7 +159,11 @@ class GoogleCLI(CLIAdapter):
             # The live-gating overlay (set by the gateway's hook_bridge_session in
             # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
             hook_env=self.hook_env,
+            on_payload=self._capture_payload,
         )
+
+    def _capture_payload(self, payload: dict[str, object]) -> None:
+        self.last_payload = payload
 
     def build_command(self, ctx: RunContext) -> list[str]:
         """Return the Gemini CLI stream-json argv for this run.
@@ -235,7 +249,7 @@ class GoogleCLI(CLIAdapter):
         if kind == "tool_use":
             return _map_tool_use(native)
         if kind == "result":
-            return _map_result_receipt(native)
+            return _map_result_receipt(native, decided_by=self._decided_by)
         return None
 
 
@@ -299,22 +313,26 @@ def _command_from_input(tool_input: Any) -> str | None:
     return None
 
 
-def _map_result_receipt(native: dict[str, Any]) -> BackendEvent:
+def _map_result_receipt(
+    native: dict[str, Any],
+    *,
+    decided_by: ReceiptDecidedBy = "bypass",
+) -> BackendEvent:
     # The Gemini CLI ran the tool; craik authorized + OBSERVED it. Hence
     # ``execution="delegated-observed"`` (the CLI observe model). ``purpose`` is
     # a stable descriptor of what the receipt attests (matching the canonical
     # receipt shape); the result text is informational and is NOT smuggled into
-    # the purpose field.
+    # the purpose field. ``decided_by`` is the REAL governance attribution
+    # threaded from the run's gating posture (parity item C): ``"operator"`` only
+    # when an operator actually decided (a gated run), else ``"bypass"`` (ungated).
     return receipt_event(
         receipt_id="receipt_google_cli_run",
         source=_SOURCE,
         purpose="execution",
         execution="delegated-observed",
-        # TODO(Phase 5): thread the real permission mode from RunContext once
-        # the BeforeTool hook bridge carries it.
         mode="default",
         decision="allow",
-        decided_by="operator",
+        decided_by=decided_by,
     )
 
 

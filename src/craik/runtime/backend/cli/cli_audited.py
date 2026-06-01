@@ -247,6 +247,7 @@ def run_cli_typed(
     map_native: Callable[[dict[str, object]], BackendEvent | None],
     coalescer: Coalescer,
     hook_env: dict[str, str] | None = None,
+    on_payload: Callable[[dict[str, object]], None] | None = None,
 ) -> Iterator[BackendEvent]:
     """Compose the CLI core and yield the adapter's NEW TYPED event sequence.
 
@@ -263,6 +264,11 @@ def run_cli_typed(
     ``hook_env`` is forwarded to :func:`run_cli_core` -- the optional live-gating
     overlay merged into the subprocess env. ``None`` (the default, and the only
     value pre-cutover) leaves the spawn env untouched.
+
+    ``on_payload`` is the OPTIONAL payload-capture seam the Task 5.7 cutover uses:
+    after the core runs, its audited payload is handed to ``on_payload`` so
+    ``execute_prompt`` can build a ``BackendPromptResult`` from a generator-shaped
+    run().
     """
     collected: list[BackendEvent] = []
 
@@ -286,6 +292,8 @@ def run_cli_typed(
         stream=_on_line,
         hook_env=hook_env,
     )
+    if on_payload is not None:
+        on_payload(core.payload)
     events: list[BackendEvent] = []
     flushed = coalescer.flush(None, source=source)
     if flushed is not None:

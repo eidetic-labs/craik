@@ -60,7 +60,10 @@ def test_gateway_prompt_execution_emits_audited_events(tmp_path: Path, monkeypat
     assert payload["run"]["task_id"] == "task_upgrade_craik_docs"
     event_types = [event.type for event in result.events]
     assert event_types[0] == "prompt.submitted"
-    assert "model.selected" in event_types
+    # Typed run() sequence: no legacy `model.selected` framing; `run.started` +
+    # differentiated `receipt.created` instead.
+    assert "model.selected" not in event_types
+    assert "run.started" in event_types
     assert "receipt.created" in event_types
     assert event_types[-1] == "run.completed"
     assert payload["gateway_events"][-1]["type"] == "run.completed"
@@ -73,10 +76,15 @@ def test_gateway_prompt_execution_emits_audited_events(tmp_path: Path, monkeypat
         output for output in outputs if output.step_result_id == "gateway_event_history"
     )
     assert gateway_output.run_id == payload["run"]["id"]
+    # The typed run() persists the RUN's own audited event history (it does not
+    # see the session-level `prompt.submitted` that `execute_prompt` emits before
+    # dispatch), so the persisted count is the gateway-events count minus that one
+    # session event. The artifact stays internally consistent.
+    persisted_count = gateway_output.observed_output["event_count"]
+    assert persisted_count == len(payload["gateway_events"]) - 1
     assert gateway_output.summary == (
-        f"Gateway recorded {len(payload['gateway_events'])} event(s) for audited prompt run."
+        f"Gateway recorded {persisted_count} event(s) for audited prompt run."
     )
-    assert gateway_output.observed_output["event_count"] == len(payload["gateway_events"])
     assert gateway_output.observed_output["events"][-1]["type"] == "run.completed"
 
 
@@ -166,11 +174,12 @@ def test_gateway_payload_includes_active_model_profile(tmp_path: Path, monkeypat
     result = execute_prompt("Upgrade Craik Docs", env=env, source="tui")
     payload = result.payload_with_events()
 
+    # The audited payload still carries the active model profile (set by the
+    # provider core); the typed run() no longer emits a `model.selected` event,
+    # so the profile is asserted on the payload, not on a gateway event.
     assert payload["model_profile"]["provider_id"] == "provider_anthropic"
-    model_event = next(
-        event for event in payload["gateway_events"] if event["type"] == "model.selected"
-    )
-    assert model_event["data"]["profile"]["display_name"] == "Claude Opus 4.7"
+    assert payload["model_profile"]["display_name"] == "Claude Opus 4.7"
+    assert not any(event["type"] == "model.selected" for event in payload["gateway_events"])
 
 
 def test_model_profile_names_are_readable_and_repair_legacy_defaults(tmp_path: Path) -> None:
@@ -228,11 +237,20 @@ def test_gateway_provider_event_contract_matrix(
     result = execute_prompt("Review provider contract", env=env, source="tui")
     events = [event.as_dict() for event in result.events]
 
-    _assert_provider_gateway_event_contract(
-        events,
-        provider_id=provider_id,
-        provider_family=provider_family,
-    )
+    # The three families WITH a typed vendor adapter (openai/anthropic/google)
+    # cut over to the typed run() sequence; `chat_completions` (ollama) has no
+    # typed adapter, so it stays on the legacy provider path and keeps the legacy
+    # contract.
+    if provider_family in {"openai", "anthropic", "google"}:
+        _assert_typed_provider_gateway_event_contract(
+            events, vendor_source=f"{provider_family}-api"
+        )
+    else:
+        _assert_provider_gateway_event_contract(
+            events,
+            provider_id=provider_id,
+            provider_family=provider_family,
+        )
 
 
 def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
@@ -299,40 +317,33 @@ def test_gateway_anthropic_marker_prompt_streams_typed_claude_events(
     payload = result.payload_with_events()
     event_types = [event.type for event in emitted]
 
+    # Typed claude run() sequence (Task 5.7 cutover): the legacy chatter
+    # (`run.progress` / `file.changed` / `approval.requested` / the `run.event`
+    # catch-all + transcript-visibility framing) is GONE; the canonical stream
+    # is `tool.used` + differentiated `receipt.created` + run framing.
     assert payload["backend"] == "claude-code"
-    assert "run.progress" in event_types
+    assert "run.progress" not in event_types
+    assert "file.changed" not in event_types
+    assert "approval.requested" not in event_types
+    assert "run.event" not in event_types
     assert "tool.used" in event_types
-    assert "file.changed" in event_types
-    assert "approval.requested" in event_types
-    assert "run.event" in event_types
+    assert "run.started" in event_types
     assert event_types[-1] == "run.completed"
     tool_events = [event for event in emitted if event.type == "tool.used"]
     assert [event.data["tool"] for event in tool_events] == ["Read", "Bash", "Edit"]
-    assert tool_events[0].data["files"] == ["README.md"]
+    assert all(event.source == "anthropic-cli" for event in tool_events)
+    # The typed tool event maps the file path to `target` (not the legacy
+    # `files` list) and threads the bash command verbatim.
+    assert tool_events[0].data["target"] == "README.md"
     assert tool_events[1].data["command"] == ("uv run pytest tests/test_backend_gateway_session.py")
-    file_event = next(event for event in emitted if event.type == "file.changed")
-    assert file_event.data["target"] == "README.md"
-    approval_event = next(event for event in emitted if event.type == "approval.requested")
-    assert approval_event.data["tool"] == "Edit"
-    assert approval_event.data["target"] == "README.md"
-    assert approval_event.data["reason"] == "write docs"
-    assert str(approval_event.data["approval_id"]).startswith("approval_claude_code_")
-    result_event = next(
-        event for event in emitted if event.type == "run.event" and event.data["kind"] == "result"
-    )
-    assert result_event.data["transcript_visibility"] == "hidden"
-    hidden_events = [
-        event
-        for event in emitted
-        if event.type == "run.event" and event.data.get("transcript_visibility") == "hidden"
-    ]
-    assert {event.data["kind"] for event in hidden_events} >= {"event", "system", "result"}
-    visible_progress = [
-        str(event.data["message"]) for event in emitted if event.type == "run.progress"
-    ]
-    assert not any("Claude Code event:" in message for message in visible_progress)
-    assert not any("Claude Code system event:" in message for message in visible_progress)
-    assert not any("Claude Code is using" in message for message in visible_progress)
+    assert tool_events[2].data["target"] == "README.md"
+    # auto + marker is UNgated -> delegated-observed receipts attribute "bypass"
+    # (parity item C: never a falsely-attributed operator decision).
+    receipt_events = [event for event in emitted if event.type == "receipt.created"]
+    assert receipt_events
+    for receipt in receipt_events:
+        assert receipt.data["execution"] == "delegated-observed"
+        assert receipt.data["decided_by"] == "bypass"
 
 
 def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None:
@@ -372,6 +383,56 @@ def test_cli_model_set_persists_provider_profile_options(tmp_path: Path) -> None
         "temperature": 0.2,
         "thinking": True,
     }
+
+
+def _assert_typed_provider_gateway_event_contract(
+    events: list[dict[str, Any]],
+    *,
+    vendor_source: str,
+) -> None:
+    """Assert the NEW typed provider run() contract (Task 5.7 cutover).
+
+    The typed sequence drops the legacy `model.selected` / `run.working` /
+    `run.progress` framing, stamps the vendor source token on every post-submit
+    event, coalesces assistant text, and emits differentiated `receipt.created`
+    events carrying the governance fields.
+    """
+    event_types = [event["type"] for event in events]
+    assert event_types[0] == "prompt.submitted"
+    assert "model.selected" not in event_types
+    assert "run.working" not in event_types
+    assert "run.started" in event_types
+    assert "tool.used" in event_types
+    assert "receipt.created" in event_types
+    assert "run.output" in event_types
+    assert event_types[-1] == "run.completed"
+
+    non_session = [event for event in events if event["type"] != "prompt.submitted"]
+    assert non_session
+    assert all(event["source"] == vendor_source for event in non_session)
+
+    run_started = _event(events, "run.started")
+    run_id = run_started["run_id"]
+    assert run_id
+    assert run_started["task_id"]
+    for event_type in ["tool.used", "receipt.created", "run.output", "run.completed"]:
+        for event in [e for e in events if e["type"] == event_type]:
+            assert event["run_id"] == run_id
+
+    for receipt in [e for e in events if e["type"] == "receipt.created"]:
+        assert receipt["data"]["execution"] == "craik"
+        assert receipt["data"]["decision"] == "allow"
+        assert receipt["data"]["decided_by"] == "operator"
+        assert receipt["data"]["purpose"] == "execution"
+
+    receipt_ids = [
+        event["data"]["receipt_id"] for event in events if event["type"] == "receipt.created"
+    ]
+    assert receipt_ids
+    assert len(receipt_ids) == len(set(receipt_ids))
+
+    completed = events[-1]
+    assert completed["data"]["status"] in {"completed", "blocked", "failed", "interrupted"}
 
 
 def _assert_provider_gateway_event_contract(

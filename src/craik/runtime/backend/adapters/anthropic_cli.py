@@ -39,6 +39,7 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
     ReceiptDecision,
     approval_resolved_event,
     receipt_event,
@@ -99,6 +100,14 @@ class AnthropicCLI(CLIAdapter):
         # before launch; this object holds only the data structure + the env keys
         # the gateway must set -- no daemon is started here.
         self.pre_tool_use_hook_config: dict[str, Any] = _pre_tool_use_hook_config()
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
+        # Per-run governance attribution for the delegated-observed receipts
+        # (parity item C). ``run()`` sets the honest value from the gating posture
+        # before the stream starts; the conservative default is the ungated
+        # ``"bypass"`` (never falsely ``operator``).
+        self._decided_by: ReceiptDecidedBy = "bypass"
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -196,10 +205,16 @@ class AnthropicCLI(CLIAdapter):
         """
         from craik.runtime.backend.adapters.audited_core import (
             claude_framing_events,
+            cli_observed_decided_by,
             run_claude_code_core,
             typed_claude_stream_sink,
         )
 
+        # Parity item C (Task 5.7): the receipt governance attribution is honest
+        # to whether this run was actually gated. ``map_native_event`` (the
+        # per-line ``result`` receipt) and the framing receipts both read it; set
+        # it for the whole run BEFORE the core streams a single line.
+        self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
         self._coalescer = Coalescer()
         native_events: list[BackendEvent] = []
         sink = typed_claude_stream_sink(
@@ -217,11 +232,21 @@ class AnthropicCLI(CLIAdapter):
             require_operator_approval=ctx.require_operator_approval,
             stream=sink,
         )
-        yield from native_events
+        self.last_payload = core.payload
+        # Assemble the full typed sequence first so the gateway-event-history
+        # artifact (parity item C: the 5.5a review flagged AnthropicCLI omitted
+        # it) is persisted with the SAME events the run yields -- matching the
+        # provider (``run_provider_typed``) and generic-CLI (``run_cli_typed``)
+        # paths, which both persist it.
+        events: list[BackendEvent] = list(native_events)
         flushed = self._coalescer.flush(None, source=_SOURCE)
         if flushed is not None:
-            yield flushed
-        yield from claude_framing_events(core, source=_SOURCE)
+            events.append(flushed)
+        events.extend(claude_framing_events(core, source=_SOURCE, decided_by=self._decided_by))
+        from craik.runtime.backend import session
+
+        session._persist_gateway_event_history(core.payload, events, env=self.original_env)
+        yield from events
 
     def _legacy_run(
         self,
@@ -273,7 +298,7 @@ class AnthropicCLI(CLIAdapter):
         if kind == "permission_denial":
             return _map_permission_denial(native)
         if kind == "result":
-            return _map_result_receipt(native)
+            return _map_result_receipt(native, decided_by=self._decided_by)
         return None
 
 
@@ -356,22 +381,26 @@ def _map_permission_denial(native: dict[str, Any]) -> BackendEvent:
     )
 
 
-def _map_result_receipt(native: dict[str, Any]) -> BackendEvent:
+def _map_result_receipt(
+    native: dict[str, Any],
+    *,
+    decided_by: ReceiptDecidedBy = "bypass",
+) -> BackendEvent:
     # The Claude CLI ran the tool; craik authorized + OBSERVED it. Hence
     # ``execution="delegated-observed"``. ``purpose`` is a stable descriptor of
     # what the receipt attests (matching the canonical receipt shape); the
     # result text is informational and is NOT smuggled into the purpose field.
+    # ``decided_by`` is the REAL governance attribution threaded from the run's
+    # gating posture (parity item C): ``"operator"`` only when an operator
+    # actually decided (a gated run), else ``"bypass"`` (ungated / observe).
     return receipt_event(
         receipt_id="receipt_anthropic_cli_run",
         source=_SOURCE,
         purpose="execution",
         execution="delegated-observed",
-        # TODO(Phase 5): thread the real permission mode
-        # (ask/auto/acceptEdits/plan) from RunContext once the hook bridge
-        # carries it.
         mode="default",
         decision="allow",
-        decided_by="operator",
+        decided_by=decided_by,
     )
 
 

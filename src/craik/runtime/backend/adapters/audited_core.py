@@ -36,6 +36,7 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
     assistant_text_event,
     receipt_event,
     run_completed_event,
@@ -260,10 +261,23 @@ def typed_claude_stream_sink(
     return _on_native
 
 
+def cli_observed_decided_by(require_operator_approval: bool) -> ReceiptDecidedBy:
+    """Return the honest ``decided_by`` for a delegated-observed CLI receipt.
+
+    Task 5.7 parity item C: an ``operator``-attributed receipt must persist ONLY
+    when an operator actually decided -- i.e. a GATED run (live operator approval
+    was requested + flows through the hook bridge). An ungated / auto run
+    authored no operator decision, so it reflects the TRUE posture ``"bypass"``
+    (the ungoverned/observe flag) rather than a falsely-attributed ``operator``.
+    """
+    return "operator" if require_operator_approval else "bypass"
+
+
 def claude_framing_events(
     core: ClaudeCoreResult,
     *,
     source: EventSource,
+    decided_by: ReceiptDecidedBy = "bypass",
 ) -> Iterator[BackendEvent]:
     """Yield the TYPED framing events derived from a :class:`ClaudeCoreResult`.
 
@@ -271,7 +285,8 @@ def claude_framing_events(
     typed stream sink; this derives the framing -- ``run.started``, a
     ``receipt.created`` per persisted receipt id (``execution=
     "delegated-observed"``), and ``run.completed`` -- carrying the core's ids /
-    status.
+    status. ``decided_by`` carries the REAL governance attribution (parity item
+    C): ``"operator"`` only for a gated run, else ``"bypass"`` (ungated/observe).
     """
     yield run_started_event(source=source, run_id=core.run_id, task_id=core.task_id)
     for receipt_id in core.receipt_ids:
@@ -282,7 +297,7 @@ def claude_framing_events(
             execution="delegated-observed",
             mode="default",
             decision="allow",
-            decided_by="operator",
+            decided_by=decided_by,
             run_id=core.run_id,
             task_id=core.task_id,
         )
@@ -370,6 +385,7 @@ def run_provider_typed(
     env: dict[str, str] | None,
     source: EventSource,
     provider_source: session.PromptSource,
+    on_payload: Callable[[dict[str, object]], None] | None = None,
 ) -> Iterator[BackendEvent]:
     """Compose the provider core and yield its NEW TYPED event sequence.
 
@@ -380,6 +396,12 @@ def run_provider_typed(
     ``provider_source`` is the operator ``PromptSource`` on the task. If the
     adapter vendor disagrees with the resolved ``provider_family`` this refuses
     to emit (``ValueError``) rather than write a wrong-vendor record.
+
+    ``on_payload`` is the OPTIONAL payload-capture seam the Task 5.7 cutover uses:
+    after the core runs (and passes the vendor guard) the core's audited payload
+    is handed to ``on_payload`` so ``execute_prompt`` can build a
+    ``BackendPromptResult`` from a generator-shaped run(). It is invoked BEFORE
+    the events are yielded, only on a non-mismatch run.
     """
     core = run_provider_core(prompt=prompt, env=env, source=provider_source)
     store = core.store
@@ -399,6 +421,8 @@ def run_provider_typed(
                 f"adapter vendor '{vendor}' does not match resolved provider family "
                 f"'{core.provider_family}'; refusing to emit wrong-vendor receipts"
             )
+        if on_payload is not None:
+            on_payload(core.payload)
         events = list(provider_typed_events(core, source=source))
         yield from events
         session._persist_gateway_event_history(core.payload, events, store=store)
@@ -410,6 +434,7 @@ __all__ = [
     "ClaudeCoreResult",
     "ProviderCoreResult",
     "claude_framing_events",
+    "cli_observed_decided_by",
     "provider_typed_events",
     "run_claude_code_core",
     "run_provider_core",

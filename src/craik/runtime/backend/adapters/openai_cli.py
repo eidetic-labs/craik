@@ -129,6 +129,9 @@ class OpenAICLI(CLIAdapter):
         # here would be a false enforcement boundary. See the module docstring +
         # ``docs/adapters/vendor-capabilities.md`` § OpenAI / ``flows/openai-cli.md``.
         # Live governance over OpenAI goes through the ``openai-api`` surface.
+        # Payload-capture seam (Task 5.7): the generator-shaped run() stashes the
+        # audited core payload here for ``execute_prompt`` to read.
+        self.last_payload: dict[str, object] | None = None
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -234,7 +237,11 @@ class OpenAICLI(CLIAdapter):
             source=_SOURCE,
             map_native=self.map_native_event,
             coalescer=self._coalescer,
+            on_payload=self._capture_payload,
         )
+
+    def _capture_payload(self, payload: dict[str, object]) -> None:
+        self.last_payload = payload
 
     def parse_stream(self, lines: Iterable[str], ctx: RunContext) -> Iterator[BackendEvent]:
         """Decode each native line, map it, and flush coalesced text last.

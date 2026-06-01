@@ -157,6 +157,10 @@ class AnthropicAPI(APIAdapter):
         # core (legacy threaded it via ``_legacy_run(source=...)``); 5.7 injects
         # the real source, defaulting to ``"tui"`` until then.
         self.prompt_source: str = prompt_source
+        # Payload-capture seam (Task 5.7): ``run()`` is a generator, so the audited
+        # payload the core builds is stashed here for ``execute_prompt`` to read
+        # after consuming the events. ``None`` until a run() composes a core.
+        self.last_payload: dict[str, object] | None = None
         # The governed function-tool the model may call. Registered here so the
         # base ``function_tools`` (which strips hosted tools) sends exactly this.
         self.register_tool(
@@ -214,7 +218,11 @@ class AnthropicAPI(APIAdapter):
             env=self.original_env,
             source=_SOURCE,
             provider_source=self.prompt_source,  # type: ignore[arg-type]
+            on_payload=self._capture_payload,
         )
+
+    def _capture_payload(self, payload: dict[str, object]) -> None:
+        self.last_payload = payload
 
     # --- abstract hooks -----------------------------------------------------
 
