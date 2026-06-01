@@ -29,7 +29,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget, Wrap},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget, Wrap},
 };
 use render::{StatusLineMetrics, status_line};
 use std::{
@@ -140,7 +140,8 @@ fn main() -> anyhow::Result<()> {
                 Block::default()
                     .title("Craik Gateway")
                     .border_style(theme::mute_style())
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             ),
             frame.area(),
         );
@@ -153,6 +154,11 @@ fn main() -> anyhow::Result<()> {
 fn run_interactive_app() -> anyhow::Result<()> {
     initialize_detected_theme();
     enable_raw_mode()?;
+    // Raw mode is required to read the terminal's OSC 11 reply byte-by-byte
+    // (no line buffering). The query is best-effort: a non-responding terminal,
+    // a late/garbled reply, or a parse failure all fall through to the existing
+    // env/COLORFGBG/default chain. Failures here must never abort startup.
+    let _ = query_terminal_background();
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::with_options(
@@ -168,9 +174,114 @@ fn run_interactive_app() -> anyhow::Result<()> {
 }
 
 fn initialize_detected_theme() {
+    // The env override is authoritative when present: it lets tests and launch
+    // wrappers inject a known background without a terminal round-trip.
     if let Ok(response) = env::var("CRAIK_TUI_OSC11_RESPONSE") {
         let _ = theme::set_detected_terminal_mode_from_osc11(&response);
     }
+}
+
+/// Best-effort live terminal background detection via OSC 11.
+///
+/// Skipped entirely unless stdin and stdout are both ttys and no stronger
+/// signal already resolves the theme (see [`theme::should_query_osc11`]). On a
+/// real terminal it emits the `OSC 11 ; ? BEL` query and reads the `rgb:…`
+/// reply directly from fd 0 with a short `poll(2)` timeout. ANY failure mode --
+/// no reply, a late or garbled reply, a non-tty, or an I/O error -- returns
+/// without touching the detected mode, so the caller's fallback chain
+/// (`COLORFGBG`, then the dark default) still applies.
+///
+/// The raw read happens BEFORE crossterm's event reader is constructed, so it
+/// never contends with crossterm for stdin and never injects spurious key
+/// events: a reply arriving after the deadline lands in the tty buffer and is
+/// later parsed by crossterm as a discarded (unsupported) escape sequence, not
+/// a keypress. This path cannot be unit-tested (it needs a live terminal that
+/// answers OSC 11); the decision-to-query logic and the response parser are
+/// covered separately.
+#[cfg(unix)]
+fn query_terminal_background() -> Option<()> {
+    use std::io::Write;
+    use std::os::unix::io::AsRawFd;
+
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return None;
+    }
+    if !theme::should_query_osc11(|key| env::var(key).ok()) {
+        return None;
+    }
+
+    let mut stdout = io::stdout();
+    stdout.write_all(b"\x1b]11;?\x07").ok()?;
+    stdout.flush().ok()?;
+
+    let fd = io::stdin().as_raw_fd();
+    let mut buffer = Vec::new();
+    let mut byte = [0u8; 1];
+    // Total budget for the round-trip; a silent terminal exits via the first
+    // poll timeout and never hangs startup.
+    let deadline = std::time::Instant::now() + Duration::from_millis(150);
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: poll_fd is a valid, initialized pollfd for the duration of
+        // the call; poll only reads/writes through this pointer.
+        let ready = unsafe {
+            libc::poll(
+                &mut poll_fd,
+                1,
+                remaining.as_millis().min(i32::MAX as u128) as i32,
+            )
+        };
+        if ready == 0 {
+            // Timeout: stop. A partial reply (if any) is parsed below; else we
+            // fall through to the env/COLORFGBG/default chain.
+            break;
+        }
+        if ready < 0 {
+            // A signal during poll returns EINTR; retry within the deadline.
+            // Any other error: give up and fall through to the chain.
+            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            break;
+        }
+        // SAFETY: a single byte read into a stack buffer; fd is the tty.
+        let n = unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) };
+        if n < 0 {
+            if io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            break;
+        }
+        if n == 0 {
+            break;
+        }
+        buffer.push(byte[0]);
+        // The reply terminates with BEL (\x07) or ST (ESC \\).
+        if byte[0] == 0x07 || (buffer.len() >= 2 && byte[0] == b'\\') {
+            break;
+        }
+        if buffer.len() > 64 {
+            break;
+        }
+    }
+
+    let response = String::from_utf8_lossy(&buffer);
+    theme::set_detected_terminal_mode_from_osc11(&response).then_some(())
+}
+
+#[cfg(not(unix))]
+fn query_terminal_background() -> Option<()> {
+    // Non-Unix targets fall back to the env/COLORFGBG/default chain. The raw
+    // fd round-trip is Unix-only; this keeps the build portable.
+    None
 }
 
 fn run_interactive_loop(
@@ -437,8 +548,8 @@ fn render_footer(frame: &mut Frame<'_>, app: &InteractiveApp, area: Rect) {
         StatusLineMetrics {
             in_flight: app.in_flight,
             pending_approval: app.latest_pending_approval(),
-            approval_reviewed: app.active_overlay == Some(app::ActiveOverlay::Approvals)
-                && app.approval_overlay_reviewed,
+            approval_armed: app.active_overlay == Some(app::ActiveOverlay::Approvals)
+                && app.selected_approval_is_armed(),
             backend_connected: app.backend_connected,
             queued_inputs: app.queued_inputs.len(),
             active_overlay: app.active_overlay.map(|overlay| overlay.title()),
@@ -673,6 +784,7 @@ fn render_approval_overlay(
                 .title_style(border_style)
                 .border_style(border_style)
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .padding(Padding::horizontal(1)),
         )
         .style(theme::surface_style())
@@ -801,14 +913,14 @@ fn approval_actions_line() -> Line<'static> {
     Line::from(vec![
         Span::styled("Actions: ", theme::mute_style()),
         Span::styled(
-            "[Ctrl-A] approve",
+            "[a] approve",
             Style::default()
                 .fg(theme::sage())
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
         Span::styled(
-            "[Ctrl-X] deny",
+            "[d] deny",
             Style::default()
                 .fg(theme::red())
                 .add_modifier(Modifier::BOLD),
@@ -1173,27 +1285,30 @@ mod tests {
 
     const CLAUDE_CODE_STREAM: &str =
         include_str!("../../../tests/fixtures/gateway/claude_code_stream.jsonl");
+    // The second tuple element is the typed `source` envelope token (vendor ×
+    // surface) the fixture now carries; it surfaces in the differentiated
+    // evidence line. The third is a model-label fragment shown in the frame.
     const PROVIDER_FIXTURES: &[(&str, &str, &str)] = &[
         (
             include_str!(
                 "../../../tests/fixtures/gateway/provider_anthropic_messages_stream.jsonl"
             ),
-            "provider_anthropic_messages",
+            "anthropic-api",
             "Sonnet 4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_openai_responses_stream.jsonl"),
-            "provider_openai_responses",
+            "openai-api",
             "GPT-5.4",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_gemini_stream.jsonl"),
-            "provider_gemini",
+            "google-api",
             "Google Gemini 2.5 Pro",
         ),
         (
             include_str!("../../../tests/fixtures/gateway/provider_local_ollama_stream.jsonl"),
-            "provider_local_ollama",
+            "openai-api",
             "Local Ollama Llama 3.1 8B",
         ),
     ];
@@ -1384,7 +1499,7 @@ mod tests {
     #[test]
     fn approval_overlay_lines_preserve_decision_labels() {
         let lines = approval_overlay_lines(
-            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
+            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [a] approve  [d] deny  [Esc] defer",
         );
         let rendered = lines
             .iter()
@@ -1395,8 +1510,8 @@ mod tests {
         assert!(rendered.contains("Queue: 1 of 2 pending"));
         assert!(rendered.contains("  - old"));
         assert!(rendered.contains("  + new"));
-        assert!(rendered.contains("[Ctrl-A] approve"));
-        assert!(rendered.contains("[Ctrl-X] deny"));
+        assert!(rendered.contains("[a] approve"));
+        assert!(rendered.contains("[d] deny"));
         assert!(rendered.contains("[Esc] defer"));
         let removed = lines
             .iter()
@@ -1440,14 +1555,14 @@ mod tests {
 
     #[test]
     fn provider_fixtures_render_provider_neutral_tui_frames() {
-        for (input, provider_id, model_fragment) in PROVIDER_FIXTURES {
+        for (input, source_token, model_fragment) in PROVIDER_FIXTURES {
             let app = app_from_fixture(input);
             let rendered = render_app_frame(&app, 144, 38);
 
             assert!(rendered.contains("Chat"));
             assert!(!rendered.contains("Activity"));
             assert!(!rendered.contains("Run provenance"));
-            assert!(rendered.contains(*provider_id));
+            assert!(rendered.contains(*source_token));
             assert!(rendered.contains(*model_fragment));
             assert!(!rendered.contains("Run completed"));
         }
@@ -1681,10 +1796,40 @@ mod tests {
         assert!(rows.iter().any(|row| row.contains("Source request")));
         assert!(rows.iter().any(|row| row.contains("Craik context")));
         assert!(rows.iter().any(|row| row.contains("Warning:")));
-        assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
+        assert!(rows.iter().any(|row| row.contains("[a] approve")));
         assert!(
             rows.iter()
                 .any(|row| row.contains('+') && row.contains("new"))
+        );
+    }
+
+    #[test]
+    fn approval_overlay_uses_rounded_boxed_frame() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(
+            &serde_json::from_str(
+                r#"{
+                    "type": "approval.requested",
+                    "data": {
+                        "approval_id": "approval_edit_1",
+                        "message": "Edit src/lib.rs?",
+                        "tool": "Edit",
+                        "target": "src/lib.rs"
+                    }
+                }"#,
+            )
+            .expect("approval fixture parses"),
+        );
+        app.active_overlay = Some(ActiveOverlay::Approvals);
+
+        let rendered = render_app_frame(&app, 120, 50);
+        assert!(
+            rendered.contains('╭') && rendered.contains('╰'),
+            "approval overlay boxed frame uses rounded corners"
+        );
+        assert!(
+            !rendered.contains('┌'),
+            "approval overlay boxed frame drops square corners"
         );
     }
 

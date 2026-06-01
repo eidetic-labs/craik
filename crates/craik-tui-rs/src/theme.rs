@@ -46,6 +46,40 @@ pub fn set_detected_terminal_mode_from_osc11(response: &str) -> bool {
     true
 }
 
+/// Decide whether a live OSC 11 background query is worth attempting.
+///
+/// The query is a terminal round-trip, so it is skipped whenever an existing
+/// signal already determines (or pins) the theme and detection would be
+/// ignored or redundant:
+/// - an explicit `CRAIK_TUI_THEME`/`CRAIK_THEME` pin,
+/// - `NO_COLOR=1` (forces monochrome),
+/// - a pre-injected `CRAIK_TUI_OSC11_RESPONSE` (tests / launch wrappers),
+/// - an already-present `COLORFGBG` background hint.
+///
+/// Precedence mirrors [`mode_from_env_and_detected`]: explicit theme and
+/// `NO_COLOR` always win over a detected mode, so skipping the query in those
+/// cases changes no observable behavior. The caller still gates the actual
+/// I/O behind a tty check.
+pub fn should_query_osc11(env_value: impl Fn(&str) -> Option<String>) -> bool {
+    if env_value("CRAIK_TUI_THEME")
+        .or_else(|| env_value("CRAIK_THEME"))
+        .and_then(|value| mode_from_configured(&value))
+        .is_some()
+    {
+        return false;
+    }
+    if env_value("NO_COLOR").as_deref() == Some("1") {
+        return false;
+    }
+    if env_value("CRAIK_TUI_OSC11_RESPONSE").is_some() {
+        return false;
+    }
+    if env_value("COLORFGBG").is_some() {
+        return false;
+    }
+    true
+}
+
 pub fn accent() -> Color {
     palette().accent
 }
@@ -326,6 +360,42 @@ mod tests {
             Some(ThemeMode::Light)
         );
         assert_eq!(mode_from_osc11_response("not osc"), None);
+    }
+
+    #[test]
+    fn osc11_query_is_skipped_when_an_explicit_signal_wins() {
+        use super::should_query_osc11;
+        // Explicit theme pins win -> no need to interrogate the terminal.
+        assert!(!should_query_osc11(
+            |key| (key == "CRAIK_TUI_THEME").then(|| "light".to_owned())
+        ));
+        assert!(!should_query_osc11(
+            |key| (key == "CRAIK_THEME").then(|| "dark".to_owned())
+        ));
+        // NO_COLOR forces monochrome regardless of background.
+        assert!(!should_query_osc11(
+            |key| (key == "NO_COLOR").then(|| "1".to_owned())
+        ));
+        // A pre-injected OSC11 response (tests / wrappers) is authoritative.
+        assert!(!should_query_osc11(|key| (key
+            == "CRAIK_TUI_OSC11_RESPONSE")
+            .then(|| "\u{1b}]11;rgb:ffff/ffff/ffff\u{7}".to_owned())));
+        // COLORFGBG already answers the question -> skip the round-trip.
+        assert!(!should_query_osc11(
+            |key| (key == "COLORFGBG").then(|| "0;15".to_owned())
+        ));
+        // Nothing set -> a live query is worthwhile.
+        assert!(should_query_osc11(|_| None));
+    }
+
+    #[test]
+    fn injected_osc11_response_resolves_to_expected_mode() {
+        // The env-override path used by tests / launch wrappers must keep
+        // working: a valid light response selects Light, garbage is rejected.
+        assert!(super::set_detected_terminal_mode_from_osc11(
+            "\u{1b}]11;rgb:ffff/ffff/ffff\u{1b}\\"
+        ));
+        assert!(!super::set_detected_terminal_mode_from_osc11("garbage"));
     }
 
     #[test]

@@ -54,7 +54,7 @@ impl ActiveOverlay {
             Self::Memory => "Type filter  Up/Down select  Ctrl-E evidence  Esc chat",
             Self::Evidence => "Type filter  Up/Down select  Ctrl-R runs  Esc chat",
             Self::Runs => "Type filter  Up/Down select  Ctrl-L filter  Ctrl-O export  Esc chat",
-            Self::Approvals => "Ctrl-N/P select  Ctrl-A approve  Ctrl-X deny  Esc defer",
+            Self::Approvals => "Ctrl-N/P select  a approve  d deny  Esc defer",
         }
     }
 }
@@ -148,6 +148,11 @@ struct PendingApproval {
     risk: Option<String>,
     command: Option<String>,
     preview: Option<String>,
+    /// The Claude permission mode this approval was raised under (e.g.
+    /// `bypassPermissions`), when the event carries it. Captured so the
+    /// most-dangerous mode forces the high-risk two-press gate independent of
+    /// the free-text risk string.
+    permission_mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -179,7 +184,16 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
     pub(crate) active_overlay: Option<ActiveOverlay>,
-    pub(crate) approval_overlay_reviewed: bool,
+    /// The id of the high-risk / bypassPermissions approval currently *armed*
+    /// for its explicit second-press confirm. Keying the arm to the selected
+    /// approval's identity (instead of a bare overlay-global bool) is fail-safe
+    /// by construction: any change of selection -- by navigation, by a queue
+    /// mutation that shifts the selected index, or by a committed decision --
+    /// leaves a stale id that no longer matches the newly-selected approval, so
+    /// the gate re-arms from scratch. Every high-risk approval therefore
+    /// requires its OWN two-press confirm; no manual reset on each
+    /// selection-change path can be forgotten.
+    pub(crate) armed_approval_id: Option<String>,
     pub(crate) overlay_filter: String,
     pub(crate) overlay_selected_index: usize,
     pub(crate) overlay_scroll: u16,
@@ -204,6 +218,18 @@ pub(crate) struct InteractiveApp {
     auto_select_latest_run: bool,
     last_submitted_text: Option<String>,
     last_prompt_preview: Option<String>,
+    /// Identity of the in-flight coalesced assistant entry: `(run_id, index)`
+    /// into `transcript`. Lets a growing `assistant_text` snapshot supersede the
+    /// run's earlier partial in place instead of stacking duplicates.
+    assistant_text_entry: Option<(String, usize)>,
+    /// Identity of the in-flight coalesced Progress entry: `(run_id, index)` into
+    /// `transcript`. Repeated `run.progress` updates for one run supersede this
+    /// entry in place (one updating status line) instead of stacking N frozen
+    /// lines. The slot is honoured only while the tracked index is still the
+    /// transcript tail; once any other entry is pushed (a tool/assistant/system
+    /// line, run completion, etc.) the tail moves and the next progress update
+    /// starts a fresh line. See `supersede_progress`.
+    progress_entry: Option<(String, usize)>,
 }
 
 impl InteractiveApp {
@@ -220,7 +246,7 @@ impl InteractiveApp {
             expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
-            approval_overlay_reviewed: false,
+            armed_approval_id: None,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -245,6 +271,8 @@ impl InteractiveApp {
             auto_select_latest_run: true,
             last_submitted_text: None,
             last_prompt_preview: None,
+            assistant_text_entry: None,
+            progress_entry: None,
         };
         app.send_commands([
             GatewayCommand::SessionStatus,
@@ -279,7 +307,7 @@ impl InteractiveApp {
             expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
-            approval_overlay_reviewed: false,
+            armed_approval_id: None,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -304,6 +332,8 @@ impl InteractiveApp {
             auto_select_latest_run: true,
             last_submitted_text: None,
             last_prompt_preview: None,
+            assistant_text_entry: None,
+            progress_entry: None,
         }
     }
 
@@ -842,6 +872,20 @@ impl InteractiveApp {
         self.pending_approvals.get(index)
     }
 
+    fn selected_approval_is_high_risk(&self) -> bool {
+        self.selected_pending_approval()
+            .is_some_and(PendingApproval::is_high_risk)
+    }
+
+    /// Whether the currently selected approval is the one armed for its
+    /// explicit second-press confirm. Drives the footer "armed" affordance.
+    pub(crate) fn selected_approval_is_armed(&self) -> bool {
+        matches!(
+            (&self.armed_approval_id, self.selected_pending_approval()),
+            (Some(armed), Some(selected)) if *armed == selected.id
+        )
+    }
+
     fn selected_approval_detail_text(&self) -> Option<String> {
         let index = self.selected_approval_index?;
         let approval = self.pending_approvals.get(index)?;
@@ -854,7 +898,9 @@ impl InteractiveApp {
 
     fn open_overlay(&mut self, overlay: ActiveOverlay) {
         self.active_overlay = Some(overlay);
-        self.approval_overlay_reviewed = overlay == ActiveOverlay::Approvals;
+        // Single-press keymap: the approvals overlay opens disarmed. The arm is
+        // keyed to the selected approval's id, so opening clears any stale arm.
+        self.armed_approval_id = None;
         self.overlay_filter.clear();
         self.overlay_selected_index = match overlay {
             ActiveOverlay::Runs => self
@@ -874,12 +920,12 @@ impl InteractiveApp {
 
     fn surface_pending_approval_overlay(&mut self) {
         self.open_overlay(ActiveOverlay::Approvals);
-        self.approval_overlay_reviewed = false;
+        self.armed_approval_id = None;
     }
 
     fn close_unreviewed_approval_overlay(&mut self) {
         if self.active_overlay == Some(ActiveOverlay::Approvals)
-            && !self.approval_overlay_reviewed
+            && self.armed_approval_id.is_none()
             && self.pending_approvals.is_empty()
         {
             self.active_overlay = None;
@@ -1127,7 +1173,7 @@ impl InteractiveApp {
         match key.code {
             KeyCode::Esc => {
                 self.active_overlay = None;
-                self.approval_overlay_reviewed = false;
+                self.armed_approval_id = None;
                 self.overlay_filter.clear();
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1139,26 +1185,49 @@ impl InteractiveApp {
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_overlay(ActiveOverlay::Runs);
             }
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if self.active_overlay == Some(ActiveOverlay::Approvals) {
-                    if self.approval_overlay_reviewed {
-                        self.approve_selected();
-                    } else {
-                        self.approval_overlay_reviewed = true;
-                    }
-                } else {
-                    self.open_overlay(ActiveOverlay::Approvals);
-                }
-            }
-            KeyCode::Char('x')
-                if key.modifiers.contains(KeyModifiers::CONTROL)
+            // Single-press approve while the approvals overlay is focused. A
+            // low-risk approval is decided on the first 'a'. A high-risk /
+            // bypassPermissions approval keeps an explicit confirmation gate:
+            // the first 'a' ARMS this specific approval (records its id in
+            // `armed_approval_id`) and only a second 'a' -- while that SAME
+            // approval is still selected -- approves, so a destructive action
+            // never lands on a single accidental keystroke. The arm is keyed to
+            // the approval's identity, so navigating away, a queue mutation, or
+            // a committed decision leaves a stale id that no longer matches the
+            // selection: the gate re-arms from scratch for every high-risk item.
+            // This branch is reachable only when an overlay is focused (see
+            // `handle_key` routing), so a stray 'a' in the composer can never
+            // approve anything.
+            KeyCode::Char('a')
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && self.active_overlay == Some(ActiveOverlay::Approvals) =>
             {
-                if self.approval_overlay_reviewed {
-                    self.deny_selected();
+                let selected_id = self.selected_pending_approval().map(|a| a.id.clone());
+                let armed_for_selection = matches!(
+                    (&self.armed_approval_id, &selected_id),
+                    (Some(armed), Some(selected)) if armed == selected
+                );
+                if self.selected_approval_is_high_risk() && !armed_for_selection {
+                    self.armed_approval_id = selected_id;
                 } else {
-                    self.approval_overlay_reviewed = true;
+                    self.approve_selected();
                 }
+            }
+            // Open the approvals overlay from any *other* overlay with Ctrl-A.
+            KeyCode::Char('a')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay != Some(ActiveOverlay::Approvals) =>
+            {
+                self.open_overlay(ActiveOverlay::Approvals);
+            }
+            // Single-press deny while the approvals overlay is focused. Deny is
+            // always unambiguous and one press -- it never falls through to
+            // approve and needs no arming step, even for high-risk approvals.
+            KeyCode::Char('d')
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                self.deny_selected();
             }
             KeyCode::Char('n')
                 if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -1246,8 +1315,8 @@ impl InteractiveApp {
             "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
             "  PageUp / PageDown scroll transcript by page; Alt-Up / Alt-Down by line".to_owned(),
             "Approvals".to_owned(),
-            "  Ctrl-A opens approval review; Ctrl-A approves from that overlay; Ctrl-X denies"
-                .to_owned(),
+            "  Ctrl-A opens the approval overlay; a approves, d denies, Esc defers".to_owned(),
+            "  High-risk approvals require a second a to confirm".to_owned(),
             "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
                 .to_owned(),
             "Help".to_owned(),
@@ -1344,9 +1413,8 @@ impl InteractiveApp {
                 if let Some(message) = event.data.get("message").and_then(|value| value.as_str())
                     && !should_hide_transcript_event(event)
                     && should_show_progress_message(event, message)
+                    && self.supersede_progress(event, message)
                 {
-                    self.transcript
-                        .push(TranscriptEntry::progress("Progress", message));
                     self.follow_tail_after_transcript_update();
                 }
             }
@@ -1356,7 +1424,14 @@ impl InteractiveApp {
                     .get("tool")
                     .and_then(|value| value.as_str())
                     .unwrap_or("tool");
-                if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
+                let message = event.data.get("message").and_then(|value| value.as_str());
+                // The typed API adapters emit tool.used with command/target but
+                // no message; render whenever any of message/command/target is
+                // present so tool activity is never silently dropped.
+                let has_renderable = message.is_some()
+                    || event.data.get("command").is_some()
+                    || event.data.get("target").is_some();
+                if has_renderable {
                     let kind = if tool == "Bash" {
                         TranscriptKind::Command
                     } else {
@@ -1468,18 +1543,33 @@ impl InteractiveApp {
                 ));
                 self.follow_tail_after_transcript_update();
             }
-            "receipt.created" => {
-                if let Some(receipt_id) = event
+            "receipt.created"
+                if event
                     .data
                     .get("receipt_id")
                     .and_then(|value| value.as_str())
-                {
-                    self.transcript.push(TranscriptEntry::new(
-                        TranscriptKind::Receipt,
-                        "Evidence saved",
-                        &summarize_receipt_marker(event, receipt_id),
-                    ));
-                    self.follow_tail_after_transcript_update();
+                    .is_some() =>
+            {
+                self.transcript.push(TranscriptEntry::new(
+                    TranscriptKind::Receipt,
+                    "Evidence saved",
+                    &summarize_receipt_marker(event),
+                ));
+                self.follow_tail_after_transcript_update();
+            }
+            "assistant_text" => {
+                // Assistant text is coalesced upstream (the backend Coalescer
+                // supersedes cumulative snapshots), so the per-run stream is a
+                // growing snapshot. Supersede the run's existing Assistant entry
+                // in place rather than stacking N partials.
+                if let Some(text) = event.data.get("text").and_then(|value| value.as_str()) {
+                    let display_text = text.trim();
+                    if display_text.is_empty() {
+                        return;
+                    }
+                    if self.supersede_assistant_text(event, display_text) {
+                        self.follow_tail_after_transcript_update();
+                    }
                 }
             }
             "run.output" => {
@@ -1491,39 +1581,6 @@ impl InteractiveApp {
                     self.transcript
                         .push(TranscriptEntry::assistant("Assistant", &display_text));
                     self.follow_tail_after_transcript_update();
-                }
-            }
-            "run.event" => {
-                if let Some(text) = event
-                    .data
-                    .get("text")
-                    .or_else(|| event.data.get("message"))
-                    .and_then(|value| value.as_str())
-                {
-                    if should_hide_transcript_event(event) {
-                        return;
-                    }
-                    let event_kind = event.data.get("kind").and_then(|value| value.as_str());
-                    let kind = match event_kind {
-                        Some("tool_result") => TranscriptKind::Tool,
-                        _ => TranscriptKind::Assistant,
-                    };
-                    let title = match event_kind {
-                        Some("tool_result") => "Tool result",
-                        _ => "Assistant",
-                    };
-                    let display_text = if kind == TranscriptKind::Assistant {
-                        assistant_event_transcript_text(text)
-                    } else {
-                        Some(text.trim().to_owned())
-                    };
-                    if let Some(display_text) = display_text
-                        && !recent_transcript_body_matches(&self.transcript, &display_text)
-                    {
-                        self.transcript
-                            .push(TranscriptEntry::new(kind, title, &display_text));
-                        self.follow_tail_after_transcript_update();
-                    }
                 }
             }
             "run.completed" => {
@@ -1570,6 +1627,68 @@ impl InteractiveApp {
             }
             _ => {}
         }
+    }
+
+    /// Render a coalesced `assistant_text` snapshot, superseding the same run's
+    /// earlier (smaller) snapshot in place. Returns whether the transcript
+    /// changed. Dedup is by `run_id` rather than a content-window match.
+    ///
+    /// `run_id` is not contract-required on `assistant_text` (the backend
+    /// `Coalescer` permits run-less streams); a missing id falls to the `""`
+    /// key, collapsing run-less snapshots into one slot, mirroring the backend's
+    /// `None`-key grouping. This tracks only the most-recent run's slot, which is
+    /// sufficient because the gateway has a single run in flight at a time; if
+    /// concurrent runs are ever introduced, interleaved snapshots would stack
+    /// rather than supersede and this would need a per-run map.
+    fn supersede_assistant_text(&mut self, event: &GatewayEvent, text: &str) -> bool {
+        let run_key = event.run_id.clone().unwrap_or_default();
+        if let Some((existing_run, index)) = self.assistant_text_entry.as_ref()
+            && *existing_run == run_key
+            && let Some(entry) = self.transcript.get_mut(*index)
+            && entry.kind == TranscriptKind::Assistant
+        {
+            if entry.body == text {
+                return false;
+            }
+            entry.update_body(text);
+            return true;
+        }
+        self.transcript
+            .push(TranscriptEntry::assistant("Assistant", text));
+        self.assistant_text_entry = Some((run_key, self.transcript.len() - 1));
+        true
+    }
+
+    /// Render a `run.progress` update, superseding this run's earlier progress
+    /// line in place rather than stacking a fresh frozen line per update.
+    /// Returns whether the transcript changed.
+    ///
+    /// The tracked slot is honoured only when it is still the transcript tail
+    /// AND keyed to the same run. The tail check is what implements the
+    /// "reset on a non-progress entry or new run" requirement without
+    /// instrumenting every other push site: as soon as a tool/assistant/system
+    /// line (or a different run's progress) is appended, the tracked index is no
+    /// longer the tail, so the next progress update appends fresh. A `run_id` of
+    /// `None` collapses to the `""` key (run-less progress streams share one
+    /// slot), mirroring `supersede_assistant_text`.
+    fn supersede_progress(&mut self, event: &GatewayEvent, message: &str) -> bool {
+        let run_key = event.run_id.clone().unwrap_or_default();
+        if let Some((existing_run, index)) = self.progress_entry.as_ref()
+            && *existing_run == run_key
+            && *index + 1 == self.transcript.len()
+            && let Some(entry) = self.transcript.get_mut(*index)
+            && entry.kind == TranscriptKind::Progress
+        {
+            if entry.body == message {
+                return false;
+            }
+            entry.update_body(message);
+            return true;
+        }
+        self.transcript
+            .push(TranscriptEntry::progress("Progress", message));
+        self.progress_entry = Some((run_key, self.transcript.len() - 1));
+        true
     }
 
     fn record_run_event(&mut self, event: &GatewayEvent) {
@@ -2285,6 +2404,9 @@ impl InteractiveApp {
             operator: "user:ratatui".to_owned(),
             reason: "approved from Ratatui client".to_owned(),
         }]);
+        // A committed decision disarms unconditionally: a subsequently-selected
+        // high-risk approval must require its own two-press confirm.
+        self.armed_approval_id = None;
     }
 
     pub(crate) fn deny_selected(&mut self) {
@@ -2312,9 +2434,16 @@ impl InteractiveApp {
             operator: "user:ratatui".to_owned(),
             reason: "denied from Ratatui client".to_owned(),
         }]);
+        // A committed decision disarms unconditionally (see `approve_selected`).
+        self.armed_approval_id = None;
     }
 
     pub(crate) fn select_next_approval(&mut self) {
+        // Changing the selection disarms: arming is bound to the previously
+        // selected approval and must not carry to the newly selected one. (The
+        // id-keyed match in the 'a' handler already makes this fail-safe; the
+        // explicit clear keeps the field from going stale.)
+        self.armed_approval_id = None;
         if self.pending_approvals.is_empty() {
             self.selected_approval_index = None;
             return;
@@ -2327,6 +2456,8 @@ impl InteractiveApp {
     }
 
     pub(crate) fn select_previous_approval(&mut self) {
+        // Changing the selection disarms (see `select_next_approval`).
+        self.armed_approval_id = None;
         if self.pending_approvals.is_empty() {
             self.selected_approval_index = None;
             return;
@@ -2563,6 +2694,7 @@ impl PendingApproval {
                 event,
                 &["preview", "diff", "patch", "command_preview", "text"],
             ),
+            permission_mode: first_string_data(event, &["permission_mode", "mode"]),
         }
     }
 
@@ -2584,7 +2716,7 @@ impl PendingApproval {
         if self.risk.as_deref().is_some_and(is_high_risk_text) {
             lines.push("Risk: high - review before deciding".to_owned());
         }
-        lines.push("Actions: Ctrl-A open review  Ctrl-X open denial review  Esc defer".to_owned());
+        lines.push("Actions: [a] approve  [d] deny  [Esc] defer".to_owned());
         lines.join("\n")
     }
 
@@ -2644,7 +2776,13 @@ impl PendingApproval {
             lines.push(format!("  $ {command}"));
         }
         lines.push(String::new());
-        lines.push("Actions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer".to_owned());
+        if self.is_high_risk() {
+            lines.push(
+                "Actions: [a] approve (press twice to confirm)  [d] deny  [Esc] defer".to_owned(),
+            );
+        } else {
+            lines.push("Actions: [a] approve  [d] deny  [Esc] defer".to_owned());
+        }
         lines.join("\n")
     }
 
@@ -2661,6 +2799,25 @@ impl PendingApproval {
             (None, None, Some(command)) => format!("Run {command}"),
             (None, None, None) => self.subject_label().to_owned(),
         }
+    }
+
+    /// A destructive / high-risk approval that must keep an explicit
+    /// confirmation gate even under the single-press keymap. Triggered by
+    /// EITHER signal:
+    ///   - `bypassPermissions` mode -- the most dangerous mode, so it is always
+    ///     high-risk regardless of the free-text risk string (which a backend
+    ///     may leave benign or empty); OR
+    ///   - the `is_high_risk_text` needle heuristic the modal already uses to
+    ///     render the "Warning: high-risk approval" affordance.
+    fn is_high_risk(&self) -> bool {
+        self.is_bypass_permissions() || self.risk.as_deref().is_some_and(is_high_risk_text)
+    }
+
+    /// Whether this approval was raised under `bypassPermissions` mode.
+    fn is_bypass_permissions(&self) -> bool {
+        self.permission_mode
+            .as_deref()
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("bypassPermissions"))
     }
 
     fn risk_label(&self) -> &str {
@@ -2862,7 +3019,11 @@ fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     lines.join("\n")
 }
 
-fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str) -> String {
+fn summarize_tool_event(
+    event: &GatewayEvent,
+    tool: &str,
+    fallback_message: Option<&str>,
+) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Tool: {tool}"));
     push_optional_data_line(&mut lines, event, "Provider", "provider_id");
@@ -2875,24 +3036,31 @@ fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str
     if let Some(target) = event.data.get("target").and_then(|value| value.as_str()) {
         lines.push(format!("Target: {target}"));
     }
-    lines.push(format!("Detail: {fallback_message}"));
+    // Only the API adapters carry a free-text message; CLI/typed adapters
+    // describe the call via command/target alone.
+    if let Some(message) = fallback_message {
+        lines.push(format!("Detail: {message}"));
+    }
     lines.join("\n")
 }
 
-fn summarize_receipt_marker(event: &GatewayEvent, receipt_id: &str) -> String {
-    let mut parts = vec![compact_text(receipt_id, 42)];
-    if let Some(run_id) = event.run_id.as_deref() {
-        parts.push(format!("run {}", compact_text(run_id, 28)));
+fn summarize_receipt_marker(event: &GatewayEvent) -> String {
+    // Differentiate evidence lines by the typed governance identity carried on
+    // the event envelope/data: vendor×surface `source`, `execution` posture,
+    // and the `decision (decided_by)` attribution. Without these, every receipt
+    // collapsed to an identical generic string (the duplicate-evidence bug).
+    let mut parts = vec![event.source.clone()];
+    if let Some(execution) = string_data(event, "execution") {
+        parts.push(execution);
     }
-    if let Some(provider) = event
-        .data
-        .get("provider_id")
-        .and_then(|value| value.as_str())
-    {
-        parts.push(compact_text(provider, 32));
+    if let Some(decision) = string_data(event, "decision") {
+        match string_data(event, "decided_by") {
+            Some(decided_by) => parts.push(format!("{decision} ({decided_by})")),
+            None => parts.push(decision),
+        }
     }
     format!(
-        "Saved evidence. Ctrl-E opens details. {}",
+        "Saved evidence · {}. Ctrl-E opens details.",
         parts.join(" · ")
     )
 }
@@ -3160,8 +3328,12 @@ fn should_show_progress_message(event: &GatewayEvent, message: &str) -> bool {
 }
 
 fn run_output_transcript_text(summary: &str) -> Option<String> {
-    let stripped = strip_craik_contract_output_sections(summary);
-    let trimmed = stripped.trim();
+    // Phase 4 strips contract envelopes at the source (every adapter runs
+    // `strip_contract_envelopes` before emitting text), so the TUI no longer
+    // needs to defensively scrub contract sections out of `run.output`
+    // summaries. A summary that still parses as a structured-output contract is
+    // reduced to its display text; everything else passes through verbatim.
+    let trimmed = summary.trim();
     if trimmed.is_empty() {
         return None;
     }
@@ -3172,118 +3344,6 @@ fn run_output_transcript_text(summary: &str) -> Option<String> {
         .as_ref()
         .and_then(extract_contract_display_text)
         .or_else(|| text_before_contract_marker(trimmed))
-}
-
-fn assistant_event_transcript_text(text: &str) -> Option<String> {
-    let stripped = strip_craik_contract_output_sections(text);
-    let candidate = stripped.trim();
-    if candidate.is_empty() {
-        None
-    } else if looks_like_structured_output_contract(candidate) {
-        run_output_transcript_text(candidate)
-    } else {
-        Some(candidate.to_owned())
-    }
-}
-
-fn strip_craik_contract_output_sections(text: &str) -> String {
-    let mut output = Vec::new();
-    let mut skipping_contract = false;
-    let mut skipping_fence = false;
-    let mut contract_had_fence = false;
-    let mut skipping_contract_group = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        let lower = trimmed.to_ascii_lowercase();
-        if let Some(kind) = craik_contract_heading_kind(&lower) {
-            remove_trailing_contract_separator(&mut output);
-            skipping_contract = true;
-            skipping_fence = false;
-            contract_had_fence = false;
-            skipping_contract_group = kind == ContractHeadingKind::Group;
-            continue;
-        }
-        if skipping_contract {
-            if trimmed.starts_with("```") {
-                if skipping_fence {
-                    skipping_contract = skipping_contract_group;
-                    skipping_fence = false;
-                    contract_had_fence = false;
-                } else {
-                    skipping_fence = true;
-                    contract_had_fence = true;
-                }
-                continue;
-            }
-            if skipping_fence
-                || trimmed.is_empty()
-                || looks_like_contract_json_line(trimmed)
-                || (contract_had_fence && craik_contract_heading_kind(&lower).is_some())
-            {
-                continue;
-            }
-            skipping_contract = false;
-            contract_had_fence = false;
-            skipping_contract_group = false;
-        }
-        output.push(line);
-    }
-    output.join("\n")
-}
-
-fn remove_trailing_contract_separator(output: &mut Vec<&str>) {
-    while output.last().is_some_and(|line| line.trim().is_empty()) {
-        output.pop();
-    }
-    if output.last().is_some_and(|line| {
-        matches!(
-            line.trim(),
-            "---" | "----" | "-----" | "***" | "___" | "—" | "–"
-        )
-    }) {
-        output.pop();
-    }
-    while output.last().is_some_and(|line| line.trim().is_empty()) {
-        output.pop();
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ContractHeadingKind {
-    Group,
-    Single,
-}
-
-fn craik_contract_heading_kind(lower: &str) -> Option<ContractHeadingKind> {
-    if lower.contains("craik contract output")
-        || lower.contains("contract-shaped output")
-        || lower.contains("contract output")
-        || lower.contains("output contract")
-    {
-        return Some(ContractHeadingKind::Group);
-    }
-    if lower.contains("**craik.") || lower.starts_with("craik.") {
-        return Some(ContractHeadingKind::Single);
-    }
-    None
-}
-
-fn looks_like_contract_json_line(line: &str) -> bool {
-    line.starts_with('{')
-        || line.starts_with('}')
-        || line.starts_with('[')
-        || line.starts_with(']')
-        || line.ends_with(',')
-        || line.ends_with(':')
-        || line.contains("\"schema\"")
-        || line.contains("\"task_id\"")
-        || line.contains("\"status\"")
-        || line.contains("\"summary\"")
-        || line.contains("\"evidence\"")
-        || line.contains("\"receipt_ids\"")
-        || line.contains("\"commands_run\"")
-        || line.contains("\"capabilities_used\"")
-        || line.contains("\"policy_compliance\"")
 }
 
 fn looks_like_structured_output_contract(text: &str) -> bool {
@@ -3734,11 +3794,21 @@ fn receipt_detail_from_event(event: &GatewayEvent) -> String {
     if let Some(task_id) = event.task_id.as_deref() {
         parts.push(format!("task={task_id}"));
     }
-    if let Some(provider) = string_data(event, "provider_id") {
-        parts.push(format!("provider={provider}"));
+    parts.push(format!("source={}", event.source));
+    if let Some(purpose) = string_data(event, "purpose") {
+        parts.push(format!("purpose={purpose}"));
     }
-    if let Some(family) = string_data(event, "provider_family") {
-        parts.push(format!("family={family}"));
+    if let Some(execution) = string_data(event, "execution") {
+        parts.push(format!("execution={execution}"));
+    }
+    if let Some(mode) = string_data(event, "mode") {
+        parts.push(format!("mode={mode}"));
+    }
+    if let Some(decision) = string_data(event, "decision") {
+        parts.push(format!("decision={decision}"));
+    }
+    if let Some(decided_by) = string_data(event, "decided_by") {
+        parts.push(format!("decided_by={decided_by}"));
     }
     parts.join(" | ")
 }
@@ -3857,10 +3927,7 @@ fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ActiveOverlay, InteractiveApp, LoopAction, RunRecord, assistant_event_transcript_text,
-        export_file_stem,
-    };
+    use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use crate::transcript::TranscriptKind;
@@ -3899,6 +3966,7 @@ mod tests {
     fn status_not_ready_surfaces_blocked_run_guidance() {
         let status = GatewayEvent {
             event_type: "session.status".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -3925,6 +3993,7 @@ mod tests {
     fn session_history_loads_persisted_receipts_into_run_records() {
         let history = GatewayEvent {
             event_type: "session.history".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -3976,6 +4045,7 @@ mod tests {
     fn completed_run_without_output_is_visible() {
         let completed = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_empty".to_owned()),
             task_id: None,
@@ -3991,6 +4061,78 @@ mod tests {
             app.transcript
                 .iter()
                 .any(|entry| entry.title == "No model output")
+        );
+    }
+
+    #[test]
+    fn assistant_text_then_completed_does_not_report_no_model_output() {
+        // Typed contract: the model's text arrives as `assistant_text`. It must
+        // count as model output so `run.completed` does not spuriously report
+        // "No model output" — the live anthropic-cli path emits no `run.output`,
+        // only `assistant_text`.
+        let assistant = GatewayEvent {
+            event_type: "assistant_text".to_owned(),
+            source: "anthropic-cli".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: None,
+            data: json!({"text": "Here is the repo overview."}),
+        };
+        let completed = GatewayEvent {
+            event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: None,
+            data: json!({"status": "completed"}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([
+            WorkerMessage::Event(assistant),
+            WorkerMessage::Event(completed),
+        ]);
+        app.in_flight = true;
+
+        app.drain_worker();
+
+        assert!(
+            !app.state.outputs.is_empty(),
+            "assistant_text must count as model output"
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "No model output"),
+            "assistant_text output must suppress the No model output flag"
+        );
+    }
+
+    #[test]
+    fn live_anthropic_cli_stream_renders_output_without_no_model_output_flag() {
+        // Regression on the operator's REAL captured anthropic-cli run, extracted
+        // from the persisted gateway_event_history (typed contract: tool.used +
+        // receipt.created + assistant_text + framing, and NO run.output). Drives
+        // the actual interactive app and asserts the model's text renders AND the
+        // spurious "No model output" flag does NOT fire.
+        let fixture = include_str!("../../../tests/fixtures/gateway/anthropic_cli_live_run.jsonl");
+        let events = crate::parse_gateway_events(fixture).expect("live fixture parses");
+        let messages = events.into_iter().map(WorkerMessage::Event);
+        let mut app = InteractiveApp::for_test_with_messages(messages);
+        app.in_flight = true;
+
+        app.drain_worker();
+
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.kind == TranscriptKind::Assistant
+                    && entry.body.contains("I can see the Craik repo")),
+            "assistant_text from the live run must render in the transcript"
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "No model output"),
+            "live anthropic-cli stream must not report No model output"
         );
     }
 
@@ -4174,6 +4316,7 @@ mod tests {
         let mut app =
             InteractiveApp::for_test_with_messages([WorkerMessage::Event(GatewayEvent {
                 event_type: "error".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: Some("run_contract".to_owned()),
                 task_id: Some("task_contract".to_owned()),
@@ -4200,9 +4343,279 @@ mod tests {
     }
 
     #[test]
+    fn distinct_receipts_render_distinct_evidence_lines() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        let first = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_a".to_owned()),
+            task_id: Some("task_a".to_owned()),
+            data: json!({
+                "receipt_id": "receipt_a",
+                "purpose": "execution",
+                "execution": "craik",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "operator"
+            }),
+        };
+        let second = GatewayEvent {
+            event_type: "receipt.created".to_owned(),
+            source: "google-cli".to_owned(),
+            created_at: None,
+            run_id: Some("run_b".to_owned()),
+            task_id: Some("task_b".to_owned()),
+            data: json!({
+                "receipt_id": "receipt_b",
+                "purpose": "execution",
+                "execution": "delegated-observed",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "bypass"
+            }),
+        };
+
+        app.record_event(&first);
+        app.record_event(&second);
+
+        let evidence: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Receipt)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(evidence.len(), 2, "two receipts render two evidence lines");
+        assert_ne!(
+            evidence[0], evidence[1],
+            "receipts that differ by source/execution/decided_by must render distinct lines"
+        );
+        assert!(evidence[0].contains("anthropic-api"));
+        assert!(evidence[0].contains("craik"));
+        assert!(evidence[0].contains("operator"));
+        assert!(evidence[1].contains("google-cli"));
+        assert!(evidence[1].contains("delegated-observed"));
+        assert!(evidence[1].contains("bypass"));
+    }
+
+    #[test]
+    fn tool_used_without_message_still_renders_from_command_or_target() {
+        // The typed API adapters emit `tool.used` with command/target but no
+        // `message`; the chat lane must still show the tool activity.
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_tool".to_owned()),
+            task_id: Some("task_tool".to_owned()),
+            data: json!({"tool": "Read", "target": "src/lib.rs"}),
+        });
+
+        let tools: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| {
+                entry.kind == TranscriptKind::Tool || entry.kind == TranscriptKind::Command
+            })
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            tools.len(),
+            1,
+            "tool.used without message must still render"
+        );
+        assert!(
+            tools[0].contains("src/lib.rs"),
+            "rendered tool line should carry the target: {:?}",
+            tools[0]
+        );
+    }
+
+    #[test]
+    fn assistant_text_event_renders_assistant_entry() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "assistant_text".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: Some("task_text".to_owned()),
+            data: json!({"text": "I can see the repo."}),
+        });
+
+        let assistant: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Assistant)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(assistant, vec!["I can see the repo."]);
+    }
+
+    #[test]
+    fn coalesced_assistant_text_supersedes_rather_than_stacks() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        for snapshot in ["Reading", "Reading the repo", "Reading the repo now."] {
+            app.record_event(&GatewayEvent {
+                event_type: "assistant_text".to_owned(),
+                source: "anthropic-api".to_owned(),
+                created_at: None,
+                run_id: Some("run_grow".to_owned()),
+                task_id: Some("task_grow".to_owned()),
+                data: json!({"text": snapshot}),
+            });
+        }
+
+        let assistant: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Assistant)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            assistant,
+            vec!["Reading the repo now."],
+            "growing coalesced assistant text supersedes earlier snapshots"
+        );
+    }
+
+    #[test]
+    fn repeated_progress_for_one_run_collapses_to_single_updating_line() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        for message in [
+            "Claude Code is starting up.",
+            "Claude Code is reading files.",
+            "Claude Code is editing files.",
+        ] {
+            app.record_event(&GatewayEvent {
+                event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
+                created_at: None,
+                run_id: Some("run_progress".to_owned()),
+                task_id: None,
+                data: json!({"message": message, "transcript_visibility": "visible"}),
+            });
+        }
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["Claude Code is editing files."],
+            "repeated progress for one run supersedes earlier updates in place"
+        );
+    }
+
+    #[test]
+    fn progress_for_new_run_does_not_supersede_prior_run() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_a".to_owned()),
+            task_id: None,
+            data: json!({"message": "Run A progress.", "transcript_visibility": "visible"}),
+        });
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_b".to_owned()),
+            task_id: None,
+            data: json!({"message": "Run B progress.", "transcript_visibility": "visible"}),
+        });
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["Run A progress.", "Run B progress."],
+            "a new run's progress starts a fresh line rather than overwriting the prior run"
+        );
+    }
+
+    #[test]
+    fn progress_does_not_supersede_after_a_non_progress_entry_intervenes() {
+        // Pins the TAIL guard in `supersede_progress`: a tracked progress entry
+        // may only be superseded in place while it is still the transcript tail.
+        // Once a non-progress entry for the same run is appended, the earlier
+        // progress entry is buried and a later progress update must APPEND a
+        // fresh line, never overwrite the buried one. (Removing the
+        // `*index + 1 == len()` guard makes this test fail.)
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        // 1) First progress for run X -> progress entry at the tail.
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"message": "First progress.", "transcript_visibility": "visible"}),
+        });
+
+        // 2) A NON-progress entry for the SAME run X buries the progress entry
+        //    (it is no longer the transcript tail).
+        app.record_event(&GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"tool": "Read", "message": "Read src/lib.rs."}),
+        });
+        assert!(
+            app.transcript
+                .last()
+                .is_some_and(|entry| entry.kind != TranscriptKind::Progress),
+            "the tool.used entry must be the tail, burying the earlier progress entry"
+        );
+
+        // 3) Another progress for run X -> must APPEND, not overwrite the buried
+        //    earlier progress entry.
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"message": "Second progress.", "transcript_visibility": "visible"}),
+        });
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["First progress.", "Second progress."],
+            "a buried progress entry must not be superseded; the later update appends a fresh line"
+        );
+    }
+
+    #[test]
     fn approval_request_tracks_pending_state_and_actions() {
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4210,6 +4623,7 @@ mod tests {
         };
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4253,14 +4667,15 @@ mod tests {
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
         assert!(entry.body.contains("Receipt: receipt_before_approval"));
-        assert!(entry.body.contains("Ctrl-A open review"));
-        assert!(entry.body.contains("Ctrl-X open denial review"));
+        assert!(entry.body.contains("[a] approve"));
+        assert!(entry.body.contains("[d] deny"));
     }
 
     #[test]
     fn approval_overlay_surfaces_real_payload_fields_and_queue_position() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4277,6 +4692,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4322,13 +4738,14 @@ mod tests {
         assert!(overlay.contains("Preview"));
         assert!(overlay.contains("  - old"));
         assert!(overlay.contains("  + new"));
-        assert!(overlay.contains("Actions: [Ctrl-A] approve"));
+        assert!(overlay.contains("Actions: [a] approve"));
     }
 
     #[test]
     fn claude_code_approval_modal_uses_only_source_fields_without_governance_section() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4363,6 +4780,7 @@ mod tests {
     fn approval_payload_aliases_preserve_source_fields() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4398,6 +4816,7 @@ mod tests {
     fn claude_code_approval_without_id_still_surfaces_as_pending() {
         let approval = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -4433,6 +4852,7 @@ mod tests {
         let events = [
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4440,20 +4860,23 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
                 data: json!({"message": "Claude Code event: user.", "transcript_visibility": "hidden"}),
             },
             GatewayEvent {
-                event_type: "run.event".to_owned(),
+                event_type: "assistant_text".to_owned(),
+                source: "anthropic-cli".to_owned(),
                 created_at: None,
-                run_id: None,
+                run_id: Some("run_1".to_owned()),
                 task_id: None,
-                data: json!({"backend": "claude-code", "kind": "assistant_text", "text": "I can see the repo."}),
+                data: json!({"text": "I can see the repo."}),
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4461,6 +4884,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "tool.used".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4474,6 +4898,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4481,6 +4906,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.progress".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4488,6 +4914,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4495,6 +4922,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4502,6 +4930,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.event".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: None,
                 task_id: None,
@@ -4509,6 +4938,7 @@ mod tests {
             },
             GatewayEvent {
                 event_type: "run.output".to_owned(),
+                source: "gateway".to_owned(),
                 created_at: None,
                 run_id: Some("run_1".to_owned()),
                 task_id: None,
@@ -4570,6 +5000,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_contract".to_owned()),
             task_id: Some("task_contract".to_owned()),
@@ -4595,6 +5026,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_contract".to_owned()),
             task_id: Some("task_contract".to_owned()),
@@ -4605,112 +5037,14 @@ mod tests {
         assert_eq!(app.run_records[0].outputs.len(), 1);
     }
 
-    #[test]
-    fn assistant_contract_output_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": "## Craik contract output\n\n```json\n{\"schema\":\"craik.runner_step_result\",\"summary\":\"internal\"}\n```\n\n```json\n{\"schema\":\"craik.handoff\",\"outcome\":\"internal\"}\n```\n\n**Remaining risks:** none for this read-only confirmation."
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Remaining risks"));
-        assert!(!transcript_text.contains("Craik contract output"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-    }
-
-    #[test]
-    fn named_craik_contract_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "**craik.runner_step_result**\n```json\n{\"task_id\":\"task_1\",\"status\":\"completed\",\"commands_run\":[\"git status\"]}\n```\n\n**craik.handoff**\n```json\n{\"task_id\":\"task_1\",\"summary\":\"internal\"}\n```\n";
-
-        assert_eq!(assistant_event_transcript_text(text), None);
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": text
-            }),
-        });
-
-        assert!(app.transcript.is_empty());
-    }
-
-    #[test]
-    fn mixed_final_answer_strips_named_contract_sections() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "Yes — I can see the Craik repo.\n\n---\n\n**craik.runner_step_result**\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"git status\"],\n  \"capabilities_used\": [\"repo.read\"]\n}\n```\n\n**craik.handoff**\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\"\n}\n```\n\nEverything stayed read-only.";
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.output".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "summary": text
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Yes"));
-        assert!(transcript_text.contains("Everything stayed read-only"));
-        assert!(!transcript_text.contains("---"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-        assert!(!transcript_text.contains("\"commands_run\""));
-    }
-
-    #[test]
-    fn bare_contract_output_sections_are_removed_from_chat_lane() {
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        let text = "Confirmed.\n\n**Contract output**\n\ncraik.runner_step_result\n```json\n{\n  \"task_id\": \"task_1\",\n  \"status\": \"completed\",\n  \"commands_run\": [\"pwd\", \"git status\"],\n  \"capabilities_used\": [\"repo.read\"],\n  \"receipts_required\": true\n}\n```\n\ncraik.handoff\n```json\n{\n  \"from\": \"claude-code\",\n  \"task_id\": \"task_1\",\n  \"summary\": \"internal\",\n  \"state\": \"complete\"\n}\n```";
-
-        app.record_event(&GatewayEvent {
-            event_type: "run.event".to_owned(),
-            created_at: None,
-            run_id: Some("run_contract".to_owned()),
-            task_id: Some("task_contract".to_owned()),
-            data: json!({
-                "kind": "assistant_text",
-                "text": text
-            }),
-        });
-
-        let transcript_text = app
-            .transcript
-            .iter()
-            .map(|entry| entry.body.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(transcript_text.contains("Confirmed."));
-        assert!(!transcript_text.contains("Contract output"));
-        assert!(!transcript_text.contains("craik.runner_step_result"));
-        assert!(!transcript_text.contains("craik.handoff"));
-        assert!(!transcript_text.contains("\"commands_run\""));
-        assert!(!transcript_text.contains("\"receipts_required\""));
-    }
+    // Contract-strip chat-lane tests were removed in Phase 6 Task 6.1: the
+    // backend now strips contract envelopes at the source (every adapter runs
+    // `strip_contract_envelopes`), and the TUI no longer routes assistant
+    // content through `run.event`. The `strip_craik_contract_output_sections`
+    // band-aid and its helpers were deleted, so these tests no longer have a
+    // production target. Assistant rendering is covered by
+    // `assistant_text_event_renders_assistant_entry` and
+    // `coalesced_assistant_text_supersedes_rather_than_stacks`.
 
     #[test]
     fn pending_approval_overlay_survives_run_output_until_reviewed() {
@@ -4718,6 +5052,7 @@ mod tests {
 
         app.record_event(&GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_approval".to_owned()),
             task_id: Some("task_approval".to_owned()),
@@ -4730,6 +5065,7 @@ mod tests {
         });
         app.record_event(&GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_approval".to_owned()),
             task_id: Some("task_approval".to_owned()),
@@ -4744,6 +5080,7 @@ mod tests {
     fn run_records_collect_evidence_and_can_be_navigated() {
         let first = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4751,6 +5088,7 @@ mod tests {
         };
         let tool = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4758,6 +5096,7 @@ mod tests {
         };
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
@@ -4765,6 +5104,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_2".to_owned()),
             task_id: Some("task_2".to_owned()),
@@ -4800,6 +5140,7 @@ mod tests {
     fn run_filter_preserves_manual_selection_while_new_events_arrive() {
         let first = GatewayEvent {
             event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_done".to_owned()),
             task_id: None,
@@ -4807,6 +5148,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_active".to_owned()),
             task_id: None,
@@ -4814,6 +5156,7 @@ mod tests {
         };
         let third = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_new".to_owned()),
             task_id: None,
@@ -4940,6 +5283,7 @@ mod tests {
     fn live_events_stream_into_run_provenance_detail() {
         let started = GatewayEvent {
             event_type: "run.started".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4947,6 +5291,7 @@ mod tests {
         };
         let working = GatewayEvent {
             event_type: "run.working".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4958,6 +5303,7 @@ mod tests {
         };
         let tool = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -4970,6 +5316,7 @@ mod tests {
         };
         let output = GatewayEvent {
             event_type: "run.output".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_live".to_owned()),
             task_id: Some("task_live".to_owned()),
@@ -5004,6 +5351,7 @@ mod tests {
     fn multiple_approvals_can_be_selected_and_decided() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5016,6 +5364,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5058,6 +5407,7 @@ mod tests {
     fn approval_resolution_removes_selected_item_and_keeps_next_pending_selected() {
         let first = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5070,6 +5420,7 @@ mod tests {
         };
         let second = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5082,6 +5433,7 @@ mod tests {
         };
         let resolved = GatewayEvent {
             event_type: "approval.resolved".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5109,6 +5461,7 @@ mod tests {
     fn approval_resolution_clears_pending_state_and_shows_decision() {
         let requested = GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5119,6 +5472,7 @@ mod tests {
         };
         let resolved = GatewayEvent {
             event_type: "approval.resolved".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5146,6 +5500,7 @@ mod tests {
     fn tool_events_surface_command_target_and_detail() {
         let event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5209,6 +5564,7 @@ mod tests {
         let mut app = InteractiveApp::for_test_with_messages([]);
         let glob_event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5220,6 +5576,7 @@ mod tests {
         };
         let read_event = GatewayEvent {
             event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5252,6 +5609,7 @@ mod tests {
     fn model_events_update_state_and_receipts_surface_provider_context() {
         let model = GatewayEvent {
             event_type: "model.selected".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: Some("task_1".to_owned()),
@@ -5265,13 +5623,17 @@ mod tests {
         };
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
+            source: "anthropic-api".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: Some("task_1".to_owned()),
             data: json!({
                 "receipt_id": "receipt_run_1_provider",
-                "provider_id": "provider_anthropic",
-                "provider_family": "anthropic"
+                "purpose": "execution",
+                "execution": "craik",
+                "mode": "default",
+                "decision": "allow",
+                "decided_by": "operator"
             }),
         };
         let mut app = InteractiveApp::for_test_with_messages([]);
@@ -5292,12 +5654,15 @@ mod tests {
                 .all(|entry| entry.title != "Model selected")
         );
 
+        // The evidence line is now differentiated by the typed governance
+        // identity (source / execution / decision) rather than collapsing to a
+        // generic receipt-id string.
         let receipt_entry = app.transcript.last().expect("receipt transcript entry");
         assert_eq!(receipt_entry.title, "Evidence saved");
-        assert!(receipt_entry.body.contains("receipt_run_1_provider"));
         assert!(receipt_entry.body.contains("Ctrl-E opens details"));
-        assert!(receipt_entry.body.contains("run run_1"));
-        assert!(receipt_entry.body.contains("provider_anthropic"));
+        assert!(receipt_entry.body.contains("anthropic-api"));
+        assert!(receipt_entry.body.contains("craik"));
+        assert!(receipt_entry.body.contains("allow (operator)"));
 
         app.open_overlay(ActiveOverlay::Evidence);
         let detail = app
@@ -5309,9 +5674,12 @@ mod tests {
         assert!(detail.contains("Receipt"));
         assert!(detail.contains("Run: run_1"));
         assert!(detail.contains("Task: task_1"));
-        assert!(detail.contains("Provider: provider_anthropic"));
+        // Under the typed contract, provider identity rides the `source`
+        // envelope on the receipt, not a `provider_id` data field.
         assert!(detail.contains("Receipt detail:"));
-        assert!(detail.contains("provider=provider_anthropic"));
+        assert!(detail.contains("source=anthropic-api"));
+        assert!(detail.contains("execution=craik"));
+        assert!(detail.contains("decided_by=operator"));
         assert!(detail.contains("Provenance:"));
     }
 
@@ -5319,6 +5687,7 @@ mod tests {
     fn session_ready_updates_state_without_crowding_transcript() {
         let ready = GatewayEvent {
             event_type: "session.ready".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -5462,47 +5831,308 @@ mod tests {
         assert_eq!(app.active_overlay, None);
     }
 
-    #[test]
-    fn approval_overlay_requires_review_before_approval_key_decides() {
-        let event = GatewayEvent {
+    fn low_risk_approval_event() -> GatewayEvent {
+        GatewayEvent {
             event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
             data: json!({
-                "approval_id": "approval_edit_1",
-                "message": "Edit src/lib.rs?",
-                "tool": "Edit",
+                "approval_id": "approval_read_1",
+                "message": "Read src/lib.rs?",
+                "tool": "Read",
                 "target": "src/lib.rs"
             }),
-        };
-        let mut app = InteractiveApp::for_test_with_messages([]);
-        app.record_event(&event);
+        }
+    }
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+    fn high_risk_approval_event() -> GatewayEvent {
+        GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Run rm -rf build?",
+                "tool": "Bash",
+                "command": "rm -rf build",
+                "risk": "executes command with bypassPermissions; writes and deletes files"
+            }),
+        }
+    }
+
+    #[test]
+    fn single_press_a_approves_low_risk_approval_when_overlay_active() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
         assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
-        assert!(!app.transcript.iter().any(|entry| entry.title == "Denying"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a approves a low-risk approval in one press"
+        );
+        assert!(
+            !app.transcript.iter().any(|entry| entry.title == "Denying"),
+            "approve never falls through to deny"
+        );
+    }
+
+    #[test]
+    fn single_press_d_denies_when_overlay_active() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+        assert!(
+            app.transcript.iter().any(|entry| entry.title == "Denying"),
+            "d denies in one press"
+        );
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "deny is unambiguous and never approves"
+        );
+    }
+
+    #[test]
+    fn esc_defers_approval_overlay_without_deciding() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert_eq!(app.active_overlay, None, "esc dismisses the overlay");
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" || entry.title == "Denying"),
+            "esc defers without approving or denying"
+        );
+        // The approval remains pending so it can be revisited.
+        assert_eq!(app.pending_approval_count(), 1);
+    }
+
+    #[test]
+    fn approval_keys_do_nothing_when_overlay_inactive() {
+        // No overlay active: the composer owns input, so a/d type normally and
+        // never reach the approval decision path. This is the critical safety
+        // property -- a stray keystroke while typing must never approve.
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.active_overlay, None);
+        let pending_before = app.pending_approval_count();
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+        assert_eq!(
+            app.input, "ad",
+            "approval keys type into the composer when no overlay is focused"
+        );
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" || entry.title == "Denying"),
+            "no decision is taken outside the approval overlay"
+        );
+        assert_eq!(app.pending_approval_count(), pending_before);
+    }
+
+    #[test]
+    fn high_risk_approval_requires_explicit_confirm_before_a_decides() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
         assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        // First 'a' arms the destructive confirm; it must NOT approve yet.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a high-risk approval is not approved on the first press"
+        );
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        // Second 'a' confirms.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "the explicit confirm press approves the high-risk approval"
+        );
+    }
+
+    fn high_risk_approval_event_b() -> GatewayEvent {
+        GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_2",
+                "message": "Run rm -rf dist?",
+                "tool": "Bash",
+                "command": "rm -rf dist",
+                "risk": "executes command; writes and deletes files"
+            }),
+        }
+    }
+
+    #[test]
+    fn arming_high_risk_then_navigating_disarms() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+        app.record_event(&high_risk_approval_event_b());
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert_eq!(app.pending_approvals.len(), 2);
+
+        // Select approval A and arm it with a single 'a' (does NOT commit).
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_1"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "arming A must not approve anything yet"
+        );
+
+        // Navigate to B. The arm must NOT carry over: a single 'a' on B must
+        // only arm B, never commit it.
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_2"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "navigating to B must disarm; the first post-navigation 'a' must NOT commit B"
+        );
+
+        // A second 'a' on B (now armed from a disarmed state) commits it.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "B requires its OWN two-press confirm from a disarmed state"
+        );
+    }
+
+    #[test]
+    fn arming_does_not_carry_after_a_committed_decision() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+        app.record_event(&high_risk_approval_event_b());
+
+        // Arm + commit high-risk A (two 'a' presses on A).
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_1"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_1")),
+            "A is committed by its two-press confirm"
+        );
+
+        // Select B; the committed decision on A must have disarmed the gate.
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.selected_pending_approval().unwrap().id,
+            "approval_bash_2"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "a single 'a' on B after a committed decision must NOT commit B"
+        );
+    }
+
+    #[test]
+    fn high_risk_approval_can_still_be_denied_in_one_press() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+
+        // Deny is always single-press and unambiguous, even for high-risk.
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        assert!(app.transcript.iter().any(|entry| entry.title == "Denying"));
         assert!(
             !app.transcript
                 .iter()
                 .any(|entry| entry.title == "Approving")
         );
+    }
+
+    #[test]
+    fn bypass_permissions_approval_is_high_risk_even_without_risk_keywords() {
+        // A bypassPermissions-mode approval with a benign risk string (none of
+        // the "write"/"delete"/"exec"... needles) must still be treated as
+        // high-risk: bypassPermissions is the most dangerous mode, so it always
+        // requires the two-press confirm regardless of the risk text.
+        let event = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bypass_1",
+                "message": "Proceed?",
+                "tool": "Read",
+                "permission_mode": "bypassPermissions",
+                "risk": "routine"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&event);
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
         assert!(
-            app.overlay_text()
-                .expect("approval overlay")
-                .contains("approval_edit_1")
+            app.selected_approval_is_high_risk(),
+            "bypassPermissions is always high-risk regardless of risk text"
         );
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+        // First 'a' must only arm, not commit.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a bypassPermissions approval is not approved on the first press"
+        );
+        // Second 'a' commits.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             app.transcript
                 .iter()
-                .any(|entry| entry.title == "Approving")
+                .any(|entry| entry.title == "Approving"),
+            "the explicit confirm press approves the bypassPermissions approval"
         );
     }
 
@@ -5693,6 +6323,7 @@ mod tests {
         ];
         let event = GatewayEvent {
             event_type: "model.changed".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: None,
             task_id: None,
@@ -5863,6 +6494,7 @@ mod tests {
     fn incoming_transcript_events_do_not_reset_scrolled_back_view() {
         let event = GatewayEvent {
             event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
@@ -5901,6 +6533,7 @@ mod tests {
     ) -> GatewayEvent {
         GatewayEvent {
             event_type: event_type.to_owned(),
+            source: "gateway".to_owned(),
             created_at: None,
             run_id: run_id.map(str::to_owned),
             task_id: task_id.map(str::to_owned),

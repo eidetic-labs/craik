@@ -24,7 +24,7 @@ pub struct ActivityMetrics<'a> {
 pub struct StatusLineMetrics<'a> {
     pub in_flight: bool,
     pub pending_approval: Option<&'a str>,
-    pub approval_reviewed: bool,
+    pub approval_armed: bool,
     pub backend_connected: bool,
     pub queued_inputs: usize,
     pub active_overlay: Option<&'a str>,
@@ -145,7 +145,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             lines.push("  Context".to_owned());
             lines.extend(preview.lines().map(|line| format!("    {line}")));
         }
-        lines.push("  Actions: Ctrl-A approve / Ctrl-X deny after review".to_owned());
+        lines.push("  Actions: a approve / d deny / Esc defer".to_owned());
         if metrics.pending_approvals > 1 {
             lines.push("  Select: Ctrl-N next / Ctrl-P previous".to_owned());
         }
@@ -223,39 +223,40 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
     }];
     let mut middle = Vec::new();
     if let Some(overlay) = metrics.active_overlay {
-        middle.push(FooterHint {
-            key: "esc",
-            label: "chat".to_owned(),
-            urgent: false,
-        });
         if overlay == "Approvals" {
             if metrics.pending_approval.is_some() {
+                // Single-press keymap: `a` approves, `d` denies. A high-risk
+                // approval that has been armed shows "confirm approve" so the
+                // operator knows the next `a` commits the destructive action.
                 middle.push(FooterHint {
-                    key: "⌃a",
-                    label: if metrics.approval_reviewed {
-                        "approve reviewed".to_owned()
+                    key: "a",
+                    label: if metrics.approval_armed {
+                        "confirm approve".to_owned()
                     } else {
-                        "review selected".to_owned()
+                        "approve".to_owned()
                     },
                     urgent: true,
                 });
                 middle.push(FooterHint {
-                    key: "⌃x",
-                    label: if metrics.approval_reviewed {
-                        "deny reviewed".to_owned()
-                    } else {
-                        "review before deny".to_owned()
-                    },
-                    urgent: metrics.approval_reviewed,
+                    key: "d",
+                    label: "deny".to_owned(),
+                    urgent: metrics.approval_armed,
                 });
             } else {
                 middle.push(FooterHint {
-                    key: "⌃a",
+                    key: "a",
                     label: "none pending".to_owned(),
                     urgent: false,
                 });
             }
         } else {
+            // Non-approval overlays keep an esc-to-chat hint plus one overlay
+            // cycle hint as the two ranked middle slots.
+            middle.push(FooterHint {
+                key: "esc",
+                label: "chat".to_owned(),
+                urgent: false,
+            });
             middle.push(FooterHint {
                 key: match overlay {
                     "Memory" => "⌃e",
@@ -327,16 +328,23 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             urgent: false,
         });
     }
-    let middle_limit = if metrics.active_overlay == Some("Approvals") {
-        3
-    } else {
-        2
-    };
-    for hint in middle.into_iter().take(middle_limit) {
+    // Strict 4-slot footer: the `/` anchor (already pushed) + exactly up to two
+    // ranked middle hints + the `?` anchor (pushed below). The middle cap is a
+    // fixed 2 in every context so the footer width never shifts between states.
+    const MIDDLE_SLOTS: usize = 2;
+    // `hints` already holds the leading `/` anchor, so `len() > MIDDLE_SLOTS`
+    // means the two middle slots are full (the `?` anchor is appended later).
+    for hint in middle.into_iter() {
+        if hints.len() > MIDDLE_SLOTS {
+            break;
+        }
         if !hints.iter().any(|existing| existing.key == hint.key) {
             hints.push(hint);
         }
     }
+    // Backfill the middle slots with stable defaults only when the active
+    // context produced fewer than two ranked hints, so the anchor layout stays
+    // consistent rather than collapsing to a bare `/ … ?`.
     for fallback in [
         FooterHint {
             key: "⌃r",
@@ -349,7 +357,7 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             urgent: false,
         },
     ] {
-        if hints.len() >= 3 {
+        if hints.len() > MIDDLE_SLOTS {
             break;
         }
         if !hints.iter().any(|existing| existing.key == fallback.key) {
@@ -543,7 +551,7 @@ mod tests {
         StatusLineMetrics {
             in_flight: false,
             pending_approval: None,
-            approval_reviewed: false,
+            approval_armed: false,
             backend_connected: true,
             queued_inputs: 0,
             active_overlay: None,
@@ -748,6 +756,60 @@ mod tests {
     }
 
     #[test]
+    fn footer_uses_fixed_four_slot_anchors() {
+        // Strict layout: `/` anchor, up to 2 ranked middle hints, `?` anchor.
+        let state = GatewayAppState {
+            ready: true,
+            receipt_ids: vec!["receipt_1".to_owned()],
+            run_ids: vec!["run_1".to_owned()],
+            ..GatewayAppState::default()
+        };
+        let hints = super::footer_hints(&state, &status_metrics());
+
+        assert!(hints.len() <= 4, "footer never exceeds four slots");
+        assert_eq!(
+            hints.first().map(|hint| hint.key),
+            Some("/"),
+            "`/` anchors the left slot"
+        );
+        assert_eq!(
+            hints.last().map(|hint| hint.key),
+            Some("?"),
+            "`?` anchors the right slot"
+        );
+        let middle = hints.len().saturating_sub(2);
+        assert!(middle <= 2, "at most two ranked middle hints");
+    }
+
+    #[test]
+    fn footer_keeps_four_slots_with_approval_actions() {
+        // Even in the approvals overlay the footer stays at four slots, and the
+        // two decision keys are the ranked middle hints.
+        let state = GatewayAppState::default();
+        let hints = super::footer_hints(
+            &state,
+            &StatusLineMetrics {
+                active_overlay: Some("Approvals"),
+                pending_approval: Some("approval_123"),
+                ..status_metrics()
+            },
+        );
+
+        assert_eq!(hints.len(), 4, "approvals footer fills exactly four slots");
+        assert_eq!(hints.first().map(|hint| hint.key), Some("/"));
+        assert_eq!(hints.last().map(|hint| hint.key), Some("?"));
+        let middle_keys: Vec<&str> = hints[1..hints.len() - 1]
+            .iter()
+            .map(|hint| hint.key)
+            .collect();
+        assert_eq!(
+            middle_keys,
+            vec!["a", "d"],
+            "approve/deny are the ranked middle"
+        );
+    }
+
+    #[test]
     fn status_line_prioritizes_pending_approval_actions() {
         let state = GatewayAppState::default();
 
@@ -771,31 +833,33 @@ mod tests {
     fn status_line_distinguishes_approval_review_from_decision() {
         let state = GatewayAppState::default();
 
-        let review = status_line(
+        // Disarmed (low-risk, or high-risk not yet armed): single-press a/d.
+        let unarmed = status_line(
             &state,
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
                 pending_approval: Some("approval_123"),
-                approval_reviewed: false,
+                approval_armed: false,
                 ..status_metrics()
             },
         )
         .to_string();
-        assert!(review.contains("⌃a review selected"));
-        assert!(review.contains("review before deny"));
+        assert!(unarmed.contains("a approve"));
+        assert!(unarmed.contains("d deny"));
 
-        let decide = status_line(
+        // Armed (a high-risk approval awaiting its explicit confirm press).
+        let armed = status_line(
             &state,
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
                 pending_approval: Some("approval_123"),
-                approval_reviewed: true,
+                approval_armed: true,
                 ..status_metrics()
             },
         )
         .to_string();
-        assert!(decide.contains("⌃a approve reviewed"));
-        assert!(decide.contains("⌃x deny reviewed"));
+        assert!(armed.contains("a confirm approve"));
+        assert!(armed.contains("d deny"));
     }
 
     #[test]
