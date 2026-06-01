@@ -31,9 +31,9 @@ Composition over reinvention:
     (``run_shell_command_ref``): authorize -> execute -> signed
     ``CapabilityReceipt`` with redacted output. Execution NEVER bypasses it.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired into
-the live ``execute_prompt`` path (cutover is Task 4.7). The ``_legacy_run``
-bridge keeps the live provider path byte-identical until then.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The ``_legacy_run`` bridge is retained as the ``CRAIK_BACKEND_LEGACY_RUN=1``
+fallback, keeping the old provider path byte-identical when opted into.
 """
 
 from __future__ import annotations
@@ -208,9 +208,10 @@ class AnthropicAPI(APIAdapter):
         (``anthropic-api``, via ``posture.source``) on emitted events, and
         ``run_provider_typed`` GUARDS that the vendor agrees with the resolved
         ``provider_family`` -- on mismatch it refuses to emit (raising), rather
-        than write a wrong-vendor audit record. ``execute_prompt`` (Task 5.7)
-        selects the adapter matching the active provider so the guard holds. NOT
-        wired into ``execute_prompt`` here (Task 5.7).
+        than write a wrong-vendor audit record. ``execute_prompt`` selects the
+        adapter matching the active provider so the guard holds. This ``run`` IS
+        the live ``execute_prompt`` path; the legacy provider path is the
+        ``CRAIK_BACKEND_LEGACY_RUN=1`` fallback.
         """
         from craik.runtime.backend.adapters.audited_core import provider_api_run
 
@@ -363,11 +364,11 @@ class AnthropicAPI(APIAdapter):
         source: str,
         env: dict[str, str] | None,
     ) -> BackendPromptResult:
-        """Bridge to the legacy provider path (pre-cutover seam).
+        """Bridge to the legacy provider path (``CRAIK_BACKEND_LEGACY_RUN`` fallback).
 
-        ``execute_prompt`` still drives the live provider path through this
-        bridge until the Task 4.7 cutover replaces it with ``run``; keeping it
-        here preserves byte-identical behavior. ``env`` is the ORIGINAL value
+        ``run`` is now the default live ``execute_prompt`` provider path; this
+        bridge is the opt-in fallback selected by ``CRAIK_BACKEND_LEGACY_RUN=1``,
+        kept here because it preserves byte-identical behavior. ``env`` is the ORIGINAL value
         (possibly None), threaded separately from ``ctx.env``.
         """
         from craik.runtime.backend.adapters.legacy_runs import _legacy_provider_run

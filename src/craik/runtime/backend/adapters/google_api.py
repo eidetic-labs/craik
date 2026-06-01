@@ -31,11 +31,11 @@ Composition over reinvention:
     (``run_shell_command_ref``): authorize -> execute -> signed
     ``CapabilityReceipt`` with redacted output. Execution NEVER bypasses it.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired into
-the live ``execute_prompt`` path (cutover is Task 4.7). The google-api id has no
-legacy ``execute_prompt`` branch (only the anthropic ids route through one
-pre-cutover), so -- like ``GoogleCLI`` and unlike the anthropic exemplar -- this
-adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The google-api id has no legacy ``execute_prompt`` branch (only the anthropic
+ids route through one), so -- like ``GoogleCLI`` and unlike the anthropic
+exemplar -- this adapter carries no ``_legacy_run`` bridge and no
+``CRAIK_BACKEND_LEGACY_RUN`` fallback.
 """
 
 from __future__ import annotations
@@ -192,8 +192,9 @@ class GoogleAPI(APIAdapter):
         captures the audited payload onto ``self.last_payload``, and closes the
         store once. See ``AnthropicAPI.run`` for the dual-path split (base
         ``direct_tool_loop`` stays the fixture-tested direct-HTTP design) and the
-        vendor/provider_family alignment note. NOT wired into ``execute_prompt``
-        (Task 5.7).
+        vendor/provider_family alignment note. This ``run()`` IS the live
+        ``execute_prompt`` path (google-api has no legacy branch / no
+        ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
         """
         from craik.runtime.backend.adapters.audited_core import provider_api_run
 

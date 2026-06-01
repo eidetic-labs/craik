@@ -17,15 +17,16 @@ free of the gating / approvals stack -- preserving the "tiny client, heavy
 gateway" split. The heavy ``events`` / ``approvals`` imports are kept
 FUNCTION-LOCAL for the same reason.
 
-Composability, not live wiring (scope: PR A): this delivers a tested unit. It
-does NOT start the bridge in the live ``execute_prompt`` loop and does NOT touch
-any adapter ``spawn``; that cutover is PR B. The ``resolve_lookup`` seam keeps
-it testable without the live run loop: a ``(approval_id) -> "allow" | "deny" |
-None`` probe over the approval store's resolution state. The operator resolves
-over JSONL via ``approval.decide`` -> ``decide_approval`` (records the delegation
-``status="resolved"`` with a ``resolution`` ``"approved: ..."`` / ``"denied:
-..."``); PR B supplies a ``resolve_lookup`` that reads that state, and tests
-inject a pre-queued decision through the same seam.
+Live wiring (PR B landed): the bridge IS started in the live ``execute_prompt``
+loop -- ``gateway.cli_gating_loop.gated_cli_run_session`` runs a gated CLI
+adapter off the stdin thread inside a ``hook_bridge_session``. The
+``resolve_lookup`` seam also keeps this unit testable without the live run loop:
+a ``(approval_id) -> "allow" | "deny" | None`` probe over the approval store's
+resolution state. The operator resolves over JSONL via ``approval.decide`` ->
+``decide_approval`` (records the delegation ``status="resolved"`` with a
+``resolution`` ``"approved: ..."`` / ``"denied: ..."``); the live driver supplies
+a ``resolve_lookup`` that reads that state, and tests inject a pre-queued
+decision through the same seam.
 
 Fail-closed: a timeout with no resolution, or ANY exception from
 ``open_approval_request`` / ``resolve_lookup`` / ``emit``, resolves to **deny**
@@ -208,29 +209,30 @@ def hook_bridge_session(
     (matching the bridge/decide contract); the operator-decision timeout is
     likewise a ``deny`` inside ``decide``.
 
-    .. note:: **Task 5.7 concurrency requirement (live wiring).** This helper only
-       STARTS the bridge; it does not run the adapter. The live gate is two
-       concurrent loops sharing this ``store``: (a) the gateway's JSONL stdin loop
-       must KEEP READING ``approval.decide`` messages -> ``decide_approval``
-       (which records the resolution this session's ``resolve_lookup`` reads),
-       WHILE (b) the gated CLI subprocess runs and its hook blocks in ``decide``
-       on the bridge thread. Therefore Task 5.7 MUST run the gated adapter OFF the
-       stdin-reading thread (e.g. the CLI run on a worker thread while the gateway
-       services approvals) -- otherwise ``decide`` blocks forever waiting for a
-       resolution the stalled stdin loop can never deliver (self-deadlock). The
-       bridge ``decide`` callback is already invoked on the bridge's own accept
-       thread here; the open item for 5.7 is the gateway/adapter concurrency, not
-       this helper.
+    .. note:: **Concurrency requirement (live wiring).** This helper only STARTS
+       the bridge; it does not run the adapter. The live gate is two concurrent
+       loops sharing this ``store``: (a) the gateway's JSONL stdin loop must KEEP
+       READING ``approval.decide`` messages -> ``decide_approval`` (which records
+       the resolution this session's ``resolve_lookup`` reads), WHILE (b) the
+       gated CLI subprocess runs and its hook blocks in ``decide`` on the bridge
+       thread. Therefore the gated adapter MUST run OFF the stdin-reading thread
+       (the CLI run on a worker thread while the gateway services approvals) --
+       otherwise ``decide`` blocks forever waiting for a resolution the stalled
+       stdin loop can never deliver (self-deadlock). The
+       ``gateway.cli_gating_loop.gated_cli_run_session`` driver now satisfies this:
+       it runs the gated adapter on a worker thread while the stdin loop keeps
+       servicing approvals. The bridge ``decide`` callback is already invoked on
+       the bridge's own accept thread here.
 
-       SECOND 5.7 constraint -- store thread-affinity: ``decide`` calls
+       SECOND constraint -- store thread-affinity: ``decide`` calls
        ``open_approval_request`` (and ``resolve_lookup`` calls
        ``get_human_delegation``) on the BRIDGE accept thread, while the gateway
        writes the resolution (``decide_approval``) on the stdin thread. The real
        ``LocalStore`` wraps a ``sqlite3`` connection that is single-thread-bound
-       (``check_same_thread`` default), so 5.7 must NOT share one ``LocalStore``
-       connection across the bridge thread and the stdin thread -- give the bridge
-       its own store handle (a connection opened on the bridge thread, or a
-       thread-safe wrapper) over the SAME on-disk Craik home, so both threads see
+       (``check_same_thread`` default), so the driver does NOT share one
+       ``LocalStore`` connection across the bridge thread and the stdin thread --
+       it gives the bridge its own store handle (a separate connection over the
+       SAME on-disk Craik home, opened ``same_thread=False``), so both threads see
        each other's writes while respecting SQLite's thread affinity.
     """
     socket_dir = Path(tempfile.mkdtemp(prefix="craik-hook-"))

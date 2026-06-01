@@ -37,11 +37,11 @@ Fallback posture: this adapter implements the Responses path as primary AND a
 Chat Completions fallback as a REAL, tested code path selected at construction by
 ``use_chat_completions``; both share the inherited gate->execute->emit loop.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired into
-the live ``execute_prompt`` path (cutover is Task 4.7). The openai-api id has no
-legacy ``execute_prompt`` branch (only the anthropic ids route through one
-pre-cutover), so -- like ``GoogleAPI`` and unlike the anthropic exemplar -- this
-adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The openai-api id has no legacy ``execute_prompt`` branch (only the anthropic
+ids route through one), so -- like ``GoogleAPI`` and unlike the anthropic
+exemplar -- this adapter carries no ``_legacy_run`` bridge and no
+``CRAIK_BACKEND_LEGACY_RUN`` fallback.
 """
 
 from __future__ import annotations
@@ -212,7 +212,9 @@ class OpenAIAPI(APIAdapter):
         store once. See ``AnthropicAPI.run`` for the dual-path split (base
         ``direct_tool_loop`` -- with its Responses/Chat-Completions branches --
         stays the fixture-tested direct-HTTP design) and the vendor/provider_family
-        alignment note. NOT wired into ``execute_prompt`` (Task 5.7).
+        alignment note. This ``run()`` IS the live ``execute_prompt`` path
+        (openai-api has no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN``
+        fallback).
         """
         from craik.runtime.backend.adapters.audited_core import provider_api_run
 

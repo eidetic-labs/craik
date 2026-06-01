@@ -13,11 +13,11 @@ records via the Phase-1 typed builders. The adapter therefore owns only the
 translation table, not a second copy of the parser; the contract-strip and the
 optional-string coercion are shared base helpers reused by every adapter.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired
-into the live ``execute_prompt`` path (that cutover is Task 4.7). The live
-PreToolUse hook bridge (Phase 5) is represented here by a config point only --
-``pre_tool_use_hook_config`` names where the hook would be registered; no live
-daemon is started.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path;
+the legacy claude-code path is retained as the ``CRAIK_BACKEND_LEGACY_RUN=1``
+fallback. The live PreToolUse hook bridge (Phase 5) is represented here by a
+config point only -- ``pre_tool_use_hook_config`` names where the hook would be
+registered; no live daemon is started.
 """
 
 from __future__ import annotations
@@ -201,7 +201,9 @@ class AnthropicCLI(CLIAdapter):
 
         ``build_command`` / ``spawn`` / ``parse_stream`` are retained as the
         abstract CLI surface (still exercised by the Phase-4 fixture tests) but
-        are NOT on this live path. NOT wired into ``execute_prompt`` (Task 5.7).
+        are NOT on this live path. This ``run()`` IS the live ``execute_prompt``
+        path; the legacy claude-code path is the ``CRAIK_BACKEND_LEGACY_RUN=1``
+        fallback.
         """
         from craik.runtime.backend.adapters.audited_core import (
             claude_framing_events,
@@ -256,11 +258,12 @@ class AnthropicCLI(CLIAdapter):
         source: str,
         env: dict[str, str] | None,
     ) -> BackendPromptResult:
-        """Bridge to the legacy claude-code path (pre-cutover seam).
+        """Bridge to the legacy claude-code path (``CRAIK_BACKEND_LEGACY_RUN`` fallback).
 
-        ``execute_prompt`` still drives the live path through this bridge until
-        the Task 4.7 cutover replaces it with ``run``; keeping it here preserves
-        byte-identical behavior. ``source`` is accepted for signature symmetry
+        ``run`` is now the default live ``execute_prompt`` path; this bridge is
+        the opt-in fallback selected by ``CRAIK_BACKEND_LEGACY_RUN=1``, kept here
+        because it preserves byte-identical behavior. ``source`` is accepted for
+        signature symmetry
         with ``AnthropicAPI`` but is unused by the claude path. ``env`` is the
         ORIGINAL value (possibly None), threaded separately from ``ctx.env``.
         """

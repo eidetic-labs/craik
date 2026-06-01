@@ -15,13 +15,13 @@ stream classifier) -- and each parsed kind is translated to a canonical
 :class:`BackendEvent` via the Phase-1 typed builders. The contract-strip and the
 optional-string coercion are shared base helpers reused by every adapter.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired
-into the live ``execute_prompt`` path (that cutover is Task 4.7). The live
-BeforeTool hook bridge (Phase 5) is represented here by a config point only --
-``before_tool_hook_config`` names where the hook would be registered; no live
-daemon is started. The google CLI has no legacy ``execute_prompt`` branch (only
-the anthropic ids route through one pre-cutover), so -- unlike the anthropic
-exemplar -- this adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path.
+The live BeforeTool hook bridge (Phase 5) is represented here by a config point
+only -- ``before_tool_hook_config`` names where the hook would be registered; no
+live daemon is started. The google CLI has no legacy ``execute_prompt`` branch
+(only the anthropic ids route through one), so -- unlike the anthropic exemplar
+-- this adapter carries no ``_legacy_run`` bridge and no ``CRAIK_BACKEND_LEGACY_RUN``
+fallback.
 """
 
 from __future__ import annotations
@@ -139,8 +139,9 @@ class GoogleCLI(CLIAdapter):
         per-run ``Coalescer`` AS IT ARRIVES, then yields the coalesced
         ``assistant_text``, the per-line ``tool.used`` / ``receipt.created``
         (``source="google-cli"`` / ``execution="delegated-observed"``), and the
-        run framing. Live-gating hook env is set by the gateway in Task 5.6; here
-        we just run. NOT wired into ``execute_prompt`` (Task 5.7).
+        run framing. Live-gating hook env is set by the gateway; here we just
+        run. This ``run()`` IS the live ``execute_prompt`` path (google-cli has
+        no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
         """
         from craik.runtime.backend.adapters.audited_core import cli_observed_decided_by
         from craik.runtime.backend.cli.cli_audited import run_cli_typed

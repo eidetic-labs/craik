@@ -37,11 +37,11 @@ documented ungoverned audit flag), NEVER the ``"operator"`` value the gating
 CLIs stamp. ``execution="delegated-observed"``: the codex CLI ran the side
 effect; craik observed and recorded the reported result.
 
-This task builds + unit-tests the adapter in isolation; it is NOT yet wired into
-the live ``execute_prompt`` path (cutover is Task 4.7). The openai-cli id has no
-legacy ``execute_prompt`` branch (only the anthropic ids route through one
-pre-cutover), so -- like ``GoogleCLI`` and unlike the anthropic exemplar -- this
-adapter carries no ``_legacy_run`` bridge.
+This adapter's typed ``run()`` is now the DEFAULT live ``execute_prompt`` path
+(observe-only: it refuses up front when asked to live-gate). The openai-cli id
+has no legacy ``execute_prompt`` branch (only the anthropic ids route through
+one), so -- like ``GoogleCLI`` and unlike the anthropic exemplar -- this adapter
+carries no ``_legacy_run`` bridge and no ``CRAIK_BACKEND_LEGACY_RUN`` fallback.
 """
 
 from __future__ import annotations
@@ -218,7 +218,9 @@ class OpenAICLI(CLIAdapter):
         through THIS adapter's ``map_native_event`` + ``Coalescer``, and yields the
         coalesced ``assistant_text``, the per-line ``tool.used`` /
         ``receipt.created`` (``source="openai-cli"`` / ``decided_by="bypass"``),
-        and the run framing. NOT wired into ``execute_prompt`` (Task 5.7).
+        and the run framing. This ``run()`` IS the live ``execute_prompt`` path
+        (openai-cli has no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN``
+        fallback).
         """
         if ctx.require_operator_approval:
             self.require_live_gating()
