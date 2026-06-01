@@ -8,13 +8,17 @@ This is the canonical API adapter pattern that ``GoogleAPI`` (Task 4.4) and
 
 It subclasses :class:`~craik.runtime.backend.adapters.base.APIAdapter` and fills
 the four abstract hooks (``request`` / ``map_response`` / ``execute_tool`` /
-``auth_headers``) plus declares a ``posture``. It does NOT override ``run``: the
-gate->execute->emit orchestration -- including the receipt event that reflects
-the side-effects layer's ACTUAL ``allowed`` verdict (not just ``ctx.decide``) and
-the ``approval``-denied + denial-receipt emission for a vetoed tool -- now lives
-once in ``APIAdapter.run`` so all three API adapters share one correct loop.
-``execute_tool`` returns the standardized
+``auth_headers``) plus declares a ``posture``. The base ``direct_tool_loop``
+owns the gate->execute->emit orchestration -- including the receipt event that
+reflects the side-effects layer's ACTUAL ``allowed`` verdict (not just
+``ctx.decide``) and the ``approval``-denied + denial-receipt emission for a
+vetoed tool -- so all three API adapters share one correct loop. ``execute_tool``
+returns the standardized
 ``{"allowed", "receipt_id", "output", "tool_call_id"}`` dict the base consumes.
+
+Task 5.5a: ``run`` is OVERRIDDEN to compose the audited provider core (the live
+path); the base ``direct_tool_loop`` remains the fixture-tested direct-HTTP
+design. See :meth:`AnthropicAPI.run` for the dual-path split.
 
 Composition over reinvention:
   * Request building reuses the provider-runtime types (``ProviderMessage`` /
@@ -34,6 +38,7 @@ bridge keeps the live provider path byte-identical until then.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -135,12 +140,23 @@ class AnthropicAPI(APIAdapter):
         profile: VendorProfile | None = None,
         *,
         side_effects: SideEffectGate | None = None,
+        original_env: dict[str, str] | None = None,
+        prompt_source: str = "tui",
     ) -> None:
         super().__init__()
         # ``select_adapter`` injects the profile + side-effect gate at the Task
         # 4.7 cutover; until then default to the canonical anthropic profile.
         self.profile: VendorProfile = profile or vendor_profile("anthropic")
         self._side_effects = side_effects
+        # The ORIGINAL env (possibly None) the provider core needs -- threaded
+        # separately from ``RunContext.env`` (coerced to ``{}``), exactly as the
+        # legacy provider path threads ``env=`` separately. ``select_adapter``
+        # injects this at the Task 5.7 cutover; tests set it directly.
+        self.original_env: dict[str, str] | None = original_env
+        # Operator ``PromptSource`` recorded on the created task by the provider
+        # core (legacy threaded it via ``_legacy_run(source=...)``); 5.7 injects
+        # the real source, defaulting to ``"tui"`` until then.
+        self.prompt_source: str = prompt_source
         # The governed function-tool the model may call. Registered here so the
         # base ``function_tools`` (which strips hosted tools) sends exactly this.
         self.register_tool(
@@ -161,6 +177,44 @@ class AnthropicAPI(APIAdapter):
         not acquire or persist credentials.
         """
         return _AUTH_SOURCE
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited provider core, yielding the NEW TYPED event sequence.
+
+        This OVERRIDES the base ``APIAdapter.run`` (the direct-HTTP tool-loop):
+        the live-today provider path runs + persists through
+        ``ProviderBackedRunExecutor`` -- the SAME machinery all provider families
+        share -- via ``audited_core.run_provider_typed``. ``run()`` then derives
+        the typed events from the ``ProviderCoreResult`` and closes the core's
+        store exactly once (leak-free), mirroring
+        ``legacy_runs._legacy_provider_run``. It is the typed counterpart of the
+        legacy provider emission layer.
+
+        Dual-path: the base ``direct_tool_loop`` (gate->request->map_response->
+        execute_tool + ``SideEffectGate``) remains the fixture-tested direct-HTTP
+        design (the Phase-4 ``*API`` tests drive it via ``direct_tool_loop``); it
+        is NOT the live path. Only ONE path runs per call -- this ``run`` composes
+        the core; it never also runs the base loop.
+
+        Vendor/provider_family alignment: ``run_provider_core`` resolves
+        ``provider_id`` / ``provider_family`` from the active model/env (as the
+        legacy provider path did). This adapter stamps its OWN vendor token
+        (``anthropic-api``) on emitted events, and ``run_provider_typed`` GUARDS
+        that the vendor agrees with the resolved ``provider_family`` -- on
+        mismatch it refuses to emit (raising), rather than write a wrong-vendor
+        audit record. ``execute_prompt`` (Task 5.7) selects the adapter matching
+        the active provider so the guard holds. NOT wired into ``execute_prompt``
+        here (Task 5.7).
+        """
+        from craik.runtime.backend.adapters.audited_core import run_provider_typed
+
+        yield from run_provider_typed(
+            prompt=ctx.prompt,
+            # The ORIGINAL env (possibly None), threaded like the legacy path.
+            env=self.original_env,
+            source=_SOURCE,
+            provider_source=self.prompt_source,  # type: ignore[arg-type]
+        )
 
     # --- abstract hooks -----------------------------------------------------
 

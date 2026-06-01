@@ -68,10 +68,21 @@ class AnthropicCLI(CLIAdapter):
     vendor = "anthropic"
     surface = "cli"
 
-    def __init__(self, profile: VendorProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: VendorProfile | None = None,
+        *,
+        original_env: dict[str, str] | None = None,
+    ) -> None:
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
         # until then default to the canonical anthropic profile.
         self.vendor_profile: VendorProfile = profile or _default_anthropic_profile()
+        # The ORIGINAL env (possibly None) the claude core needs -- threaded
+        # separately from ``RunContext.env`` (which is coerced to ``{}``), exactly
+        # as the legacy path threads ``env=`` separately (e.g.
+        # ``LocalStore.from_env(None)`` vs ``from_env({})``). ``select_adapter``
+        # injects this at the Task 5.7 cutover; tests set it directly.
+        self.original_env: dict[str, str] | None = original_env
         # Phase-5 gating config: the REAL PreToolUse hook that registers the
         # ``craik-hook`` client as Claude Code's pre-tool command (anthropic-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.claude/settings.json``
@@ -146,6 +157,59 @@ class AnthropicCLI(CLIAdapter):
         flushed = self._coalescer.flush(None, source=_SOURCE)
         if flushed is not None:
             yield flushed
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited claude core, yielding the NEW TYPED event sequence.
+
+        This OVERRIDES the ``CLIAdapter`` template (build_command -> spawn ->
+        parse_stream): the live claude run is executed + persisted by
+        ``run_claude_code_core`` (the core spawns the subprocess), NOT by this
+        adapter's ``spawn``. ``run()`` only re-shapes EMISSION -- it is the typed
+        counterpart of ``legacy_runs._legacy_claude_code_run``, deriving NEW typed
+        events from the SAME ``ClaudeCoreResult`` the legacy layer derives OLD
+        events from.
+
+        Sequence:
+          1. The core streams each native claude line to an injected sink; the
+             sink maps it through THIS adapter's ``map_native_event`` (+ the
+             per-run ``Coalescer``), so assistant-text snapshots coalesce and
+             tool / approval / receipt kinds become typed events. Those typed
+             native events are buffered (the sink is push; ``run`` is a
+             generator) and yielded first, followed by the single coalesced
+             ``assistant_text``.
+          2. After the core returns, the framing events (``run.started`` /
+             per-receipt ``receipt.created`` with ``execution=delegated-observed``
+             / ``run.completed``) are derived from the result and yielded.
+
+        ``build_command`` / ``spawn`` / ``parse_stream`` are retained as the
+        abstract CLI surface (still exercised by the Phase-4 fixture tests) but
+        are NOT on this live path. NOT wired into ``execute_prompt`` (Task 5.7).
+        """
+        from craik.runtime.backend.adapters.audited_core import (
+            claude_framing_events,
+            run_claude_code_core,
+            typed_claude_stream_sink,
+        )
+
+        self._coalescer = Coalescer()
+        native_events: list[BackendEvent] = []
+        sink = typed_claude_stream_sink(
+            map_native=self.map_native_event,
+            coalescer=self._coalescer,
+            sink=native_events.append,
+        )
+        core = run_claude_code_core(
+            prompt=ctx.prompt,
+            # The ORIGINAL env (possibly None), threaded like the legacy path.
+            env=self.original_env,
+            require_operator_approval=ctx.require_operator_approval,
+            stream=sink,
+        )
+        yield from native_events
+        flushed = self._coalescer.flush(None, source=_SOURCE)
+        if flushed is not None:
+            yield flushed
+        yield from claude_framing_events(core, source=_SOURCE)
 
     def _legacy_run(
         self,

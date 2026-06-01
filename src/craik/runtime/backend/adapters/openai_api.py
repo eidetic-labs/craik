@@ -4,12 +4,16 @@ A DELTA of the API-side exemplars :mod:`anthropic_api` / :mod:`google_api`. The
 gate->execute->emit tool-loop and the receipt allow/deny reconciliation live once
 in :class:`~craik.runtime.backend.adapters.base.APIAdapter`, so this adapter only
 declares a ``posture`` and fills the four vendor hooks (``request`` /
-``map_response`` / ``execute_tool`` / ``auth_headers``). It does NOT override
-``run``: the gate->execute->emit orchestration -- including the receipt event
-that reflects the side-effects layer's ACTUAL ``allowed`` verdict (not just
-``ctx.decide``) and the ``approval``-denied + denial-receipt emission for a
-vetoed tool -- is inherited. ``execute_tool`` returns the standardized
+``map_response`` / ``execute_tool`` / ``auth_headers``). The base
+``direct_tool_loop`` owns the gate->execute->emit orchestration -- including the
+receipt event that reflects the side-effects layer's ACTUAL ``allowed`` verdict
+(not just ``ctx.decide``) and the ``approval``-denied + denial-receipt emission
+for a vetoed tool. ``execute_tool`` returns the standardized
 ``{"allowed", "receipt_id", "output", "tool_call_id"}`` dict the base consumes.
+
+Task 5.5a: ``run`` is OVERRIDDEN to compose the audited provider core (the live
+path); the base ``direct_tool_loop`` remains the fixture-tested direct-HTTP
+design. See :meth:`OpenAIAPI.run` for the dual-path split.
 
 Composition over reinvention:
   * Request building reuses the provider-runtime types (``ProviderMessage`` /
@@ -43,12 +47,14 @@ adapter carries no ``_legacy_run`` bridge.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from craik.runtime.backend.adapters.base import (
     APIAdapter,
     ReceiptPosture,
+    RunContext,
     optional_str,
     strip_contract_envelopes,
 )
@@ -149,12 +155,21 @@ class OpenAIAPI(APIAdapter):
         *,
         side_effects: SideEffectGate | None = None,
         use_chat_completions: bool = False,
+        original_env: dict[str, str] | None = None,
+        prompt_source: str = "tui",
     ) -> None:
         super().__init__()
         # ``select_adapter`` injects the profile + side-effect gate at the Task
         # 4.7 cutover; until then default to the canonical openai profile.
         self.profile: VendorProfile = profile or vendor_profile("openai")
         self._side_effects = side_effects
+        # The ORIGINAL env (possibly None) the provider core needs -- threaded
+        # separately from ``RunContext.env`` (coerced to ``{}``), like the legacy
+        # provider path. 5.7 injects this; tests set it directly.
+        self.original_env: dict[str, str] | None = original_env
+        # Operator ``PromptSource`` recorded on the created task by the provider
+        # core; 5.7 injects the real source, defaulting to ``"tui"`` until then.
+        self.prompt_source: str = prompt_source
         # Primary surface is the Responses API; the Chat Completions fallback is a
         # real, selectable branch (request building + response parsing) that
         # shares the inherited gate->execute->emit loop.
@@ -181,6 +196,27 @@ class OpenAIAPI(APIAdapter):
         resolves.
         """
         return _AUTH_SOURCE
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited provider core, yielding the NEW TYPED event sequence.
+
+        OVERRIDES the base ``APIAdapter.run`` (the direct-HTTP tool-loop): the
+        live-today provider path runs + persists through the SAME
+        ``ProviderBackedRunExecutor`` all families share, via
+        ``audited_core.run_provider_typed``, then derives typed events and closes
+        the store once. See ``AnthropicAPI.run`` for the dual-path split (base
+        ``direct_tool_loop`` -- with its Responses/Chat-Completions branches --
+        stays the fixture-tested direct-HTTP design) and the vendor/provider_family
+        alignment note. NOT wired into ``execute_prompt`` (Task 5.7).
+        """
+        from craik.runtime.backend.adapters.audited_core import run_provider_typed
+
+        yield from run_provider_typed(
+            prompt=ctx.prompt,
+            env=self.original_env,
+            source=_SOURCE,
+            provider_source=self.prompt_source,  # type: ignore[arg-type]
+        )
 
     # --- abstract hooks -----------------------------------------------------
 
