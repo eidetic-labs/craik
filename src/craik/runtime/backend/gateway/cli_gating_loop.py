@@ -50,7 +50,7 @@ class GatedRunController:
     run() failure is NOT silently swallowed.
     """
 
-    def __init__(self, thread: threading.Thread, error_box: dict[str, BaseException]) -> None:
+    def __init__(self, thread: threading.Thread, error_box: dict[str, Exception]) -> None:
         self._thread = thread
         self._error_box = error_box
 
@@ -113,7 +113,7 @@ def gated_cli_run_session(
     if timeout is not None:
         session_kwargs["timeout"] = timeout
 
-    error_box: dict[str, BaseException] = {}
+    error_box: dict[str, Exception] = {}
 
     try:
         with hook_bridge_session(**session_kwargs) as (socket_path, _overlay):
@@ -121,9 +121,11 @@ def gated_cli_run_session(
             def _worker() -> None:
                 try:
                     run(socket_path)
-                except BaseException as error:  # noqa: BLE001 -- re-raised in join()
+                except Exception as error:  # noqa: BLE001 -- re-raised in join()
                     # Captured, not swallowed: GatedRunController.join() re-raises
                     # it on the gateway thread so a real run() failure surfaces.
+                    # KeyboardInterrupt/SystemExit deliberately propagate (worker
+                    # ends; bounded join + bridge teardown fail-closed the hook).
                     error_box["error"] = error
 
             worker = threading.Thread(target=_worker, name="craik-gated-cli-run", daemon=True)
