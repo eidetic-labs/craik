@@ -1,10 +1,13 @@
 """Tests for the real ``AnthropicCLI`` adapter (Phase 4 exemplar).
 
 Feeds recorded Claude Code ``--output-format stream-json`` lines through the
-adapter and asserts the canonical typed-event sequence: a single coalesced
-``assistant_text``, a ``tool.used``, an ``approval.*`` event, and a
-``receipt.created`` carrying the delegated-observed governance posture --
-with NO ``craik.runner_step_result`` / ``craik.handoff`` envelope leakage.
+adapter's TEMPLATE ``parse_stream`` surface and asserts the canonical typed-event
+sequence: a single coalesced ``assistant_text``, a ``tool.used``, an
+``approval.*`` event -- and NO per-line ``receipt.created`` (the end-of-run
+``result`` line is dropped here; the canonical receipt, carrying ``run_id``, is
+owned by the live ``run()`` framing -- see ``test_typed_run.py`` /
+``test_cli_receipt_run_id_guard.py``) -- with NO ``craik.runner_step_result`` /
+``craik.handoff`` envelope leakage.
 """
 
 from __future__ import annotations
@@ -104,7 +107,13 @@ def test_event_sequence_is_canonical() -> None:
     assert types.count("assistant_text") == 1
     assert "tool.used" in types
     assert any(t.startswith("approval.") for t in types)
-    assert "receipt.created" in types
+    # The ``parse_stream`` surface NO LONGER synthesizes a per-line
+    # ``receipt.created`` from the end-of-run ``result`` line: that record was
+    # run-id-less + hardcoded-id and the gateway event contract rejected it. The
+    # CANONICAL receipt (with run_id) is emitted by the live ``run()`` framing
+    # (``claude_framing_events``), exercised in ``test_typed_run.py`` +
+    # ``test_cli_receipt_run_id_guard.py``.
+    assert "receipt.created" not in types
 
 
 def test_assistant_text_is_coalesced_not_concatenated() -> None:
@@ -118,24 +127,15 @@ def test_assistant_text_is_coalesced_not_concatenated() -> None:
     assert text.count("Reviewing the plan") == 1
 
 
-def test_receipt_carries_delegated_observed_posture() -> None:
-    events = _run_fixture()
-    receipts = [e for e in events if e.type == "receipt.created"]
+def test_result_line_maps_to_no_receipt() -> None:
+    # The end-of-run ``result`` line must NOT synthesize a ``receipt.created``:
+    # the canonical receipt (with run_id) is owned by the live ``run()`` framing.
+    # A receipt mapped here would lack a run_id and crash the gateway. The
+    # delegated-observed posture of the CANONICAL receipt is asserted in
+    # ``test_typed_run.py`` / ``test_cli_receipt_run_id_guard.py``.
+    adapter = AnthropicCLI()
 
-    assert receipts, "expected at least one receipt.created event"
-    receipt = receipts[0]
-    assert receipt.source == "anthropic-cli"
-    assert receipt.data["execution"] == "delegated-observed"
-    assert receipt.data["decision"] in {"allow", "deny"}
-    assert receipt.data["decided_by"] in {"operator", "policy", "bypass"}
-    assert receipt.data["mode"] in {
-        "ask",
-        "auto",
-        "acceptEdits",
-        "plan",
-        "default",
-        "bypassPermissions",
-    }
+    assert adapter.map_native_event({"kind": "result", "result": "done"}) is None
 
 
 def test_every_event_sources_anthropic_cli() -> None:

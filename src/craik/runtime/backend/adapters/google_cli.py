@@ -44,7 +44,6 @@ from craik.runtime.backend.events import (
     Coalescer,
     EventSource,
     ReceiptDecidedBy,
-    receipt_event,
     tool_event,
 )
 
@@ -137,9 +136,10 @@ class GoogleCLI(CLIAdapter):
         workspace-trust-pre-authorized ``spawn_env``, maps each native
         ``stream-json`` line through THIS adapter's ``map_native_event`` + the
         per-run ``Coalescer`` AS IT ARRIVES, then yields the coalesced
-        ``assistant_text``, the per-line ``tool.used`` / ``receipt.created``
-        (``source="google-cli"`` / ``execution="delegated-observed"``), and the
-        run framing. Live-gating hook env is set by the gateway; here we just
+        ``assistant_text``, the per-line ``tool.used``, and the run framing --
+        which includes the canonical ``receipt.created`` (``source="google-cli"``
+        / ``execution="delegated-observed"``) derived from the core's PERSISTED
+        receipt id WITH ``run_id``. Live-gating hook env is set by the gateway; here we just
         run. This ``run()`` IS the live ``execute_prompt`` path (google-cli has
         no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
         """
@@ -157,6 +157,10 @@ class GoogleCLI(CLIAdapter):
             source=_SOURCE,
             map_native=self.map_native_event,
             coalescer=self._coalescer,
+            # The canonical ``receipt.created`` (emitted from the core's persisted
+            # receipt id by ``cli_framing_events``) carries this REAL gating
+            # posture: ``"operator"`` only for a gated run, else ``"bypass"``.
+            decided_by=self._decided_by,
             # The live-gating overlay (set by the gateway's hook_bridge_session in
             # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
             hook_env=self.hook_env,
@@ -233,12 +237,11 @@ class GoogleCLI(CLIAdapter):
         """Map ONE parsed Gemini CLI stream line to a typed event.
 
         Assistant ``message`` text is fed to the coalescer and returns ``None``
-        (emitted once at flush). ``tool_use`` maps to a ``tool.used`` event; the
-        end-of-run ``result`` line maps to the single delegated-observed
-        receipt. ``tool_result`` (the tool's intermediate output) carries no
-        other canonical signal, so it is dropped -- mirroring the exemplar
-        ``AnthropicCLI``, which likewise drops its analogous intermediate and
-        emits exactly one receipt from the end-of-run ``result``. ``init`` (and
+        (emitted once at flush). ``tool_use`` maps to a ``tool.used`` event. The
+        end-of-run ``result`` line is DROPPED -- the canonical
+        ``receipt.created`` (with ``run_id``) is owned by the framing path, not
+        synthesized per-line. ``tool_result`` (the tool's intermediate output)
+        carries no other canonical signal, so it too is dropped. ``init`` (and
         anything else) is dropped to keep the canonical stream clean.
         """
         kind = str(native.get("type") or "")
@@ -249,8 +252,13 @@ class GoogleCLI(CLIAdapter):
             return None
         if kind == "tool_use":
             return _map_tool_use(native)
-        if kind == "result":
-            return _map_result_receipt(native, decided_by=self._decided_by)
+        # The end-of-run ``result`` line is DROPPED here: the canonical
+        # ``receipt.created`` is owned by ``run_cli_typed`` -> ``cli_framing_events``
+        # (derived from the core's REAL persisted receipt id, WITH ``run_id`` +
+        # the run's gating posture). Synthesizing a second receipt here produced a
+        # run-id-less, hardcoded-id record the gateway event contract rejects
+        # (``receipt.created`` requires a non-empty ``run_id``) -- crashing the
+        # session. See ``test_cli_receipt_run_id_guard``.
         return None
 
 
@@ -312,29 +320,6 @@ def _command_from_input(tool_input: Any) -> str | None:
     if isinstance(tool_input, dict):
         return optional_str(tool_input.get("command"))
     return None
-
-
-def _map_result_receipt(
-    native: dict[str, Any],
-    *,
-    decided_by: ReceiptDecidedBy = "bypass",
-) -> BackendEvent:
-    # The Gemini CLI ran the tool; craik authorized + OBSERVED it. Hence
-    # ``execution="delegated-observed"`` (the CLI observe model). ``purpose`` is
-    # a stable descriptor of what the receipt attests (matching the canonical
-    # receipt shape); the result text is informational and is NOT smuggled into
-    # the purpose field. ``decided_by`` is the REAL governance attribution
-    # threaded from the run's gating posture (parity item C): ``"operator"`` only
-    # when an operator actually decided (a gated run), else ``"bypass"`` (ungated).
-    return receipt_event(
-        receipt_id="receipt_google_cli_run",
-        source=_SOURCE,
-        purpose="execution",
-        execution="delegated-observed",
-        mode="default",
-        decision="allow",
-        decided_by=decided_by,
-    )
 
 
 __all__ = ["GoogleCLI"]

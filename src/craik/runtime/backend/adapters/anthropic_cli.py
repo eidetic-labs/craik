@@ -42,7 +42,6 @@ from craik.runtime.backend.events import (
     ReceiptDecidedBy,
     ReceiptDecision,
     approval_resolved_event,
-    receipt_event,
     tool_event,
 )
 
@@ -213,9 +212,10 @@ class AnthropicCLI(CLIAdapter):
         )
 
         # Parity item C (Task 5.7): the receipt governance attribution is honest
-        # to whether this run was actually gated. ``map_native_event`` (the
-        # per-line ``result`` receipt) and the framing receipts both read it; set
-        # it for the whole run BEFORE the core streams a single line.
+        # to whether this run was actually gated. The framing receipts
+        # (``claude_framing_events``, derived from the core's persisted receipt
+        # ids WITH ``run_id``) read it; set it for the whole run BEFORE the core
+        # streams a single line.
         self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
         self._coalescer = Coalescer()
         native_events: list[BackendEvent] = []
@@ -300,8 +300,12 @@ class AnthropicCLI(CLIAdapter):
         # mapped there with a verified event shape.
         if kind == "permission_denial":
             return _map_permission_denial(native)
-        if kind == "result":
-            return _map_result_receipt(native, decided_by=self._decided_by)
+        # The end-of-run ``result`` line is DROPPED here: the canonical
+        # ``receipt.created`` is owned by ``claude_framing_events`` (derived from
+        # the core's REAL persisted receipt ids, WITH ``run_id``). Synthesizing a
+        # second receipt here produced a run-id-less, hardcoded-id record that the
+        # gateway event contract rejects (``receipt.created`` requires a non-empty
+        # ``run_id``) -- crashing the session. See ``test_cli_receipt_run_id_guard``.
         return None
 
 
@@ -381,29 +385,6 @@ def _map_permission_denial(native: dict[str, Any]) -> BackendEvent:
         decision=decision,
         source=_SOURCE,
         decided_by="policy",
-    )
-
-
-def _map_result_receipt(
-    native: dict[str, Any],
-    *,
-    decided_by: ReceiptDecidedBy = "bypass",
-) -> BackendEvent:
-    # The Claude CLI ran the tool; craik authorized + OBSERVED it. Hence
-    # ``execution="delegated-observed"``. ``purpose`` is a stable descriptor of
-    # what the receipt attests (matching the canonical receipt shape); the
-    # result text is informational and is NOT smuggled into the purpose field.
-    # ``decided_by`` is the REAL governance attribution threaded from the run's
-    # gating posture (parity item C): ``"operator"`` only when an operator
-    # actually decided (a gated run), else ``"bypass"`` (ungated / observe).
-    return receipt_event(
-        receipt_id="receipt_anthropic_cli_run",
-        source=_SOURCE,
-        purpose="execution",
-        execution="delegated-observed",
-        mode="default",
-        decision="allow",
-        decided_by=decided_by,
     )
 
 

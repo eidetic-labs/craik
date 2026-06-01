@@ -28,6 +28,8 @@ from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
     EventSource,
+    ReceiptDecidedBy,
+    receipt_event,
     run_completed_event,
     run_started_event,
 )
@@ -220,14 +222,37 @@ def cli_framing_events(
     core: CliCoreResult,
     *,
     source: EventSource,
+    decided_by: ReceiptDecidedBy = "bypass",
 ) -> Iterator[BackendEvent]:
-    """Yield TYPED framing for a CLI run: ``run.started`` then ``run.completed``.
+    """Yield TYPED framing for a CLI run: ``run.started``, the canonical
+    ``receipt.created`` per persisted receipt id, then ``run.completed``.
 
-    The per-line ``tool.used`` / ``receipt.created`` / coalesced ``assistant_text``
-    events were already produced via the adapter's ``map_native_event`` during the
-    run; this adds only the run brackets carrying the core ids / terminal status.
+    The per-line ``tool.used`` / coalesced ``assistant_text`` events were already
+    produced via the adapter's ``map_native_event`` during the run; this adds the
+    run brackets carrying the core ids / terminal status AND the canonical
+    delegated-observed ``receipt.created`` derived from the core's REAL persisted
+    receipt id(s) -- carrying ``run_id`` + ``task_id`` (the gateway event contract
+    requires a non-empty ``run_id`` on ``receipt.created``). This is the SOLE
+    receipt emitter for the CLI path: the adapters NO LONGER synthesize a
+    run-id-less per-line receipt from the ``result`` / ``turn.completed`` line
+    (that produced the gateway-rejected record this fixes; mirrors
+    ``audited_core.claude_framing_events``). ``decided_by`` carries the run's REAL
+    gating posture: ``"operator"`` only for a gated run, ``"bypass"`` for an
+    ungated / observe-only run.
     """
     yield run_started_event(source=source, run_id=core.run_id, task_id=core.task_id)
+    for receipt_id in core.receipt_ids:
+        yield receipt_event(
+            receipt_id=receipt_id,
+            source=source,
+            purpose="execution",
+            execution="delegated-observed",
+            mode="default",
+            decision="allow",
+            decided_by=decided_by,
+            run_id=core.run_id,
+            task_id=core.task_id,
+        )
     yield run_completed_event(
         status=str(core.status),
         source=source,
@@ -247,6 +272,7 @@ def run_cli_typed(
     map_native: Callable[[dict[str, object]], BackendEvent | None],
     coalescer: Coalescer,
     hook_env: dict[str, str] | None = None,
+    decided_by: ReceiptDecidedBy = "bypass",
     on_payload: Callable[[dict[str, object]], None] | None = None,
 ) -> Iterator[BackendEvent]:
     """Compose the CLI core and yield the adapter's NEW TYPED event sequence.
@@ -254,16 +280,21 @@ def run_cli_typed(
     The live CLI ``run()`` body shared by ``GoogleCLI`` / ``OpenAICLI``: it runs +
     persists the audited CLI run via :func:`run_cli_core`, mapping each native
     stdout line through the adapter's ``map_native`` + ``Coalescer`` AS IT ARRIVES
-    (text snapshots coalesce, ``tool.used`` / ``receipt.created`` collect). After
-    the core returns it yields the coalesced ``assistant_text`` (if any), the
-    collected per-line events in arrival order, then the run framing, and persists
-    the gateway-event-history artifact. A subprocess failure still yields a clean
-    framed sequence ending in ``run.completed`` (status ``failed`` /
-    ``interrupted``).
+    (text snapshots coalesce, ``tool.used`` collect). After the core returns it
+    yields the coalesced ``assistant_text`` (if any), the collected per-line
+    events in arrival order, then the run framing (which now owns the canonical
+    ``receipt.created`` -- derived from the core's persisted receipt id, WITH
+    ``run_id``), and persists the gateway-event-history artifact. A subprocess
+    failure still yields a clean framed sequence ending in ``run.completed``
+    (status ``failed`` / ``interrupted``).
 
     ``hook_env`` is forwarded to :func:`run_cli_core` -- the optional live-gating
     overlay merged into the subprocess env. ``None`` (the default, and the only
     value pre-cutover) leaves the spawn env untouched.
+
+    ``decided_by`` is the run's REAL gating posture, stamped on the canonical
+    framing receipt: ``"operator"`` only for a gated run, else ``"bypass"`` (the
+    ungated / observe-only default).
 
     ``on_payload`` is the OPTIONAL payload-capture seam the Task 5.7 cutover uses:
     after the core runs, its audited payload is handed to ``on_payload`` so
@@ -299,7 +330,7 @@ def run_cli_typed(
     if flushed is not None:
         events.append(flushed)
     events.extend(collected)
-    events.extend(cli_framing_events(core, source=source))
+    events.extend(cli_framing_events(core, source=source, decided_by=decided_by))
     yield from events
     session._persist_gateway_event_history(core.payload, events, env=env)
 
