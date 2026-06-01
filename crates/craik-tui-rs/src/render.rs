@@ -145,7 +145,7 @@ pub fn render_activity_panel(state: &GatewayAppState, metrics: ActivityMetrics<'
             lines.push("  Context".to_owned());
             lines.extend(preview.lines().map(|line| format!("    {line}")));
         }
-        lines.push("  Actions: Ctrl-A approve / Ctrl-X deny after review".to_owned());
+        lines.push("  Actions: a approve / d deny / Esc defer".to_owned());
         if metrics.pending_approvals > 1 {
             lines.push("  Select: Ctrl-N next / Ctrl-P previous".to_owned());
         }
@@ -230,27 +230,26 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
         });
         if overlay == "Approvals" {
             if metrics.pending_approval.is_some() {
+                // Single-press keymap: `a` approves, `d` denies. A high-risk
+                // approval that has been armed shows "confirm approve" so the
+                // operator knows the next `a` commits the destructive action.
                 middle.push(FooterHint {
-                    key: "⌃a",
+                    key: "a",
                     label: if metrics.approval_reviewed {
-                        "approve reviewed".to_owned()
+                        "confirm approve".to_owned()
                     } else {
-                        "review selected".to_owned()
+                        "approve".to_owned()
                     },
                     urgent: true,
                 });
                 middle.push(FooterHint {
-                    key: "⌃x",
-                    label: if metrics.approval_reviewed {
-                        "deny reviewed".to_owned()
-                    } else {
-                        "review before deny".to_owned()
-                    },
+                    key: "d",
+                    label: "deny".to_owned(),
                     urgent: metrics.approval_reviewed,
                 });
             } else {
                 middle.push(FooterHint {
-                    key: "⌃a",
+                    key: "a",
                     label: "none pending".to_owned(),
                     urgent: false,
                 });
@@ -771,7 +770,8 @@ mod tests {
     fn status_line_distinguishes_approval_review_from_decision() {
         let state = GatewayAppState::default();
 
-        let review = status_line(
+        // Disarmed (low-risk, or high-risk not yet armed): single-press a/d.
+        let unarmed = status_line(
             &state,
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
@@ -781,10 +781,11 @@ mod tests {
             },
         )
         .to_string();
-        assert!(review.contains("⌃a review selected"));
-        assert!(review.contains("review before deny"));
+        assert!(unarmed.contains("a approve"));
+        assert!(unarmed.contains("d deny"));
 
-        let decide = status_line(
+        // Armed (a high-risk approval awaiting its explicit confirm press).
+        let armed = status_line(
             &state,
             StatusLineMetrics {
                 active_overlay: Some("Approvals"),
@@ -794,8 +795,8 @@ mod tests {
             },
         )
         .to_string();
-        assert!(decide.contains("⌃a approve reviewed"));
-        assert!(decide.contains("⌃x deny reviewed"));
+        assert!(armed.contains("a confirm approve"));
+        assert!(armed.contains("d deny"));
     }
 
     #[test]

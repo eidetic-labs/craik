@@ -54,7 +54,7 @@ impl ActiveOverlay {
             Self::Memory => "Type filter  Up/Down select  Ctrl-E evidence  Esc chat",
             Self::Evidence => "Type filter  Up/Down select  Ctrl-R runs  Esc chat",
             Self::Runs => "Type filter  Up/Down select  Ctrl-L filter  Ctrl-O export  Esc chat",
-            Self::Approvals => "Ctrl-N/P select  Ctrl-A approve  Ctrl-X deny  Esc defer",
+            Self::Approvals => "Ctrl-N/P select  a approve  d deny  Esc defer",
         }
     }
 }
@@ -858,6 +858,11 @@ impl InteractiveApp {
         self.pending_approvals.get(index)
     }
 
+    fn selected_approval_is_high_risk(&self) -> bool {
+        self.selected_pending_approval()
+            .is_some_and(PendingApproval::is_high_risk)
+    }
+
     fn selected_approval_detail_text(&self) -> Option<String> {
         let index = self.selected_approval_index?;
         let approval = self.pending_approvals.get(index)?;
@@ -870,7 +875,10 @@ impl InteractiveApp {
 
     fn open_overlay(&mut self, overlay: ActiveOverlay) {
         self.active_overlay = Some(overlay);
-        self.approval_overlay_reviewed = overlay == ActiveOverlay::Approvals;
+        // Single-press keymap: the approvals overlay opens disarmed. The
+        // `approval_overlay_reviewed` flag now means "a high-risk approval has
+        // been armed for its explicit confirm press", so it must start false.
+        self.approval_overlay_reviewed = false;
         self.overlay_filter.clear();
         self.overlay_selected_index = match overlay {
             ActiveOverlay::Runs => self
@@ -1155,26 +1163,39 @@ impl InteractiveApp {
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.open_overlay(ActiveOverlay::Runs);
             }
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if self.active_overlay == Some(ActiveOverlay::Approvals) {
-                    if self.approval_overlay_reviewed {
-                        self.approve_selected();
-                    } else {
-                        self.approval_overlay_reviewed = true;
-                    }
-                } else {
-                    self.open_overlay(ActiveOverlay::Approvals);
-                }
-            }
-            KeyCode::Char('x')
-                if key.modifiers.contains(KeyModifiers::CONTROL)
+            // Single-press approve while the approvals overlay is focused. A
+            // low-risk approval is decided on the first 'a'. A high-risk /
+            // bypassPermissions approval keeps an explicit confirmation gate:
+            // the first 'a' arms (sets `approval_overlay_reviewed`) and only a
+            // second 'a' approves, so a destructive action never lands on a
+            // single accidental keystroke. This branch is reachable only when
+            // an overlay is focused (see `handle_key` routing), so a stray 'a'
+            // in the composer can never approve anything.
+            KeyCode::Char('a')
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && self.active_overlay == Some(ActiveOverlay::Approvals) =>
             {
-                if self.approval_overlay_reviewed {
-                    self.deny_selected();
-                } else {
+                if self.selected_approval_is_high_risk() && !self.approval_overlay_reviewed {
                     self.approval_overlay_reviewed = true;
+                } else {
+                    self.approve_selected();
                 }
+            }
+            // Open the approvals overlay from any *other* overlay with Ctrl-A.
+            KeyCode::Char('a')
+                if key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay != Some(ActiveOverlay::Approvals) =>
+            {
+                self.open_overlay(ActiveOverlay::Approvals);
+            }
+            // Single-press deny while the approvals overlay is focused. Deny is
+            // always unambiguous and one press -- it never falls through to
+            // approve and needs no arming step, even for high-risk approvals.
+            KeyCode::Char('d')
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.active_overlay == Some(ActiveOverlay::Approvals) =>
+            {
+                self.deny_selected();
             }
             KeyCode::Char('n')
                 if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -1262,8 +1283,8 @@ impl InteractiveApp {
             "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
             "  PageUp / PageDown scroll transcript by page; Alt-Up / Alt-Down by line".to_owned(),
             "Approvals".to_owned(),
-            "  Ctrl-A opens approval review; Ctrl-A approves from that overlay; Ctrl-X denies"
-                .to_owned(),
+            "  Ctrl-A opens the approval overlay; a approves, d denies, Esc defers".to_owned(),
+            "  High-risk approvals require a second a to confirm".to_owned(),
             "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
                 .to_owned(),
             "Help".to_owned(),
@@ -2643,7 +2664,7 @@ impl PendingApproval {
         if self.risk.as_deref().is_some_and(is_high_risk_text) {
             lines.push("Risk: high - review before deciding".to_owned());
         }
-        lines.push("Actions: Ctrl-A open review  Ctrl-X open denial review  Esc defer".to_owned());
+        lines.push("Actions: [a] approve  [d] deny  [Esc] defer".to_owned());
         lines.join("\n")
     }
 
@@ -2703,7 +2724,11 @@ impl PendingApproval {
             lines.push(format!("  $ {command}"));
         }
         lines.push(String::new());
-        lines.push("Actions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer".to_owned());
+        if self.is_high_risk() {
+            lines.push("Actions: [a] approve (press twice to confirm)  [d] deny  [Esc] defer".to_owned());
+        } else {
+            lines.push("Actions: [a] approve  [d] deny  [Esc] defer".to_owned());
+        }
         lines.join("\n")
     }
 
@@ -2720,6 +2745,15 @@ impl PendingApproval {
             (None, None, Some(command)) => format!("Run {command}"),
             (None, None, None) => self.subject_label().to_owned(),
         }
+    }
+
+    /// A destructive / high-risk approval that must keep an explicit
+    /// confirmation gate even under the single-press keymap. Mirrors the
+    /// `is_high_risk_text` heuristic the modal already uses to render the
+    /// "Warning: high-risk approval" affordance, so the visual distinction and
+    /// the extra-press gate are driven by the same signal.
+    fn is_high_risk(&self) -> bool {
+        self.risk.as_deref().is_some_and(is_high_risk_text)
     }
 
     fn risk_label(&self) -> &str {
@@ -4393,8 +4427,8 @@ mod tests {
         assert!(entry.body.contains("Target: src/lib.rs"));
         assert!(entry.body.contains("Reason: normalize event mapping"));
         assert!(entry.body.contains("Receipt: receipt_before_approval"));
-        assert!(entry.body.contains("Ctrl-A open review"));
-        assert!(entry.body.contains("Ctrl-X open denial review"));
+        assert!(entry.body.contains("[a] approve"));
+        assert!(entry.body.contains("[d] deny"));
     }
 
     #[test]
@@ -4464,7 +4498,7 @@ mod tests {
         assert!(overlay.contains("Preview"));
         assert!(overlay.contains("  - old"));
         assert!(overlay.contains("  + new"));
-        assert!(overlay.contains("Actions: [Ctrl-A] approve"));
+        assert!(overlay.contains("Actions: [a] approve"));
     }
 
     #[test]
@@ -5557,46 +5591,160 @@ mod tests {
         assert_eq!(app.active_overlay, None);
     }
 
-    #[test]
-    fn approval_overlay_requires_review_before_approval_key_decides() {
-        let event = GatewayEvent {
+    fn low_risk_approval_event() -> GatewayEvent {
+        GatewayEvent {
             event_type: "approval.requested".to_owned(),
             source: "gateway".to_owned(),
             created_at: None,
             run_id: Some("run_1".to_owned()),
             task_id: None,
             data: json!({
-                "approval_id": "approval_edit_1",
-                "message": "Edit src/lib.rs?",
-                "tool": "Edit",
+                "approval_id": "approval_read_1",
+                "message": "Read src/lib.rs?",
+                "tool": "Read",
                 "target": "src/lib.rs"
             }),
-        };
+        }
+    }
+
+    fn high_risk_approval_event() -> GatewayEvent {
+        GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Run rm -rf build?",
+                "tool": "Bash",
+                "command": "rm -rf build",
+                "risk": "executes command with bypassPermissions; writes and deletes files"
+            }),
+        }
+    }
+
+    #[test]
+    fn single_press_a_approves_low_risk_approval_when_overlay_active() {
         let mut app = InteractiveApp::for_test_with_messages([]);
-        app.record_event(&event);
-
-        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.record_event(&low_risk_approval_event());
         assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
-        assert!(!app.transcript.iter().any(|entry| entry.title == "Denying"));
-        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        assert_eq!(app.active_overlay, None);
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
-        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a approves a low-risk approval in one press"
+        );
+        assert!(
+            !app.transcript.iter().any(|entry| entry.title == "Denying"),
+            "approve never falls through to deny"
+        );
+    }
+
+    #[test]
+    fn single_press_d_denies_when_overlay_active() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+        assert!(
+            app.transcript.iter().any(|entry| entry.title == "Denying"),
+            "d denies in one press"
+        );
         assert!(
             !app.transcript
                 .iter()
-                .any(|entry| entry.title == "Approving")
+                .any(|entry| entry.title == "Approving"),
+            "deny is unambiguous and never approves"
+        );
+    }
+
+    #[test]
+    fn esc_defers_approval_overlay_without_deciding() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert_eq!(app.active_overlay, None, "esc dismisses the overlay");
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" || entry.title == "Denying"),
+            "esc defers without approving or denying"
+        );
+        // The approval remains pending so it can be revisited.
+        assert_eq!(app.pending_approval_count(), 1);
+    }
+
+    #[test]
+    fn approval_keys_do_nothing_when_overlay_inactive() {
+        // No overlay active: the composer owns input, so a/d type normally and
+        // never reach the approval decision path. This is the critical safety
+        // property -- a stray keystroke while typing must never approve.
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&low_risk_approval_event());
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(app.active_overlay, None);
+        let pending_before = app.pending_approval_count();
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+        assert_eq!(
+            app.input, "ad",
+            "approval keys type into the composer when no overlay is focused"
         );
         assert!(
-            app.overlay_text()
-                .expect("approval overlay")
-                .contains("approval_edit_1")
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" || entry.title == "Denying"),
+            "no decision is taken outside the approval overlay"
         );
+        assert_eq!(app.pending_approval_count(), pending_before);
+    }
 
-        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+    #[test]
+    fn high_risk_approval_requires_explicit_confirm_before_a_decides() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        // First 'a' arms the destructive confirm; it must NOT approve yet.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "a high-risk approval is not approved on the first press"
+        );
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+
+        // Second 'a' confirms.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(
             app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "the explicit confirm press approves the high-risk approval"
+        );
+    }
+
+    #[test]
+    fn high_risk_approval_can_still_be_denied_in_one_press() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+
+        // Deny is always single-press and unambiguous, even for high-risk.
+        app.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        assert!(app.transcript.iter().any(|entry| entry.title == "Denying"));
+        assert!(
+            !app.transcript
                 .iter()
                 .any(|entry| entry.title == "Approving")
         );

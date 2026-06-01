@@ -897,14 +897,14 @@ fn approval_actions_line() -> Line<'static> {
     Line::from(vec![
         Span::styled("Actions: ", theme::mute_style()),
         Span::styled(
-            "[Ctrl-A] approve",
+            "[a] approve",
             Style::default()
                 .fg(theme::sage())
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
         Span::styled(
-            "[Ctrl-X] deny",
+            "[d] deny",
             Style::default()
                 .fg(theme::red())
                 .add_modifier(Modifier::BOLD),
@@ -1483,7 +1483,7 @@ mod tests {
     #[test]
     fn approval_overlay_lines_preserve_decision_labels() {
         let lines = approval_overlay_lines(
-            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [Ctrl-A] approve  [Ctrl-X] deny  [Esc] defer",
+            "Review required\nOrigin: claude-code\nQueue: 1 of 2 pending\nWarning: risky\nPreview\n  - old\n  + new\nActions: [a] approve  [d] deny  [Esc] defer",
         );
         let rendered = lines
             .iter()
@@ -1494,8 +1494,8 @@ mod tests {
         assert!(rendered.contains("Queue: 1 of 2 pending"));
         assert!(rendered.contains("  - old"));
         assert!(rendered.contains("  + new"));
-        assert!(rendered.contains("[Ctrl-A] approve"));
-        assert!(rendered.contains("[Ctrl-X] deny"));
+        assert!(rendered.contains("[a] approve"));
+        assert!(rendered.contains("[d] deny"));
         assert!(rendered.contains("[Esc] defer"));
         let removed = lines
             .iter()
@@ -1780,7 +1780,7 @@ mod tests {
         assert!(rows.iter().any(|row| row.contains("Source request")));
         assert!(rows.iter().any(|row| row.contains("Craik context")));
         assert!(rows.iter().any(|row| row.contains("Warning:")));
-        assert!(rows.iter().any(|row| row.contains("[Ctrl-A] approve")));
+        assert!(rows.iter().any(|row| row.contains("[a] approve")));
         assert!(
             rows.iter()
                 .any(|row| row.contains('+') && row.contains("new"))
