@@ -63,7 +63,6 @@ from craik.runtime.backend.events import (
     Coalescer,
     EventSource,
     ReceiptDecidedBy,
-    receipt_event,
     tool_event,
 )
 
@@ -216,11 +215,12 @@ class OpenAICLI(CLIAdapter):
         machinery the gating cores use): it spawns the REAL ``codex exec --json``
         subprocess, maps each native ``thread`` / ``turn`` / ``item.*`` line
         through THIS adapter's ``map_native_event`` + ``Coalescer``, and yields the
-        coalesced ``assistant_text``, the per-line ``tool.used`` /
-        ``receipt.created`` (``source="openai-cli"`` / ``decided_by="bypass"``),
-        and the run framing. This ``run()`` IS the live ``execute_prompt`` path
-        (openai-cli has no legacy branch / no ``CRAIK_BACKEND_LEGACY_RUN``
-        fallback).
+        coalesced ``assistant_text``, the per-line ``tool.used``, and the run
+        framing -- which includes the canonical ``receipt.created``
+        (``source="openai-cli"`` / ``decided_by="bypass"``) derived from the
+        core's PERSISTED receipt id WITH ``run_id``. This ``run()`` IS the live
+        ``execute_prompt`` path (openai-cli has no legacy branch / no
+        ``CRAIK_BACKEND_LEGACY_RUN`` fallback).
         """
         if ctx.require_operator_approval:
             self.require_live_gating()
@@ -239,6 +239,11 @@ class OpenAICLI(CLIAdapter):
             source=_SOURCE,
             map_native=self.map_native_event,
             coalescer=self._coalescer,
+            # Observe-only attribution: the canonical ``receipt.created`` (emitted
+            # from the core's persisted receipt id by ``cli_framing_events``)
+            # attests OBSERVATION only -- never the ``operator`` value the gating
+            # CLIs stamp -- because the codex pre-tool hook does not fire.
+            decided_by=_OBSERVE_ONLY_DECIDED_BY,
             on_payload=self._capture_payload,
         )
 
@@ -273,15 +278,21 @@ class OpenAICLI(CLIAdapter):
         Assistant ``item.completed`` text (``item.type=="assistant_message"``)
         is fed to the coalescer and returns ``None`` (emitted once at flush).
         A ``command_execution`` item maps to a ``tool.used`` event. The
-        end-of-turn ``turn.completed`` maps to the single OBSERVE-ONLY receipt.
-        ``thread.started`` / ``turn.started`` (and anything else) are dropped to
-        keep the canonical stream clean.
+        end-of-turn ``turn.completed`` line is DROPPED -- the canonical
+        OBSERVE-ONLY ``receipt.created`` (with ``run_id``) is owned by the framing
+        path, not synthesized per-line. ``thread.started`` / ``turn.started`` (and
+        anything else) are dropped to keep the canonical stream clean.
         """
         kind = str(native.get("type") or "")
         if kind == "item.completed":
             return self._map_item(native.get("item"))
-        if kind == "turn.completed":
-            return _map_turn_receipt(native)
+        # The end-of-turn ``turn.completed`` line is DROPPED here: the canonical
+        # OBSERVE-ONLY ``receipt.created`` is owned by ``run_cli_typed`` ->
+        # ``cli_framing_events`` (derived from the core's REAL persisted receipt
+        # id, WITH ``run_id`` + ``decided_by="bypass"``). Synthesizing a second
+        # receipt here produced a run-id-less, hardcoded-id record the gateway
+        # event contract rejects (``receipt.created`` requires a non-empty
+        # ``run_id``) -- crashing the session. See ``test_cli_receipt_run_id_guard``.
         return None
 
     def _map_item(self, item: Any) -> BackendEvent | None:
@@ -303,26 +314,6 @@ def _map_command_item(item: dict[str, Any]) -> BackendEvent:
         tool="shell",
         source=_SOURCE,
         command=optional_str(item.get("command")),
-    )
-
-
-def _map_turn_receipt(native: dict[str, Any]) -> BackendEvent:
-    # The codex CLI ran the side effect; craik OBSERVED and recorded the
-    # reported result -- hence ``execution="delegated-observed"``. Crucially,
-    # because the pre-tool hook does NOT fire (vendor-capabilities.md § OpenAI),
-    # craik did NOT authorize the call pre-execution: the receipt attests
-    # OBSERVATION only, so ``decided_by="bypass"`` (the ungoverned audit flag)
-    # -- NOT the ``operator`` value the gating CLIs stamp. craik cannot enforce
-    # a ``deny`` on this surface, so the observed verdict is recorded as
-    # ``allow`` (the codex CLI already executed it).
-    return receipt_event(
-        receipt_id="receipt_openai_cli_observe",
-        source=_SOURCE,
-        purpose="execution",
-        execution="delegated-observed",
-        mode="default",
-        decision="allow",
-        decided_by=_OBSERVE_ONLY_DECIDED_BY,
     )
 
 

@@ -9,10 +9,13 @@ the receipts it emits attest OBSERVATION only -- ``decided_by="bypass"`` (the
 ungoverned audit flag), NOT the ``operator`` value the gating CLIs stamp.
 
 Feeds recorded ``codex exec --json`` lines (the ``thread`` / ``turn`` / ``item.*``
-vocabulary) through the adapter and asserts the canonical observe sequence: a
-single coalesced ``assistant_text``, a ``tool.used``, and one
-``receipt.created`` with ``source=="openai-cli"`` and
-``execution=="delegated-observed"`` -- with NO contract-envelope leakage.
+vocabulary) through the adapter's TEMPLATE ``parse_stream`` surface and asserts
+the canonical observe sequence: a single coalesced ``assistant_text``, a
+``tool.used``, and NO per-line ``receipt.created`` (the end-of-turn
+``turn.completed`` line is dropped here; the canonical observe-only receipt,
+carrying ``run_id``, is owned by the live ``run()`` framing -- see
+``test_cli_run.py`` / ``test_cli_receipt_run_id_guard.py``) -- with NO
+contract-envelope leakage.
 """
 
 from __future__ import annotations
@@ -115,11 +118,13 @@ def test_event_sequence_is_canonical_observe() -> None:
 
     assert types.count("assistant_text") == 1
     assert "tool.used" in types
+    # NO per-line receipt: the end-of-turn ``turn.completed`` line is dropped
+    # here. That synthetic per-line receipt was run-id-less + hardcoded-id and the
+    # gateway event contract rejected it. The CANONICAL observe-only receipt (with
+    # run_id) is emitted by the live ``run()`` framing (``cli_framing_events``),
+    # exercised in ``test_cli_run.py`` + ``test_cli_receipt_run_id_guard.py``.
     receipts = [e for e in events if e.type == "receipt.created"]
-    assert len(receipts) == 1
-    receipt = receipts[0]
-    assert receipt.source == "openai-cli"
-    assert receipt.data["execution"] == "delegated-observed"
+    assert receipts == []
 
 
 def test_assistant_text_is_coalesced_not_concatenated() -> None:
@@ -132,20 +137,16 @@ def test_assistant_text_is_coalesced_not_concatenated() -> None:
     assert text.count("Reviewing the plan") == 1
 
 
-def test_receipt_is_observe_only_not_operator_authorized() -> None:
-    events = _run_fixture()
-    receipts = [e for e in events if e.type == "receipt.created"]
+def test_turn_completed_line_maps_to_no_receipt() -> None:
+    # The end-of-turn ``turn.completed`` line must NOT synthesize a
+    # ``receipt.created``: the canonical observe-only receipt (with run_id) is
+    # owned by the live ``run()`` framing (``cli_framing_events``), not the
+    # per-line mapper. A receipt mapped here would lack a run_id and crash the
+    # gateway. The observe-only attribution (``decided_by="bypass"``, never
+    # ``operator``) of the CANONICAL receipt is asserted in ``test_cli_run.py``.
+    adapter = OpenAICLI()
 
-    assert len(receipts) == 1
-    receipt = receipts[0]
-    assert receipt.source == "openai-cli"
-    assert receipt.data["execution"] == "delegated-observed"
-    assert receipt.data["purpose"] == "execution"
-    # Observe-only attribution: craik did NOT authorize pre-execution (no hook
-    # fired), so the receipt must NOT claim ``operator`` authorization the way
-    # the gating CLIs do. ``bypass`` is the ungoverned audit flag.
-    assert receipt.data["decided_by"] == "bypass"
-    assert receipt.data["decided_by"] != "operator"
+    assert adapter.map_native_event({"type": "turn.completed"}) is None
 
 
 def test_every_event_sources_openai_cli() -> None:
