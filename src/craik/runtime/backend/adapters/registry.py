@@ -12,10 +12,10 @@ from craik.runtime.backend.adapters.anthropic_api import AnthropicAPI
 from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
 from craik.runtime.backend.adapters.base import Adapter
 from craik.runtime.backend.adapters.concrete import (
-    GoogleAPI,
     OpenAIAPI,
     OpenAICLI,
 )
+from craik.runtime.backend.adapters.google_api import GoogleAPI
 from craik.runtime.backend.adapters.google_cli import GoogleCLI
 from craik.runtime.backend.claude_code import anthropic_uses_claude_cli_marker
 
