@@ -4427,6 +4427,67 @@ mod tests {
     }
 
     #[test]
+    fn progress_does_not_supersede_after_a_non_progress_entry_intervenes() {
+        // Pins the TAIL guard in `supersede_progress`: a tracked progress entry
+        // may only be superseded in place while it is still the transcript tail.
+        // Once a non-progress entry for the same run is appended, the earlier
+        // progress entry is buried and a later progress update must APPEND a
+        // fresh line, never overwrite the buried one. (Removing the
+        // `*index + 1 == len()` guard makes this test fail.)
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        // 1) First progress for run X -> progress entry at the tail.
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"message": "First progress.", "transcript_visibility": "visible"}),
+        });
+
+        // 2) A NON-progress entry for the SAME run X buries the progress entry
+        //    (it is no longer the transcript tail).
+        app.record_event(&GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"tool": "Read", "message": "Read src/lib.rs."}),
+        });
+        assert!(
+            app.transcript
+                .last()
+                .is_some_and(|entry| entry.kind != TranscriptKind::Progress),
+            "the tool.used entry must be the tail, burying the earlier progress entry"
+        );
+
+        // 3) Another progress for run X -> must APPEND, not overwrite the buried
+        //    earlier progress entry.
+        app.record_event(&GatewayEvent {
+            event_type: "run.progress".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_x".to_owned()),
+            task_id: None,
+            data: json!({"message": "Second progress.", "transcript_visibility": "visible"}),
+        });
+
+        let progress: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| entry.kind == TranscriptKind::Progress)
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(
+            progress,
+            vec!["First progress.", "Second progress."],
+            "a buried progress entry must not be superseded; the later update appends a fresh line"
+        );
+    }
+
+    #[test]
     fn approval_request_tracks_pending_state_and_actions() {
         let receipt = GatewayEvent {
             event_type: "receipt.created".to_owned(),
