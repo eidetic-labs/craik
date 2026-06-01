@@ -4065,6 +4065,48 @@ mod tests {
     }
 
     #[test]
+    fn assistant_text_then_completed_does_not_report_no_model_output() {
+        // Typed contract: the model's text arrives as `assistant_text`. It must
+        // count as model output so `run.completed` does not spuriously report
+        // "No model output" — the live anthropic-cli path emits no `run.output`,
+        // only `assistant_text`.
+        let assistant = GatewayEvent {
+            event_type: "assistant_text".to_owned(),
+            source: "anthropic-cli".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: None,
+            data: json!({"text": "Here is the repo overview."}),
+        };
+        let completed = GatewayEvent {
+            event_type: "run.completed".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: None,
+            data: json!({"status": "completed"}),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([
+            WorkerMessage::Event(assistant),
+            WorkerMessage::Event(completed),
+        ]);
+        app.in_flight = true;
+
+        app.drain_worker();
+
+        assert!(
+            !app.state.outputs.is_empty(),
+            "assistant_text must count as model output"
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .all(|entry| entry.title != "No model output"),
+            "assistant_text output must suppress the No model output flag"
+        );
+    }
+
+    #[test]
     fn prompt_submission_stream_lifecycle_reaches_completed_state() {
         let events = [
             event(

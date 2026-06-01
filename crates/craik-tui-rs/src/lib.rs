@@ -261,6 +261,15 @@ impl GatewayAppState {
                     self.outputs.push(text);
                 }
             }
+            "assistant_text" => {
+                // The typed contract carries the model's text here (coalesced
+                // upstream). Count it as model output so the "No model output"
+                // completion check does not false-fire on paths (e.g.
+                // anthropic-cli) that emit `assistant_text` but no `run.output`.
+                if let Some(text) = string_at(&event.data, &["text"]) {
+                    self.outputs.push(text);
+                }
+            }
             "run.completed" => {
                 self.run_status =
                     string_at(&event.data, &["status"]).or_else(|| Some("completed".to_owned()));
@@ -1259,6 +1268,25 @@ mod tests {
                 "Slash command completed: 2 records\n- run_docs [completed] via claude-code\n- run_review [running] via provider_anthropic"
             ]
         );
+    }
+
+    #[test]
+    fn assistant_text_counts_as_model_output() {
+        // Typed contract: `assistant_text` carries the model's text. AppState
+        // must count it as output so the completion check does not report
+        // "No model output" on paths that emit no `run.output` (anthropic-cli).
+        let event = GatewayEvent {
+            event_type: "assistant_text".to_owned(),
+            source: "anthropic-cli".to_owned(),
+            created_at: None,
+            run_id: Some("run_text".to_owned()),
+            task_id: None,
+            data: json!({"text": "Here is the repo overview."}),
+        };
+
+        let state = app_state_from_events(&[event]);
+
+        assert_eq!(state.outputs, ["Here is the repo overview."]);
     }
 
     #[test]
