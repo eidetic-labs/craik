@@ -223,11 +223,6 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
     }];
     let mut middle = Vec::new();
     if let Some(overlay) = metrics.active_overlay {
-        middle.push(FooterHint {
-            key: "esc",
-            label: "chat".to_owned(),
-            urgent: false,
-        });
         if overlay == "Approvals" {
             if metrics.pending_approval.is_some() {
                 // Single-press keymap: `a` approves, `d` denies. A high-risk
@@ -255,6 +250,13 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
                 });
             }
         } else {
+            // Non-approval overlays keep an esc-to-chat hint plus one overlay
+            // cycle hint as the two ranked middle slots.
+            middle.push(FooterHint {
+                key: "esc",
+                label: "chat".to_owned(),
+                urgent: false,
+            });
             middle.push(FooterHint {
                 key: match overlay {
                     "Memory" => "⌃e",
@@ -326,16 +328,23 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             urgent: false,
         });
     }
-    let middle_limit = if metrics.active_overlay == Some("Approvals") {
-        3
-    } else {
-        2
-    };
-    for hint in middle.into_iter().take(middle_limit) {
+    // Strict 4-slot footer: the `/` anchor (already pushed) + exactly up to two
+    // ranked middle hints + the `?` anchor (pushed below). The middle cap is a
+    // fixed 2 in every context so the footer width never shifts between states.
+    const MIDDLE_SLOTS: usize = 2;
+    // `hints` already holds the leading `/` anchor, so `len() > MIDDLE_SLOTS`
+    // means the two middle slots are full (the `?` anchor is appended later).
+    for hint in middle.into_iter() {
+        if hints.len() > MIDDLE_SLOTS {
+            break;
+        }
         if !hints.iter().any(|existing| existing.key == hint.key) {
             hints.push(hint);
         }
     }
+    // Backfill the middle slots with stable defaults only when the active
+    // context produced fewer than two ranked hints, so the anchor layout stays
+    // consistent rather than collapsing to a bare `/ … ?`.
     for fallback in [
         FooterHint {
             key: "⌃r",
@@ -348,7 +357,7 @@ fn footer_hints(state: &GatewayAppState, metrics: &StatusLineMetrics<'_>) -> Vec
             urgent: false,
         },
     ] {
-        if hints.len() >= 3 {
+        if hints.len() > MIDDLE_SLOTS {
             break;
         }
         if !hints.iter().any(|existing| existing.key == fallback.key) {
@@ -744,6 +753,48 @@ mod tests {
 
         assert!(rendered.contains(" ask "));
         assert!(!rendered.contains(" default "));
+    }
+
+    #[test]
+    fn footer_uses_fixed_four_slot_anchors() {
+        // Strict layout: `/` anchor, up to 2 ranked middle hints, `?` anchor.
+        let state = GatewayAppState {
+            ready: true,
+            receipt_ids: vec!["receipt_1".to_owned()],
+            run_ids: vec!["run_1".to_owned()],
+            ..GatewayAppState::default()
+        };
+        let hints = super::footer_hints(&state, &status_metrics());
+
+        assert!(hints.len() <= 4, "footer never exceeds four slots");
+        assert_eq!(hints.first().map(|hint| hint.key), Some("/"), "`/` anchors the left slot");
+        assert_eq!(hints.last().map(|hint| hint.key), Some("?"), "`?` anchors the right slot");
+        let middle = hints.len().saturating_sub(2);
+        assert!(middle <= 2, "at most two ranked middle hints");
+    }
+
+    #[test]
+    fn footer_keeps_four_slots_with_approval_actions() {
+        // Even in the approvals overlay the footer stays at four slots, and the
+        // two decision keys are the ranked middle hints.
+        let state = GatewayAppState::default();
+        let hints = super::footer_hints(
+            &state,
+            &StatusLineMetrics {
+                active_overlay: Some("Approvals"),
+                pending_approval: Some("approval_123"),
+                ..status_metrics()
+            },
+        );
+
+        assert_eq!(hints.len(), 4, "approvals footer fills exactly four slots");
+        assert_eq!(hints.first().map(|hint| hint.key), Some("/"));
+        assert_eq!(hints.last().map(|hint| hint.key), Some("?"));
+        let middle_keys: Vec<&str> = hints[1..hints.len() - 1]
+            .iter()
+            .map(|hint| hint.key)
+            .collect();
+        assert_eq!(middle_keys, vec!["a", "d"], "approve/deny are the ranked middle");
     }
 
     #[test]
