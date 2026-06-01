@@ -533,7 +533,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &InteractiveApp, area: Rect) {
             in_flight: app.in_flight,
             pending_approval: app.latest_pending_approval(),
             approval_reviewed: app.active_overlay == Some(app::ActiveOverlay::Approvals)
-                && app.approval_overlay_reviewed,
+                && app.selected_approval_is_armed(),
             backend_connected: app.backend_connected,
             queued_inputs: app.queued_inputs.len(),
             active_overlay: app.active_overlay.map(|overlay| overlay.title()),

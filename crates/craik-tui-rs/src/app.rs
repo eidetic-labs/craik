@@ -179,7 +179,16 @@ pub(crate) struct InteractiveApp {
     pub(crate) expand_transcript_details: bool,
     pub(crate) help_visible: bool,
     pub(crate) active_overlay: Option<ActiveOverlay>,
-    pub(crate) approval_overlay_reviewed: bool,
+    /// The id of the high-risk / bypassPermissions approval currently *armed*
+    /// for its explicit second-press confirm. Keying the arm to the selected
+    /// approval's identity (instead of a bare overlay-global bool) is fail-safe
+    /// by construction: any change of selection -- by navigation, by a queue
+    /// mutation that shifts the selected index, or by a committed decision --
+    /// leaves a stale id that no longer matches the newly-selected approval, so
+    /// the gate re-arms from scratch. Every high-risk approval therefore
+    /// requires its OWN two-press confirm; no manual reset on each
+    /// selection-change path can be forgotten.
+    pub(crate) armed_approval_id: Option<String>,
     pub(crate) overlay_filter: String,
     pub(crate) overlay_selected_index: usize,
     pub(crate) overlay_scroll: u16,
@@ -232,7 +241,7 @@ impl InteractiveApp {
             expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
-            approval_overlay_reviewed: false,
+            armed_approval_id: None,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -293,7 +302,7 @@ impl InteractiveApp {
             expand_transcript_details: false,
             help_visible: false,
             active_overlay: None,
-            approval_overlay_reviewed: false,
+            armed_approval_id: None,
             overlay_filter: String::new(),
             overlay_selected_index: 0,
             overlay_scroll: 0,
@@ -863,6 +872,15 @@ impl InteractiveApp {
             .is_some_and(PendingApproval::is_high_risk)
     }
 
+    /// Whether the currently selected approval is the one armed for its
+    /// explicit second-press confirm. Drives the footer "armed" affordance.
+    pub(crate) fn selected_approval_is_armed(&self) -> bool {
+        matches!(
+            (&self.armed_approval_id, self.selected_pending_approval()),
+            (Some(armed), Some(selected)) if *armed == selected.id
+        )
+    }
+
     fn selected_approval_detail_text(&self) -> Option<String> {
         let index = self.selected_approval_index?;
         let approval = self.pending_approvals.get(index)?;
@@ -875,10 +893,9 @@ impl InteractiveApp {
 
     fn open_overlay(&mut self, overlay: ActiveOverlay) {
         self.active_overlay = Some(overlay);
-        // Single-press keymap: the approvals overlay opens disarmed. The
-        // `approval_overlay_reviewed` flag now means "a high-risk approval has
-        // been armed for its explicit confirm press", so it must start false.
-        self.approval_overlay_reviewed = false;
+        // Single-press keymap: the approvals overlay opens disarmed. The arm is
+        // keyed to the selected approval's id, so opening clears any stale arm.
+        self.armed_approval_id = None;
         self.overlay_filter.clear();
         self.overlay_selected_index = match overlay {
             ActiveOverlay::Runs => self
@@ -898,12 +915,12 @@ impl InteractiveApp {
 
     fn surface_pending_approval_overlay(&mut self) {
         self.open_overlay(ActiveOverlay::Approvals);
-        self.approval_overlay_reviewed = false;
+        self.armed_approval_id = None;
     }
 
     fn close_unreviewed_approval_overlay(&mut self) {
         if self.active_overlay == Some(ActiveOverlay::Approvals)
-            && !self.approval_overlay_reviewed
+            && self.armed_approval_id.is_none()
             && self.pending_approvals.is_empty()
         {
             self.active_overlay = None;
@@ -1151,7 +1168,7 @@ impl InteractiveApp {
         match key.code {
             KeyCode::Esc => {
                 self.active_overlay = None;
-                self.approval_overlay_reviewed = false;
+                self.armed_approval_id = None;
                 self.overlay_filter.clear();
             }
             KeyCode::Char('m') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1166,17 +1183,27 @@ impl InteractiveApp {
             // Single-press approve while the approvals overlay is focused. A
             // low-risk approval is decided on the first 'a'. A high-risk /
             // bypassPermissions approval keeps an explicit confirmation gate:
-            // the first 'a' arms (sets `approval_overlay_reviewed`) and only a
-            // second 'a' approves, so a destructive action never lands on a
-            // single accidental keystroke. This branch is reachable only when
-            // an overlay is focused (see `handle_key` routing), so a stray 'a'
-            // in the composer can never approve anything.
+            // the first 'a' ARMS this specific approval (records its id in
+            // `armed_approval_id`) and only a second 'a' -- while that SAME
+            // approval is still selected -- approves, so a destructive action
+            // never lands on a single accidental keystroke. The arm is keyed to
+            // the approval's identity, so navigating away, a queue mutation, or
+            // a committed decision leaves a stale id that no longer matches the
+            // selection: the gate re-arms from scratch for every high-risk item.
+            // This branch is reachable only when an overlay is focused (see
+            // `handle_key` routing), so a stray 'a' in the composer can never
+            // approve anything.
             KeyCode::Char('a')
                 if !key.modifiers.contains(KeyModifiers::CONTROL)
                     && self.active_overlay == Some(ActiveOverlay::Approvals) =>
             {
-                if self.selected_approval_is_high_risk() && !self.approval_overlay_reviewed {
-                    self.approval_overlay_reviewed = true;
+                let selected_id = self.selected_pending_approval().map(|a| a.id.clone());
+                let armed_for_selection = matches!(
+                    (&self.armed_approval_id, &selected_id),
+                    (Some(armed), Some(selected)) if armed == selected
+                );
+                if self.selected_approval_is_high_risk() && !armed_for_selection {
+                    self.armed_approval_id = selected_id;
                 } else {
                     self.approve_selected();
                 }
@@ -2365,6 +2392,9 @@ impl InteractiveApp {
             operator: "user:ratatui".to_owned(),
             reason: "approved from Ratatui client".to_owned(),
         }]);
+        // A committed decision disarms unconditionally: a subsequently-selected
+        // high-risk approval must require its own two-press confirm.
+        self.armed_approval_id = None;
     }
 
     pub(crate) fn deny_selected(&mut self) {
@@ -2392,9 +2422,16 @@ impl InteractiveApp {
             operator: "user:ratatui".to_owned(),
             reason: "denied from Ratatui client".to_owned(),
         }]);
+        // A committed decision disarms unconditionally (see `approve_selected`).
+        self.armed_approval_id = None;
     }
 
     pub(crate) fn select_next_approval(&mut self) {
+        // Changing the selection disarms: arming is bound to the previously
+        // selected approval and must not carry to the newly selected one. (The
+        // id-keyed match in the 'a' handler already makes this fail-safe; the
+        // explicit clear keeps the field from going stale.)
+        self.armed_approval_id = None;
         if self.pending_approvals.is_empty() {
             self.selected_approval_index = None;
             return;
@@ -2407,6 +2444,8 @@ impl InteractiveApp {
     }
 
     pub(crate) fn select_previous_approval(&mut self) {
+        // Changing the selection disarms (see `select_next_approval`).
+        self.armed_approval_id = None;
         if self.pending_approvals.is_empty() {
             self.selected_approval_index = None;
             return;
@@ -5732,6 +5771,94 @@ mod tests {
                 .iter()
                 .any(|entry| entry.title == "Approving"),
             "the explicit confirm press approves the high-risk approval"
+        );
+    }
+
+    fn high_risk_approval_event_b() -> GatewayEvent {
+        GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_2",
+                "message": "Run rm -rf dist?",
+                "tool": "Bash",
+                "command": "rm -rf dist",
+                "risk": "executes command; writes and deletes files"
+            }),
+        }
+    }
+
+    #[test]
+    fn arming_high_risk_then_navigating_disarms() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+        app.record_event(&high_risk_approval_event_b());
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert_eq!(app.pending_approvals.len(), 2);
+
+        // Select approval A and arm it with a single 'a' (does NOT commit).
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_1");
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "arming A must not approve anything yet"
+        );
+
+        // Navigate to B. The arm must NOT carry over: a single 'a' on B must
+        // only arm B, never commit it.
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_2");
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "navigating to B must disarm; the first post-navigation 'a' must NOT commit B"
+        );
+
+        // A second 'a' on B (now armed from a disarmed state) commits it.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "B requires its OWN two-press confirm from a disarmed state"
+        );
+    }
+
+    #[test]
+    fn arming_does_not_carry_after_a_committed_decision() {
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&high_risk_approval_event());
+        app.record_event(&high_risk_approval_event_b());
+
+        // Arm + commit high-risk A (two 'a' presses on A).
+        app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_1");
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_1")),
+            "A is committed by its two-press confirm"
+        );
+
+        // Select B; the committed decision on A must have disarmed the gate.
+        app.handle_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert_eq!(app.selected_pending_approval().unwrap().id, "approval_bash_2");
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_2")),
+            "a single 'a' on B after a committed decision must NOT commit B"
         );
     }
 
