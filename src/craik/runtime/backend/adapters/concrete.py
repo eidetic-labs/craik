@@ -7,10 +7,11 @@ its ``run`` raises ``NotImplementedError``.
 
 Phase 4 rebases these onto ``CLIAdapter`` / ``APIAdapter`` one vendor at a time.
 The real :class:`AnthropicCLI` (Task 4.1), :class:`AnthropicAPI` (Task 4.2),
-:class:`GoogleCLI` (Task 4.3), and :class:`GoogleAPI` (Task 4.4) now live in
-their own modules and are re-exported here for back-compat so existing
-``from ...concrete import ...`` imports keep resolving; the remaining two
-(``OpenAICLI`` / ``OpenAIAPI``) stay stubs until their own Phase-4 tasks land.
+:class:`GoogleCLI` (Task 4.3), :class:`GoogleAPI` (Task 4.4), and
+:class:`OpenAIAPI` (Task 4.5) now live in their own modules and are re-exported
+here for back-compat so existing ``from ...concrete import ...`` imports keep
+resolving; the remaining one (``OpenAICLI``) stays a stub until its own Phase-4
+task lands.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
 from craik.runtime.backend.adapters.base import RunContext
 from craik.runtime.backend.adapters.google_api import GoogleAPI
 from craik.runtime.backend.adapters.google_cli import GoogleCLI
+from craik.runtime.backend.adapters.openai_api import OpenAIAPI
 from craik.runtime.backend.events import BackendEvent
 
 __all__ = [
@@ -63,8 +65,3 @@ class _NotImplementedAdapter:
 class OpenAICLI(_NotImplementedAdapter):
     vendor = "openai"
     surface = "cli"
-
-
-class OpenAIAPI(_NotImplementedAdapter):
-    vendor = "openai"
-    surface = "api"

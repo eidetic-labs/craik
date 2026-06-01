@@ -84,7 +84,9 @@ def test_unknown_identifier_raises_value_error(identifier: str) -> None:
 def test_stub_run_raises_not_implemented_naming_class() -> None:
     from craik.runtime.backend.adapters.base import RunContext
 
-    adapter = select_adapter("openai-api", _ctx_env())
+    # ``openai-cli`` is the last remaining Phase-2 stub (OpenAIAPI graduated to a
+    # real adapter in Task 4.5); its ``run`` still raises a class-named error.
+    adapter = select_adapter("openai-cli", _ctx_env())
     ctx = RunContext(
         prompt="hi",
         env={},
@@ -93,5 +95,5 @@ def test_stub_run_raises_not_implemented_naming_class() -> None:
         require_operator_approval=False,
     )
 
-    with pytest.raises(NotImplementedError, match="OpenAIAPI"):
+    with pytest.raises(NotImplementedError, match="OpenAICLI"):
         adapter.run(ctx)
