@@ -1,34 +1,26 @@
-"""Emission-agnostic audited-execution cores extracted from ``legacy_runs`` (Task 5.4).
+"""Emission-agnostic audited-execution cores (Task 5.4 / 5.5b).
 
-This module holds the *core* of the two legacy run paths -- the audited run
-itself (store/task setup, execution via the claude subprocess / the
-``ProviderBackedRunExecutor``, receipt persistence, and payload assembly) --
-factored OUT of event emission. Each core returns a structured ``*CoreResult``
-carrying everything an emission layer needs to derive events (ids, status,
-receipt ids, the native claude stream / provider step results, the assembled
-payload); the core itself NEVER decides event shapes.
+Each core performs an audited run (store/task setup, execution, receipt
+persistence, payload assembly) factored OUT of event emission, returning a
+``*CoreResult`` an emission layer derives events from. The core never decides
+event shapes.
 
-Two cores exist because the two paths *execute* differently:
+* :func:`run_claude_code_core` -- the Claude Code subprocess; native events
+  stream DURING the run via an injected ``stream`` sink (the only emission
+  seam), framing derived by the caller from :class:`ClaudeCoreResult` after.
+* :func:`run_provider_core` -- the ``ProviderBackedRunExecutor``; no events
+  during the run, so the whole sequence is derived from
+  :class:`ProviderCoreResult`. The still-open ``store`` is returned for the
+  caller to persist gateway history with, then close.
 
-* :func:`run_claude_code_core` drives the Claude Code subprocess. Its native
-  events are produced DURING execution (the subprocess streams stream-json
-  lines), so the core takes an injected ``stream`` sink for those native events.
-  That sink is the ONLY emission seam the core touches, and it is supplied by
-  the caller -- the legacy layer feeds it the old-shape mapper, a later
-  ``run()`` can feed it a typed mapper. The framing events
-  (model.selected / run.working / run.started / receipt.created / run.completed)
-  are derived by the caller from :class:`ClaudeCoreResult` *after* the core
-  returns.
-* :func:`run_provider_core` drives the ``ProviderBackedRunExecutor``. Provider
-  execution does not stream during the run, so EVERY event (framing + tool-call
-  + receipt + output) is derivable from :class:`ProviderCoreResult` after the
-  fact; the core takes no sink at all. Because the gateway-event-history
-  artifact must be persisted with the SAME open store the run used, the core
-  returns the still-open ``store`` and the caller is responsible for closing it
-  (the legacy layer does so in a ``finally``).
+The GENERIC vendor-CLI core (``gemini`` / ``codex``, Task 5.5b) -- the model of
+``run_claude_code_core`` generalized to any ``argv`` -- lives in
+``backend.cli.cli_audited`` (its own package because ``backend`` /
+``backend/adapters`` are at the sibling-module layout cap); its subprocess pump
+is ``sandbox.cli_stream``.
 
-Import direction matches ``legacy_runs``: this module imports from ``session``
-for the shared private helpers; ``session`` must NOT import this module.
+Import direction: this module imports from ``session`` for shared private
+helpers; ``session`` must NOT import this module.
 """
 
 from __future__ import annotations
@@ -70,17 +62,10 @@ from craik.runtime.work.tasks import create_task
 class ClaudeCoreResult:
     """Structured result of an audited claude-code run, emission-agnostic.
 
-    Carries everything an emission layer needs to derive the framing events for
-    a claude-code run. The native per-line stream events were already delivered
-    to the injected ``stream`` sink DURING execution (they cannot be replayed
-    from a structured snapshot), so they are not re-carried here.
-
-    Attributes:
-        payload: The assembled run payload (``execute_claude_code_run`` output).
-        run_id: The audited run id, if the payload carried a ``run.id`` string.
-        task_id: The audited task id, if the payload carried a ``task.id`` string.
-        status: The terminal run status from the payload, if any.
-        receipt_ids: The persisted receipt ids (string-only), in payload order.
+    Carries everything an emission layer needs to derive the framing events. The
+    native per-line stream events were delivered to the injected ``stream`` sink
+    DURING execution, so they are not re-carried. ``receipt_ids`` are string-only
+    in payload order; ``status`` is the terminal run status.
     """
 
     payload: dict[str, object]
@@ -94,26 +79,11 @@ class ClaudeCoreResult:
 class ProviderCoreResult:
     """Structured result of an audited provider run, emission-agnostic.
 
-    Carries everything an emission layer needs to derive every event for a
-    provider run (no events are produced during execution). The still-open
-    ``store`` is returned so the caller can persist the gateway-event-history
-    artifact with the same store the run used, then close it.
-
-    Attributes:
-        payload: The assembled provider run payload (project/task/profile merged).
-        result: The raw ``ProviderBackedRunResult`` (run, provider step results).
-        store: The OPEN store the run used; the caller MUST close it.
-        provider_id: The selected provider id.
-        provider_family: The normalized provider family for the selected provider
-            (``None`` when the provider id maps to no known family).
-        model: The originally selected model (may be ``None``).
-        resolved_model: The model resolved from the last provider step result.
-        display_name: The operator-facing model display name.
-        active_profile: The active model profile, if any.
-        receipt_ids: The persisted receipt ids (string-only), in payload order.
-        status: The terminal run status.
-        run_id: The audited run id.
-        task_id: The audited task id (the created task's id).
+    Carries everything an emission layer needs to derive every event (no events
+    are produced during execution). The still-open ``store`` is returned so the
+    caller can persist the gateway-event-history artifact with the same store the
+    run used, then close it. ``provider_family`` is ``None`` when the provider id
+    maps to no known family; ``receipt_ids`` are string-only in payload order.
     """
 
     payload: dict[str, object]
@@ -255,10 +225,9 @@ def run_provider_core(
 
 # --- Typed emission (Task 5.5a) ---------------------------------------------
 # These helpers derive the NEW typed event sequence from the SAME ``*CoreResult``
-# the legacy emission layer derives the OLD events from. They are the typed
-# counterpart of ``legacy_runs`` -- emission only; execution + persistence happen
-# in the cores above. They live here (not a new ``adapters/`` file) because the
-# ``adapters/`` package is at its 15-file cap.
+# the legacy emission layer derives the OLD events from -- emission only;
+# execution + persistence happen in the cores above. They live here (not a new
+# ``adapters/`` file) because the ``adapters/`` package is at its 15-file cap.
 
 
 def typed_claude_stream_sink(
@@ -269,19 +238,12 @@ def typed_claude_stream_sink(
 ) -> Callable[[BackendEvent], None]:
     """Return a ``stream`` sink for ``run_claude_code_core`` that emits TYPED events.
 
-    ``run_claude_code_core`` (via ``_execute_claude_code_prompt``) delivers each
-    native claude line to its ``stream`` callback as an OLD-shape
-    ``BackendEvent`` whose ``data`` carries the native ``{"kind": ...}`` fields
-    (``kind`` / ``text`` / ``tool`` / ``target`` / ``command`` / ...). This sink
-    re-shapes each one through the adapter's ``map_native`` (the SAME mapper +
-    ``Coalescer`` the Phase-4 fixture tests exercise): assistant-text snapshots
-    are coalesced (and emitted once at flush by the caller), and tool / approval
-    / receipt kinds are forwarded to ``sink`` as typed events. Non-canonical
-    kinds map to ``None`` and are dropped.
-
-    The returned callable is what the typed ``run()`` passes as the core's
-    ``stream``; the caller flushes ``coalescer`` and emits the framing events
-    AFTER the core returns (see :func:`claude_framing_events`).
+    Re-shapes each native claude line (delivered as an OLD-shape ``BackendEvent``
+    whose ``data`` carries the native fields) through the adapter's
+    ``map_native`` + ``Coalescer``: text snapshots are coalesced (flushed once by
+    the caller), tool/approval/receipt kinds forward to ``sink``, non-canonical
+    kinds drop. The caller flushes ``coalescer`` and emits framing AFTER the core
+    returns (see :func:`claude_framing_events`).
     """
 
     def _on_native(old_event: BackendEvent) -> None:
@@ -306,12 +268,10 @@ def claude_framing_events(
     """Yield the TYPED framing events derived from a :class:`ClaudeCoreResult`.
 
     The native per-line events were already emitted DURING the core run via the
-    typed stream sink; this derives only the framing the legacy layer derives
-    after the fact -- ``run.started``, a ``receipt.created`` per persisted
-    receipt id, and ``run.completed`` -- as canonical typed builders carrying the
-    core's ``run_id`` / ``task_id`` / ``status``. Receipt posture mirrors the
-    CLI exemplar (``execution="delegated-observed"``: the CLI ran the tool, craik
-    authorized + observed it).
+    typed stream sink; this derives the framing -- ``run.started``, a
+    ``receipt.created`` per persisted receipt id (``execution=
+    "delegated-observed"``), and ``run.completed`` -- carrying the core's ids /
+    status.
     """
     yield run_started_event(source=source, run_id=core.run_id, task_id=core.task_id)
     for receipt_id in core.receipt_ids:
@@ -342,22 +302,12 @@ def provider_typed_events(
     """Yield the full TYPED event sequence derived from a :class:`ProviderCoreResult`.
 
     The provider core produces NO events during execution, so the whole sequence
-    is derived after the fact from the structured result:
-
-    * one coalesced ``assistant_text`` (the per-step ``text`` joined, contract
-      envelopes stripped) when any step produced text;
-    * a ``tool.used`` per native tool call across ``result.provider_results``;
-    * ``run.started`` framing;
-    * a ``receipt.created`` per persisted receipt id carrying ``execution=
-      "craik"`` (craik ran the provider step itself);
-    * ``run.output`` summarizing the run stop reason;
-    * ``run.completed`` with the terminal status.
-
-    ``source`` is the originating adapter's vendor token (e.g. ``"openai-api"``).
-    ``run_provider_typed`` guards that this vendor agrees with
-    ``core.provider_family`` BEFORE deriving events, so by the time this runs the
-    token always matches ``core.provider_family``; ``execute_prompt`` (5.7)
-    selects the adapter matching the active provider to keep the guard satisfied.
+    is derived after the fact: one coalesced ``assistant_text`` (contract
+    envelopes stripped) when any step produced text; a ``tool.used`` per native
+    tool call; ``run.started``; a ``receipt.created`` per persisted receipt id
+    (``execution="craik"``); ``run.output`` summarizing the stop reason;
+    ``run.completed``. ``source`` is the adapter vendor token, guarded against
+    ``core.provider_family`` by ``run_provider_typed`` before this runs.
     """
     run_id = core.run_id
     task_id = core.task_id
@@ -423,20 +373,13 @@ def run_provider_typed(
 ) -> Iterator[BackendEvent]:
     """Compose the provider core and yield its NEW TYPED event sequence.
 
-    The single live API ``run()`` body shared by ``AnthropicAPI`` / ``GoogleAPI``
-    / ``OpenAIAPI``: it runs + persists the audited provider run via
-    ``run_provider_core`` (the SAME machinery the legacy provider layer uses),
-    derives the typed events from the :class:`ProviderCoreResult`, persists the
-    gateway-event-history artifact with the core's still-open ``store``, and
-    closes that store exactly ONCE in a ``finally`` (leak-free), mirroring
-    ``legacy_runs._legacy_provider_run``.
-
-    ``source`` is the originating adapter's vendor token stamped on emitted
-    events; ``provider_source`` is the operator ``PromptSource`` recorded on the
-    created task. The adapter vendor (derived from ``source``) MUST agree with the
-    core's resolved ``provider_family`` -- if it does not, this refuses to emit
-    (raising ``ValueError``) rather than write a wrong-vendor audit record. The
-    core's store is still closed exactly once on that raise path.
+    The live API ``run()`` body shared by ``AnthropicAPI`` / ``GoogleAPI`` /
+    ``OpenAIAPI``: run + persist via ``run_provider_core``, derive typed events,
+    persist gateway history with the core's still-open ``store``, and close it
+    exactly ONCE in a ``finally``. ``source`` is the adapter vendor token;
+    ``provider_source`` is the operator ``PromptSource`` on the task. If the
+    adapter vendor disagrees with the resolved ``provider_family`` this refuses
+    to emit (``ValueError``) rather than write a wrong-vendor record.
     """
     core = run_provider_core(prompt=prompt, env=env, source=provider_source)
     store = core.store

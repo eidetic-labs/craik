@@ -75,10 +75,18 @@ class GoogleCLI(CLIAdapter):
     vendor = "google"
     surface = "cli"
 
-    def __init__(self, profile: VendorProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: VendorProfile | None = None,
+        *,
+        original_env: dict[str, str] | None = None,
+    ) -> None:
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
-        # until then default to the canonical google profile.
+        # until then default to the canonical google profile. ``original_env`` is
+        # the ORIGINAL (possibly None) operator env threaded to the audited core
+        # like the claude path; the gateway injects it in Task 5.7.
         self.profile: VendorProfile = profile or vendor_profile("google")
+        self.original_env: dict[str, str] | None = original_env
         # Phase-5 gating config: the REAL BeforeTool hook that registers the
         # ``craik-hook`` client as the Gemini CLI's pre-tool command (google-cli.md
         # §1/§3). The live ``spawn`` (PR B) writes this into ``.gemini/settings.json``
@@ -103,6 +111,34 @@ class GoogleCLI(CLIAdapter):
         re-implementing auth.
         """
         return _AUTH_SOURCE
+
+    def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
+        """Compose the audited CLI core and yield the typed Gemini event sequence.
+
+        Runs + persists the audited CLI run via ``cli_audited.run_cli_typed``
+        (the SAME store/receipt machinery the claude / provider cores use): it
+        spawns the REAL ``gemini`` subprocess (``build_command``) with the
+        workspace-trust-pre-authorized ``spawn_env``, maps each native
+        ``stream-json`` line through THIS adapter's ``map_native_event`` + the
+        per-run ``Coalescer`` AS IT ARRIVES, then yields the coalesced
+        ``assistant_text``, the per-line ``tool.used`` / ``receipt.created``
+        (``source="google-cli"`` / ``execution="delegated-observed"``), and the
+        run framing. Live-gating hook env is set by the gateway in Task 5.6; here
+        we just run. NOT wired into ``execute_prompt`` (Task 5.7).
+        """
+        from craik.runtime.backend.cli.cli_audited import run_cli_typed
+
+        self._coalescer = Coalescer()
+        yield from run_cli_typed(
+            prompt=ctx.prompt,
+            env=self.original_env,
+            argv=self.build_command(ctx),
+            spawn_env=self.spawn_env(dict(ctx.env)),
+            vendor="google",
+            source=_SOURCE,
+            map_native=self.map_native_event,
+            coalescer=self._coalescer,
+        )
 
     def build_command(self, ctx: RunContext) -> list[str]:
         """Return the Gemini CLI stream-json argv for this run.

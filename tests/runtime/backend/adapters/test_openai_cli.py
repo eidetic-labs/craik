@@ -45,6 +45,12 @@ def _ctx(*, require_operator_approval: bool = False) -> RunContext:
 
 
 def _run_fixture() -> list[BackendEvent]:
+    # Task 5.5b repurposes ``OpenAICLI.run`` as the live path composing the
+    # audited CLI core (the core spawns the real subprocess), so ``run`` no
+    # longer reads the injected ``spawn``. The template hooks remain the abstract
+    # CLI surface; this exercises THAT surface via ``parse_stream`` over a fake
+    # ``spawn`` -- exactly the path the typed ``run`` re-uses through
+    # ``map_native_event`` + the ``Coalescer``.
     adapter = OpenAICLI()
     lines = _fixture_lines()
 
@@ -52,7 +58,8 @@ def _run_fixture() -> list[BackendEvent]:
         return lines
 
     adapter.spawn = fake_spawn  # type: ignore[method-assign]
-    return list(adapter.run(_ctx()))
+    ctx = _ctx()
+    return list(adapter.parse_stream(adapter.spawn(adapter.build_command(ctx), ctx.env), ctx))
 
 
 def test_supports_live_gating_is_false() -> None:

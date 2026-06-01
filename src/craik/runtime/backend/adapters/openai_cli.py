@@ -107,10 +107,18 @@ class OpenAICLI(CLIAdapter):
     vendor = "openai"
     surface = "cli"
 
-    def __init__(self, profile: VendorProfile | None = None) -> None:
+    def __init__(
+        self,
+        profile: VendorProfile | None = None,
+        *,
+        original_env: dict[str, str] | None = None,
+    ) -> None:
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
-        # until then default to the canonical openai profile.
+        # until then default to the canonical openai profile. ``original_env`` is
+        # the ORIGINAL (possibly None) operator env threaded to the audited core
+        # like the claude path; the gateway injects it in Task 5.7.
         self.profile: VendorProfile = profile or vendor_profile("openai")
+        self.original_env: dict[str, str] | None = original_env
         # NO PreToolUse hook config -- deliberately absent (the gating CLIs hold a
         # ``pre_tool_use_hook_config`` / ``before_tool_hook_config`` here). The
         # codex ``PreToolUse`` / ``PermissionRequest`` hook does NOT fire for the
@@ -172,26 +180,61 @@ class OpenAICLI(CLIAdapter):
             ctx.prompt.strip(),
         ]
 
+    def spawn_env(self, env: dict[str, str]) -> dict[str, str]:
+        """Return the spawn env for the codex subprocess (side-effect free copy).
+
+        The codex CLI needs no workspace-trust pre-authorization (unlike the
+        Gemini CLI), and -- being observe-only -- registers no hook env, so the
+        spawn env is just a defensive copy of the caller's env.
+        """
+        return dict(env)
+
     def spawn(self, cmd: list[str], env: dict[str, str]) -> Iterable[str]:
         """Spawn the codex CLI and return native stdout lines.
 
-        Left unimplemented in this task: the live subprocess bridge lands with
-        the cutover (Task 4.7). Unit tests inject a fake ``spawn``; calling the
-        real one before the cutover is a programming error.
+        Left unimplemented: the live ``run`` path spawns via
+        ``cli_audited.run_cli_typed`` -> ``sandbox.cli_stream`` rather than this
+        abstract hook. Unit tests inject a fake subprocess at the
+        ``local_process_backend`` seam; calling this hook directly is a
+        programming error.
         """
-        raise NotImplementedError("OpenAICLI.spawn is wired to the live subprocess in Task 4.7")
+        raise NotImplementedError(
+            "OpenAICLI.spawn is unused; the live run() streams via cli_stream"
+        )
 
     def run(self, ctx: RunContext) -> Iterator[BackendEvent]:
-        """Template run, but REFUSE first if the caller asks for live gating.
+        """Compose the audited CLI core, but REFUSE FIRST if asked to live-gate.
 
         ``require_operator_approval`` is a request to gate the run before tool
-        execution -- which this observe-only surface cannot honor. Refusing here
-        (rather than silently observing) makes the limitation explicit at the
-        call site so a governed run is never misrouted to the CLI surface.
+        execution -- which this observe-only surface cannot honor. The refusal
+        (``LiveGatingUnsupported``) happens BEFORE any subprocess is spawned, so a
+        governed run is never silently observed nor misrouted. Otherwise it runs +
+        persists the audited CLI run via ``cli_audited.run_cli_typed`` (the SAME
+        machinery the gating cores use): it spawns the REAL ``codex exec --json``
+        subprocess, maps each native ``thread`` / ``turn`` / ``item.*`` line
+        through THIS adapter's ``map_native_event`` + ``Coalescer``, and yields the
+        coalesced ``assistant_text``, the per-line ``tool.used`` /
+        ``receipt.created`` (``source="openai-cli"`` / ``decided_by="bypass"``),
+        and the run framing. NOT wired into ``execute_prompt`` (Task 5.7).
         """
         if ctx.require_operator_approval:
             self.require_live_gating()
-        yield from super().run(ctx)
+        from craik.runtime.backend.cli.cli_audited import run_cli_typed
+
+        self._coalescer = Coalescer()
+        yield from run_cli_typed(
+            prompt=ctx.prompt,
+            env=self.original_env,
+            argv=self.build_command(ctx),
+            spawn_env=self.spawn_env(dict(ctx.env)),
+            # The codex CLI's audited run/receipt uses the ``codex`` runner id
+            # (the runner-capability matrix knows ``codex``, not ``openai``); the
+            # emitted events still source the canonical ``openai-cli`` token.
+            vendor="codex",
+            source=_SOURCE,
+            map_native=self.map_native_event,
+            coalescer=self._coalescer,
+        )
 
     def parse_stream(self, lines: Iterable[str], ctx: RunContext) -> Iterator[BackendEvent]:
         """Decode each native line, map it, and flush coalesced text last.
