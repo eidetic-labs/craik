@@ -205,25 +205,18 @@ class OpenAIAPI(APIAdapter):
 
         OVERRIDES the base ``APIAdapter.run`` (the direct-HTTP tool-loop): the
         live-today provider path runs + persists through the SAME
-        ``ProviderBackedRunExecutor`` all families share, via
-        ``audited_core.run_provider_typed``, then derives typed events and closes
-        the store once. See ``AnthropicAPI.run`` for the dual-path split (base
+        ``ProviderBackedRunExecutor`` all families share, via the shared
+        ``audited_core.provider_api_run`` wiring (the identical body
+        ``AnthropicAPI`` / ``GoogleAPI`` also compose): it derives typed events,
+        captures the audited payload onto ``self.last_payload``, and closes the
+        store once. See ``AnthropicAPI.run`` for the dual-path split (base
         ``direct_tool_loop`` -- with its Responses/Chat-Completions branches --
         stays the fixture-tested direct-HTTP design) and the vendor/provider_family
         alignment note. NOT wired into ``execute_prompt`` (Task 5.7).
         """
-        from craik.runtime.backend.adapters.audited_core import run_provider_typed
+        from craik.runtime.backend.adapters.audited_core import provider_api_run
 
-        yield from run_provider_typed(
-            prompt=ctx.prompt,
-            env=self.original_env,
-            source=_SOURCE,
-            provider_source=self.prompt_source,  # type: ignore[arg-type]
-            on_payload=self._capture_payload,
-        )
-
-    def _capture_payload(self, payload: dict[str, object]) -> None:
-        self.last_payload = payload
+        return provider_api_run(self, ctx)
 
     # --- abstract hooks -----------------------------------------------------
 

@@ -188,11 +188,13 @@ class AnthropicAPI(APIAdapter):
         This OVERRIDES the base ``APIAdapter.run`` (the direct-HTTP tool-loop):
         the live-today provider path runs + persists through
         ``ProviderBackedRunExecutor`` -- the SAME machinery all provider families
-        share -- via ``audited_core.run_provider_typed``. ``run()`` then derives
-        the typed events from the ``ProviderCoreResult`` and closes the core's
+        share -- via the shared ``audited_core.provider_api_run`` wiring. That
+        helper derives the typed events from the ``ProviderCoreResult``, captures
+        the audited payload onto ``self.last_payload``, and closes the core's
         store exactly once (leak-free), mirroring
         ``legacy_runs._legacy_provider_run``. It is the typed counterpart of the
-        legacy provider emission layer.
+        legacy provider emission layer, shared identically with ``GoogleAPI`` /
+        ``OpenAIAPI``.
 
         Dual-path: the base ``direct_tool_loop`` (gate->request->map_response->
         execute_tool + ``SideEffectGate``) remains the fixture-tested direct-HTTP
@@ -203,26 +205,16 @@ class AnthropicAPI(APIAdapter):
         Vendor/provider_family alignment: ``run_provider_core`` resolves
         ``provider_id`` / ``provider_family`` from the active model/env (as the
         legacy provider path did). This adapter stamps its OWN vendor token
-        (``anthropic-api``) on emitted events, and ``run_provider_typed`` GUARDS
-        that the vendor agrees with the resolved ``provider_family`` -- on
-        mismatch it refuses to emit (raising), rather than write a wrong-vendor
-        audit record. ``execute_prompt`` (Task 5.7) selects the adapter matching
-        the active provider so the guard holds. NOT wired into ``execute_prompt``
-        here (Task 5.7).
+        (``anthropic-api``, via ``posture.source``) on emitted events, and
+        ``run_provider_typed`` GUARDS that the vendor agrees with the resolved
+        ``provider_family`` -- on mismatch it refuses to emit (raising), rather
+        than write a wrong-vendor audit record. ``execute_prompt`` (Task 5.7)
+        selects the adapter matching the active provider so the guard holds. NOT
+        wired into ``execute_prompt`` here (Task 5.7).
         """
-        from craik.runtime.backend.adapters.audited_core import run_provider_typed
+        from craik.runtime.backend.adapters.audited_core import provider_api_run
 
-        yield from run_provider_typed(
-            prompt=ctx.prompt,
-            # The ORIGINAL env (possibly None), threaded like the legacy path.
-            env=self.original_env,
-            source=_SOURCE,
-            provider_source=self.prompt_source,  # type: ignore[arg-type]
-            on_payload=self._capture_payload,
-        )
-
-    def _capture_payload(self, payload: dict[str, object]) -> None:
-        self.last_payload = payload
+        return provider_api_run(self, ctx)
 
     # --- abstract hooks -----------------------------------------------------
 

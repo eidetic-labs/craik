@@ -28,10 +28,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from craik.cli_run_support import fixture_shell_grant, provider_run_payload
 from craik.runtime.backend import session
-from craik.runtime.backend.adapters.base import strip_contract_envelopes
+from craik.runtime.backend.adapters.base import (
+    ReceiptPosture,
+    RunContext,
+    strip_contract_envelopes,
+)
 from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
@@ -379,6 +384,48 @@ def provider_typed_events(
     )
 
 
+class _ProviderAPIAdapter(Protocol):
+    """The slice of an API adapter ``provider_api_run`` reads.
+
+    The three API adapters (``AnthropicAPI`` / ``GoogleAPI`` / ``OpenAIAPI``)
+    share an identical live ``run()`` body: stamp the vendor token from
+    ``posture.source``, thread the ORIGINAL env + operator ``PromptSource``, and
+    capture the audited payload onto ``last_payload``. This Protocol pins exactly
+    those attributes so the shared wiring stays vendor-agnostic.
+    """
+
+    posture: ReceiptPosture
+    original_env: dict[str, str] | None
+    prompt_source: str
+    last_payload: dict[str, object] | None
+
+
+def provider_api_run(adapter: _ProviderAPIAdapter, ctx: RunContext) -> Iterator[BackendEvent]:
+    """Yield the shared live API-adapter ``run()`` sequence for ``adapter``.
+
+    The identical body the three API adapters' ``run()`` compose: run + persist
+    via the audited provider core and yield the NEW TYPED event sequence through
+    :func:`run_provider_typed`, stamping the adapter's vendor token
+    (``posture.source``) on every event, threading the adapter's ORIGINAL env and
+    operator ``PromptSource``, and capturing the audited payload onto
+    ``adapter.last_payload`` (the ``on_payload`` seam ``execute_prompt`` reads).
+    Behavior is identical to the former per-adapter bodies (same events, same
+    payload capture, same vendor guard, same single store close).
+    """
+
+    def _capture_payload(payload: dict[str, object]) -> None:
+        adapter.last_payload = payload
+
+    yield from run_provider_typed(
+        prompt=ctx.prompt,
+        # The ORIGINAL env (possibly None), threaded like the legacy path.
+        env=adapter.original_env,
+        source=adapter.posture.source,
+        provider_source=adapter.prompt_source,  # type: ignore[arg-type]
+        on_payload=_capture_payload,
+    )
+
+
 def run_provider_typed(
     *,
     prompt: str,
@@ -435,6 +482,7 @@ __all__ = [
     "ProviderCoreResult",
     "claude_framing_events",
     "cli_observed_decided_by",
+    "provider_api_run",
     "provider_typed_events",
     "run_claude_code_core",
     "run_provider_core",
