@@ -1424,7 +1424,14 @@ impl InteractiveApp {
                     .get("tool")
                     .and_then(|value| value.as_str())
                     .unwrap_or("tool");
-                if let Some(message) = event.data.get("message").and_then(|value| value.as_str()) {
+                let message = event.data.get("message").and_then(|value| value.as_str());
+                // The typed API adapters emit tool.used with command/target but
+                // no message; render whenever any of message/command/target is
+                // present so tool activity is never silently dropped.
+                let has_renderable = message.is_some()
+                    || event.data.get("command").is_some()
+                    || event.data.get("target").is_some();
+                if has_renderable {
                     let kind = if tool == "Bash" {
                         TranscriptKind::Command
                     } else {
@@ -3010,7 +3017,7 @@ fn summarize_run_event(event: &GatewayEvent, fallback: &str) -> String {
     lines.join("\n")
 }
 
-fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str) -> String {
+fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: Option<&str>) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Tool: {tool}"));
     push_optional_data_line(&mut lines, event, "Provider", "provider_id");
@@ -3023,7 +3030,11 @@ fn summarize_tool_event(event: &GatewayEvent, tool: &str, fallback_message: &str
     if let Some(target) = event.data.get("target").and_then(|value| value.as_str()) {
         lines.push(format!("Target: {target}"));
     }
-    lines.push(format!("Detail: {fallback_message}"));
+    // Only the API adapters carry a free-text message; CLI/typed adapters
+    // describe the call via command/target alone.
+    if let Some(message) = fallback_message {
+        lines.push(format!("Detail: {message}"));
+    }
     lines.join("\n")
 }
 
@@ -4308,6 +4319,37 @@ mod tests {
         assert!(evidence[1].contains("google-cli"));
         assert!(evidence[1].contains("delegated-observed"));
         assert!(evidence[1].contains("bypass"));
+    }
+
+    #[test]
+    fn tool_used_without_message_still_renders_from_command_or_target() {
+        // The typed API adapters emit `tool.used` with command/target but no
+        // `message`; the chat lane must still show the tool activity.
+        let mut app = InteractiveApp::for_test_with_messages([]);
+
+        app.record_event(&GatewayEvent {
+            event_type: "tool.used".to_owned(),
+            source: "anthropic-api".to_owned(),
+            created_at: None,
+            run_id: Some("run_tool".to_owned()),
+            task_id: Some("task_tool".to_owned()),
+            data: json!({"tool": "Read", "target": "src/lib.rs"}),
+        });
+
+        let tools: Vec<&str> = app
+            .transcript
+            .iter()
+            .filter(|entry| {
+                entry.kind == TranscriptKind::Tool || entry.kind == TranscriptKind::Command
+            })
+            .map(|entry| entry.body.as_str())
+            .collect();
+        assert_eq!(tools.len(), 1, "tool.used without message must still render");
+        assert!(
+            tools[0].contains("src/lib.rs"),
+            "rendered tool line should carry the target: {:?}",
+            tools[0]
+        );
     }
 
     #[test]
