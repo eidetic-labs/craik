@@ -149,6 +149,9 @@ class HookBridgeServer:
             try:
                 _write_message(conn, {"decision": _DENY})
             except OSError:
+                # Best-effort deny reply: the connection is already broken, so
+                # the write may fail. The client treats an empty/closed
+                # connection as a deny anyway, so there is nothing left to do.
                 pass
         finally:
             conn.close()
@@ -174,6 +177,8 @@ class HookBridgeServer:
             try:
                 path.unlink()
             except OSError:
+                # Best-effort cleanup: the socket file may already be gone
+                # (concurrent close / removed externally); nothing to do.
                 pass
 
 
