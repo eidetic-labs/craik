@@ -154,6 +154,11 @@ fn main() -> anyhow::Result<()> {
 fn run_interactive_app() -> anyhow::Result<()> {
     initialize_detected_theme();
     enable_raw_mode()?;
+    // Raw mode is required to read the terminal's OSC 11 reply byte-by-byte
+    // (no line buffering). The query is best-effort: a non-responding terminal,
+    // a late/garbled reply, or a parse failure all fall through to the existing
+    // env/COLORFGBG/default chain. Failures here must never abort startup.
+    let _ = query_terminal_background();
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::with_options(
@@ -169,9 +174,98 @@ fn run_interactive_app() -> anyhow::Result<()> {
 }
 
 fn initialize_detected_theme() {
+    // The env override is authoritative when present: it lets tests and launch
+    // wrappers inject a known background without a terminal round-trip.
     if let Ok(response) = env::var("CRAIK_TUI_OSC11_RESPONSE") {
         let _ = theme::set_detected_terminal_mode_from_osc11(&response);
     }
+}
+
+/// Best-effort live terminal background detection via OSC 11.
+///
+/// Skipped entirely unless stdin and stdout are both ttys and no stronger
+/// signal already resolves the theme (see [`theme::should_query_osc11`]). On a
+/// real terminal it emits the `OSC 11 ; ? BEL` query and reads the `rgb:…`
+/// reply directly from fd 0 with a short `poll(2)` timeout. ANY failure mode --
+/// no reply, a late or garbled reply, a non-tty, or an I/O error -- returns
+/// without touching the detected mode, so the caller's fallback chain
+/// (`COLORFGBG`, then the dark default) still applies.
+///
+/// The raw read happens BEFORE crossterm's event reader is constructed, so it
+/// never contends with crossterm for stdin and cannot corrupt the input
+/// stream. This path cannot be unit-tested (it needs a live terminal that
+/// answers OSC 11); the decision-to-query logic and the response parser are
+/// covered separately.
+#[cfg(unix)]
+fn query_terminal_background() -> Option<()> {
+    use std::io::Write;
+    use std::os::unix::io::AsRawFd;
+
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        return None;
+    }
+    if !theme::should_query_osc11(|key| env::var(key).ok()) {
+        return None;
+    }
+
+    let mut stdout = io::stdout();
+    stdout.write_all(b"\x1b]11;?\x07").ok()?;
+    stdout.flush().ok()?;
+
+    let fd = io::stdin().as_raw_fd();
+    let mut buffer = Vec::new();
+    let mut byte = [0u8; 1];
+    // Total budget for the round-trip; a silent terminal exits via the first
+    // poll timeout and never hangs startup.
+    let deadline = std::time::Instant::now() + Duration::from_millis(150);
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let mut poll_fd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: poll_fd is a valid, initialized pollfd for the duration of
+        // the call; poll only reads/writes through this pointer.
+        let ready = unsafe {
+            libc::poll(
+                &mut poll_fd,
+                1,
+                remaining.as_millis().min(i32::MAX as u128) as i32,
+            )
+        };
+        if ready <= 0 {
+            // Timeout (0) or error (<0): stop. If we already have a partial
+            // reply, try to parse it; otherwise fall through to the chain.
+            break;
+        }
+        // SAFETY: a single byte read into a stack buffer; fd is the tty.
+        let n = unsafe { libc::read(fd, byte.as_mut_ptr().cast(), 1) };
+        if n <= 0 {
+            break;
+        }
+        buffer.push(byte[0]);
+        // The reply terminates with BEL (\x07) or ST (ESC \\).
+        if byte[0] == 0x07 || (buffer.len() >= 2 && byte[0] == b'\\') {
+            break;
+        }
+        if buffer.len() > 64 {
+            break;
+        }
+    }
+
+    let response = String::from_utf8_lossy(&buffer);
+    theme::set_detected_terminal_mode_from_osc11(&response).then_some(())
+}
+
+#[cfg(not(unix))]
+fn query_terminal_background() -> Option<()> {
+    // Non-Unix targets fall back to the env/COLORFGBG/default chain. The raw
+    // fd round-trip is Unix-only; this keeps the build portable.
+    None
 }
 
 fn run_interactive_loop(

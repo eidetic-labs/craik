@@ -193,6 +193,7 @@ dependencies = [
  "anyhow",
  "crossterm 0.28.1",
  "insta",
+ "libc",
  "ratatui",
  "serde",
  "serde_json",
