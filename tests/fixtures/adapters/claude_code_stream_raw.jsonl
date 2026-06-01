@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"sess_review"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Reviewing the"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Reviewing the plan and normalizing Gateway event handling."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/Users/bjones/Desktop/Craik_Backend_Plan.md"}}]}}
+{"type":"control_request","subtype":"can_use_tool","tool_name":"Edit","input":{"file_path":"src/craik/runtime/backend/session.py"},"reason":"normalize stream event mapping"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Reviewing the plan and normalizing Gateway event handling. craik.runner_step_result and craik.handoff envelope sections must not leak."}]}}
+{"type":"result","subtype":"success","result":"Reviewed the plan and normalized Gateway event handling for Claude Code stream events.","permission_denials":[{"tool_name":"Bash","reason":"network access not permitted"}]}

@@ -1,0 +1,30 @@
+{
+  "id": "resp_openai_api_exemplar",
+  "object": "response",
+  "model": "gpt-5.4",
+  "output_text": "",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Running the requested shell command now. craik.runner_step_result"
+        }
+      ]
+    },
+    {
+      "type": "function_call",
+      "id": "fc_openai_api_shell",
+      "call_id": "call_openai_api_shell",
+      "name": "run_shell_command",
+      "arguments": "{\"command\": \"fixture-action\"}"
+    }
+  ],
+  "usage": {
+    "input_tokens": 42,
+    "output_tokens": 17,
+    "total_tokens": 59
+  }
+}

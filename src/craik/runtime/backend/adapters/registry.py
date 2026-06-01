@@ -8,15 +8,13 @@ in ``execute_prompt``.
 
 from __future__ import annotations
 
+from craik.runtime.backend.adapters.anthropic_api import AnthropicAPI
+from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
 from craik.runtime.backend.adapters.base import Adapter
-from craik.runtime.backend.adapters.concrete import (
-    AnthropicAPI,
-    AnthropicCLI,
-    GoogleAPI,
-    GoogleCLI,
-    OpenAIAPI,
-    OpenAICLI,
-)
+from craik.runtime.backend.adapters.google_api import GoogleAPI
+from craik.runtime.backend.adapters.google_cli import GoogleCLI
+from craik.runtime.backend.adapters.openai_api import OpenAIAPI
+from craik.runtime.backend.adapters.openai_cli import OpenAICLI
 from craik.runtime.backend.claude_code import anthropic_uses_claude_cli_marker
 
 # Canonical "<vendor>-<surface>" id -> concrete adapter class. The keys here are

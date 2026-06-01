@@ -1,0 +1,7 @@
+{"type":"init","session_id":"sess_gemini_review"}
+{"type":"message","role":"assistant","text":"Reviewing the"}
+{"type":"message","role":"assistant","text":"Reviewing the plan and normalizing Gateway event handling."}
+{"type":"tool_use","name":"ReadFile","input":{"file_path":"/Users/bjones/Desktop/Craik_Backend_Plan.md"}}
+{"type":"message","role":"assistant","text":"Reviewing the plan and normalizing Gateway event handling. craik.runner_step_result and craik.handoff envelope sections must not leak."}
+{"type":"tool_result","name":"ReadFile","output":"plan contents elided"}
+{"type":"result","subtype":"success","result":"Reviewed the plan and normalized Gateway event handling for the Gemini CLI stream."}

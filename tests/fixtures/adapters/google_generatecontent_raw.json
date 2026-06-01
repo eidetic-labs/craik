@@ -1,0 +1,30 @@
+{
+  "modelVersion": "gemini-2.5-pro",
+  "responseId": "resp_google_api_exemplar",
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "Running the requested shell command now. craik.runner_step_result"
+          },
+          {
+            "functionCall": {
+              "name": "run_shell_command",
+              "args": {
+                "command": "fixture-action"
+              }
+            }
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 42,
+    "candidatesTokenCount": 17,
+    "totalTokenCount": 59
+  }
+}
