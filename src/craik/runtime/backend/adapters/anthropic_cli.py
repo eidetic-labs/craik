@@ -32,6 +32,7 @@ from craik.runtime.backend.adapters.base import (
     optional_str,
     strip_contract_envelopes,
 )
+from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV, VENDOR_ENV
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.claude_code_support import _claude_stream_line_events
 from craik.runtime.backend.events import (
@@ -71,12 +72,13 @@ class AnthropicCLI(CLIAdapter):
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
         # until then default to the canonical anthropic profile.
         self.vendor_profile: VendorProfile = profile or _default_anthropic_profile()
-        # Phase-5 config point: where the live PreToolUse gating hook is
-        # registered. Held as inert config here -- no daemon is started.
-        self.pre_tool_use_hook_config: dict[str, str] = {
-            "event": "PreToolUse",
-            "transport": "craik.tui.gateway",
-        }
+        # Phase-5 gating config: the REAL PreToolUse hook that registers the
+        # ``craik-hook`` client as Claude Code's pre-tool command (anthropic-cli.md
+        # §1/§3). The live ``spawn`` (PR B) writes this into ``.claude/settings.json``
+        # and substitutes the real bridge socket path into ``env[CRAIK_HOOK_SOCKET]``
+        # before launch; this object holds only the data structure + the env keys
+        # the gateway must set -- no daemon is started here.
+        self.pre_tool_use_hook_config: dict[str, Any] = _pre_tool_use_hook_config()
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -197,6 +199,42 @@ class AnthropicCLI(CLIAdapter):
         if kind == "result":
             return _map_result_receipt(native)
         return None
+
+
+# The ``craik-hook`` console script (defined in pyproject, entry point
+# ``craik.runtime.backend.adapters.hook_bridge:craik_hook_main``) is the pre-tool
+# gating client the CLI invokes. The live spawn (PR B) resolves its absolute path
+# and the real bridge socket; the matcher ``*`` registers it for every tool.
+_HOOK_COMMAND = "craik-hook"
+
+
+def _pre_tool_use_hook_config() -> dict[str, Any]:
+    """Return the REAL Claude Code PreToolUse hook config for ``craik-hook``.
+
+    Pure data: the live ``spawn`` (PR B) writes ``settings`` into
+    ``.claude/settings.json`` (anthropic-cli.md §1: a ``PreToolUse`` hook pointing
+    at craik's hook script) and exports ``env`` before launch, substituting the
+    real socket path into ``env[CRAIK_HOOK_SOCKET]``. ``CRAIK_HOOK_VENDOR`` is
+    fixed to ``anthropic`` so the client emits the Anthropic ``permissionDecision``
+    /exit-2 dialect (anthropic-cli.md §3.4). The socket value is left empty here;
+    no daemon is started in this task.
+    """
+    return {
+        "event": "PreToolUse",
+        "command": _HOOK_COMMAND,
+        "env": {SOCKET_ENV: "", VENDOR_ENV: "anthropic"},
+        # ``.claude/settings.json``-style entry the live spawn writes verbatim.
+        "settings": {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "*",
+                        "hooks": [{"type": "command", "command": _HOOK_COMMAND}],
+                    }
+                ]
+            }
+        },
+    }
 
 
 def _default_anthropic_profile() -> VendorProfile:

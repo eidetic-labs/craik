@@ -37,6 +37,7 @@ from craik.runtime.backend.adapters.base import (
     optional_str,
     strip_contract_envelopes,
 )
+from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV, VENDOR_ENV
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.events import (
     BackendEvent,
@@ -78,12 +79,14 @@ class GoogleCLI(CLIAdapter):
         # ``select_adapter`` will inject the profile at construction in Task 4.7;
         # until then default to the canonical google profile.
         self.profile: VendorProfile = profile or vendor_profile("google")
-        # Phase-5 config point: where the live BeforeTool gating hook is
-        # registered. Held as inert config here -- no daemon is started.
-        self.before_tool_hook_config: dict[str, str] = {
-            "event": "BeforeTool",
-            "transport": "craik.tui.gateway",
-        }
+        # Phase-5 gating config: the REAL BeforeTool hook that registers the
+        # ``craik-hook`` client as the Gemini CLI's pre-tool command (google-cli.md
+        # §1/§3). The live ``spawn`` (PR B) writes this into ``.gemini/settings.json``
+        # and substitutes the real bridge socket path into ``env[CRAIK_HOOK_SOCKET]``
+        # before launch. The workspace-trust flag is carried alongside the hook env
+        # because it is the load-bearing precondition for the hook to fire at all
+        # (google-cli.md §1/§5); no daemon is started here.
+        self.before_tool_hook_config: dict[str, Any] = _before_tool_hook_config()
         # Per-run coalescer for cumulative assistant-text snapshots. Reset at
         # the start of every ``parse_stream`` so runs never bleed together.
         self._coalescer = Coalescer()
@@ -187,6 +190,45 @@ class GoogleCLI(CLIAdapter):
         if kind == "result":
             return _map_result_receipt(native)
         return None
+
+
+# The ``craik-hook`` console script is the pre-tool gating client the Gemini CLI
+# invokes. The live spawn (PR B) resolves its absolute path + the real socket.
+_HOOK_COMMAND = "craik-hook"
+
+
+def _before_tool_hook_config() -> dict[str, Any]:
+    """Return the REAL Gemini CLI BeforeTool hook config for ``craik-hook``.
+
+    Pure data: the live ``spawn`` (PR B) writes ``settings`` into
+    ``.gemini/settings.json`` (google-cli.md §1: a ``BeforeTool`` hook pointing at
+    craik's hook script) and exports ``env`` before launch, substituting the real
+    socket path into ``env[CRAIK_HOOK_SOCKET]``. ``CRAIK_HOOK_VENDOR`` is fixed to
+    ``google`` so the client emits the Gemini ``decision``/exit-2 dialect
+    (google-cli.md §3.4). ``GEMINI_CLI_TRUST_WORKSPACE=true`` travels with the env
+    because the hook does NOT fire in an untrusted workspace -- the load-bearing
+    precondition (google-cli.md §1/§5). No daemon is started in this task.
+    """
+    return {
+        "event": "BeforeTool",
+        "command": _HOOK_COMMAND,
+        "env": {
+            SOCKET_ENV: "",
+            VENDOR_ENV: "google",
+            _WORKSPACE_TRUST_ENV: "true",
+        },
+        # ``.gemini/settings.json``-style entry the live spawn writes verbatim.
+        "settings": {
+            "hooks": {
+                "BeforeTool": [
+                    {
+                        "matcher": "*",
+                        "hooks": [{"type": "command", "command": _HOOK_COMMAND}],
+                    }
+                ]
+            }
+        },
+    }
 
 
 def _map_tool_use(native: dict[str, Any]) -> BackendEvent:
