@@ -34,11 +34,11 @@ from craik.runtime.backend.adapters.hook_bridge import (
     SOCKET_ENV,
     VENDOR_ENV,
     HookBridgeServer,
-    forward_tool_request,
 )
 from craik.runtime.backend.adapters.hook_gating import make_operator_decide
 from craik.runtime.backend.adapters.openai_cli import OpenAICLI
-from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.events import BackendEvent, validate_event
+from craik.runtime.hooks.client import forward_tool_request
 
 
 class _FakeApprovalStore:
@@ -88,6 +88,31 @@ def test_decide_emits_approval_requested_and_allows_on_queued_allow() -> None:
     assert approval_id in store.delegations
     # The derived tool summary surfaces the tool + target/command.
     assert requested[0].data.get("tool") == "Bash"
+
+
+def test_approval_requested_event_with_extra_approval_id_passes_contract() -> None:
+    # ``make_operator_decide`` adds an EXTRA ``approval_id`` key to the
+    # ``approval.requested`` event's ``data`` (the builder omits it). Pin that the
+    # resulting event still PASSES the gateway event contract, so a future
+    # strict-additional-properties change can't silently break the gating wiring.
+    store = _FakeApprovalStore()
+    events, emit = _collector()
+    decide = make_operator_decide(
+        store=store,
+        emit=emit,
+        timeout=0.05,
+        resolve_lookup=lambda _approval_id: None,
+    )
+
+    decide(_BASH_PAYLOAD)
+
+    requested = [e for e in events if e.type == "approval.requested"]
+    assert len(requested) == 1
+    event = requested[0]
+    # The extra key is present (the contract-pin's reason for existing).
+    assert "approval_id" in event.data
+    # ... and the full event (with that extra key) satisfies the contract.
+    validate_event(event)
 
 
 def test_decide_denies_on_queued_deny() -> None:

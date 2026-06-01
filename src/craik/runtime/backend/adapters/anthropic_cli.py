@@ -202,7 +202,7 @@ class AnthropicCLI(CLIAdapter):
 
 
 # The ``craik-hook`` console script (defined in pyproject, entry point
-# ``craik.runtime.backend.adapters.hook_bridge:craik_hook_main``) is the pre-tool
+# ``craik.runtime.hooks.client:craik_hook_main``) is the pre-tool
 # gating client the CLI invokes. The live spawn (PR B) resolves its absolute path
 # and the real bridge socket; the matcher ``*`` registers it for every tool.
 _HOOK_COMMAND = "craik-hook"
