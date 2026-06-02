@@ -45,6 +45,7 @@ from craik.runtime.backend.claude_code_process import (
     _terminate_claude_code_process,
 )
 from craik.runtime.backend.claude_code_settings import (
+    CLAUDE_PERMISSION_MODE_ENV,
     _active_model,
     _claude_code_command_summary,
     _claude_permission_mode,
@@ -101,7 +102,9 @@ _CLAUDE_CODE_CANCEL: ContextVar[threading.Event | None] = ContextVar(
     default=None,
 )
 CLAUDE_CODE_RUN_APPROVED_ENV = "CRAIK_CLAUDE_CODE_RUN_APPROVED"
-CLAUDE_PERMISSION_MODE_ENV = "CRAIK_CLAUDE_PERMISSION_MODE"
+# ``CLAUDE_PERMISSION_MODE_ENV`` is now defined in ``claude_code_settings`` (the
+# single source of truth alongside the per-vendor mode env vars) and re-exported
+# here for the existing importers of ``claude_code``.
 
 
 @dataclass(frozen=True)

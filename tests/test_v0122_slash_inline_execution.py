@@ -219,6 +219,7 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
 
 def test_mode_set_persists_claude_permission_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
 
     result = dispatch_slash_command("/mode bypassPermissions", env=env)
     status = dispatch_slash_command("/mode", env=env)
@@ -230,6 +231,7 @@ def test_mode_set_persists_claude_permission_mode(tmp_path: Path) -> None:
 
 def test_mode_set_persists_dont_ask_permission_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
 
     result = dispatch_slash_command("/mode dontAsk", env=env)
     status = dispatch_slash_command("/mode", env=env)
@@ -241,6 +243,7 @@ def test_mode_set_persists_dont_ask_permission_mode(tmp_path: Path) -> None:
 
 def test_mode_rejects_fake_auto_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
 
     result = dispatch_slash_command("/mode auto", env=env)
 
@@ -251,6 +254,7 @@ def test_mode_rejects_fake_auto_mode(tmp_path: Path) -> None:
 
 def test_mode_ask_alias_persists_default_permission_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
 
     result = dispatch_slash_command("/mode ask", env=env)
     status = dispatch_slash_command("/mode", env=env)
@@ -493,6 +497,112 @@ def test_claude_permission_mode_accepts_real_cli_modes(
 
     env = {} if mode is None else {"CRAIK_CLAUDE_PERMISSION_MODE": mode}
     assert _claude_permission_mode(env) == expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("default", "default"),
+        ("auto_edit", "auto_edit"),
+        ("yolo", "yolo"),
+        ("plan", "plan"),
+        # Claude-only / Codex-only / nonsense values are rejected.
+        ("bypassPermissions", None),
+        ("acceptEdits", None),
+        ("workspace-write", None),
+        ("nonsense", None),
+        (None, None),
+    ],
+)
+def test_gemini_approval_mode_accepts_real_cli_modes(
+    mode: str | None, expected: str | None
+) -> None:
+    from craik.runtime.backend.claude_code_settings import _gemini_approval_mode
+
+    env = {} if mode is None else {"CRAIK_GEMINI_APPROVAL_MODE": mode}
+    assert _gemini_approval_mode(env) == expected
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("read-only", "read-only"),
+        ("workspace-write", "workspace-write"),
+        ("danger-full-access", "danger-full-access"),
+        # Claude-only / Gemini-only / nonsense values are rejected.
+        ("bypassPermissions", None),
+        ("yolo", None),
+        ("default", None),
+        ("nonsense", None),
+        (None, None),
+    ],
+)
+def test_codex_sandbox_mode_accepts_real_cli_modes(
+    mode: str | None, expected: str | None
+) -> None:
+    from craik.runtime.backend.claude_code_settings import _codex_sandbox_mode
+
+    env = {} if mode is None else {"CRAIK_CODEX_SANDBOX_MODE": mode}
+    assert _codex_sandbox_mode(env) == expected
+
+
+def test_mode_set_stores_gemini_approval_mode_when_google_active(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set google/gemini-2.5-pro", env=env)
+
+    result = dispatch_slash_command("/mode yolo", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert env["CRAIK_GEMINI_APPROVAL_MODE"] == "yolo"
+    assert "CRAIK_CLAUDE_PERMISSION_MODE" not in env
+    payload = json.loads(status.text)
+    assert payload["vendor"] == "google"
+    assert payload["mode"] == "yolo"
+    assert "yolo" in payload["choices"]
+
+
+def test_mode_rejects_claude_only_mode_when_google_active(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set google/gemini-2.5-pro", env=env)
+
+    result = dispatch_slash_command("/mode bypassPermissions", env=env)
+
+    assert result.exit_code == 2
+    assert "CRAIK_GEMINI_APPROVAL_MODE" not in env
+    # The error names the ACTIVE vendor's (gemini) modes, not Claude's.
+    assert "yolo" in result.text
+    assert "bypassPermissions" not in result.text
+
+
+def test_mode_set_stores_codex_sandbox_mode_when_openai_active(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set openai/gpt-4o-mini", env=env)
+
+    result = dispatch_slash_command("/mode workspace-write", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert env["CRAIK_CODEX_SANDBOX_MODE"] == "workspace-write"
+    assert "CRAIK_CLAUDE_PERMISSION_MODE" not in env
+    payload = json.loads(status.text)
+    assert payload["vendor"] == "openai"
+    assert payload["mode"] == "workspace-write"
+    assert "danger-full-access" in payload["choices"]
+
+
+def test_mode_set_still_stores_claude_mode_when_anthropic_active(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+
+    result = dispatch_slash_command("/mode bypassPermissions", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.exit_code == 0, result.text
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "bypassPermissions"
+    payload = json.loads(status.text)
+    assert payload["vendor"] == "anthropic"
+    assert payload["mode"] == "bypassPermissions"
 
 
 def test_run_claude_code_backend_passes_bypass_permissions_to_claude(

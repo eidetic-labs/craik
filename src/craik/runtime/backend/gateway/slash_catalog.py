@@ -6,9 +6,7 @@ import os
 
 from craik.runtime.modeling import ModelSettingsStore
 from craik.runtime.providers.model_providers import default_model_provider_registry
-from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
-    CLAUDE_PERMISSION_MODE_ENV,
-)
+from craik.runtime.shell.contract_runtime.mode_args import active_vendor_mode_spec
 from craik.runtime.shell.slash_command_schema import SlashCommandSpec
 from craik.runtime.shell.textual_widgets.theme_settings import current_theme
 
@@ -94,8 +92,10 @@ def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str
     if command_name == "model":
         return ModelSettingsStore.from_env(env).load().active_model
     if command_name == "mode":
+        # Vendor-aware: show the ACTIVE vendor's current mode (Claude / Gemini /
+        # Codex) so the catalog "current value" matches what ``/mode`` would set.
         values = os.environ if env is None else env
-        return _display_permission_mode(values.get(CLAUDE_PERMISSION_MODE_ENV, "default"))
+        return active_vendor_mode_spec(values).current(values)
     if command_name == "effort":
         profile = ModelSettingsStore.from_env(env).load().active_profile
         if profile is None:
@@ -105,7 +105,3 @@ def _current_catalog_value(command_name: str, env: dict[str, str] | None) -> str
     if command_name == "theme":
         return current_theme(env)
     return None
-
-
-def _display_permission_mode(mode: str) -> str:
-    return "ask" if mode == "default" else mode

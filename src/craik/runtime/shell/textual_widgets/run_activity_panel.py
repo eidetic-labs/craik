@@ -109,10 +109,16 @@ def _mode_posture(mode: str) -> str:
     normalized = mode.lower()
     if normalized == "plan":
         return "Plan (preview only)"
-    if normalized == "accept edits":
+    if normalized in {"accept edits", "auto edit"}:
         return "Accept edits (writes allowed)"
-    if normalized == "auto":
-        return "Auto (tools proceed)"
+    if normalized in {"read-only"}:
+        return "Read-only (sandbox)"
+    if normalized in {"workspace write"}:
+        return "Workspace write (sandbox writes)"
+    # High-risk bypass-equivalents across vendors (bypassPermissions / yolo /
+    # full access).
+    if normalized in {"bypass", "yolo", "full access"}:
+        return f"{mode} (gates bypassed)"
     return mode
 
 

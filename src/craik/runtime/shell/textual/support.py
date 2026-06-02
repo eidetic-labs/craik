@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from craik.runtime.backend.claude_code import CLAUDE_PERMISSION_MODE_ENV
 from craik.runtime.contract.command_result import CommandResult
 from craik.runtime.providers.provider_transport import normalize_provider_family
+from craik.runtime.shell.contract_runtime.mode_args import active_vendor_mode_spec
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmationRequest
 from craik.runtime.shell.transcript_renderers import (
     render_claude_event,
@@ -18,12 +18,30 @@ from craik.runtime.shell.transcript_renderers import (
     render_user_message,
 )
 
+# Per-vendor display labels for the status bar / cycle toast. Each vendor's REAL
+# mode tokens map to short human labels; the high-risk bypass-equivalents
+# (``bypassPermissions`` / ``yolo`` / ``danger-full-access``) keep a distinct
+# "Bypass"-family treatment so the operator always sees the elevated posture.
 CLAUDE_PERMISSION_MODE_LABELS = {
     "default": "Default",
     "acceptEdits": "Accept edits",
     "plan": "Plan",
     "dontAsk": "Don't ask",
     "bypassPermissions": "Bypass",
+}
+_VENDOR_MODE_LABELS: dict[str, dict[str, str]] = {
+    "anthropic": CLAUDE_PERMISSION_MODE_LABELS,
+    "google": {
+        "default": "Default",
+        "auto_edit": "Auto edit",
+        "yolo": "Yolo",
+        "plan": "Plan",
+    },
+    "openai": {
+        "read-only": "Read-only",
+        "workspace-write": "Workspace write",
+        "danger-full-access": "Full access",
+    },
 }
 
 
@@ -391,21 +409,63 @@ def _diff_paths(message: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
+def _vendor_mode_display(family: str, mode: str) -> str:
+    labels = _VENDOR_MODE_LABELS.get(family, CLAUDE_PERMISSION_MODE_LABELS)
+    return labels.get(mode, mode)
+
+
 def _claude_permission_mode_label(env: dict[str, str]) -> str | None:
-    mode = env.get(CLAUDE_PERMISSION_MODE_ENV)
-    if mode is None or mode == "default":
+    """Return the ACTIVE vendor's permission-mode label for the status bar.
+
+    Vendor-aware: resolves the active vendor (anthropic / google / openai) and
+    renders its CURRENT stored mode with that vendor's label prefix (``Claude`` /
+    ``Gemini`` / ``Codex``), e.g. ``"Claude Accept edits"`` or ``"Gemini Yolo"``.
+    Returns ``None`` when the active vendor is at its default (no mode chip).
+    """
+    spec = active_vendor_mode_spec(env)
+    stored = env.get(spec.env_var)
+    if stored is None or stored == spec._default_stored():
         return None
-    return CLAUDE_PERMISSION_MODE_LABELS.get(mode, mode)
+    return f"{spec.label} {_vendor_mode_display(spec.family, stored)}"
+
+
+def _active_permission_mode_display(env: dict[str, str]) -> str:
+    """Return the active vendor's CURRENT mode as a bare display label.
+
+    Unlike ``_claude_permission_mode_label`` (vendor-prefixed, status-bar
+    facing), this returns just the mode label (e.g. ``"Plan"`` / ``"Default"``)
+    for the approval-request copy whose posture text keys off the bare label.
+    """
+    spec = active_vendor_mode_spec(env)
+    stored = env.get(spec.env_var, spec._default_stored())
+    return _vendor_mode_display(spec.family, stored)
+
+
+def _active_permission_mode_label_bare(env: dict[str, str]) -> str | None:
+    """Bare active-vendor mode label, or ``None`` when at the vendor default.
+
+    Feeds the run-activity panel (which renders its own posture line and skips
+    the chip entirely at default).
+    """
+    spec = active_vendor_mode_spec(env)
+    stored = env.get(spec.env_var)
+    if stored is None or stored == spec._default_stored():
+        return None
+    return _vendor_mode_display(spec.family, stored)
 
 
 def _claude_permission_mode_posture(mode: str) -> str:
     normalized = mode.lower()
     if normalized == "plan":
-        return "Claude Code should preview intent without editing."
-    if normalized == "accept edits":
+        return "the backend should preview intent without editing."
+    if normalized in {"accept edits", "auto edit"}:
         return "file edits can proceed with fewer prompts."
     if normalized in {"dontask", "don't ask"}:
-        return "Claude Code tools run without prompting; craik records each."
-    if normalized in {"bypasspermissions", "bypass"}:
+        return "tools run without prompting; craik records each."
+    # The high-risk bypass-equivalents across vendors: bypassPermissions
+    # (Claude), yolo (Gemini), full access / danger-full-access (Codex).
+    if normalized in {"bypasspermissions", "bypass", "yolo", "full access", "danger-full-access"}:
         return "permission gates are bypassed; craik observes and records every tool call."
-    return "Claude Code follows its normal tool permission gates."
+    if normalized in {"read-only", "workspace write", "workspace-write"}:
+        return "the backend follows its sandbox boundary; craik records every tool call."
+    return "the backend follows its normal tool permission gates."

@@ -29,9 +29,7 @@ from craik.runtime.shell.commands import note_result
 from craik.runtime.shell.commands.confirmation import confirmation_result
 from craik.runtime.shell.contract_runtime.builtin_slash_specs import HELP_SPEC_ORDER, help_spec
 from craik.runtime.shell.contract_runtime.mode_args import (
-    CLAUDE_PERMISSION_MODE_CHOICES,
-    display_permission_mode,
-    stored_permission_mode,
+    active_vendor_mode_spec,
 )
 from craik.runtime.shell.contract_runtime.model_args import parse_model_set_args
 from craik.runtime.shell.contract_runtime.result_helpers import (
@@ -253,31 +251,46 @@ def model_command(*args: str, env: dict[str, str] | None = None) -> CommandResul
 
 
 def mode_command(*args: str, env: dict[str, str] | None = None) -> CommandResult:
-    """Inspect or set Claude Code permission mode."""
+    """Inspect or set the ACTIVE vendor's permission mode (universal ``/mode``).
+
+    ``/mode`` is one command with per-vendor underlying modes. It resolves the
+    active provider's vendor family (anthropic | google | openai), then validates
+    the requested mode against THAT vendor's real CLI mode set and stores it in
+    THAT vendor's env var (capture, don't force). The no-arg status shows the
+    active vendor, its current mode, and its valid choices. An unknown mode for
+    the active vendor errors listing that vendor's modes.
+    """
     values = env if env is not None else os.environ
+    spec = active_vendor_mode_spec(values)
     if args:
         requested_mode = args[0]
         try:
-            mode = stored_permission_mode(requested_mode)
+            mode = spec.store(requested_mode)
         except ValueError:
-            text = (
-                "mode must be one of `ask`, `acceptEdits`, `plan`, "
-                "`dontAsk`, or `bypassPermissions`."
-            )
+            choices = "`, `".join(spec.choices)
+            text = f"{spec.label} mode must be one of `{choices}`."
             return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
-        values[CLAUDE_PERMISSION_MODE_ENV] = mode
-    mode = values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
-    display_mode = display_permission_mode(mode)
+        values[spec.env_var] = mode
+    display_mode = spec.current(values)
     payload = {
-        "claude_permission_mode": mode,
+        "vendor": spec.family,
+        "mode": display_mode,
+        # ``claude_permission_mode`` retained for back-compat with existing
+        # consumers/snapshots that key on it; for non-anthropic vendors it
+        # mirrors the active vendor's mode.
+        "claude_permission_mode": (
+            values.get(CLAUDE_PERMISSION_MODE_ENV, "default")
+            if spec.family == "anthropic"
+            else display_mode
+        ),
         "display_mode": display_mode,
-        "choices": list(CLAUDE_PERMISSION_MODE_CHOICES),
+        "choices": list(spec.choices),
         "hint": "Shift-Tab cycles this mode inside the TUI.",
     }
     return CommandResult(
         payload=payload,
         shape="kv",
-        text=f"Claude permission mode: `{display_mode}`." if args else None,
+        text=f"{spec.label} permission mode: `{display_mode}`." if args else None,
         command_name="mode",
     )
 

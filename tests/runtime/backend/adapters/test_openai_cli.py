@@ -37,10 +37,12 @@ def _fixture_lines() -> list[str]:
     return _RAW_FIXTURE.read_text(encoding="utf-8").splitlines()
 
 
-def _ctx(*, require_operator_approval: bool = False) -> RunContext:
+def _ctx(
+    *, require_operator_approval: bool = False, env: dict[str, str] | None = None
+) -> RunContext:
     return RunContext(
         prompt="Review the implementation plan for the next phase",
-        env={},
+        env=env if env is not None else {},
         emit=lambda event: None,
         decide=lambda request: "allow",
         require_operator_approval=require_operator_approval,
@@ -100,6 +102,22 @@ def test_build_command_uses_codex_exec_json_argv() -> None:
     assert Path(cmd[0]).name == "codex"
     assert "exec" in cmd
     assert "--json" in cmd
+    # No sandbox env var set -> the flag is absent (capture, don't force).
+    assert "--sandbox" not in cmd
+
+
+def test_build_command_appends_sandbox_when_set() -> None:
+    cmd = OpenAICLI().build_command(_ctx(env={"CRAIK_CODEX_SANDBOX_MODE": "workspace-write"}))
+
+    assert "--sandbox" in cmd
+    assert cmd[cmd.index("--sandbox") + 1] == "workspace-write"
+
+
+def test_build_command_omits_invalid_sandbox_mode() -> None:
+    # A Claude-only value is not a real Codex sandbox mode -> dropped.
+    cmd = OpenAICLI().build_command(_ctx(env={"CRAIK_CODEX_SANDBOX_MODE": "bypassPermissions"}))
+
+    assert "--sandbox" not in cmd
 
 
 def test_default_vendor_profile_is_openai() -> None:

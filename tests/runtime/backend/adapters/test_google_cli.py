@@ -81,6 +81,40 @@ def test_build_command_uses_gemini_stream_json_argv() -> None:
     assert "-p" in cmd
     assert "--output-format" in cmd
     assert "stream-json" in cmd
+    # No approval-mode env var set -> the flag is absent (capture, don't force).
+    assert "--approval-mode" not in cmd
+
+
+def test_build_command_appends_approval_mode_when_set() -> None:
+    adapter = GoogleCLI()
+    ctx = RunContext(
+        prompt="hi",
+        env={"CRAIK_GEMINI_APPROVAL_MODE": "yolo"},
+        emit=lambda event: None,
+        decide=lambda request: "allow",
+        require_operator_approval=False,
+    )
+
+    cmd = adapter.build_command(ctx)
+
+    assert "--approval-mode" in cmd
+    assert cmd[cmd.index("--approval-mode") + 1] == "yolo"
+
+
+def test_build_command_omits_invalid_approval_mode() -> None:
+    adapter = GoogleCLI()
+    ctx = RunContext(
+        prompt="hi",
+        # A Claude-only value is not a real Gemini approval mode -> dropped.
+        env={"CRAIK_GEMINI_APPROVAL_MODE": "bypassPermissions"},
+        emit=lambda event: None,
+        decide=lambda request: "allow",
+        require_operator_approval=False,
+    )
+
+    cmd = adapter.build_command(ctx)
+
+    assert "--approval-mode" not in cmd
 
 
 def test_default_vendor_profile_is_google() -> None:

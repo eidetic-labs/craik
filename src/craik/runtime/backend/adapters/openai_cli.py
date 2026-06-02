@@ -58,6 +58,7 @@ from craik.runtime.backend.adapters.base import (
     optional_str,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
+from craik.runtime.backend.claude_code_settings import _codex_sandbox_mode
 from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
@@ -175,12 +176,27 @@ class OpenAICLI(CLIAdapter):
         prompt is passed last, as ``codex exec`` expects.
         """
         executable = shutil.which("codex") or "codex"
-        return [
+        cmd = [
             executable,
             "exec",
             "--json",
-            ctx.prompt.strip(),
         ]
+        # Faithful per-vendor permission-mode passthrough (Phase 7.2 step 2): the
+        # operator's chosen codex sandbox mode (set by ``/mode`` in
+        # ``CRAIK_CODEX_SANDBOX_MODE``) reaches the live argv via the CLI's real
+        # ``--sandbox`` flag. ``_codex_sandbox_mode`` returns the value ONLY when
+        # it is one of codex's real modes (read-only / workspace-write /
+        # danger-full-access), so a Claude/Gemini mode never leaks here. Absent
+        # when unset (capture, don't force). Codex is OBSERVE-ONLY: craik passes
+        # the mode so the CLI behaves, but cannot live-gate it. This IS the live
+        # path: ``run()`` passes this argv straight to ``run_cli_typed`` which
+        # spawns the real subprocess. The flags precede the positional prompt,
+        # which ``codex exec`` expects last.
+        sandbox_mode = _codex_sandbox_mode(ctx.env)
+        if sandbox_mode:
+            cmd.extend(["--sandbox", sandbox_mode])
+        cmd.append(ctx.prompt.strip())
+        return cmd
 
     def spawn_env(self, env: dict[str, str]) -> dict[str, str]:
         """Return the spawn env for the codex subprocess (side-effect free copy).

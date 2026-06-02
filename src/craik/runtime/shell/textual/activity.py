@@ -15,8 +15,8 @@ from craik.runtime.shell.inline_actions import handle_inline_action
 from craik.runtime.shell.modals.textual_flow import open_textual_modal_flow
 from craik.runtime.shell.slash_completer import complete_slash_input
 from craik.runtime.shell.textual.support import (
+    _active_permission_mode_label_bare,
     _activity_details,
-    _claude_permission_mode_label,
     _data_string,
     _data_string_list,
     _display_model_label,
@@ -355,7 +355,7 @@ class CraikAppActivityMixin:
             RunActivityState(
                 backend=self._run_backend_label or "model",
                 elapsed_seconds=elapsed,
-                mode=_claude_permission_mode_label(self.env),
+                mode=_active_permission_mode_label_bare(self.env),
                 phase=self._current_run_phase,
                 run_id=self._current_run_id,
                 task_id=self._current_task_id,

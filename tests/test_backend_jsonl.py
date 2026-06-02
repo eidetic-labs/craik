@@ -373,10 +373,15 @@ def test_jsonl_gateway_approval_decision_event(tmp_path: Path) -> None:
 
 
 def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    # Pin the active vendor so the mode ``current_value`` is deterministic
+    # (``/mode`` is vendor-aware; with no model the default vendor is not
+    # anthropic).
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
     stdin = io.StringIO('{"type":"slash.catalog"}\n{"type":"session.close"}\n')
     stdout = io.StringIO()
 
-    run_jsonl_gateway(env=_env(tmp_path), stdin=stdin, stdout=stdout)
+    run_jsonl_gateway(env=env, stdin=stdin, stdout=stdout)
     events = _events(stdout.getvalue())
 
     assert [event["type"] for event in events] == ["session.ready", "slash.catalog"]
@@ -385,14 +390,22 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert "run" in names
     assert "status" in names
     assert commands["effort"]["choices"] == {"effort": ["default", "low", "medium", "high", "max"]}
+    # ``/mode`` is universal: the static catalog choices are the UNION across the
+    # three vendors (anthropic + gemini + codex), never Claude-only, and the fake
+    # ``auto`` is gone.
     assert commands["mode"]["choices"] == {
         "mode": [
             "ask",
-            "auto",
             "acceptEdits",
             "plan",
             "dontAsk",
             "bypassPermissions",
+            "default",
+            "auto_edit",
+            "yolo",
+            "read-only",
+            "workspace-write",
+            "danger-full-access",
         ]
     }
     assert commands["mode"]["current_value"] == "ask"
