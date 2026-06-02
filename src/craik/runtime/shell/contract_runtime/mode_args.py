@@ -29,6 +29,20 @@ from craik.runtime.backend.claude_code_settings import (
 )
 from craik.runtime.providers.provider_transport import normalize_provider_family
 
+# Public API of this module (consumed by the slash command, slash spec, TUI, and
+# catalog). Declaring it also tells the unused-global analysis that the
+# choice tuples are exports, not dead module-level state.
+__all__ = [
+    "CLAUDE_PERMISSION_MODE_CHOICES",
+    "GEMINI_APPROVAL_MODE_CHOICES",
+    "CODEX_SANDBOX_MODE_CHOICES",
+    "ALL_PERMISSION_MODE_CHOICES",
+    "VendorModeSpec",
+    "stored_permission_mode",
+    "display_permission_mode",
+    "active_vendor_mode_spec",
+]
+
 # Claude's user-facing choices keep ``ask`` (the display alias of ``default``)
 # in the list and DROP the internal ``default`` token — matching the original
 # Claude-only ``/mode`` UX.
