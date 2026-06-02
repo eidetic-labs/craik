@@ -51,12 +51,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 from craik.runtime.backend.adapters.base import (
     APIAdapter,
     ReceiptPosture,
     RunContext,
     optional_str,
-    strip_contract_envelopes,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.events import (
@@ -323,7 +323,7 @@ class OpenAIAPI(APIAdapter):
             for content in item.get("content", []):
                 if isinstance(content, dict) and content.get("type") == "output_text":
                     text_parts.append(str(content.get("text") or ""))
-        text = strip_contract_envelopes(
+        text = clean_assistant_text(
             str(_text_field(response, "output_text")) + "".join(text_parts)
         )
         if text:
@@ -356,7 +356,7 @@ class OpenAIAPI(APIAdapter):
                     command=optional_str(_command_from_arguments(arguments)),
                 )
             )
-        text = strip_contract_envelopes(str(message.get("content") or ""))
+        text = clean_assistant_text(str(message.get("content") or ""))
         if text:
             events.insert(0, assistant_text_event(text=text, source=_SOURCE))
         return events, tool_calls

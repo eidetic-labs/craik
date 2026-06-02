@@ -51,11 +51,11 @@ import shutil
 from collections.abc import Iterable, Iterator
 from typing import Any
 
+from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
 from craik.runtime.backend.adapters.base import (
     CLIAdapter,
     RunContext,
     optional_str,
-    strip_contract_envelopes,
 )
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.events import (
@@ -300,7 +300,7 @@ class OpenAICLI(CLIAdapter):
             return None
         item_type = str(item.get("type") or "")
         if item_type == "assistant_message":
-            text = strip_contract_envelopes(str(item.get("text") or ""))
+            text = clean_assistant_text(str(item.get("text") or ""))
             if text:
                 self._coalescer.update(None, text)
             return None

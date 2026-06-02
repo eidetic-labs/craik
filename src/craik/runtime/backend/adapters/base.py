@@ -25,25 +25,6 @@ from craik.runtime.backend.events import (
     receipt_event,
 )
 
-# Envelope schema sections that must never leak into emitted events. The vendor
-# paths declare these as expected runner outputs; adapters strip any matching
-# markers so they stay an internal contract concern. Shared by every adapter so
-# the strip logic is defined once, not copied per vendor.
-_CONTRACT_ENVELOPE_MARKERS = ("craik.runner_step_result", "craik.handoff")
-
-
-def strip_contract_envelopes(text: str) -> str:
-    """Remove ``craik.runner_step_result`` / ``craik.handoff`` envelope markers.
-
-    The vendor paths use these schema ids as expected runner outputs; they are
-    an internal contract concern and must never surface in emitted events.
-    Tolerates repeated markers and collapses surrounding whitespace.
-    """
-    cleaned = text
-    for marker in _CONTRACT_ENVELOPE_MARKERS:
-        cleaned = cleaned.replace(marker, "")
-    return " ".join(cleaned.split())
-
 
 def optional_str(value: Any) -> str | None:
     """Coerce ``value`` to a trimmed non-empty string, or ``None``.
