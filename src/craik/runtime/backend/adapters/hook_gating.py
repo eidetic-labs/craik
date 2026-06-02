@@ -96,6 +96,7 @@ def make_operator_decide(
     emit: Callable[[BackendEvent], None],
     timeout: float,
     resolve_lookup: Callable[[str], str | None],
+    permission_mode: str | None = None,
 ) -> Callable[[dict[str, Any]], str]:
     """Build the bridge ``decide`` callback that routes to operator approval.
 
@@ -108,6 +109,13 @@ def make_operator_decide(
 
     ``resolve_lookup`` is the injectable seam over the approval store's resolution
     state (see the section comment above).
+
+    ``permission_mode`` is the ACTIVE vendor permission mode (e.g. Claude
+    ``bypassPermissions`` / Gemini ``yolo`` / Codex ``danger-full-access``). When
+    provided it is carried onto the ``approval.requested`` event's ``data`` (an
+    extra key the contract permits) so the TUI's high-risk gate -- the two-press
+    confirm for the bypass-equivalents -- fires for THIS gated call. ``None``
+    leaves the mode off the event (no high-risk escalation signal).
     """
     # Function-local: keep the short-lived client process free of these imports.
     from craik.runtime.backend.events import approval_requested_event
@@ -139,6 +147,11 @@ def make_operator_decide(
             # targets THIS request (the builder omits it; the contract permits the
             # extra key and the data dict is mutable).
             event.data["approval_id"] = approval_id
+            # Carry the active vendor permission mode so the TUI's high-risk
+            # two-press gate fires for the bypass-equivalents (extra key, allowed
+            # by the contract). Omitted entirely when no mode was resolved.
+            if permission_mode is not None:
+                event.data["permission_mode"] = permission_mode
             emit(event)
         except Exception:
             # Could not open/surface the request -> fail-closed deny: a tool call
@@ -191,6 +204,7 @@ def hook_bridge_session(
     env: dict[str, str] | None = None,
     timeout: float = _DEFAULT_GATE_TIMEOUT_SECONDS,
     vendor: str = "anthropic",
+    permission_mode: str | None = None,
 ) -> Iterator[tuple[str, dict[str, str]]]:
     """Run a live hook-bridge for one gated CLI run; yield ``(socket_path, overlay)``.
 
@@ -242,6 +256,7 @@ def hook_bridge_session(
         emit=emit,
         timeout=timeout,
         resolve_lookup=make_store_resolve_lookup(store),
+        permission_mode=permission_mode,
     )
     server = HookBridgeServer(socket_path, decide=decide)
     server.start()

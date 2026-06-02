@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from typing import Any, TextIO
 
 from craik.runtime.backend.event_contract import (
@@ -13,11 +14,16 @@ from craik.runtime.backend.event_contract import (
     validate_gateway_event,
 )
 from craik.runtime.backend.events import BackendEvent
+from craik.runtime.backend.gateway.gated_prompt import (
+    LineSource,
+    gated_cli_prompt_plan,
+    handle_approval_decide,
+    run_gated_prompt,
+)
 from craik.runtime.backend.gateway.slash_catalog import slash_catalog_entry
 from craik.runtime.backend.session import execute_prompt
 from craik.runtime.model_commands import model_set_result, parse_model_options
 from craik.runtime.modeling import ModelSettingsStore
-from craik.runtime.reviewing.approval_commands import approvals_decide_result
 from craik.runtime.shell.contract_runtime.builtin_slash_commands import (
     CLAUDE_PERMISSION_MODE_ENV,
 )
@@ -36,14 +42,20 @@ def run_jsonl_gateway(
     """Run a local JSONL request/response loop for Gateway clients."""
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
+    # A gated CLI run emits from a WORKER thread AND the hook bridge thread, while
+    # the stdin loop emits ``approval.resolved`` -- serialize writes so concurrent
+    # events never interleave on the shared output stream.
+    emit_lock = threading.Lock()
 
     def emit(event: BackendEvent | dict[str, Any]) -> None:
         payload = event.as_dict() if isinstance(event, BackendEvent) else event
         issues = validate_gateway_event(payload)
         if issues:
             raise GatewayContractViolation(payload, issues)
-        output_stream.write(json.dumps(payload, sort_keys=True) + "\n")
-        output_stream.flush()
+        line = json.dumps(payload, sort_keys=True) + "\n"
+        with emit_lock:
+            output_stream.write(line)
+            output_stream.flush()
 
     emit(
         BackendEvent(
@@ -66,7 +78,14 @@ def run_jsonl_gateway(
             },
         )
     )
-    for line in input_stream:
+    # ONE reader thread drains stdin into a queue; the main loop AND the gated-run
+    # inner loop both pull from this SAME source, so a gated run can keep servicing
+    # ``approval.decide`` without a second reader racing the main loop for lines.
+    source = LineSource(input_stream)
+    while True:
+        line = source.next_line()
+        if line is None:
+            break
         raw = line.strip()
         if not raw:
             continue
@@ -93,6 +112,15 @@ def run_jsonl_gateway(
                 continue
             if message_type == "prompt.submit":
                 text = _required_text(message)
+                plan = gated_cli_prompt_plan(text, env=env, source="jsonl")
+                if plan is not None:
+                    # Live approve-to-elevate: run the gated CLI off the stdin
+                    # thread so this loop KEEPS reading + servicing the operator's
+                    # ``approval.decide`` (which unblocks the bridge gate). The
+                    # synchronous ``execute_prompt`` would block this loop and
+                    # deadlock the gate, so it is NOT used on this path.
+                    run_gated_prompt(plan, env=env, emit=emit, source=source)
+                    continue
                 execute_prompt(
                     text,
                     env=env,
@@ -118,27 +146,7 @@ def run_jsonl_gateway(
                 )
                 continue
             if message_type == "approval.decide":
-                approval_id = _required_string(message, "approval_id")
-                decision = _required_string(message, "decision")
-                reason = _required_string(message, "reason")
-                operator = _string_or_default(message.get("operator"), "user:jsonl")
-                result = approvals_decide_result(
-                    approval_id,
-                    decision=decision,
-                    operator=operator,
-                    reason=reason,
-                    env=env,
-                )
-                emit(
-                    BackendEvent(
-                        type="approval.resolved",
-                        data={
-                            "approval_id": approval_id,
-                            "decision": decision,
-                            "payload": result.payload,
-                        },
-                    )
-                )
+                handle_approval_decide(message, env=env, emit=emit)
                 continue
             if message_type == "run.interrupt":
                 run_id = _required_string(message, "run_id")

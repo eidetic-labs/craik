@@ -20,6 +20,19 @@ from craik.runtime.store import LocalStore
 PromptSource = Literal["tui", "cli", "slash", "jsonl", "channel"]
 BackendPreference = Literal["auto", "provider", "claude-code"]
 
+# Re-export the live gated-CLI orchestration (Phase 7.2 ③) so callers and tests
+# that reference ``session.gated_cli_prompt_plan`` / ``session.GatedCliPlan`` keep
+# their stable import site after the orchestration moved to ``gateway.gated_prompt``
+# (a split made to keep this file within the file-size budget). ``gated_prompt``
+# imports the session-internal resolvers FUNCTION-LOCALLY, so this top-level import
+# is cycle-free.
+from craik.runtime.backend.gateway.gated_prompt import (  # noqa: E402
+    GatedCliPlan as GatedCliPlan,
+)
+from craik.runtime.backend.gateway.gated_prompt import (  # noqa: E402
+    gated_cli_prompt_plan as gated_cli_prompt_plan,
+)
+
 
 class _LegacyRunAdapter(Protocol):
     """Adapters that bridge to a legacy ``execute_prompt`` branch (Task 2.4).
@@ -110,38 +123,7 @@ def execute_prompt(
     from craik.runtime.backend.adapters.base import RunContext
     from craik.runtime.backend.adapters.registry import select_adapter
 
-    # Resolve whether this is the claude path (explicit `claude-code`, or `auto` +
-    # the anthropic marker -- the SAME rule `select_adapter("auto")` used).
-    is_claude_path = backend == "claude-code" or (
-        backend == "auto" and _anthropic_marker_uses_claude_code(env)
-    )
-    legacy_run = _legacy_run_enabled(env)
-    legacy_provider_family_run = False
-
-    if is_claude_path:
-        identifier = "anthropic-cli"
-    elif backend in {"provider", "auto"}:
-        # Generic provider preference: it does NOT pin a vendor (the active
-        # model/env decides the provider family at runtime). Under the LEGACY
-        # flag, route to the `anthropic-api` legacy bridge (the only id carrying
-        # `_legacy_run`, which forwards to the env-resolved `_legacy_provider_run`).
-        # Otherwise route to the typed adapter matching the ACTIVE provider
-        # family; families with NO typed vendor adapter (e.g. `chat_completions`
-        # for local / OpenAI-compatible providers) fall back to the legacy
-        # provider path below.
-        if legacy_run:
-            identifier = "anthropic-api"
-        else:
-            provider_api_id = _resolve_provider_api_id(env)
-            if provider_api_id is None:
-                legacy_provider_family_run = True
-                identifier = "anthropic-api"
-            else:
-                identifier = provider_api_id
-    else:
-        # A canonical `<vendor>-<surface>` id passed straight through (id
-        # exposure); `select_adapter` validates it.
-        identifier = backend
+    identifier, legacy_run, legacy_provider_family_run = _resolve_run_identifier(env, backend)
 
     selected = select_adapter(identifier, env, prompt_source=source)
     ctx = RunContext(
@@ -193,6 +175,52 @@ def execute_prompt(
             "cannot build BackendPromptResult"
         )
     return BackendPromptResult(payload=payload, events=events)
+
+
+def _resolve_run_identifier(
+    env: dict[str, str] | None,
+    backend: BackendPreference | str,
+) -> tuple[str, bool, bool]:
+    """Resolve the canonical adapter id (+ legacy-path flags) for a prompt run.
+
+    Extracted from ``execute_prompt`` so the live gated-CLI planner
+    (:func:`gated_cli_prompt_plan`) resolves the SAME adapter id the synchronous
+    path would, with no divergence. Returns ``(identifier, legacy_run,
+    legacy_provider_family_run)``.
+    """
+    # Resolve whether this is the claude path (explicit `claude-code`, or `auto` +
+    # the anthropic marker -- the SAME rule `select_adapter("auto")` used).
+    is_claude_path = backend == "claude-code" or (
+        backend == "auto" and _anthropic_marker_uses_claude_code(env)
+    )
+    legacy_run = _legacy_run_enabled(env)
+    legacy_provider_family_run = False
+
+    if is_claude_path:
+        identifier = "anthropic-cli"
+    elif backend in {"provider", "auto"}:
+        # Generic provider preference: it does NOT pin a vendor (the active
+        # model/env decides the provider family at runtime). Under the LEGACY
+        # flag, route to the `anthropic-api` legacy bridge (the only id carrying
+        # `_legacy_run`, which forwards to the env-resolved `_legacy_provider_run`).
+        # Otherwise route to the typed adapter matching the ACTIVE provider
+        # family; families with NO typed vendor adapter (e.g. `chat_completions`
+        # for local / OpenAI-compatible providers) fall back to the legacy
+        # provider path.
+        if legacy_run:
+            identifier = "anthropic-api"
+        else:
+            provider_api_id = _resolve_provider_api_id(env)
+            if provider_api_id is None:
+                legacy_provider_family_run = True
+                identifier = "anthropic-api"
+            else:
+                identifier = provider_api_id
+    else:
+        # A canonical `<vendor>-<surface>` id passed straight through (id
+        # exposure); `select_adapter` validates it.
+        identifier = backend
+    return identifier, legacy_run, legacy_provider_family_run
 
 
 def _legacy_run_enabled(env: dict[str, str] | None) -> bool:
