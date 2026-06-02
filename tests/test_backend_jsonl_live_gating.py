@@ -397,14 +397,21 @@ def test_observe_only_adapter_is_not_gated(tmp_path: Path) -> None:
     assert plan is None
 
 
-def test_active_permission_mode_returns_stored_token_or_none() -> None:
-    # The high-risk gate keys off the RAW stored mode token. When set, return it;
-    # when unset, return None (NOT a display-form default the TUI gate wouldn't
-    # match) so the two-press confirm only fires for an explicitly-chosen mode.
+def test_active_permission_mode_returns_stored_token_or_none(tmp_path: Path) -> None:
+    # The high-risk gate keys off the RAW stored mode token for the ACTIVE vendor.
+    # Pin the active vendor to anthropic in an isolated CRAIK_HOME so resolution
+    # does not depend on ambient ~/.craik state (CI has none and would otherwise
+    # default to provider_openai, reading the WRONG vendor's env var).
     from craik.runtime.backend.gateway.gated_prompt import _active_permission_mode
+    from craik.runtime.modeling.settings import ModelSettings, ModelSettingsStore
 
-    assert _active_permission_mode({}) is None
+    env = _env(tmp_path)
+    ModelSettingsStore.from_env(env).save(ModelSettings(active_model="anthropic/claude-sonnet-4"))
+
+    # Unset -> None (NOT a display-form default the TUI gate wouldn't match) so the
+    # two-press confirm only fires for an explicitly-chosen mode.
+    assert _active_permission_mode(env) is None
     assert (
-        _active_permission_mode({"CRAIK_CLAUDE_PERMISSION_MODE": "bypassPermissions"})
+        _active_permission_mode({**env, "CRAIK_CLAUDE_PERMISSION_MODE": "bypassPermissions"})
         == "bypassPermissions"
     )
