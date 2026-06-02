@@ -6711,7 +6711,13 @@ mod tests {
                 "message": "Run cargo test?",
                 "tool": "Bash",
                 "command": "cargo test",
-                "risk": "executes command",
+                // Needle-free risk text on purpose: `is_high_risk_text` matches
+                // "exec"/"write"/... so a risk string like "executes command"
+                // would make this high-risk via the TEXT path and mask a broken
+                // token match. With benign text, the high-risk verdict (and thus
+                // the two-press arming) rides SOLELY on the bypassPermissions
+                // permission_mode token -- which is what this test pins.
+                "risk": "routine tool call",
                 "permission_mode": "bypassPermissions"
             }),
         };
