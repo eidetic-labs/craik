@@ -83,6 +83,7 @@ def gated_cli_run_session(
     env: dict[str, str] | None,
     vendor: str,
     timeout: float | None = None,
+    permission_mode: str | None = None,
 ) -> Iterator[GatedRunController]:
     """Run a gated CLI ``run`` OFF the stdin thread inside a live hook bridge.
 
@@ -100,6 +101,9 @@ def gated_cli_run_session(
     ``run`` receives the bridge socket path. ``store_factory`` MUST return a fresh
     store handle each call (the bridge thread owns its own connection). ``emit`` is
     the gateway event sink the bridge uses to surface ``approval.requested``.
+    ``permission_mode`` is the ACTIVE vendor permission mode carried onto each
+    ``approval.requested`` (so the TUI high-risk two-press gate fires); ``None``
+    leaves it off the event.
     """
     bridge_store = store_factory()
     bridge_store.initialize()
@@ -109,6 +113,7 @@ def gated_cli_run_session(
         "emit": emit,
         "env": env,
         "vendor": vendor,
+        "permission_mode": permission_mode,
     }
     if timeout is not None:
         session_kwargs["timeout"] = timeout
