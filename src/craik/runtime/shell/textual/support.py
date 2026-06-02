@@ -22,7 +22,8 @@ CLAUDE_PERMISSION_MODE_LABELS = {
     "default": "Default",
     "acceptEdits": "Accept edits",
     "plan": "Plan",
-    "auto": "Auto",
+    "dontAsk": "Don't ask",
+    "bypassPermissions": "Bypass",
 }
 
 
@@ -403,6 +404,8 @@ def _claude_permission_mode_posture(mode: str) -> str:
         return "Claude Code should preview intent without editing."
     if normalized == "accept edits":
         return "file edits can proceed with fewer prompts."
-    if normalized == "auto":
-        return "Claude Code tools can proceed with minimal interruption."
+    if normalized in {"dontask", "don't ask"}:
+        return "Claude Code tools run without prompting; craik records each."
+    if normalized in {"bypasspermissions", "bypass"}:
+        return "permission gates are bypassed; craik observes and records every tool call."
     return "Claude Code follows its normal tool permission gates."

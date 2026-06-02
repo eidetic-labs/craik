@@ -4,7 +4,6 @@ from __future__ import annotations
 
 CLAUDE_PERMISSION_MODE_CHOICES = (
     "ask",
-    "auto",
     "acceptEdits",
     "plan",
     "dontAsk",

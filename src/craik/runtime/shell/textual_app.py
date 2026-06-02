@@ -79,7 +79,7 @@ from craik.runtime.status import auto_approve_status_payload
 
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
 
-CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
+CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "dontAsk", "bypassPermissions")
 
 
 class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):

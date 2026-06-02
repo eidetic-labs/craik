@@ -1594,7 +1594,7 @@ mod tests {
                         "commands": [
                             {
                                 "name": "mode",
-                                "usage": "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+                                "usage": "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
                                 "summary": "Inspect or set Claude Code mode.",
                                 "category": "Run",
                                 "choices": {"mode": ["ask", "auto", "acceptEdits", "plan"]},

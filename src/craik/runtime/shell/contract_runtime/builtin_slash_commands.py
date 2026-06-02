@@ -261,7 +261,7 @@ def mode_command(*args: str, env: dict[str, str] | None = None) -> CommandResult
             mode = stored_permission_mode(requested_mode)
         except ValueError:
             text = (
-                "mode must be one of `ask`, `auto`, `acceptEdits`, `plan`, "
+                "mode must be one of `ask`, `acceptEdits`, `plan`, "
                 "`dontAsk`, or `bypassPermissions`."
             )
             return CommandResult(payload=text, shape="markdown", text=text, exit_code=2)
