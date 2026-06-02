@@ -597,16 +597,10 @@ fn usage_has_subcommands(usage: &str) -> bool {
 
 fn fallback_choices(name: &str) -> Vec<String> {
     match name {
-        "mode" => [
-            "ask",
-            "acceptEdits",
-            "plan",
-            "dontAsk",
-            "bypassPermissions",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
+        "mode" => ["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         "theme" => ["dark", "light", "monochrome"]
             .into_iter()
             .map(str::to_owned)
