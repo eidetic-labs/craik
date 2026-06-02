@@ -220,12 +220,33 @@ def test_audited_anthropic_marker_routes_to_claude_code_stream_without_preapprov
 def test_mode_set_persists_claude_permission_mode(tmp_path: Path) -> None:
     env = _env(tmp_path)
 
-    result = dispatch_slash_command("/mode auto", env=env)
+    result = dispatch_slash_command("/mode bypassPermissions", env=env)
     status = dispatch_slash_command("/mode", env=env)
 
-    assert result.text == "Claude permission mode: `auto`."
-    assert json.loads(status.text)["claude_permission_mode"] == "auto"
-    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "auto"
+    assert result.text == "Claude permission mode: `bypassPermissions`."
+    assert json.loads(status.text)["claude_permission_mode"] == "bypassPermissions"
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "bypassPermissions"
+
+
+def test_mode_set_persists_dont_ask_permission_mode(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+
+    result = dispatch_slash_command("/mode dontAsk", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.text == "Claude permission mode: `dontAsk`."
+    assert json.loads(status.text)["claude_permission_mode"] == "dontAsk"
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "dontAsk"
+
+
+def test_mode_rejects_fake_auto_mode(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+
+    result = dispatch_slash_command("/mode auto", env=env)
+
+    assert result.exit_code == 2
+    assert "auto" not in result.text
+    assert "CRAIK_CLAUDE_PERMISSION_MODE" not in env
 
 
 def test_mode_ask_alias_persists_default_permission_mode(tmp_path: Path) -> None:
@@ -449,6 +470,80 @@ def test_run_claude_code_backend_creates_audited_artifacts(
     assert "--permission-mode" in calls[0]
     assert calls[0][calls[0].index("--permission-mode") + 1] == "plan"
     assert "-p" in calls[0]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("default", "default"),
+        ("acceptEdits", "acceptEdits"),
+        ("plan", "plan"),
+        ("dontAsk", "dontAsk"),
+        ("bypassPermissions", "bypassPermissions"),
+        ("auto", None),
+        ("ask", None),
+        ("nonsense", None),
+        (None, None),
+    ],
+)
+def test_claude_permission_mode_accepts_real_cli_modes(
+    mode: str | None, expected: str | None
+) -> None:
+    from craik.runtime.backend.claude_code_settings import _claude_permission_mode
+
+    env = {} if mode is None else {"CRAIK_CLAUDE_PERMISSION_MODE": mode}
+    assert _claude_permission_mode(env) == expected
+
+
+def test_run_claude_code_backend_passes_bypass_permissions_to_claude(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+    monkeypatch.chdir(repo)
+    env = {
+        **_env(tmp_path),
+        "CRAIK_CLAUDE_PERMISSION_MODE": "bypassPermissions",
+        CLAUDE_CODE_RUN_APPROVED_ENV: "1",
+    }
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+    calls: list[list[str]] = []
+    original_popen = subprocess.Popen
+
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _Process:
+        stdout = iter(['{"type":"result","subtype":"success","result":"done"}\n'])
+
+        def wait(self, timeout=None):
+            return 0
+
+    def _popen(args, **kwargs):
+        if Path(args[0]).name != "claude":
+            return original_popen(args, **kwargs)
+        calls.append(list(args))
+        return _Process()
+
+    monkeypatch.setattr(
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
+        _popen,
+    )
+
+    result = dispatch_slash_command(
+        "/run --backend claude-code Upgrade Craik Docs",
+        env=env,
+    )
+
+    assert result.exit_code == 0, result.text
+    assert calls
+    assert "--permission-mode" in calls[0]
+    assert calls[0][calls[0].index("--permission-mode") + 1] == "bypassPermissions"
 
 
 def test_run_claude_code_backend_invokes_claude_without_auth_preflight(

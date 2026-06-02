@@ -597,17 +597,10 @@ fn usage_has_subcommands(usage: &str) -> bool {
 
 fn fallback_choices(name: &str) -> Vec<String> {
     match name {
-        "mode" => [
-            "ask",
-            "auto",
-            "acceptEdits",
-            "plan",
-            "dontAsk",
-            "bypassPermissions",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
+        "mode" => ["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         "theme" => ["dark", "light", "monochrome"]
             .into_iter()
             .map(str::to_owned)
@@ -841,7 +834,7 @@ mod tests {
     fn slash_completion_uses_selected_candidate_and_drilldown_value() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -858,7 +851,7 @@ mod tests {
         );
         assert_eq!(
             slash_completion_at("/mode ", &catalog, 2).as_deref(),
-            Some("/mode acceptEdits ")
+            Some("/mode plan ")
         );
     }
 
@@ -938,7 +931,7 @@ mod tests {
     fn slash_suggestions_surface_choices_and_confirmation_flags() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -962,7 +955,7 @@ mod tests {
     fn slash_palette_metadata_stays_compact_and_actionable() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -990,7 +983,7 @@ mod tests {
     fn slash_palette_renders_current_and_confirm_hints_as_row_metadata() {
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Inspect or set mode.",
             "Run",
         );
@@ -1005,7 +998,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         assert!(root.contains(
-            "RUN  /mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]  Inspect or set mode."
+            "RUN  /mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]  Inspect or set mode."
         ));
         assert!(root.contains("now: ask · Enter"));
         assert!(root.contains("RUN  /mode"));

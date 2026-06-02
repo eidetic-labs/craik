@@ -223,7 +223,7 @@ def _builtin_usage(name: str) -> str:
         "/provider": "/provider [login <provider>]",
         "/model": "/model [set <provider/model>]",
         "/effort": "/effort [default|low|medium|high|max]",
-        "/mode": "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+        "/mode": "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
         "/policy": "/policy reset",
         "/migrate": "/migrate apply",
         "/sessions": "/sessions",

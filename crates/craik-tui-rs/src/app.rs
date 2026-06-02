@@ -67,14 +67,8 @@ pub(crate) enum TranscriptJump {
     Error,
 }
 
-const PERMISSION_MODE_CYCLE: &[&str] = &[
-    "ask",
-    "auto",
-    "acceptEdits",
-    "plan",
-    "dontAsk",
-    "bypassPermissions",
-];
+const PERMISSION_MODE_CYCLE: &[&str] =
+    &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
 
 impl TranscriptJump {
     pub(crate) fn label(self) -> &'static str {
@@ -3927,7 +3921,10 @@ fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ActiveOverlay, InteractiveApp, LoopAction, RunRecord, export_file_stem};
+    use super::{
+        ActiveOverlay, InteractiveApp, LoopAction, PERMISSION_MODE_CYCLE, RunRecord,
+        export_file_stem, next_permission_mode,
+    };
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
     use crate::transcript::TranscriptKind;
@@ -3935,6 +3932,33 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use serde_json::json;
     use std::collections::VecDeque;
+
+    #[test]
+    fn permission_mode_cycle_matches_real_claude_modes() {
+        assert!(
+            !PERMISSION_MODE_CYCLE.contains(&"auto"),
+            "fake `auto` mode must not be in the cycle"
+        );
+        assert!(PERMISSION_MODE_CYCLE.contains(&"dontAsk"));
+        assert!(PERMISSION_MODE_CYCLE.contains(&"bypassPermissions"));
+        assert_eq!(
+            PERMISSION_MODE_CYCLE,
+            &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+        );
+    }
+
+    #[test]
+    fn next_permission_mode_cycles_through_real_modes() {
+        // `default`/None display as `ask`.
+        assert_eq!(next_permission_mode(None), "acceptEdits");
+        assert_eq!(next_permission_mode(Some("default")), "acceptEdits");
+        assert_eq!(next_permission_mode(Some("ask")), "acceptEdits");
+        assert_eq!(next_permission_mode(Some("acceptEdits")), "plan");
+        assert_eq!(next_permission_mode(Some("plan")), "dontAsk");
+        assert_eq!(next_permission_mode(Some("dontAsk")), "bypassPermissions");
+        // Wraps back to the start of the cycle.
+        assert_eq!(next_permission_mode(Some("bypassPermissions")), "ask");
+    }
 
     #[test]
     fn backend_close_unblocks_working_state() {
@@ -6233,7 +6257,7 @@ mod tests {
         let mut app = InteractiveApp::for_test_with_messages([]);
         let mut mode = SlashHint::new(
             "mode",
-            "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+            "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
             "Set mode.",
             "Run",
         );
@@ -6246,7 +6270,7 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
 
-        assert_eq!(app.input, "/mode acceptEdits ");
+        assert_eq!(app.input, "/mode plan ");
     }
 
     #[test]
@@ -6310,7 +6334,7 @@ mod tests {
             ),
             SlashHint::new(
                 "mode",
-                "/mode [ask|auto|acceptEdits|plan|dontAsk|bypassPermissions]",
+                "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
                 "Set mode.",
                 "Run",
             ),
@@ -6357,7 +6381,7 @@ mod tests {
         assert!(
             app.transcript
                 .iter()
-                .any(|entry| entry.title == "Mode" && entry.body.contains("`auto`"))
+                .any(|entry| entry.title == "Mode" && entry.body.contains("`acceptEdits`"))
         );
     }
 

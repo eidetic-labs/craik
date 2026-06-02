@@ -79,7 +79,9 @@ def _active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | N
 def _claude_permission_mode(env: dict[str, str] | None) -> str | None:
     values = env or {}
     mode = values.get("CRAIK_CLAUDE_PERMISSION_MODE")
-    return mode if mode in {"default", "acceptEdits", "plan", "auto"} else None
+    return (
+        mode if mode in {"default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"} else None
+    )
 
 
 def _claude_code_command_summary(env: dict[str, str] | None) -> str:

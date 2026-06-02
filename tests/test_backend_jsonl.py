@@ -153,7 +153,7 @@ def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
         "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
         env=env,
     )
-    dispatch_slash_command("/mode auto", env=env)
+    dispatch_slash_command("/mode bypassPermissions", env=env)
     stdin = io.StringIO('{"type":"session.status"}\n{"type":"session.close"}\n')
     stdout = io.StringIO()
 
@@ -167,7 +167,7 @@ def test_jsonl_gateway_reports_ready_and_status(tmp_path: Path) -> None:
     assert "approval.decide" in events[0]["data"]["capabilities"]
     assert events[1]["type"] == "session.status"
     assert events[1]["data"]["state"] == "unconfigured"
-    assert events[1]["data"]["claude_permission_mode"] == "auto"
+    assert events[1]["data"]["claude_permission_mode"] == "bypassPermissions"
     assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
     assert events[1]["data"]["provider_id"] == "provider_anthropic"
     assert events[1]["data"]["provider_family"] == "anthropic"
@@ -256,7 +256,7 @@ def test_jsonl_gateway_slash_model_and_mode_emit_state_events(tmp_path: Path) ->
                         "text": "/model set anthropic/claude-opus-4-7 --reasoning-effort high",
                     }
                 ),
-                json.dumps({"type": "slash.submit", "text": "/mode auto"}),
+                json.dumps({"type": "slash.submit", "text": "/mode bypassPermissions"}),
                 "",
             ]
         )
@@ -275,7 +275,7 @@ def test_jsonl_gateway_slash_model_and_mode_emit_state_events(tmp_path: Path) ->
     ]
     assert events[1]["data"]["model"] == "anthropic/claude-opus-4-7"
     assert events[1]["data"]["reasoning_effort"] == "high"
-    assert events[3]["data"]["claude_permission_mode"] == "auto"
+    assert events[3]["data"]["claude_permission_mode"] == "bypassPermissions"
 
 
 def test_jsonl_gateway_slash_effort_emits_model_state_event(tmp_path: Path) -> None:
