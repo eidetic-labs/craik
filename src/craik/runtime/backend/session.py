@@ -33,6 +33,23 @@ from craik.runtime.backend.gateway.gated_prompt import (  # noqa: E402
     gated_cli_prompt_plan as gated_cli_prompt_plan,
 )
 
+# Declares this module's public surface. The two ``gated_prompt`` names above are
+# re-exports (the orchestration lives in ``gateway.gated_prompt``); listing them
+# here marks the re-export as intentional so unused-import analysis does not flag
+# the stable ``session.GatedCliPlan`` / ``session.gated_cli_prompt_plan`` site.
+__all__ = [
+    "PromptSource",
+    "BackendPreference",
+    "BackendPromptResult",
+    "execute_prompt",
+    "active_provider_and_model",
+    "active_model_profile",
+    "live_provider_enabled",
+    "claude_structured_event_to_backend_event",
+    "GatedCliPlan",
+    "gated_cli_prompt_plan",
+]
+
 
 class _LegacyRunAdapter(Protocol):
     """Adapters that bridge to a legacy ``execute_prompt`` branch (Task 2.4).
