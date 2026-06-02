@@ -597,10 +597,27 @@ fn usage_has_subcommands(usage: &str) -> bool {
 
 fn fallback_choices(name: &str) -> Vec<String> {
     match name {
-        "mode" => ["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
+        // `/mode` is universal but per-vendor. Completion offers the UNION
+        // across the three vendors (anthropic + gemini + codex) — never
+        // Claude-only — and the `/mode` dispatch validates the choice against
+        // the ACTIVE vendor's set, cleanly rejecting a wrong-vendor mode. The
+        // Shift-Tab cycle (not this completion) is the active-vendor-scoped path.
+        "mode" => [
+            "ask",
+            "acceptEdits",
+            "plan",
+            "dontAsk",
+            "bypassPermissions",
+            "default",
+            "auto_edit",
+            "yolo",
+            "read-only",
+            "workspace-write",
+            "danger-full-access",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
         "theme" => ["dark", "light", "monochrome"]
             .into_iter()
             .map(str::to_owned)

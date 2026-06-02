@@ -39,6 +39,7 @@ from craik.runtime.backend.adapters.base import (
 )
 from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV, VENDOR_ENV
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
+from craik.runtime.backend.claude_code_settings import _gemini_approval_mode
 from craik.runtime.backend.events import (
     BackendEvent,
     Coalescer,
@@ -180,13 +181,25 @@ class GoogleCLI(CLIAdapter):
         selects the machine-readable stream this adapter parses.
         """
         executable = shutil.which("gemini") or "gemini"
-        return [
+        cmd = [
             executable,
             "-p",
             ctx.prompt.strip(),
             "--output-format",
             "stream-json",
         ]
+        # Faithful per-vendor permission-mode passthrough (Phase 7.2 step 2): the
+        # operator's chosen Gemini approval mode (set by ``/mode`` / Shift-Tab in
+        # ``CRAIK_GEMINI_APPROVAL_MODE``) reaches the live argv via the CLI's real
+        # ``--approval-mode`` flag. ``_gemini_approval_mode`` returns the value
+        # ONLY when it is one of Gemini's real modes (default / auto_edit / yolo /
+        # plan), so a Claude/Codex mode never leaks here. Absent when unset
+        # (capture, don't force). This IS the live path: ``run()`` passes this
+        # argv straight to ``run_cli_typed`` which spawns the real subprocess.
+        approval_mode = _gemini_approval_mode(ctx.env)
+        if approval_mode:
+            cmd.extend(["--approval-mode", approval_mode])
+        return cmd
 
     def spawn_env(self, env: dict[str, str]) -> dict[str, str]:
         """Return the spawn env with workspace trust pre-authorized.

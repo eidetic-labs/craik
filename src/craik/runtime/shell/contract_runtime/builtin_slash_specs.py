@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from craik.runtime.contract.auto_registry import CommandInventoryEntry
+from craik.runtime.shell.contract_runtime.mode_args import ALL_PERMISSION_MODE_CHOICES
 from craik.runtime.shell.slash_command_schema import (
     ActionKeySet,
     EmptyState,
@@ -175,16 +176,12 @@ def builtin_spec(name: str, *, summary: str, shape: str) -> SlashCommandSpec:
         kwargs["choices"] = {"effort": ("default", "low", "medium", "high", "max")}
         kwargs["example"] = "/effort high"
     if name == "/mode":
-        kwargs["choices"] = {
-            "mode": (
-                "ask",
-                "auto",
-                "acceptEdits",
-                "plan",
-                "dontAsk",
-                "bypassPermissions",
-            )
-        }
+        # ``/mode`` is universal: it resolves the ACTIVE vendor and validates
+        # against that vendor's modes at dispatch time. The static spec cannot
+        # see the env, so its choices/usage are the UNION across vendors
+        # (anthropic + google + codex) — never Claude-only. The command itself
+        # enforces the per-vendor set.
+        kwargs["choices"] = {"mode": ALL_PERMISSION_MODE_CHOICES}
         kwargs["example"] = "/mode ask"
     if name == "/provider":
         kwargs["example"] = "/provider login openai"
@@ -223,7 +220,7 @@ def _builtin_usage(name: str) -> str:
         "/provider": "/provider [login <provider>]",
         "/model": "/model [set <provider/model>]",
         "/effort": "/effort [default|low|medium|high|max]",
-        "/mode": "/mode [ask|acceptEdits|plan|dontAsk|bypassPermissions]",
+        "/mode": "/mode [<active-vendor mode>]",
         "/policy": "/policy reset",
         "/migrate": "/migrate apply",
         "/sessions": "/sessions",

@@ -17,7 +17,6 @@ from textual.widgets import OptionList, RichLog
 from craik import __version__
 from craik.runtime.backend.claude_code import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
-    CLAUDE_PERMISSION_MODE_ENV,
 )
 from craik.runtime.contract.auto_registry import AutoSlashRegistry
 from craik.runtime.contract.command_result import CommandResult
@@ -27,6 +26,7 @@ from craik.runtime.contract.dispatch import (
 from craik.runtime.shell.confirmations import (
     confirmation_request_for_text,
 )
+from craik.runtime.shell.contract_runtime.mode_args import active_vendor_mode_spec
 from craik.runtime.shell.contract_runtime.registry_provider import get_tui_registry
 from craik.runtime.shell.external_editor import edit_text_externally
 from craik.runtime.shell.readiness import ReadinessReport
@@ -38,10 +38,11 @@ from craik.runtime.shell.shell_invocation import (
 from craik.runtime.shell.textual.activity import CraikAppActivityMixin
 from craik.runtime.shell.textual.dispatch import CraikAppDispatchMixin
 from craik.runtime.shell.textual.support import (
-    CLAUDE_PERMISSION_MODE_LABELS,
     InterruptibleProcess,
+    _active_permission_mode_display,
     _claude_permission_mode_label,
     _requires_claude_code_run_approval,
+    _vendor_mode_display,
 )
 from craik.runtime.shell.textual.support import (
     _claude_code_run_approval_request as _claude_code_run_approval_request,
@@ -78,8 +79,6 @@ from craik.runtime.shell.textual_widgets.working_indicator import WorkingIndicat
 from craik.runtime.status import auto_approve_status_payload
 
 __all__ = ["CraikApp", "resolve_textual_theme", "run_textual_tui", "terminal_supports_textual"]
-
-CLAUDE_PERMISSION_MODE_CYCLE = ("default", "acceptEdits", "plan", "dontAsk", "bypassPermissions")
 
 
 class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
@@ -288,7 +287,7 @@ class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
         ):
             confirmation = _claude_code_run_approval_request(
                 text,
-                mode=_claude_permission_mode_label(self.env) or "Default",
+                mode=_active_permission_mode_display(self.env),
             )
         if confirmation is not None:
             self.push_screen(
@@ -454,15 +453,13 @@ class CraikApp(CraikAppActivityMixin, CraikAppDispatchMixin, App[None]):
         input_widget.cursor_position = len(input_widget.value)
 
     def action_cycle_claude_permission_mode(self) -> None:
-        current = self.env.get(CLAUDE_PERMISSION_MODE_ENV, "default")
-        try:
-            index = CLAUDE_PERMISSION_MODE_CYCLE.index(current)
-        except ValueError:
-            index = 0
-        next_mode = CLAUDE_PERMISSION_MODE_CYCLE[(index + 1) % len(CLAUDE_PERMISSION_MODE_CYCLE)]
-        self.env[CLAUDE_PERMISSION_MODE_ENV] = next_mode
-        label = CLAUDE_PERMISSION_MODE_LABELS[next_mode]
-        self._toast(f"Claude mode: {label}", severity="information")
+        # Vendor-aware Shift-Tab cycle: step through the ACTIVE vendor's real
+        # mode set (Claude / Gemini / Codex), storing into that vendor's env var.
+        spec = active_vendor_mode_spec(self.env)
+        next_mode = spec.next_stored(self.env)
+        self.env[spec.env_var] = next_mode
+        label = _vendor_mode_display(spec.family, next_mode)
+        self._toast(f"{spec.label} mode: {label}", severity="information")
         self._refresh_status_bar()
         self._flash_accent("state")
 

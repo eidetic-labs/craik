@@ -67,8 +67,30 @@ pub(crate) enum TranscriptJump {
     Error,
 }
 
+// Per-vendor Shift-Tab permission-mode cycles. `/mode` is universal but each
+// vendor's CLI has its OWN real mode vocabulary, so the cycle steps through the
+// ACTIVE vendor's set (capture, don't force). The high-risk bypass-equivalents
+// (`bypassPermissions` / `yolo` / `danger-full-access`) keep the elevated
+// treatment downstream (see `PendingApproval::is_bypass_permissions`).
+//   anthropic (Claude): --permission-mode; `ask` shown for stored `default`.
+//   google (Gemini):    --approval-mode.
+//   openai (Codex):     --sandbox.
 const PERMISSION_MODE_CYCLE: &[&str] =
     &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
+const GEMINI_APPROVAL_MODE_CYCLE: &[&str] = &["default", "auto_edit", "yolo", "plan"];
+const CODEX_SANDBOX_MODE_CYCLE: &[&str] = &["read-only", "workspace-write", "danger-full-access"];
+
+/// Return the Shift-Tab mode cycle for the ACTIVE provider family.
+///
+/// Defaults to the Claude cycle when the family is unknown / not one of the
+/// three permission-mode vendors (e.g. a local OpenAI-compatible endpoint).
+fn permission_mode_cycle_for(family: Option<&str>) -> &'static [&'static str] {
+    match family {
+        Some("google") => GEMINI_APPROVAL_MODE_CYCLE,
+        Some("openai") => CODEX_SANDBOX_MODE_CYCLE,
+        _ => PERMISSION_MODE_CYCLE,
+    }
+}
 
 impl TranscriptJump {
     pub(crate) fn label(self) -> &'static str {
@@ -380,7 +402,11 @@ impl InteractiveApp {
     }
 
     fn cycle_permission_mode(&mut self) {
-        let next_mode = next_permission_mode(self.state.active_permission_mode.as_deref());
+        // Vendor-aware: cycle within the ACTIVE provider family's mode set so
+        // Shift-Tab proposes a mode the active vendor's CLI actually accepts.
+        let family = self.state.active_provider_family.as_deref();
+        let next_mode =
+            next_permission_mode_for(family, self.state.active_permission_mode.as_deref());
         self.transcript.push(TranscriptEntry::system(
             "Mode",
             &format!("Switching mode to `{next_mode}`."),
@@ -2807,11 +2833,16 @@ impl PendingApproval {
         self.is_bypass_permissions() || self.risk.as_deref().is_some_and(is_high_risk_text)
     }
 
-    /// Whether this approval was raised under `bypassPermissions` mode.
+    /// Whether this approval was raised under a permission mode that bypasses
+    /// the vendor's tool gates: Claude `bypassPermissions`, Gemini `yolo`, or
+    /// Codex `danger-full-access`. Any of these forces the high-risk two-press
+    /// confirm regardless of the free-text risk string.
     fn is_bypass_permissions(&self) -> bool {
-        self.permission_mode
-            .as_deref()
-            .is_some_and(|mode| mode.eq_ignore_ascii_case("bypassPermissions"))
+        self.permission_mode.as_deref().is_some_and(|mode| {
+            ["bypassPermissions", "yolo", "danger-full-access"]
+                .iter()
+                .any(|bypass| mode.eq_ignore_ascii_case(bypass))
+        })
     }
 
     fn risk_label(&self) -> &str {
@@ -3068,16 +3099,17 @@ fn string_data(event: &GatewayEvent, key: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
-fn next_permission_mode(current: Option<&str>) -> &'static str {
+fn next_permission_mode_for(family: Option<&str>, current: Option<&str>) -> &'static str {
+    let cycle = permission_mode_cycle_for(family);
+    // Claude stores `default` but DISPLAYS/cycles from `ask`; the other vendors'
+    // stored tokens are their cycle tokens, so only normalize the Claude alias.
     let current = match current {
-        Some("default") | None => "ask",
+        None => cycle[0],
+        Some("default") if cycle == PERMISSION_MODE_CYCLE => "ask",
         Some(value) => value,
     };
-    let index = PERMISSION_MODE_CYCLE
-        .iter()
-        .position(|mode| *mode == current)
-        .unwrap_or(0);
-    PERMISSION_MODE_CYCLE[(index + 1) % PERMISSION_MODE_CYCLE.len()]
+    let index = cycle.iter().position(|mode| *mode == current).unwrap_or(0);
+    cycle[(index + 1) % cycle.len()]
 }
 
 fn selected_slash_completion_is_executable(input: &str) -> bool {
@@ -3923,7 +3955,7 @@ fn transcript_entry_visual_line_count(entry: &TranscriptEntry) -> usize {
 mod tests {
     use super::{
         ActiveOverlay, InteractiveApp, LoopAction, PERMISSION_MODE_CYCLE, RunRecord,
-        export_file_stem, next_permission_mode,
+        export_file_stem, next_permission_mode_for, permission_mode_cycle_for,
     };
     use crate::backend::{WorkerMessage, format_backend_closed};
     use crate::input::SlashHint;
@@ -3949,15 +3981,78 @@ mod tests {
 
     #[test]
     fn next_permission_mode_cycles_through_real_modes() {
+        let claude = Some("anthropic");
         // `default`/None display as `ask`.
-        assert_eq!(next_permission_mode(None), "acceptEdits");
-        assert_eq!(next_permission_mode(Some("default")), "acceptEdits");
-        assert_eq!(next_permission_mode(Some("ask")), "acceptEdits");
-        assert_eq!(next_permission_mode(Some("acceptEdits")), "plan");
-        assert_eq!(next_permission_mode(Some("plan")), "dontAsk");
-        assert_eq!(next_permission_mode(Some("dontAsk")), "bypassPermissions");
+        assert_eq!(next_permission_mode_for(claude, None), "acceptEdits");
+        assert_eq!(
+            next_permission_mode_for(claude, Some("default")),
+            "acceptEdits"
+        );
+        assert_eq!(next_permission_mode_for(claude, Some("ask")), "acceptEdits");
+        assert_eq!(
+            next_permission_mode_for(claude, Some("acceptEdits")),
+            "plan"
+        );
+        assert_eq!(next_permission_mode_for(claude, Some("plan")), "dontAsk");
+        assert_eq!(
+            next_permission_mode_for(claude, Some("dontAsk")),
+            "bypassPermissions"
+        );
         // Wraps back to the start of the cycle.
-        assert_eq!(next_permission_mode(Some("bypassPermissions")), "ask");
+        assert_eq!(
+            next_permission_mode_for(claude, Some("bypassPermissions")),
+            "ask"
+        );
+    }
+
+    #[test]
+    fn permission_mode_cycle_is_vendor_aware() {
+        // Anthropic keeps the Claude set.
+        assert_eq!(
+            permission_mode_cycle_for(Some("anthropic")),
+            &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+        );
+        // Google cycles the REAL Gemini approval modes (yolo is the high-risk one).
+        assert_eq!(
+            permission_mode_cycle_for(Some("google")),
+            &["default", "auto_edit", "yolo", "plan"]
+        );
+        // OpenAI cycles the REAL Codex sandbox modes.
+        assert_eq!(
+            permission_mode_cycle_for(Some("openai")),
+            &["read-only", "workspace-write", "danger-full-access"]
+        );
+        // Unknown / local family falls back to the Claude cycle.
+        assert_eq!(permission_mode_cycle_for(None), PERMISSION_MODE_CYCLE);
+    }
+
+    #[test]
+    fn next_permission_mode_for_steps_within_active_vendor() {
+        // Gemini: from its default through its set; never a Claude mode. None /
+        // `default` both advance off the resting state (parity with Claude's
+        // None -> acceptEdits), landing on the first non-default mode.
+        assert_eq!(next_permission_mode_for(Some("google"), None), "auto_edit");
+        assert_eq!(
+            next_permission_mode_for(Some("google"), Some("default")),
+            "auto_edit"
+        );
+        assert_eq!(
+            next_permission_mode_for(Some("google"), Some("auto_edit")),
+            "yolo"
+        );
+        assert_eq!(
+            next_permission_mode_for(Some("google"), Some("plan")),
+            "default"
+        );
+        // Codex: steps through its sandbox set.
+        assert_eq!(
+            next_permission_mode_for(Some("openai"), Some("read-only")),
+            "workspace-write"
+        );
+        assert_eq!(
+            next_permission_mode_for(Some("openai"), Some("danger-full-access")),
+            "read-only"
+        );
     }
 
     #[test]
@@ -6158,6 +6253,35 @@ mod tests {
                 .any(|entry| entry.title == "Approving"),
             "the explicit confirm press approves the bypassPermissions approval"
         );
+    }
+
+    #[test]
+    fn gemini_yolo_and_codex_full_access_are_high_risk_like_bypass() {
+        // The per-vendor bypass-equivalents (Gemini `yolo`, Codex
+        // `danger-full-access`) force the same high-risk two-press confirm as
+        // Claude `bypassPermissions`, even with a benign risk string.
+        for mode in ["yolo", "danger-full-access"] {
+            let event = GatewayEvent {
+                event_type: "approval.requested".to_owned(),
+                source: "gateway".to_owned(),
+                created_at: None,
+                run_id: Some("run_1".to_owned()),
+                task_id: None,
+                data: json!({
+                    "approval_id": "approval_bypass_eq",
+                    "message": "Proceed?",
+                    "tool": "Read",
+                    "permission_mode": mode,
+                    "risk": "routine"
+                }),
+            };
+            let mut app = InteractiveApp::for_test_with_messages([]);
+            app.record_event(&event);
+            assert!(
+                app.selected_approval_is_high_risk(),
+                "{mode} must be treated high-risk like bypassPermissions"
+            );
+        }
     }
 
     #[test]

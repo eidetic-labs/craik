@@ -53,8 +53,11 @@ class StatusBar(Static):
             plain_segments.append(session_name)
             rich_segments.append(f"[b]{escape(session_name)}[/b]")
         if claude_mode:
-            plain_segments.append(f"Claude {claude_mode}")
-            rich_segments.append(f"[green]Claude {escape(claude_mode)}[/green]")
+            # ``claude_mode`` is already vendor-prefixed by the caller
+            # (``_claude_permission_mode_label`` -> "Claude …" / "Gemini …" /
+            # "Codex …"), so it is rendered verbatim.
+            plain_segments.append(claude_mode)
+            rich_segments.append(f"[green]{escape(claude_mode)}[/green]")
         if backend:
             plain_segments.append(backend)
             rich_segments.append(f"[cyan]{escape(backend)}[/cyan]")

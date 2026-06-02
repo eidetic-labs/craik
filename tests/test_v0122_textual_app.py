@@ -11,9 +11,11 @@ from rich.panel import Panel
 
 from craik.runtime.auth.profile import AuthProfile, CredentialKind, CredentialStatus
 from craik.runtime.auth.store import AuthProfileStore
+from craik.runtime.backend.claude_code import CLAUDE_PERMISSION_MODE_ENV
 from craik.runtime.backend.events import BackendEvent
 from craik.runtime.backend.session import BackendPromptResult
 from craik.runtime.contract.command_result import CommandResult
+from craik.runtime.shell.slash_commands import dispatch_slash_command
 from craik.runtime.shell.textual.support import (
     _claude_code_run_approval_request,
     _claude_progress_markup,
@@ -24,7 +26,6 @@ from craik.runtime.shell.textual.support import (
 )
 from craik.runtime.shell.textual_app import (
     CLAUDE_CODE_RUN_APPROVED_ENV,
-    CLAUDE_PERMISSION_MODE_ENV,
     CraikApp,
 )
 from craik.runtime.shell.textual_widgets.confirm_modal import ConfirmModal
@@ -689,7 +690,9 @@ def _render_to_text(renderable: object) -> str:
 
 def test_shift_tab_cycles_claude_permission_mode(tmp_path: Path) -> None:
     async def run() -> None:
-        app = CraikApp(env=_env(tmp_path))
+        env = _env(tmp_path)
+        dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+        app = CraikApp(env=env)
         async with app.run_test() as pilot:
             await pilot.press("backtab")
             assert app.env[CLAUDE_PERMISSION_MODE_ENV] == "acceptEdits"
@@ -697,6 +700,26 @@ def test_shift_tab_cycles_claude_permission_mode(tmp_path: Path) -> None:
             await pilot.press("backtab")
             assert app.env[CLAUDE_PERMISSION_MODE_ENV] == "plan"
             assert "Claude Plan" in app.query_one("#status", StatusBar).current_status
+
+    asyncio.run(run())
+
+
+def test_shift_tab_cycles_gemini_approval_mode_when_google_active(tmp_path: Path) -> None:
+    async def run() -> None:
+        env = _env(tmp_path)
+        dispatch_slash_command("/model set google/gemini-2.5-pro", env=env)
+        app = CraikApp(env=env)
+        async with app.run_test() as pilot:
+            await pilot.press("backtab")
+            # Cycle starts from gemini's default and advances within gemini's
+            # real set (default -> auto_edit -> yolo -> plan), NOT Claude's.
+            assert app.env["CRAIK_GEMINI_APPROVAL_MODE"] in {
+                "default",
+                "auto_edit",
+                "yolo",
+                "plan",
+            }
+            assert "CRAIK_CLAUDE_PERMISSION_MODE" not in app.env
 
     asyncio.run(run())
 
