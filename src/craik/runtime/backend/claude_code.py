@@ -20,6 +20,9 @@ from craik.contracts.models import (
     ReceiptResult,
     RunOutput,
 )
+from craik.runtime.backend.adapters.anthropic_cli import _pre_tool_use_hook_config
+from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV
+from craik.runtime.backend.adapters.hook_settings import claude_gate_settings
 from craik.runtime.backend.claude_code_attestations import (
     _claude_code_execution_prompt,
     _claude_model_arg,
@@ -347,32 +350,38 @@ def _execute_claude_code_prompt(
     executable = shutil.which("claude")
     if executable is None:
         raise RuntimeError("Claude CLI was not found; install Claude Code and run `claude`")
-    command = [
-        executable,
-        "--tools",
-        "default",
-        "--output-format",
-        "stream-json",
-        "--verbose",
-    ]
+    command = [executable, "--tools", "default", "--output-format", "stream-json", "--verbose"]
     model_arg = _claude_model_arg(_active_model(env))
     if model_arg:
         command.extend(["--model", model_arg])
-    permission_mode = _claude_permission_mode(env)
-    if permission_mode:
-        command.extend(["--permission-mode", permission_mode])
-    command.extend(["-p", prompt.strip()])
-    _emit_claude_code_progress(f"Starting `{_claude_code_command_summary(env)}`")
-    try:
-        process = start_reviewed_local_process(
-            command,
-            stdout="pipe",
-            stderr="stdout",
-            env=_claude_code_env(env),
-        )
-    except (OSError, LocalProcessStartError) as exc:
-        raise RuntimeError("Claude Code could not be executed") from exc
+    # GATED run (bridge socket present): force a fail-safe gate + register craik's
+    # PreToolUse hook via a craik-owned temp --settings file. See claude_gate_settings.
+    gated = SOCKET_ENV in (env or {})
+    gate = claude_gate_settings(
+        operator_mode=_claude_permission_mode(env),
+        gated=gated,
+        hook_block=_pre_tool_use_hook_config()["settings"] if gated else None,
+    )
+    with gate as gate_settings:
+        if gate_settings.permission_mode:
+            command.extend(["--permission-mode", gate_settings.permission_mode])
+        if gate_settings.settings_path is not None:
+            command.extend(["--settings", str(gate_settings.settings_path)])
+        command.extend(["-p", prompt.strip()])
+        _emit_claude_code_progress(f"Starting `{_claude_code_command_summary(env)}`")
+        try:
+            process = start_reviewed_local_process(
+                command,
+                stdout="pipe",
+                stderr="stdout",
+                env=_claude_code_env(env),
+            )
+        except (OSError, LocalProcessStartError) as exc:
+            raise RuntimeError("Claude Code could not be executed") from exc
+        return _stream_claude_code_process(process)
 
+
+def _stream_claude_code_process(process: ClaudeProcessProtocol) -> ClaudeCodeExecution:
     _set_claude_code_process(process)
     pid = getattr(process, "pid", "unknown")
     _emit_claude_code_progress(f"Claude Code process started (pid {pid}).")
@@ -409,9 +418,7 @@ def _execute_claude_code_prompt(
                         _emit_claude_code_event(
                             hidden_status_event(
                                 kind="heartbeat",
-                                message=(
-                                    "Claude Code is still running; waiting for stream output."
-                                ),
+                                message="Claude Code is still running; waiting for stream output.",
                             )
                         )
                         last_heartbeat = now
@@ -447,20 +454,13 @@ def _execute_claude_code_prompt(
     if return_code != 0:
         detail = _safe_cli_detail(output)
         raise RuntimeError("Claude Code prompt failed" + (f": {detail}" if detail else ""))
-    if output:
-        return ClaudeCodeExecution(
-            text=output,
-            raw_events=raw_events,
-            progress_events=progress_events,
-            structured_events=structured_events,
-        )
-    fallback_output = _claude_completion_fallback(
+    text = output or _claude_completion_fallback(
         progress_events=progress_events,
         structured_events=structured_events,
         raw_events=raw_events,
     )
     return ClaudeCodeExecution(
-        text=fallback_output,
+        text=text,
         raw_events=raw_events,
         progress_events=progress_events,
         structured_events=structured_events,
@@ -488,13 +488,11 @@ def _claude_code_env(env: dict[str, str] | None) -> dict[str, str]:
     values = dict(os.environ)
     if env is not None:
         values.update(env)
-    for name in (
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_TOKEN",
-        "CRAIK_ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-    ):
+    bearer_token_envs = (
+        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_TOKEN",
+        "CRAIK_ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN",
+    )
+    for name in bearer_token_envs:
         values.pop(name, None)
     _emit_claude_code_progress("Using Claude CLI auth; bearer token env vars removed.")
     return values

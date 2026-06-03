@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +101,70 @@ def write_hook_settings_file(target: Path, hook_block: dict[str, Any]) -> None:
     target.write_text(json.dumps(hook_block, indent=2) + "\n", encoding="utf-8")
 
 
+def gated_claude_permission_mode(operator_mode: str | None) -> str:
+    """Choose the gate ``--permission-mode`` for a GATED real-claude run.
+
+    Governance overrides the operator's chosen mode for a gated run -- with one
+    exception. Per the live smoke on real ``claude``:
+
+    * ``dontAsk`` + a PreToolUse craik-hook = deny-by-default with the hook as
+      the approval path (fail-SAFE). This is the default gate; it OVERRIDES any
+      other operator mode (the point of governance), and the override is visible
+      via the recorded permission mode.
+    * ``bypassPermissions`` still ENFORCES a hook ``deny`` (governance holds),
+      so when the operator EXPLICITLY chose it we respect their escape hatch.
+    """
+    if operator_mode == "bypassPermissions":
+        return "bypassPermissions"
+    return "dontAsk"
+
+
+@dataclass(frozen=True)
+class GateSettings:
+    """Per-run gate decision for a vendor-CLI spawn.
+
+    ``permission_mode`` is the ``--permission-mode`` value to pass (or ``None``
+    to omit). ``settings_path`` is a craik-owned ``--settings`` file path when a
+    PreToolUse craik-hook is registered (gated run), else ``None``.
+    """
+
+    permission_mode: str | None
+    settings_path: Path | None
+
+
+@contextmanager
+def claude_gate_settings(
+    *,
+    operator_mode: str | None,
+    gated: bool,
+    hook_block: dict[str, Any] | None,
+) -> Iterator[GateSettings]:
+    """Yield the gate decision for a claude spawn, fail-safe on teardown.
+
+    GATED run (``gated`` True): force a fail-safe gate mode
+    (:func:`gated_claude_permission_mode`) and register craik's PreToolUse hook
+    via a craik-owned temp ``--settings`` file written to a craik-managed system
+    temp dir (NOT the operator's workspace), removed on exit -- normal OR
+    exceptional -- so nothing is left behind. NON-gated run: pass ``operator_mode``
+    through unchanged and register no ``--settings`` (delegate-observe).
+    """
+    if not gated or hook_block is None:
+        yield GateSettings(permission_mode=operator_mode, settings_path=None)
+        return
+    gate_mode = gated_claude_permission_mode(operator_mode)
+    temp_dir = Path(tempfile.mkdtemp(prefix="craik-hook-settings-"))
+    settings_path = temp_dir / "settings.json"
+    write_hook_settings_file(settings_path, hook_block)
+    try:
+        yield GateSettings(permission_mode=gate_mode, settings_path=settings_path)
+    finally:
+        settings_path.unlink(missing_ok=True)
+        try:
+            temp_dir.rmdir()
+        except OSError:  # pragma: no cover - dir not empty / already gone
+            pass
+
+
 @contextmanager
 def registered_hook_settings(settings_path: Path, hook_block: dict[str, Any]) -> Iterator[Path]:
     """Temporarily merge craik's hook into ``settings_path``, restoring on exit.
@@ -146,6 +212,9 @@ def registered_hook_settings(settings_path: Path, hook_block: dict[str, Any]) ->
 
 __all__ = [
     "HOOK_COMMAND",
+    "GateSettings",
+    "claude_gate_settings",
+    "gated_claude_permission_mode",
     "merge_hook_settings",
     "registered_hook_settings",
     "write_hook_settings_file",
