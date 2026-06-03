@@ -80,14 +80,25 @@ def _active_provider_and_model(env: dict[str, str] | None) -> tuple[str, str | N
 # Each surface reads ITS OWN env var so the operator's chosen mode reaches the
 # matching vendor CLI faithfully (capture, don't force). The mode sets are the
 # values verified against the installed CLIs (see the validators below):
-#   claude: --permission-mode {default, acceptEdits, plan, dontAsk, bypassPermissions}
+#   claude: --permission-mode {default, acceptEdits, plan, auto, dontAsk, bypassPermissions}
+#           (``auto`` requires Claude Code v2.1.83+; craik passes it faithfully and
+#            does not detect availability — the run surfaces an error if rejected.
+#            ``bypassPermissions`` is the only true high-risk mode; ``dontAsk`` is
+#            deny-by-default/SAFE, not high-risk.)
 #   gemini: --approval-mode    {default, auto_edit, yolo, plan}
 #   codex:  --sandbox          {read-only, workspace-write, danger-full-access}
 CLAUDE_PERMISSION_MODE_ENV = "CRAIK_CLAUDE_PERMISSION_MODE"
 GEMINI_APPROVAL_MODE_ENV = "CRAIK_GEMINI_APPROVAL_MODE"
 CODEX_SANDBOX_MODE_ENV = "CRAIK_CODEX_SANDBOX_MODE"
 
-_CLAUDE_PERMISSION_MODES = ("default", "acceptEdits", "plan", "dontAsk", "bypassPermissions")
+_CLAUDE_PERMISSION_MODES = (
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions",
+)
 _GEMINI_APPROVAL_MODES = ("default", "auto_edit", "yolo", "plan")
 _CODEX_SANDBOX_MODES = ("read-only", "workspace-write", "danger-full-access")
 

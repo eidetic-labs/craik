@@ -391,13 +391,14 @@ def test_jsonl_gateway_reports_slash_catalog(tmp_path: Path) -> None:
     assert "status" in names
     assert commands["effort"]["choices"] == {"effort": ["default", "low", "medium", "high", "max"]}
     # ``/mode`` is universal: the static catalog choices are the UNION across the
-    # three vendors (anthropic + gemini + codex), never Claude-only, and the fake
-    # ``auto`` is gone.
+    # three vendors (anthropic + gemini + codex), never Claude-only. ``auto`` is a
+    # REAL Claude mode (distinct from Gemini's ``auto_edit``).
     assert commands["mode"]["choices"] == {
         "mode": [
             "ask",
             "acceptEdits",
             "plan",
+            "auto",
             "dontAsk",
             "bypassPermissions",
             "default",

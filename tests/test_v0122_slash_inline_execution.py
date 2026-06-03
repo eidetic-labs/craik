@@ -241,14 +241,26 @@ def test_mode_set_persists_dont_ask_permission_mode(tmp_path: Path) -> None:
     assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "dontAsk"
 
 
-def test_mode_rejects_fake_auto_mode(tmp_path: Path) -> None:
+def test_mode_set_persists_auto_permission_mode(tmp_path: Path) -> None:
+    # ``auto`` is a REAL Claude mode (background safety classifier; CC v2.1.83+).
     env = _env(tmp_path)
     dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
 
     result = dispatch_slash_command("/mode auto", env=env)
+    status = dispatch_slash_command("/mode", env=env)
+
+    assert result.text == "Claude permission mode: `auto`."
+    assert json.loads(status.text)["claude_permission_mode"] == "auto"
+    assert env["CRAIK_CLAUDE_PERMISSION_MODE"] == "auto"
+
+
+def test_mode_rejects_truly_fake_mode(tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    dispatch_slash_command("/model set anthropic/claude-opus-4-7", env=env)
+
+    result = dispatch_slash_command("/mode nonsense", env=env)
 
     assert result.exit_code == 2
-    assert "auto" not in result.text
     assert "CRAIK_CLAUDE_PERMISSION_MODE" not in env
 
 
@@ -482,9 +494,9 @@ def test_run_claude_code_backend_creates_audited_artifacts(
         ("default", "default"),
         ("acceptEdits", "acceptEdits"),
         ("plan", "plan"),
+        ("auto", "auto"),
         ("dontAsk", "dontAsk"),
         ("bypassPermissions", "bypassPermissions"),
-        ("auto", None),
         ("ask", None),
         ("nonsense", None),
         (None, None),
@@ -497,6 +509,40 @@ def test_claude_permission_mode_accepts_real_cli_modes(
 
     env = {} if mode is None else {"CRAIK_CLAUDE_PERMISSION_MODE": mode}
     assert _claude_permission_mode(env) == expected
+
+
+def test_claude_mode_spec_reconciled_with_real_claude_vocab() -> None:
+    """The claude spec matches the real Claude permission-mode vocabulary.
+
+    ``auto`` is a real mode (cycled); ``dontAsk`` is settable but deny-by-default
+    (SAFE, not high-risk) and is NOT cycled; ``bypassPermissions`` is the only
+    true high-risk mode.
+    """
+    from craik.runtime.shell.contract_runtime.mode_args import (
+        _CLAUDE_MODE_SPEC,
+        CLAUDE_PERMISSION_MODE_CHOICES,
+        stored_permission_mode,
+    )
+
+    # auto + dontAsk both settable; auto stored as-is.
+    assert "auto" in CLAUDE_PERMISSION_MODE_CHOICES
+    assert "dontAsk" in CLAUDE_PERMISSION_MODE_CHOICES
+    assert stored_permission_mode("auto") == "auto"
+    assert stored_permission_mode("dontAsk") == "dontAsk"
+
+    # dontAsk is SAFE (deny-by-default), so NOT high-risk; only bypass is.
+    assert _CLAUDE_MODE_SPEC.high_risk == ("bypassPermissions",)
+    assert "dontAsk" not in _CLAUDE_MODE_SPEC.high_risk
+
+    # Cycle adds auto, drops dontAsk (settable but not cycled).
+    assert _CLAUDE_MODE_SPEC.cycle == (
+        "default",
+        "acceptEdits",
+        "plan",
+        "auto",
+        "bypassPermissions",
+    )
+    assert "dontAsk" not in _CLAUDE_MODE_SPEC.cycle
 
 
 @pytest.mark.parametrize(

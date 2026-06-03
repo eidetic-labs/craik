@@ -1,11 +1,15 @@
 """Pin the per-vendor permission/approval-mode passthrough against regression.
 
 ``/mode`` is one operator command but each vendor CLI has its OWN mode
-vocabulary, its OWN flag, and its OWN env var. A bug previously shipped where a
-fake mode (``auto``) was silently swallowed and the real high-risk modes
-(``bypassPermissions`` / ``dontAsk`` / ``yolo`` / ``danger-full-access``) were
-filtered out, so NO mode the operator picked actually reached the vendor CLI.
-Phase 7.2 fixed it with per-vendor validators.
+vocabulary, its OWN flag, and its OWN env var. A bug previously shipped where
+real high-risk modes (``bypassPermissions`` / ``yolo`` / ``danger-full-access``)
+were filtered out, so NO mode the operator picked actually reached the vendor
+CLI. Phase 7.2 fixed it with per-vendor validators.
+
+Note on ``auto``: it is a REAL Claude mode (``--permission-mode auto``, a
+background safety classifier; requires Claude Code v2.1.83+) and so is a valid
+claude passthrough, but it is NOT a Gemini or Codex mode — so it must still be
+rejected by those two validators (the per-vendor bogus-token set below).
 
 This guard makes that regression class un-mergeable. It drives the REAL
 validators (no subprocess, no AST parsing) and asserts, per vendor:
@@ -22,7 +26,7 @@ validators (no subprocess, no AST parsing) and asserts, per vendor:
 The verified CLI vocabularies (source of truth, confirmed against the installed
 CLIs):
 
-* claude  ``--permission-mode``  {default, acceptEdits, plan, dontAsk, bypassPermissions}
+* claude  ``--permission-mode``  {default, acceptEdits, plan, auto, dontAsk, bypassPermissions}
 * gemini  ``--approval-mode``    {default, auto_edit, yolo, plan}
 * codex   ``--sandbox``          {read-only, workspace-write, danger-full-access}
 """
@@ -48,13 +52,17 @@ from craik.runtime.shell.contract_runtime.mode_args import (
 # The verified per-vendor CLI vocabularies. This literal is the pin: the guard
 # compares the live choices constants against it as sets, so any future edit
 # that drops a real high-risk mode or re-adds a fake one fails the guard.
-CLAUDE_VERIFIED = frozenset({"default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"})
+CLAUDE_VERIFIED = frozenset(
+    {"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"}
+)
 GEMINI_VERIFIED = frozenset({"default", "auto_edit", "yolo", "plan"})
 CODEX_VERIFIED = frozenset({"read-only", "workspace-write", "danger-full-access"})
 
-# Tokens that must NEVER pass any validator. ``auto`` is the exact original bug
-# (a fake Claude mode); ``nonsense`` is a generic foreign token.
-BOGUS_TOKENS = ("auto", "nonsense")
+# Tokens that must NEVER pass a given vendor's validator. ``nonsense`` is a
+# generic foreign token rejected everywhere. ``auto`` is a REAL Claude mode but
+# is foreign to gemini/codex, so it is bogus for those two only — added
+# per-vendor below.
+BOGUS_TOKENS = ("nonsense",)
 
 
 def _normalized_choices(choices: tuple[str, ...]) -> frozenset[str]:
@@ -71,6 +79,8 @@ def check_vendor() -> list[str]:
     """Return per-vendor failures pinning the mode passthrough. Empty == OK."""
     failures: list[str] = []
 
+    # Per-vendor extra bogus tokens: ``auto`` is a real Claude mode but foreign
+    # to gemini/codex, so those two must still reject it.
     vendors = (
         (
             "claude",
@@ -78,6 +88,7 @@ def check_vendor() -> list[str]:
             CLAUDE_VERIFIED,
             CLAUDE_PERMISSION_MODE_ENV,
             _claude_permission_mode,
+            (),
         ),
         (
             "gemini",
@@ -85,6 +96,7 @@ def check_vendor() -> list[str]:
             GEMINI_VERIFIED,
             GEMINI_APPROVAL_MODE_ENV,
             _gemini_approval_mode,
+            ("auto",),
         ),
         (
             "codex",
@@ -92,10 +104,11 @@ def check_vendor() -> list[str]:
             CODEX_VERIFIED,
             CODEX_SANDBOX_MODE_ENV,
             _codex_sandbox_mode,
+            ("auto",),
         ),
     )
 
-    for name, choices, verified, env_var, validator in vendors:
+    for name, choices, verified, env_var, validator, extra_bogus in vendors:
         # (1) choices constant must exactly equal the verified CLI vocabulary.
         live = _normalized_choices(choices)
         if live != verified:
@@ -116,7 +129,7 @@ def check_vendor() -> list[str]:
                 )
 
         # (3) bogus tokens must be rejected (not coerced to a permissive default).
-        for bogus in BOGUS_TOKENS:
+        for bogus in (*BOGUS_TOKENS, *extra_bogus):
             rejected = validator({env_var: bogus})
             if rejected:
                 failures.append(
