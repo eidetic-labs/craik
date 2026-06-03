@@ -210,13 +210,23 @@ class AnthropicCLI(CLIAdapter):
             run_claude_code_core,
             typed_claude_stream_sink,
         )
+        from craik.runtime.backend.claude_code_grants import _run_operator_approved
 
         # Parity item C (Task 5.7): the receipt governance attribution is honest
         # to whether this run was actually gated. The framing receipts
         # (``claude_framing_events``, derived from the core's persisted receipt
         # ids WITH ``run_id``) read it; set it for the whole run BEFORE the core
-        # streams a single line.
-        self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
+        # streams a single line. ``operator`` is honest ONLY when an operator
+        # actually decided -- i.e. approval was requested AND the genuine operator
+        # signal is present (``_run_operator_approved``: the TUI-set
+        # CRAIK_CLAUDE_CODE_RUN_APPROVED). Absent the real live hook today, a
+        # ``require_operator_approval=True`` run with no such signal is
+        # delegate-observed -> ``bypass``, matching the core's persisted
+        # ``operator_approved`` so the emitted stream and the durable record agree.
+        operator_approved = ctx.require_operator_approval and _run_operator_approved(
+            self.original_env
+        )
+        self._decided_by = cli_observed_decided_by(operator_approved)
         self._coalescer = Coalescer()
         native_events: list[BackendEvent] = []
         sink = typed_claude_stream_sink(

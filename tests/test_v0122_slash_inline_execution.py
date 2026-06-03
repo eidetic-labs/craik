@@ -1021,40 +1021,89 @@ def test_claude_code_progress_callback_receives_structured_approval_events(
     assert events[0]["target"] == "docs/index.md"
 
 
-def test_run_claude_code_backend_requires_operator_approval(
+def _stub_claude_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub the `claude` CLI discovery + spawn so the audited run can proceed."""
+    original_popen = subprocess.Popen
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _Process:
+        stdout = iter(['{"type":"result","result":"docs updated"}\n'])
+
+        def wait(self, timeout=None):  # noqa: ANN001, ANN202
+            return 0
+
+    def _popen(args, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        if Path(args[0]).name != "claude":
+            return original_popen(args, **kwargs)
+        return _Process()
+
+    monkeypatch.setattr(
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen",
+        _popen,
+    )
+
+
+def test_run_claude_code_backend_starts_without_preapproval_delegate_observed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The audited run ALWAYS starts (no pre-run denial); with no real operator
+    approval it is honestly recorded as delegate-observed, not operator-approved."""
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
     subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
     env = _env(tmp_path)
+    _stub_claude_spawn(monkeypatch)
 
     result = dispatch_slash_command("/run --backend claude-code Upgrade Craik Docs", env=env)
     runs = dispatch_slash_command("/run list", env=env)
 
-    assert result.exit_code == 2
-    assert "requires operator approval" in result.text
-    assert "task_upgrade_craik_docs" not in runs.text
+    assert result.exit_code == 0, result.text
+    assert "requires operator approval" not in result.text
+    assert "task_upgrade_craik_docs" in runs.text
+
+    store = LocalStore.from_env(env)
+    try:
+        approval = store.get_receipt("receipt_upgrade_craik_docs_claude_code_approval")
+    finally:
+        store.close()
+    assert approval is not None
+    assert approval.actor == "system:craik"
+    assert approval.result.metadata["approved"] is False
+    assert approval.result.metadata["default_attested_backend"] is True
 
 
 def test_run_claude_code_backend_does_not_treat_tui_marker_as_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A bare TUI marker is NOT an operator approval: the run still starts but
+    must be recorded as delegate-observed, never operator-approved."""
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
     subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
     env = {**_env(tmp_path), "CRAIK_TUI": "1"}
+    _stub_claude_spawn(monkeypatch)
 
     result = dispatch_slash_command("/run --backend claude-code Upgrade Craik Docs", env=env)
 
-    assert result.exit_code == 2
-    assert "requires operator approval" in result.text
+    assert result.exit_code == 0, result.text
+    store = LocalStore.from_env(env)
+    try:
+        approval = store.get_receipt("receipt_upgrade_craik_docs_claude_code_approval")
+    finally:
+        store.close()
+    assert approval is not None
+    # CRAIK_TUI alone is not a real operator decision.
+    assert approval.result.metadata["approved"] is False
+    assert approval.result.metadata["default_attested_backend"] is True
 
 
 def test_craik_prefix_gets_specific_recovery() -> None:
