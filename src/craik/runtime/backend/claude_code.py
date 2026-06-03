@@ -170,7 +170,7 @@ def execute_claude_code_run(
             expected_outputs=["runner_step_result", "handoff"],
         )
         _emit_claude_code_progress(f"Created task `{task.id}`.")
-        grant_ids = _put_claude_code_grants(store, task.id)
+        grant_ids = _put_claude_code_grants(store, task.id, operator_approved=operator_approved)
         approval_receipt = _put_claude_code_approval_receipt(
             store,
             task.id,

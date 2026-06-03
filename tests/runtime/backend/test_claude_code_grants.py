@@ -50,13 +50,15 @@ def test_craik_internal_grants_are_system_authority(store: LocalStore) -> None:
 
 
 def test_agent_grants_are_provisioned_separately(store: LocalStore) -> None:
+    # Default (no operator approval) is the delegate-observe path.
     grant_ids = _put_claude_code_agent_grants(store, TASK_ID)
 
     assert set(grant_ids) == set(AGENT_GRANT_IDS)
     for gid in AGENT_GRANT_IDS:
         grant = store.get_capability_grant(gid)
         assert grant is not None
-        assert grant.approved_by == "user:tui"
+        # Delegate-observe: no operator decided, so attribute to delegated authority.
+        assert grant.approved_by == "system:craik"
     # The agent grant set must not include the craik-internal receipt grant.
     assert RECEIPT_GRANT_ID not in grant_ids
     assert "receipt.write" not in {
@@ -64,7 +66,31 @@ def test_agent_grants_are_provisioned_separately(store: LocalStore) -> None:
     }
 
 
+def test_agent_grants_attributed_to_operator_when_approved(store: LocalStore) -> None:
+    grant_ids = _put_claude_code_agent_grants(store, TASK_ID, operator_approved=True)
+
+    assert set(grant_ids) == set(AGENT_GRANT_IDS)
+    for gid in AGENT_GRANT_IDS:
+        grant = store.get_capability_grant(gid)
+        assert grant is not None
+        # Operator genuinely approved (TUI modal-confirm path).
+        assert grant.approved_by == "user:tui"
+
+
+def test_agent_grants_delegate_observed_when_not_approved(store: LocalStore) -> None:
+    grant_ids = _put_claude_code_agent_grants(store, TASK_ID, operator_approved=False)
+
+    assert set(grant_ids) == set(AGENT_GRANT_IDS)
+    for gid in AGENT_GRANT_IDS:
+        grant = store.get_capability_grant(gid)
+        assert grant is not None
+        # Nobody approved write/shell; attribute honestly to delegated authority.
+        assert grant.approved_by == "system:craik"
+        assert grant.approved_by != "user:tui"
+
+
 def test_combined_helper_provisions_both_categories(store: LocalStore) -> None:
+    # Combined helper, delegate-observe default.
     grant_ids = _put_claude_code_grants(store, TASK_ID)
 
     # System authority present and always-on.
@@ -73,7 +99,24 @@ def test_combined_helper_provisions_both_categories(store: LocalStore) -> None:
     assert receipt_grant is not None
     assert receipt_grant.approved_by == "system:craik"
 
-    # Agent grants present.
+    # Agent grants present and delegate-observed by default.
+    for gid in AGENT_GRANT_IDS:
+        grant = store.get_capability_grant(gid)
+        assert grant is not None
+        assert grant.approved_by == "system:craik"
+
+
+def test_combined_helper_operator_approved_keeps_internal_system_authority(
+    store: LocalStore,
+) -> None:
+    _put_claude_code_grants(store, TASK_ID, operator_approved=True)
+
+    # craik-internal receipt.write stays system authority regardless (Task 1).
+    receipt_grant = store.get_capability_grant(RECEIPT_GRANT_ID)
+    assert receipt_grant is not None
+    assert receipt_grant.approved_by == "system:craik"
+
+    # Agent grants now attributed to the operator who approved.
     for gid in AGENT_GRANT_IDS:
         grant = store.get_capability_grant(gid)
         assert grant is not None

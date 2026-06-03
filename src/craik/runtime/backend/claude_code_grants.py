@@ -43,8 +43,24 @@ def _put_craik_internal_grants(store: LocalStore, task_id: str) -> list[str]:
     return [grant.id for grant in grants]
 
 
-def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
-    """Provision the agent capabilities the operator governs."""
+def _put_claude_code_agent_grants(
+    store: LocalStore,
+    task_id: str,
+    *,
+    operator_approved: bool = False,
+) -> list[str]:
+    """Provision the agent capabilities, attributed honestly to reality.
+
+    Agent capabilities (``repo.read``/``repo.write.docs``/``shell.test``) are
+    governed by the operator ONLY when a real operator approval occurred. On the
+    common delegate-observe path no operator decided -- Craik delegated to the
+    vendor CLI under its permission mode and OBSERVES the run -- so the grants are
+    attributed to Craik's delegated authority (``system:craik``), not to the
+    operator. Claiming ``user:tui`` on a run nobody approved would be dishonest.
+    The set of capabilities provisioned is identical either way; only the
+    attribution differs.
+    """
+    approved_by = "user:tui" if operator_approved else "system:craik"
     grants = [
         CapabilityGrant(
             id=f"grant_{task_id.removeprefix('task_')}_claude_repo_read",
@@ -53,7 +69,7 @@ def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
             target=CapabilityTarget(paths=["."]),
             operations=["read"],
             reason="Allow Claude Code to inspect the current repository for the audited run.",
-            approved_by="user:tui",
+            approved_by=approved_by,
         ),
         CapabilityGrant(
             id=f"grant_{task_id.removeprefix('task_')}_claude_repo_write_docs",
@@ -62,7 +78,7 @@ def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
             target=CapabilityTarget(paths=["docs", "README.md", "CHANGELOG.md"]),
             operations=["read", "write"],
             reason="Allow Claude Code to update documentation for the audited run.",
-            approved_by="user:tui",
+            approved_by=approved_by,
         ),
         CapabilityGrant(
             id=f"grant_{task_id.removeprefix('task_')}_claude_shell_verify",
@@ -71,7 +87,7 @@ def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
             target=CapabilityTarget(paths=["."]),
             operations=["execute"],
             reason="Allow Claude Code to run verification commands for documentation changes.",
-            approved_by="user:tui",
+            approved_by=approved_by,
         ),
     ]
     for grant in grants:
@@ -79,15 +95,23 @@ def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
     return [grant.id for grant in grants]
 
 
-def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
-    """Provision both Craik-internal system grants and operator-governed agent grants.
+def _put_claude_code_grants(
+    store: LocalStore,
+    task_id: str,
+    *,
+    operator_approved: bool = False,
+) -> list[str]:
+    """Provision both Craik-internal system grants and the agent grants.
 
     Thin compatibility shim that preserves the combined contract for existing
     callers. Craik-internal grants are provisioned unconditionally under system
-    authority; agent grants remain operator-attributed.
+    authority (Task 1); agent grants are attributed to the operator only when a
+    real operator approval occurred, otherwise to Craik's delegated authority.
     """
     internal_ids = _put_craik_internal_grants(store, task_id)
-    agent_ids = _put_claude_code_agent_grants(store, task_id)
+    agent_ids = _put_claude_code_agent_grants(
+        store, task_id, operator_approved=operator_approved
+    )
     return internal_ids + agent_ids
 
 

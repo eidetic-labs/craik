@@ -96,6 +96,39 @@ def test_no_approval_run_records_delegate_observed_receipt(
     assert run_receipt.result.metadata["default_attested_backend"] is True
 
 
+def test_no_approval_run_attributes_agent_grants_to_delegated_authority(
+    tmp_path: Path,
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delegate-observe: agent grants must not claim operator approval."""
+    _stub_prompt(monkeypatch)
+    env = _env(tmp_path)
+
+    execute_claude_code_run("Upgrade Craik Docs", env, require_operator_approval=True)
+
+    store = LocalStore.from_env(env)
+    try:
+        repo_read = store.get_capability_grant("grant_upgrade_craik_docs_claude_repo_read")
+        repo_write = store.get_capability_grant(
+            "grant_upgrade_craik_docs_claude_repo_write_docs"
+        )
+        shell = store.get_capability_grant("grant_upgrade_craik_docs_claude_shell_verify")
+        receipt_write = store.get_capability_grant(
+            "grant_upgrade_craik_docs_claude_receipt_write"
+        )
+    finally:
+        store.close()
+
+    # Nobody approved write/shell -> delegated/observed authority, not user:tui.
+    for grant in (repo_read, repo_write, shell):
+        assert grant is not None
+        assert grant.approved_by == "system:craik"
+    # craik-internal receipt.write stays system authority regardless (Task 1).
+    assert receipt_write is not None
+    assert receipt_write.approved_by == "system:craik"
+
+
 def test_real_operator_approval_flag_records_operator_approved(
     tmp_path: Path,
     repo: Path,
