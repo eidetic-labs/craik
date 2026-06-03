@@ -4,8 +4,13 @@
 vocabulary + its OWN env var (capture, don't force — the operator's chosen mode
 must reach each vendor faithfully):
 
-* anthropic (Claude): ``--permission-mode`` {default, acceptEdits, plan, dontAsk,
-  bypassPermissions}; ``ask`` is a display alias of ``default``.
+* anthropic (Claude): ``--permission-mode`` {default, acceptEdits, plan, auto,
+  dontAsk, bypassPermissions}; ``ask`` is a display alias of ``default``.
+  ``bypassPermissions`` is the only true high-risk mode (skips all checks);
+  ``dontAsk`` auto-DENIES everything not pre-approved (locked-down/CI, SAFE).
+  ``auto`` requires Claude Code v2.1.83+ (a background safety classifier) —
+  craik passes it faithfully and does NOT detect availability; if the vendor
+  rejects it the run surfaces an error.
 * google (Gemini): ``--approval-mode`` {default, auto_edit, yolo, plan};
   ``yolo`` is the high-risk bypass-equivalent.
 * openai (Codex): ``--sandbox`` {read-only, workspace-write, danger-full-access};
@@ -50,6 +55,7 @@ CLAUDE_PERMISSION_MODE_CHOICES = (
     "ask",
     "acceptEdits",
     "plan",
+    "auto",
     "dontAsk",
     "bypassPermissions",
 )
@@ -151,9 +157,14 @@ _CLAUDE_MODE_SPEC = _ClaudeModeSpec(
     label="Claude",
     env_var=CLAUDE_PERMISSION_MODE_ENV,
     choices=CLAUDE_PERMISSION_MODE_CHOICES,
-    high_risk=("dontAsk", "bypassPermissions"),
-    # Stored values (``default``, not the ``ask`` display alias).
-    cycle=("default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"),
+    # Only ``bypassPermissions`` truly bypasses checks; ``dontAsk`` is
+    # deny-by-default (SAFE), so it is NOT high-risk. Mirrors the Rust
+    # ``is_bypass_permissions`` which flags only true-bypass tokens.
+    high_risk=("bypassPermissions",),
+    # Stored values (``default``, not the ``ask`` display alias). ``auto`` is in
+    # the cycle; ``dontAsk`` is settable via ``/mode dontAsk`` but NOT cycled
+    # (faithful to Claude's Shift+Tab cycle).
+    cycle=("default", "acceptEdits", "plan", "auto", "bypassPermissions"),
 )
 _GEMINI_MODE_SPEC = _PlainModeSpec(
     family="google",

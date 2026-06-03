@@ -75,8 +75,10 @@ pub(crate) enum TranscriptJump {
 //   anthropic (Claude): --permission-mode; `ask` shown for stored `default`.
 //   google (Gemini):    --approval-mode.
 //   openai (Codex):     --sandbox.
-const PERMISSION_MODE_CYCLE: &[&str] =
-    &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"];
+// `auto` is a real Claude mode (background safety classifier; requires Claude
+// Code v2.1.83+). `dontAsk` is settable via `/mode dontAsk` but is NOT cycled
+// (faithful to Claude's Shift+Tab cycle). Mirrors the Python claude cycle.
+const PERMISSION_MODE_CYCLE: &[&str] = &["ask", "acceptEdits", "plan", "auto", "bypassPermissions"];
 const GEMINI_APPROVAL_MODE_CYCLE: &[&str] = &["default", "auto_edit", "yolo", "plan"];
 const CODEX_SANDBOX_MODE_CYCLE: &[&str] = &["read-only", "workspace-write", "danger-full-access"];
 
@@ -3967,15 +3969,17 @@ mod tests {
 
     #[test]
     fn permission_mode_cycle_matches_real_claude_modes() {
+        // `auto` is a REAL Claude mode and IS cycled; `dontAsk` is settable but
+        // NOT cycled (faithful to Claude's Shift+Tab cycle).
+        assert!(PERMISSION_MODE_CYCLE.contains(&"auto"));
         assert!(
-            !PERMISSION_MODE_CYCLE.contains(&"auto"),
-            "fake `auto` mode must not be in the cycle"
+            !PERMISSION_MODE_CYCLE.contains(&"dontAsk"),
+            "`dontAsk` is settable but not part of the cycle"
         );
-        assert!(PERMISSION_MODE_CYCLE.contains(&"dontAsk"));
         assert!(PERMISSION_MODE_CYCLE.contains(&"bypassPermissions"));
         assert_eq!(
             PERMISSION_MODE_CYCLE,
-            &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+            &["ask", "acceptEdits", "plan", "auto", "bypassPermissions"]
         );
     }
 
@@ -3993,9 +3997,9 @@ mod tests {
             next_permission_mode_for(claude, Some("acceptEdits")),
             "plan"
         );
-        assert_eq!(next_permission_mode_for(claude, Some("plan")), "dontAsk");
+        assert_eq!(next_permission_mode_for(claude, Some("plan")), "auto");
         assert_eq!(
-            next_permission_mode_for(claude, Some("dontAsk")),
+            next_permission_mode_for(claude, Some("auto")),
             "bypassPermissions"
         );
         // Wraps back to the start of the cycle.
@@ -4010,7 +4014,7 @@ mod tests {
         // Anthropic keeps the Claude set.
         assert_eq!(
             permission_mode_cycle_for(Some("anthropic")),
-            &["ask", "acceptEdits", "plan", "dontAsk", "bypassPermissions"]
+            &["ask", "acceptEdits", "plan", "auto", "bypassPermissions"]
         );
         // Google cycles the REAL Gemini approval modes (yolo is the high-risk one).
         assert_eq!(
