@@ -177,6 +177,32 @@ def test_anthropic_cli_run_starts_without_approval_flag(
     assert all(e.data["execution"] == "delegated-observed" for e in receipts)
 
 
+def test_anthropic_cli_emitted_receipts_not_operator_without_real_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The DEFAULT claude path requests approval (require_operator_approval=True)
+    but, with no live hook + no CRAIK_CLAUDE_CODE_RUN_APPROVED flag, no operator
+    actually decides. The EMITTED receipt.created events must say
+    decided_by="bypass" (delegate-observed), NOT "operator" -- otherwise the
+    stream contradicts the honest persisted record (review finding C1)."""
+    _repo(tmp_path, monkeypatch)
+    env = _env(tmp_path)
+    AuthProfileStore.from_env(env).put(_claude_cli_marker_profile())
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+    _install_claude_marker_subprocess(monkeypatch)
+
+    adapter = AnthropicCLI(original_env=env)
+    # require_operator_approval=True (the real claude path) but NO approval flag.
+    events = list(adapter.run(_ctx(env, require_operator_approval=True)))
+
+    receipts = [e for e in events if e.type == "receipt.created"]
+    assert receipts
+    assert all(e.data.get("decided_by") != "operator" for e in receipts), (
+        "no operator decided this run; emitted receipts must not claim 'operator'"
+    )
+    assert all(e.data.get("decided_by") == "bypass" for e in receipts)
+
+
 # --- google-cli: representative gating CLI ----------------------------------
 
 

@@ -64,7 +64,14 @@ def test_anthropic_cli_ungated_run_does_not_attribute_operator(monkeypatch) -> N
 
 
 def test_anthropic_cli_gated_run_attributes_operator(monkeypatch) -> None:
-    """A gated AnthropicCLI run (operator decided) attributes ``operator``."""
+    """A run where an operator ACTUALLY decided attributes ``operator``.
+
+    ``operator`` is honest only when approval was requested AND a genuine
+    operator-decision signal is present -- the TUI-set
+    ``CRAIK_CLAUDE_CODE_RUN_APPROVED=1`` (until the live hook is wired). Without
+    that signal the run is delegate-observed (``bypass``); see
+    test_no_pre_run_denial.py. ``require_operator_approval=True`` ALONE is only a
+    request, not a decision (review finding C1)."""
     from craik.runtime.backend.adapters.anthropic_cli import AnthropicCLI
     from craik.runtime.backend.adapters.audited_core import ClaudeCoreResult
 
@@ -82,7 +89,8 @@ def test_anthropic_cli_gated_run_attributes_operator(monkeypatch) -> None:
         _fake_core,
     )
 
-    adapter = AnthropicCLI(original_env={})
+    # The genuine operator-decision signal (the TUI sets this on approve-confirm).
+    adapter = AnthropicCLI(original_env={"CRAIK_CLAUDE_CODE_RUN_APPROVED": "1"})
     captured = _run_events(adapter, _ctx(require_operator_approval=True))
 
     receipts = [event for event in captured if event.type == "receipt.created"]
