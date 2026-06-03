@@ -94,15 +94,15 @@ def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
 CLAUDE_CODE_RUN_APPROVED_ENV = "CRAIK_CLAUDE_CODE_RUN_APPROVED"
 
 
-def _require_claude_code_run_approval(env: dict[str, str] | None) -> None:
-    values = env or {}
-    if values.get(CLAUDE_CODE_RUN_APPROVED_ENV) == "1":
-        return
-    raise ValueError(
-        "Audited run requires operator approval for repo.write.docs, "
-        "receipt.write, and shell.test. Use the TUI or set "
-        f"`{CLAUDE_CODE_RUN_APPROVED_ENV}=1` for a deliberate non-interactive run."
-    )
+def _run_operator_approved(env: dict[str, str] | None) -> bool:
+    """Return whether a REAL operator approval occurred for this run.
+
+    The only honest signal of an operator decision on the delegate-observe path
+    is the approval flag, which the TUI sets on modal confirm. No flag means no
+    operator decided -- the run still proceeds (delegate-observed), it is just
+    not attributed to the operator.
+    """
+    return (env or {}).get(CLAUDE_CODE_RUN_APPROVED_ENV) == "1"
 
 
 def _put_claude_code_approval_receipt(

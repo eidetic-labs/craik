@@ -30,9 +30,10 @@ from craik.runtime.backend.claude_code_events import (
     should_stream_progress,
 )
 from craik.runtime.backend.claude_code_grants import (
+    CLAUDE_CODE_RUN_APPROVED_ENV,
     _put_claude_code_approval_receipt,
     _put_claude_code_grants,
-    _require_claude_code_run_approval,
+    _run_operator_approved,
 )
 from craik.runtime.backend.claude_code_hooks import (
     chain_event_callbacks,
@@ -101,7 +102,6 @@ _CLAUDE_CODE_CANCEL: ContextVar[threading.Event | None] = ContextVar(
     "claude_code_cancel",
     default=None,
 )
-CLAUDE_CODE_RUN_APPROVED_ENV = "CRAIK_CLAUDE_CODE_RUN_APPROVED"
 
 
 @dataclass(frozen=True)
@@ -157,8 +157,8 @@ def execute_claude_code_run(
         _emit_claude_code_progress("Preparing audited model run.")
         store.initialize()
         project = _project_for_cwd(store)
-        if require_operator_approval:
-            _require_claude_code_run_approval(env)
+        # Delegate-and-observe: the run ALWAYS starts; operator attribution is honest.
+        operator_approved = require_operator_approval and _run_operator_approved(env)
         title = _title_from_prompt(prompt)
         task = create_task(
             store,
@@ -175,7 +175,7 @@ def execute_claude_code_run(
             store,
             task.id,
             grant_ids,
-            operator_approved=require_operator_approval,
+            operator_approved=operator_approved,
         )
         _emit_claude_code_progress("Recorded Claude Code authority grants and receipt.")
         _emit_claude_code_progress("Building case file.")
@@ -197,7 +197,7 @@ def execute_claude_code_run(
                     "runner_id": "claude-code",
                     "backend": "claude-code",
                     "execution_mode": "local-cli",
-                    "operator_approved_grants": require_operator_approval,
+                    "operator_approved_grants": operator_approved,
                     "grant_ids": grant_ids,
                 }
             ],
@@ -260,8 +260,8 @@ def execute_claude_code_run(
                         "active_model": _active_model(env),
                         "permission_mode": _claude_permission_mode(env),
                         "command": _claude_code_command_summary(env),
-                        "operator_approved_grants": require_operator_approval,
-                        "default_attested_backend": not require_operator_approval,
+                        "operator_approved_grants": operator_approved,
+                        "default_attested_backend": not operator_approved,
                         "grant_ids": grant_ids,
                         "approval_receipt_id": approval_receipt.id,
                     },
