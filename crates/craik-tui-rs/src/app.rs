@@ -6688,4 +6688,173 @@ mod tests {
             data,
         }
     }
+
+    #[test]
+    fn high_risk_bypass_approval_requires_two_press_arm() {
+        // A bypassPermissions-mode approval is high-risk, so the single-press
+        // keymap upgrades to a two-press confirm: the first 'a' ARMS this
+        // specific approval (recording its id in `armed_approval_id`, surfaced
+        // by `selected_approval_is_armed`) without committing, and only the
+        // second 'a' calls `approve_selected`. The committed-decision signal is
+        // the "Approving" transcript entry that `approve_selected` pushes;
+        // `approve_selected` does NOT remove the pending item (that happens only
+        // on the gateway's `approval.resolved` echo), so the count is an
+        // unreliable observable here -- the transcript entry is the real signal.
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Run cargo test?",
+                "tool": "Bash",
+                "command": "cargo test",
+                // Needle-free risk text on purpose: `is_high_risk_text` matches
+                // "exec"/"write"/... so a risk string like "executes command"
+                // would make this high-risk via the TEXT path and mask a broken
+                // token match. With benign text, the high-risk verdict (and thus
+                // the two-press arming) rides SOLELY on the bypassPermissions
+                // permission_mode token -- which is what this test pins.
+                "risk": "routine tool call",
+                "permission_mode": "bypassPermissions"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&approval);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert!(
+            app.selected_approval_is_high_risk(),
+            "bypassPermissions is high-risk"
+        );
+
+        // First press only ARMS -- not yet armed, not yet approved.
+        assert!(
+            !app.selected_approval_is_armed(),
+            "selection is disarmed before the first press"
+        );
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.selected_approval_is_armed(),
+            "the first press arms the selected approval"
+        );
+        assert!(
+            !app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving"),
+            "the first press does not approve -- the approval is still pending"
+        );
+
+        // Second press commits and disarms.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_1")),
+            "the second press approves the high-risk approval"
+        );
+        assert!(
+            !app.selected_approval_is_armed(),
+            "a committed decision disarms"
+        );
+    }
+
+    #[test]
+    fn high_risk_gate_fires_for_yolo_and_danger_full_access() {
+        // The per-vendor bypass-equivalents force the same high-risk gate as
+        // Claude `bypassPermissions`, even with a benign risk string.
+        for mode in ["yolo", "danger-full-access"] {
+            let approval = GatewayEvent {
+                event_type: "approval.requested".to_owned(),
+                source: "gateway".to_owned(),
+                created_at: None,
+                run_id: Some("run_1".to_owned()),
+                task_id: None,
+                data: json!({
+                    "approval_id": "approval_bash_1",
+                    "message": "Proceed?",
+                    "tool": "Read",
+                    "risk": "routine",
+                    "permission_mode": mode
+                }),
+            };
+            let mut app = InteractiveApp::for_test_with_messages([]);
+            app.record_event(&approval);
+            assert!(
+                app.selected_approval_is_high_risk(),
+                "{mode} must trip the high-risk gate like bypassPermissions"
+            );
+        }
+    }
+
+    #[test]
+    fn high_risk_match_is_case_insensitive() {
+        // The bypass-token match is case-insensitive, so an upper-cased token
+        // still trips the high-risk two-press gate.
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Proceed?",
+                "tool": "Read",
+                "risk": "routine",
+                "permission_mode": "BYPASSPERMISSIONS"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&approval);
+        assert!(
+            app.selected_approval_is_high_risk(),
+            "the bypass-token match is case-insensitive"
+        );
+    }
+
+    #[test]
+    fn non_bypass_approval_approves_on_single_press() {
+        // A non-bypass, benign approval is not high-risk, so the first 'a'
+        // approves immediately with no arming step.
+        let approval = GatewayEvent {
+            event_type: "approval.requested".to_owned(),
+            source: "gateway".to_owned(),
+            created_at: None,
+            run_id: Some("run_1".to_owned()),
+            task_id: None,
+            data: json!({
+                "approval_id": "approval_bash_1",
+                "message": "Run cargo test?",
+                "tool": "Bash",
+                "command": "cargo test",
+                "permission_mode": "default"
+            }),
+        };
+        let mut app = InteractiveApp::for_test_with_messages([]);
+        app.record_event(&approval);
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::CONTROL));
+
+        assert_eq!(app.active_overlay, Some(ActiveOverlay::Approvals));
+        assert!(
+            !app.selected_approval_is_high_risk(),
+            "a non-bypass benign approval is not high-risk"
+        );
+
+        // A single press approves immediately -- no arming.
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(
+            !app.selected_approval_is_armed(),
+            "a low-risk approval never arms"
+        );
+        assert!(
+            app.transcript
+                .iter()
+                .any(|entry| entry.title == "Approving" && entry.body.contains("approval_bash_1")),
+            "the single press approves the low-risk approval"
+        );
+    }
 }
