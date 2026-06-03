@@ -13,7 +13,38 @@ from craik.contracts.models import (
 from craik.runtime.store import LocalStore
 
 
-def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
+def _put_craik_internal_grants(store: LocalStore, task_id: str) -> list[str]:
+    """Provision Craik's own infrastructure capability grants.
+
+    These are not agent capabilities the operator governs; they are how Craik
+    fulfills its purpose (persisting its audit record). They are always granted
+    under Craik's own system authority and are never withheld by any
+    operator-approval path. ``receipt.write`` is recorded metadata for audit
+    attribution only — ``store.put_receipt`` writes unconditionally and never
+    enforces this grant at runtime.
+    """
+    grants = [
+        CapabilityGrant(
+            id=f"grant_{task_id.removeprefix('task_')}_claude_receipt_write",
+            task_id=task_id,
+            capability="receipt.write",
+            target=CapabilityTarget(paths=["craik-runtime"]),
+            operations=["write"],
+            reason=(
+                "Craik's own infrastructure authority to persist the audit "
+                "receipt for the delegated model run. Always granted under "
+                "system:craik authority; never operator-gated."
+            ),
+            approved_by="system:craik",
+        ),
+    ]
+    for grant in grants:
+        store.put_capability_grant(grant)
+    return [grant.id for grant in grants]
+
+
+def _put_claude_code_agent_grants(store: LocalStore, task_id: str) -> list[str]:
+    """Provision the agent capabilities the operator governs."""
     grants = [
         CapabilityGrant(
             id=f"grant_{task_id.removeprefix('task_')}_claude_repo_read",
@@ -34,15 +65,6 @@ def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
             approved_by="user:tui",
         ),
         CapabilityGrant(
-            id=f"grant_{task_id.removeprefix('task_')}_claude_receipt_write",
-            task_id=task_id,
-            capability="receipt.write",
-            target=CapabilityTarget(paths=["craik-runtime"]),
-            operations=["write"],
-            reason="Allow Craik to persist receipts for the delegated model run.",
-            approved_by="user:tui",
-        ),
-        CapabilityGrant(
             id=f"grant_{task_id.removeprefix('task_')}_claude_shell_verify",
             task_id=task_id,
             capability="shell.test",
@@ -55,6 +77,18 @@ def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
     for grant in grants:
         store.put_capability_grant(grant)
     return [grant.id for grant in grants]
+
+
+def _put_claude_code_grants(store: LocalStore, task_id: str) -> list[str]:
+    """Provision both Craik-internal system grants and operator-governed agent grants.
+
+    Thin compatibility shim that preserves the combined contract for existing
+    callers. Craik-internal grants are provisioned unconditionally under system
+    authority; agent grants remain operator-attributed.
+    """
+    internal_ids = _put_craik_internal_grants(store, task_id)
+    agent_ids = _put_claude_code_agent_grants(store, task_id)
+    return internal_ids + agent_ids
 
 
 CLAUDE_CODE_RUN_APPROVED_ENV = "CRAIK_CLAUDE_CODE_RUN_APPROVED"
@@ -107,10 +141,12 @@ def _put_claude_code_approval_receipt(
                     "approved": operator_approved,
                     "default_attested_backend": not operator_approved,
                     "grant_ids": grant_ids,
+                    # Operator-approved agent capabilities only. receipt.write is
+                    # Craik's own system authority (system:craik) and is not
+                    # attributed to operator approval here.
                     "capabilities": [
                         "repo.read",
                         "repo.write.docs",
-                        "receipt.write",
                         "shell.test",
                     ],
                 },
