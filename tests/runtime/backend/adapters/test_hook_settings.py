@@ -145,11 +145,15 @@ def test_context_manager_restores_on_exception(tmp_path: Path) -> None:
     original = '{"existing": true}'
     settings.write_text(original, encoding="utf-8")
 
-    with pytest.raises(RuntimeError):
+    def _raise_inside_cm() -> None:
         with registered_hook_settings(settings, _CRAIK_BLOCK):
             assert HOOK_COMMAND in settings.read_text(encoding="utf-8")
             raise RuntimeError("boom")
 
+    with pytest.raises(RuntimeError):
+        _raise_inside_cm()
+
+    # Byte-for-byte restore even when the body raised.
     assert settings.read_text(encoding="utf-8") == original
 
 
@@ -175,10 +179,14 @@ def test_context_manager_removes_file_that_did_not_exist_on_exception(
     tmp_path: Path,
 ) -> None:
     settings = tmp_path / "settings.json"
-    with pytest.raises(RuntimeError):
+
+    def _raise_inside_cm() -> None:
         with registered_hook_settings(settings, _CRAIK_BLOCK):
             assert settings.exists()
             raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        _raise_inside_cm()
     assert not settings.exists()
 
 
