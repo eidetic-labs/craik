@@ -3,9 +3,16 @@
 A future refactor must not be able to silently drop a "gated" run back to an
 ungated-while-claiming-gated state -- a run that opens the bridge but never
 registers craik's pre-tool hook with the vendor CLI would let every tool call
-proceed unreviewed while still presenting as governed. This guard makes that
-regression class un-mergeable for the two hook-capable vendors (anthropic-cli /
-google-cli; openai-cli is observe-only and is NOT gated, so it is excluded).
+proceed unreviewed while still presenting as governed. This guard pins the registration HELPERS used by the two hook-capable vendors
+(anthropic-cli / google-cli; openai-cli is observe-only and is NOT gated, so it
+is excluded). NOTE on scope: it asserts the helper functions register the hook;
+the call SITES (that ``claude_code._execute_claude_code_prompt`` enters
+``claude_gate_settings`` on the gated path, and that ``GoogleCLI.run`` enters
+``registered_hook_settings``) are pinned by the unit tests
+(test_claude_code_gated_hook.py / test_google_gated_hook.py), which read the
+settings file mid-spawn. Guard + those tests together close the regression.
+(Gemini's gated ROUTING is not yet activated by the gateway decision -- see the
+PR notes; this guard pins the registration machinery the activation will use.)
 
 It drives the REAL production gating-config code (no AST parsing, no subprocess):
 
