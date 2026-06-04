@@ -29,6 +29,8 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Iterable, Iterator
+from contextlib import ExitStack
+from pathlib import Path
 from typing import Any
 
 from craik.runtime.backend.adapters.assistant_text import clean_assistant_text
@@ -38,6 +40,7 @@ from craik.runtime.backend.adapters.base import (
     optional_str,
 )
 from craik.runtime.backend.adapters.hook_bridge import SOCKET_ENV, VENDOR_ENV
+from craik.runtime.backend.adapters.hook_settings import registered_hook_settings
 from craik.runtime.backend.adapters.vendor_profile import VendorProfile, vendor_profile
 from craik.runtime.backend.claude_code_settings import _gemini_approval_mode
 from craik.runtime.backend.events import (
@@ -149,24 +152,47 @@ class GoogleCLI(CLIAdapter):
 
         self._decided_by = cli_observed_decided_by(ctx.require_operator_approval)
         self._coalescer = Coalescer()
-        yield from run_cli_typed(
-            prompt=ctx.prompt,
-            env=self.original_env,
-            argv=self.build_command(ctx),
-            spawn_env=self.spawn_env(dict(ctx.env)),
-            vendor="google",
-            source=_SOURCE,
-            map_native=self.map_native_event,
-            coalescer=self._coalescer,
-            # The canonical ``receipt.created`` (emitted from the core's persisted
-            # receipt id by ``cli_framing_events``) carries this REAL gating
-            # posture: ``"operator"`` only for a gated run, else ``"bypass"``.
-            decided_by=self._decided_by,
-            # The live-gating overlay (set by the gateway's hook_bridge_session in
-            # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
-            hook_env=self.hook_env,
-            on_payload=self._capture_payload,
-        )
+        # GATED run (the gateway opened a hook-bridge session -> ``hook_env``
+        # carries the bridge socket): register craik's REAL BeforeTool ``craik-hook``
+        # in ``.gemini/settings.json`` for the duration of the spawn. Unlike claude
+        # (which accepts ``--settings <file>``), gemini has NO per-run settings-path
+        # flag (google-cli.md / hook_settings.py), so craik MUST merge into the
+        # project ``.gemini/settings.json`` and RESTORE the operator's original bytes
+        # on teardown (``registered_hook_settings`` is fail-safe). The
+        # workspace-trust flag travels via ``spawn_env`` (load-bearing: the hook does
+        # NOT fire in an untrusted workspace). The gate MODE is NOT forced here -- the
+        # operator's ``--approval-mode`` passes through ``build_command`` unchanged.
+        # HONESTY NOTE: which ``--approval-mode`` makes the BeforeTool hook the
+        # AUTHORITATIVE headless gate is PENDING the operator smoke
+        # (``scripts/smoke_gemini_hook.sh``); unlike the verified claude ``dontAsk``
+        # path we do NOT hardcode a forced mode until that smoke confirms it. Hook
+        # registration + workspace trust are correct regardless of the mode.
+        with ExitStack() as stack:
+            if self.hook_env and SOCKET_ENV in self.hook_env:
+                stack.enter_context(
+                    registered_hook_settings(
+                        Path.cwd() / ".gemini" / "settings.json",
+                        self.before_tool_hook_config["settings"],
+                    )
+                )
+            yield from run_cli_typed(
+                prompt=ctx.prompt,
+                env=self.original_env,
+                argv=self.build_command(ctx),
+                spawn_env=self.spawn_env(dict(ctx.env)),
+                vendor="google",
+                source=_SOURCE,
+                map_native=self.map_native_event,
+                coalescer=self._coalescer,
+                # The canonical ``receipt.created`` (emitted from the core's persisted
+                # receipt id by ``cli_framing_events``) carries this REAL gating
+                # posture: ``"operator"`` only for a gated run, else ``"bypass"``.
+                decided_by=self._decided_by,
+                # The live-gating overlay (set by the gateway's hook_bridge_session in
+                # Task 5.7); ``None`` pre-cutover leaves the spawn env untouched.
+                hook_env=self.hook_env,
+                on_payload=self._capture_payload,
+            )
 
     def _capture_payload(self, payload: dict[str, object]) -> None:
         self.last_payload = payload
