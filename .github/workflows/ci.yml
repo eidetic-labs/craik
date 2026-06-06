@@ -200,6 +200,8 @@ jobs:
         run: python scripts/check_gateway_event_emission.py
       - name: Check per-vendor permission-mode passthrough
         run: python scripts/check_vendor_mode_passthrough.py
+      - name: Check gated run registers craik-hook
+        run: python scripts/check_gated_run_registers_hook.py
       - name: Check CommandResult return annotations
         run: python scripts/check_command_result_return.py
       - name: Check CLI/TUI contract metadata

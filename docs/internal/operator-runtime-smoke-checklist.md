@@ -20,6 +20,8 @@ picks a mode, craik passes it through faithfully, and records (via receipts) wha
 | `receipt.created` always carries `run_id` + `receipt_id` (the bug that crashed the gateway) | same smoke test + `scripts/check_gateway_event_emission.py` (CI guard) |
 | Each vendor's real mode vocab reaches its CLI flag; fake modes (`auto`) are dropped, not silently coerced | `scripts/check_vendor_mode_passthrough.py` (CI guard) + `tests/test_check_vendor_mode_passthrough.py` |
 | Operator approve→executes+operator receipt; deny→blocked+denial receipt; timeout→fail-closed deny | `tests/test_backend_jsonl_live_gating.py` |
+| **Live gate round-trip through the REAL bridge + REAL `craik-hook` client** — a fake "CLI" runs the actual `craik-hook` console binary against the live bridge socket and honors its allow/deny: approve→ALLOW (exit 0, allow JSON)+operator receipt; deny→DENY (exit 2, deny JSON)+denial receipt; unreachable socket / no socket env / timeout→fail-closed DENY. This is the automatable core of the old "live eyeball" — the bridge↔client decision path is now covered headlessly. | `tests/runtime/backend/gateway/test_live_gate_e2e.py` |
+| A gated run for a hook-capable vendor (anthropic-cli/google-cli) actually REGISTERS the craik-hook — no "ungated-while-claiming-gated" regression (claude via `--settings` PreToolUse; gemini via merged `BeforeTool`, operator's own hooks preserved) | `scripts/check_gated_run_registers_hook.py` (CI guard) + `tests/test_check_gated_run_registers_hook.py` |
 | Observe-only (Codex) is excluded from gating, not errored | `tests/test_backend_jsonl_live_gating.py::test_observe_only_adapter_is_not_gated` |
 | TUI high-risk two-press arming keys off the RAW `permission_mode` token (`bypassPermissions`/`yolo`/`danger-full-access`, case-insensitive) | `crates/craik-tui-rs/src/app.rs` tests `high_risk_bypass_approval_requires_two_press_arm`, `high_risk_gate_fires_for_yolo_and_danger_full_access`, `high_risk_match_is_case_insensitive`, `non_bypass_approval_approves_on_single_press` |
 | `_active_permission_mode` resolves the active vendor's stored token (not a display form) | `tests/test_backend_jsonl_live_gating.py::test_active_permission_mode_returns_stored_token_or_none` |
@@ -30,17 +32,38 @@ Run the automated gate locally exactly as CI does:
 .venv/bin/python -m pytest \
   tests/runtime/backend/gateway/test_operator_runtime_smoke.py \
   tests/test_backend_jsonl_live_gating.py \
+  tests/runtime/backend/gateway/test_live_gate_e2e.py \
   tests/test_gateway_replay.py \
   tests/test_check_gateway_event_emission.py \
-  tests/test_check_vendor_mode_passthrough.py -q
+  tests/test_check_vendor_mode_passthrough.py \
+  tests/test_check_gated_run_registers_hook.py -q
 .venv/bin/python scripts/check_gateway_event_emission.py
 .venv/bin/python scripts/check_vendor_mode_passthrough.py
+.venv/bin/python scripts/check_gated_run_registers_hook.py
 ( cd crates/craik-tui-rs && cargo test && cargo clippy --all-targets -- -D warnings )
 ```
 
 ---
 
 ## Manual round-trip (real CLI + interactive TUI)
+
+**What's left for a human.** The bridge↔client decision path — the `craik-hook` client
+forwarding to the live bridge, the operator decision resolving, and the vendor-correct
+allow/deny coming back (incl. all three fail-closed cases) — is now AUTOMATED end-to-end
+(`tests/runtime/backend/gateway/test_live_gate_e2e.py`, which drives the **real** `craik-hook`
+console binary against a **real** bridge socket). The TRUE residual eyeball is the one thing a
+headless test cannot do: run a real `claude` / `gemini` prompt through the **interactive TUI**
+and watch craik intercept a real vendor tool call (the vendor CLI actually invoking the
+registered hook, the TUI modal, the two-press arm) and record the receipt.
+
+Gate-mode status going in:
+
+- **Claude (`anthropic-cli`)** — gate mode is **verified**: a gated run is forced to `dontAsk`
+  (or honored `bypassPermissions`) with the PreToolUse `craik-hook` as the authoritative
+  approval path (confirmed via the operator smoke).
+- **Gemini (`google-cli`)** — gate mode is **PENDING** `scripts/smoke_gemini_hook.sh`: hook
+  registration + workspace trust are correct, but *which* `--approval-mode` makes the
+  `BeforeTool` hook the authoritative headless gate is not yet pinned, so no mode is force-set.
 
 The pieces below require a real vendor CLI installed + authed and a human watching the TUI.
 For each gatable vendor, drive one real prompt that triggers a tool call.
