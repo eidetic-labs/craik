@@ -151,6 +151,16 @@ def gated_cli_prompt_plan(
     normalized_prompt = prompt.strip()
     if not normalized_prompt:
         return None
+    # OBSERVE-ONLY PARK: craik is parked in an observe-only posture -- it observes
+    # vendor runs and records honest receipts, but does NOT register its hook or
+    # surface approval modals. The live-gating machinery below (adapter resolution,
+    # GatedCliPlan, hook-bridge wiring) is intentionally kept DORMANT, not deleted:
+    # returning None here routes every prompt to the synchronous execute_prompt
+    # path (no CRAIK_HOOK_SOCKET -> claude_gate_settings(gated=False) -> operator
+    # vendor mode VERBATIM, no --settings, no hook). Set CRAIK_LIVE_GATING=1 to
+    # re-arm the dormant gating path (e.g. tests of the dormant machinery).
+    if not _live_gating_enabled(env):
+        return None
     approval_required = (
         require_operator_approval
         if require_operator_approval is not None
@@ -179,6 +189,21 @@ def gated_cli_prompt_plan(
         env=env,
         adapter_prompt=normalized_prompt,
     )
+
+
+def _live_gating_enabled(env: dict[str, str] | None) -> bool:
+    """Return whether ``CRAIK_LIVE_GATING=1`` re-arms the dormant live-gating path.
+
+    Craik is parked observe-only by default (flag OFF): the live-gating machinery
+    is kept dormant. Only the explicit opt-in value ``"1"`` enables it; any other
+    value (including unset) leaves the gateway on the synchronous observe-only
+    path. Mirrors ``session._legacy_run_enabled`` -- reads ``os.environ`` when
+    ``env is None``.
+    """
+    import os
+
+    values = os.environ if env is None else env
+    return values.get("CRAIK_LIVE_GATING") == "1"
 
 
 def _active_permission_mode(env: dict[str, str] | None) -> str | None:

@@ -397,6 +397,133 @@ def test_observe_only_adapter_is_not_gated(tmp_path: Path) -> None:
     assert plan is None
 
 
+def test_gated_plan_parked_observe_only_by_default(tmp_path: Path) -> None:
+    """OBSERVE-ONLY park: ``gated_cli_prompt_plan`` returns ``None`` by default.
+
+    Craik is parked observe-only: live gating is DORMANT (flag-gated). For the
+    claude path (which DOES support live gating), the plan must be ``None`` when
+    ``CRAIK_LIVE_GATING`` is unset -- so ``jsonl.py`` falls through to the
+    synchronous ``execute_prompt`` (vendor mode verbatim, no hook). Setting
+    ``CRAIK_LIVE_GATING=1`` re-arms the dormant machinery: a plan is returned.
+    """
+    env = _env(tmp_path)
+    _seed_home(env)
+
+    # Default (flag unset): the claude path is NOT gated -> None (parked contract).
+    parked = session_backend.gated_cli_prompt_plan(
+        "prompt",
+        env=env,
+        source="jsonl",
+        backend="claude-code",
+    )
+    assert parked is None, "observe-only park: no gated plan when CRAIK_LIVE_GATING unset"
+
+    # Flag on: the dormant live-gating machinery is still reachable (a plan returns).
+    armed = session_backend.gated_cli_prompt_plan(
+        "prompt",
+        env={**env, "CRAIK_LIVE_GATING": "1"},
+        source="jsonl",
+        backend="claude-code",
+    )
+    assert armed is not None, "CRAIK_LIVE_GATING=1 re-arms the dormant gated path"
+    assert armed.vendor == "anthropic"
+    assert armed.require_operator_approval is True
+
+
+def test_auto_mode_spawns_claude_verbatim_no_settings_when_parked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression: parked observe-only honors operator mode ``auto`` verbatim.
+
+    Reported bug: in ``auto`` permission mode the gated path forced ``dontAsk``
+    (prompting on every tool call). Parked observe-only (``CRAIK_LIVE_GATING``
+    unset) the gateway plan returns ``None`` -> synchronous ``execute_prompt`` ->
+    no ``CRAIK_HOOK_SOCKET`` -> ``claude`` is spawned with ``--permission-mode
+    auto`` VERBATIM and NO ``--settings`` (no hook registered).
+    """
+    import subprocess
+
+    from craik.runtime.auth.profile import AuthProfile, CredentialKind
+    from craik.runtime.auth.store import AuthProfileStore
+    from craik.runtime.shell.slash_commands import dispatch_slash_command
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Repo\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+    monkeypatch.chdir(repo)
+
+    env = {**_env(tmp_path), "CRAIK_CLAUDE_PERMISSION_MODE": "auto"}
+    _seed_home(env)
+    from datetime import UTC, datetime
+
+    AuthProfileStore.from_env(env).put(
+        AuthProfile(
+            id="anthropic:default",
+            kind=CredentialKind.MARKER,
+            provider_family="anthropic",
+            metadata={"external_runtime": "claude-cli", "credential_mode": "claude-cli"},
+            created_at=datetime(2026, 5, 22, 12, 0, tzinfo=UTC),
+            last_status="ok",
+        )
+    )
+    dispatch_slash_command("/model set anthropic/claude-sonnet-4-20250514", env=env)
+
+    # Fake the claude subprocess at the Popen seam; record the spawned argv.
+    spawned: list[list[str]] = []
+    original_popen = subprocess.Popen
+    monkeypatch.setattr(
+        "craik.runtime.backend.claude_code.shutil.which",
+        lambda command: "/usr/local/bin/claude" if command == "claude" else None,
+    )
+
+    class _FakeProc:
+        def __init__(self) -> None:
+            self.stdout = iter(['{"type":"result","result":"done"}\n'])
+            self.returncode = 0
+            self.pid = 4242
+
+        def poll(self):  # noqa: ANN202
+            return None
+
+        def wait(self, timeout=None):  # noqa: ANN001, ANN202
+            return 0
+
+        def terminate(self) -> None:  # pragma: no cover
+            self.returncode = 0
+
+        def kill(self) -> None:  # pragma: no cover
+            self.returncode = 0
+
+    def _popen(args, **kwargs):  # noqa: ANN001, ANN202
+        if Path(args[0]).name != "claude":
+            return original_popen(args, **kwargs)
+        spawned.append([str(a) for a in args])
+        return _FakeProc()
+
+    monkeypatch.setattr(
+        "craik.runtime.sandbox.local_process_backend.subprocess.Popen", _popen
+    )
+
+    instream = io.StringIO(
+        json.dumps({"type": "prompt.submit", "text": "do a thing"})
+        + "\n"
+        + json.dumps({"type": "session.close"})
+        + "\n"
+    )
+    outbuf = io.StringIO()
+    run_jsonl_gateway(env=env, stdin=instream, stdout=outbuf)
+
+    assert spawned, "claude subprocess was reached (parked synchronous path)"
+    argv = spawned[0]
+    assert Path(argv[0]).name == "claude"
+    # Operator mode passes through VERBATIM (not forced to dontAsk).
+    assert "--permission-mode" in argv
+    assert argv[argv.index("--permission-mode") + 1] == "auto"
+    # No hook registered in observe-only park.
+    assert "--settings" not in argv
+
+
 def test_active_permission_mode_returns_stored_token_or_none(tmp_path: Path) -> None:
     # The high-risk gate keys off the RAW stored mode token for the ACTIVE vendor.
     # Pin the active vendor to anthropic in an isolated CRAIK_HOME so resolution
