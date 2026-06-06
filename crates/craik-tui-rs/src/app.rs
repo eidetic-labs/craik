@@ -19,7 +19,6 @@ pub(crate) enum LoopAction {
 pub(crate) enum RunFilter {
     All,
     Active,
-    NeedsApproval,
     Failed,
     Completed,
 }
@@ -62,7 +61,6 @@ impl ActiveOverlay {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TranscriptJump {
     Tool,
-    Approval,
     Receipt,
     Error,
 }
@@ -98,7 +96,6 @@ impl TranscriptJump {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Tool => "tool",
-            Self::Approval => "approval",
             Self::Receipt => "receipt",
             Self::Error => "error",
         }
@@ -110,7 +107,6 @@ impl TranscriptJump {
                 kind,
                 TranscriptKind::Tool | TranscriptKind::Command | TranscriptKind::File
             ),
-            Self::Approval => kind == TranscriptKind::Approval,
             Self::Receipt => kind == TranscriptKind::Receipt,
             Self::Error => kind == TranscriptKind::Error,
         }
@@ -122,7 +118,6 @@ impl RunFilter {
         match self {
             Self::All => "all",
             Self::Active => "active",
-            Self::NeedsApproval => "approval",
             Self::Failed => "failed",
             Self::Completed => "completed",
         }
@@ -131,8 +126,7 @@ impl RunFilter {
     fn next(self) -> Self {
         match self {
             Self::All => Self::Active,
-            Self::Active => Self::NeedsApproval,
-            Self::NeedsApproval => Self::Failed,
+            Self::Active => Self::Failed,
             Self::Failed => Self::Completed,
             Self::Completed => Self::All,
         }
@@ -142,7 +136,6 @@ impl RunFilter {
         match self {
             Self::All => true,
             Self::Active => run.is_active(),
-            Self::NeedsApproval => !run.approvals.is_empty() && !run.is_completed(),
             Self::Failed => run.is_failed(),
             Self::Completed => run.is_completed(),
         }
@@ -838,8 +831,8 @@ impl InteractiveApp {
         if items.is_empty() {
             items.push(OverlayItem {
                 title: "No pending approvals".to_owned(),
-                summary: "queue empty".to_owned(),
-                detail: "Approvals requested by the Gateway will appear here with their real target, command, reason, and risk context.".to_owned(),
+                summary: "observe-only".to_owned(),
+                detail: "Craik is parked observe-only: it observes vendor runs and records receipts but does not surface approval requests. This overlay stays empty.".to_owned(),
             });
         }
         items
@@ -998,10 +991,6 @@ impl InteractiveApp {
                 self.cycle_run_filter();
                 LoopAction::Continue
             }
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.open_overlay(ActiveOverlay::Approvals);
-                LoopAction::Continue
-            }
             KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.surface_pending_approval_overlay();
                 LoopAction::Continue
@@ -1024,14 +1013,6 @@ impl InteractiveApp {
             }
             KeyCode::Char('T') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.jump_to_previous_transcript_kind(TranscriptJump::Tool);
-                LoopAction::Continue
-            }
-            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.jump_to_next_transcript_kind(TranscriptJump::Approval);
-                LoopAction::Continue
-            }
-            KeyCode::Char('G') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.jump_to_previous_transcript_kind(TranscriptJump::Approval);
                 LoopAction::Continue
             }
             KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1235,13 +1216,6 @@ impl InteractiveApp {
                     self.approve_selected();
                 }
             }
-            // Open the approvals overlay from any *other* overlay with Ctrl-A.
-            KeyCode::Char('a')
-                if key.modifiers.contains(KeyModifiers::CONTROL)
-                    && self.active_overlay != Some(ActiveOverlay::Approvals) =>
-            {
-                self.open_overlay(ActiveOverlay::Approvals);
-            }
             // Single-press deny while the approvals overlay is focused. Deny is
             // always unambiguous and one press -- it never falls through to
             // approve and needs no arming step, even for high-risk approvals.
@@ -1326,21 +1300,16 @@ impl InteractiveApp {
                 .to_owned(),
             "Run and provenance".to_owned(),
             "  Ctrl-J / Ctrl-K select next or previous run".to_owned(),
-            "  Ctrl-L cycle run filters: all, active, approval, failed, completed".to_owned(),
+            "  Ctrl-L cycle run filters: all, active, failed, completed".to_owned(),
             "  Ctrl-C stop active run; Ctrl-B reconnect Gateway backend".to_owned(),
             "Overlays".to_owned(),
-            "  Ctrl-M memory; Ctrl-E evidence; Ctrl-R runs; Ctrl-A approvals".to_owned(),
+            "  Ctrl-M memory; Ctrl-E evidence; Ctrl-R runs".to_owned(),
             "  Esc returns from an overlay to chat".to_owned(),
             "Transcript".to_owned(),
             "  Ctrl-F search; Ctrl-N / Ctrl-P navigate search results".to_owned(),
-            "  Ctrl-T/G/H/Z jump to tool, approval, receipt, or error".to_owned(),
-            "  Ctrl-Shift-T/G/H/Z jump backward by kind".to_owned(),
+            "  Ctrl-T/H/Z jump to tool, receipt, or error".to_owned(),
+            "  Ctrl-Shift-T/H/Z jump backward by kind".to_owned(),
             "  PageUp / PageDown scroll transcript by page; Alt-Up / Alt-Down by line".to_owned(),
-            "Approvals".to_owned(),
-            "  Ctrl-A opens the approval overlay; a approves, d denies, Esc defers".to_owned(),
-            "  High-risk approvals require a second a to confirm".to_owned(),
-            "  Ctrl-N / Ctrl-P select next or previous approval when approvals are pending"
-                .to_owned(),
             "Help".to_owned(),
             "  ? or Ctrl-/ show this help; Esc closes help".to_owned(),
         ];
@@ -5919,7 +5888,7 @@ mod tests {
         let help = app.help_text();
         assert!(help.contains("Craik Rust TUI Commands"));
         assert!(help.contains("Ctrl-Y retry last prompt"));
-        assert!(help.contains("Ctrl-T/G/H/Z jump"));
+        assert!(help.contains("Ctrl-T/H/Z jump"));
 
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
@@ -6558,14 +6527,13 @@ mod tests {
             ),
         ];
 
-        app.jump_to_next_transcript_kind(super::TranscriptJump::Approval);
+        app.jump_to_next_transcript_kind(super::TranscriptJump::Receipt);
 
-        assert_eq!(app.transcript_jump, Some(super::TranscriptJump::Approval));
+        assert_eq!(app.transcript_jump, Some(super::TranscriptJump::Receipt));
         assert_eq!(
             app.transcript_jump_summary().as_deref(),
-            Some("approval: 1 entries")
+            Some("receipt: 1 entries")
         );
-        assert!(app.transcript_scroll > 0);
     }
 
     #[test]
